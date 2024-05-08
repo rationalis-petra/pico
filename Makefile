@@ -1,12 +1,13 @@
 # Thanks to Job Vranish (https://spin.atomicobject.com/2016/08/26/makefile-c-projects/)
+# I don't fully nderstand this myself... 
+
 TARGET_EXEC := pico
 
 BUILD_DIR := ./build
 SRC_DIRS := ./src
 
-# Find all the C and C++ files we want to compile
-# Note the single quotes around the * expressions. The shell will incorrectly expand these otherwise, but we want to send the * directly to the find command.
-SRCS := $(shell find $(SRC_DIRS) -name '*.c' -or -name '*.s')
+# Find all the C files we want to compile
+SRCS := $(shell find $(SRC_DIRS) -name '*.c')
 
 # Prepends BUILD_DIR and appends .o to every src file
 # As an example, ./your_dir/hello.c turns into ./build/./your_dir/hello.c.o
@@ -24,7 +25,7 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CPPFLAGS := $(INC_FLAGS) -MMD -MP
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP
 
 # The final build step.
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
@@ -33,8 +34,7 @@ $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
 # Build step for C source
 $(BUILD_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONY: clean
 clean:
