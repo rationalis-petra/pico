@@ -29,22 +29,22 @@ assembler* mk_assembler(allocator a) {
     return out;
 }
 
-destination reg(regname reg) {
-    destination out;
+location reg(regname reg) {
+    location out;
     out.type = Register;
     out.reg = reg;
     return out;
 }
 
-destination rref(regname name, uint8_t offset) {
-    destination out;
+location rref(regname name, uint8_t offset) {
+    location out;
     out.type = Deref;
     out.immediate = offset;
     return out;
 }
 
-destination imm32(uint32_t immediate) {
-    destination out;
+location imm32(uint32_t immediate) {
+    location out;
     out.type = Immediate;
     out.immediate = immediate;
     return out;
@@ -63,7 +63,8 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
 }
 
 
-asm_result build_binary_op(assembler* assembler, binary_op op, destination dest, destination src, allocator a) {
+
+asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
     // Most paths are successful, so default assume the operation succeeded.
     asm_result out;
     out.succ = true;
@@ -80,7 +81,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, destination dest,
     uint8_t mod_rm_byte;
     uint8_t sib_byte;
 
-    // Switch based on the destination type.
+    // Switch based on the location type.
     switch (dest.type) {
     case Register:
         switch (src.type) {

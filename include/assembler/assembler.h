@@ -46,15 +46,15 @@ typedef enum dest_t {
     Immediate
 } dest_t;
 
-// Destination: Can be one of
+// Location: Can be one of
 // + Register
 // + [Register + Offset]
 // + Immediate
-typedef struct destination {
+typedef struct location {
     dest_t type;
     regname reg;
     uint32_t immediate;
-} destination;
+} location;
 
 // result of assembling (might error due to inferior type system :()
 typedef struct asm_result {
@@ -63,12 +63,12 @@ typedef struct asm_result {
 } asm_result;
 
 // Location Constructors 
-destination reg(regname name);
-destination rref(regname name, uint8_t offset);
-destination imm32(uint32_t immediate);
+location reg(regname name);
+location rref(regname name, uint8_t offset);
+location imm32(uint32_t immediate);
 
-// Build an Integral (+,-,etc.) operation. May error
-asm_result build_binary_op(assembler* ass, binary_op op, destination dest, destination src, allocator a);
+// Build a Binary (+,-,etc.) operation. May error
+asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
 
 
 #endif
