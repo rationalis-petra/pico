@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdio.h>
 
 #include "memory/allocator.h"
 #include "data/string.h"
@@ -46,7 +47,7 @@ string string_from_UTF_32(u32_array arr, allocator a) {
     for (size_t i = 0; i < arr.len; ) {
         uint8_t nbytes;
         uint32_t codepoint = aref_u32(i, arr);
-        encode_point_utf8(out.bytes + i, &nbytes, aref_u32(i, arr));
+        encode_point_utf8(out.bytes + i, &nbytes, codepoint);
         i += nbytes;
     }
     out.bytes[out.memsize - 1] = 0;
@@ -54,7 +55,7 @@ string string_from_UTF_32(u32_array arr, allocator a) {
 }
 
 int string_cmp(const string lhs, const string rhs) {
-    return strcmp(lhs.bytes, rhs.bytes);
+    return strcmp((char*)lhs.bytes, (char*)rhs.bytes);
 }
 
 string string_cat(const string lhs, const string rhs, allocator a) {

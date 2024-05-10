@@ -106,6 +106,7 @@ stream_result next(istream* stream, uint32_t* out) {
         else {
             stream->impl.file_istream.peeked = false;
             *out = stream->impl.file_istream.peek_codepoint;
+            return StreamSuccess;
         }
     } break;
     default:

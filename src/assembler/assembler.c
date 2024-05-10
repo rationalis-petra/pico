@@ -73,11 +73,11 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     case Pop:
         switch (loc.type) {
         case Register:
-            if (log.reg & 0b1000) {
+            if (loc.reg & 0b1000) {
                 use_prefix_byte = true;
                 prefix_byte = 0x41;
             }
-            opcode = 0x58 + loc.reg;
+            opcode = 0x58 + (loc.reg & 0b111);
             break;
         default:
             out.succ = false;
@@ -88,11 +88,11 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     case Push:
         switch (loc.type) {
         case Register:
-            if (log.reg & 0b1000) {
+            if (loc.reg & 0b1000) {
                 use_prefix_byte = true;
                 prefix_byte = 0x41;
             }
-            opcode = 0x50 + loc.reg;
+            opcode = 0x50 + (loc.reg & 0b111);
             break;
         default:
             out.succ = false;
@@ -101,6 +101,9 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         break;
     }
 
+    if (use_prefix_byte) {
+        push_u8(prefix_byte, assembler, a);
+    }
     push_u8(opcode, assembler, a);
     return out;
 }
@@ -120,7 +123,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
     uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
     uint8_t opcode;
     uint8_t mod_rm_byte;
-    uint8_t sib_byte;
+    //uint8_t sib_byte;
 
     // Switch based on the location type.
     switch (dest.type) {
