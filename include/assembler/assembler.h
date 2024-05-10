@@ -21,6 +21,11 @@ typedef enum binary_op {
     Or,
 } binary_op;
 
+typedef enum unary_op {
+    Push,
+    Pop,
+} unary_op;
+
 typedef enum regname {
     RAX = 0b0000,
     RBX = 0b0011,
@@ -69,6 +74,9 @@ location imm32(uint32_t immediate);
 
 // Build a Binary (+,-,etc.) operation. May error
 asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
+
+// Build a unary operation. May error.
+asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
 
 
 #endif

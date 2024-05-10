@@ -50,7 +50,7 @@ location imm32(uint32_t immediate) {
     return out;
 }
 
-// return: the ModR/M byte
+// Return: the ModR/M byte
 uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     // R1 (dest) is encoded in ModR/M Reg + REX.R
     // R2 (src)  is encoded in ModR/M R/M + REX.B
@@ -62,7 +62,48 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     return 0b11000000 | ((r2 & 0b111 ) << 3) | (r1 & 0b111); 
 }
 
+asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a) {
+    asm_result out;
+    out.succ = true;
+    bool use_prefix_byte = false;
+    uint8_t prefix_byte;
 
+    uint8_t opcode;
+    switch (op) {
+    case Pop:
+        switch (loc.type) {
+        case Register:
+            if (log.reg & 0b1000) {
+                use_prefix_byte = true;
+                prefix_byte = 0x41;
+            }
+            opcode = 0x58 + loc.reg;
+            break;
+        default:
+            out.succ = false;
+            out.msg = mk_string("Pop for non register locations not implemented", a);
+            break;
+        }
+        break;
+    case Push:
+        switch (loc.type) {
+        case Register:
+            if (log.reg & 0b1000) {
+                use_prefix_byte = true;
+                prefix_byte = 0x41;
+            }
+            opcode = 0x50 + loc.reg;
+            break;
+        default:
+            out.succ = false;
+            out.msg = mk_string("Push for non register locations not implemented", a);
+        }
+        break;
+    }
+
+    push_u8(opcode, assembler, a);
+    return out;
+}
 
 asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
     // Most paths are successful, so default assume the operation succeeded.
