@@ -23,7 +23,7 @@ typedef struct parse_result {
     parse_result_type type;
     union {
         sourcerange range;
-        ob_rawtree result;
+        pi_rawtree result;
     } data;
 } parse_result;
 

@@ -15,7 +15,7 @@ typedef struct eval_result {
     Result_t type;
     union {
         string error_message;
-        ob_value out;
+        pi_value out;
     } data;
 } eval_result;
 

@@ -15,11 +15,11 @@ environment* env_empty(allocator a) {
 }
 
 
-void env_insert_inplace(ob_symbol sym, ob_value val, environment* env, allocator a) {
+void env_insert_inplace(pi_symbol sym, pi_value val, environment* env, allocator a) {
     sym_val_insert(sym, val, &env->local_bindings, a);
 }
 
-ob_value* env_lookup(ob_symbol sym, environment* env) {
+pi_value* env_lookup(pi_symbol sym, environment* env) {
     return sym_val_lookup(sym, env->local_bindings);
 }
 

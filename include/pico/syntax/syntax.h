@@ -28,7 +28,7 @@
 // Use visitor pattern for tree-walkers
 
 typedef enum SyntaxType {
-    SValue,
+    SLiteral,
     SVariable,
     SFunction,
     SApplication,
@@ -61,29 +61,29 @@ typedef struct syn_app {
 } syn_app;
 
 typedef struct syn_constructor {
-    ob_symbol name;
+    pi_symbol name;
     syn_array args;
 } syn_constructor;
 
 typedef struct syn_recursor {
-    ob_symbol recfn;
+    pi_symbol recfn;
     syn_array vals;
     ptn_array clauses;
 } syn_recursor;
 
 typedef struct syn_destructor {
-    ob_symbol name;
+    pi_symbol name;
     syntax* value;
 } syn_destructor;
 
 typedef struct syn_copattern {
-    ob_symbol name;
+    pi_symbol name;
     symbol_array vars;
     syntax* body;
 } copattern;
 
 typedef struct syn_corecursor {
-    ob_symbol recfn;
+    pi_symbol recfn;
     syn_array vals;
     coptn_array functions;
 } syn_corecursor;
@@ -102,6 +102,7 @@ typedef struct syn_let {
     sym_syn_amap bindings;
     syntax* body;
 } syn_let;
+
 typedef struct syn_if {
     syntax* condition;
     syntax* true_branch;
@@ -112,8 +113,8 @@ typedef struct syn_if {
 struct syntax {
     SyntaxType type;
     union {
-        ob_value val;
-        ob_symbol variable;
+        int64_t lit_i64;
+        pi_symbol variable;
 
         syn_function function;
         syn_app application;
@@ -130,8 +131,8 @@ struct syntax {
 };
 
 
-syntax* mv_val_syn(const ob_value value, allocator a);
-//syntax* mk_val_doc(const ob_value value, local_collector* lcl, allocator a);
+syntax* mv_val_syn(const pi_value value, allocator a);
+//syntax* mk_val_doc(const pi_value value, local_collector* lcl, allocator a);
 
 
 /* The Syntax Destructor */

@@ -1,26 +1,27 @@
 #include "pico/syntax/syntax.h"
 
 typedef struct syntax_call {
-    ob_symbol field;
+    pi_symbol field;
     syntax* fnc;
     syntax* arg;
 } syntax_call;
 
 
-syntax* mv_val_syn(const ob_value value, allocator a) {
+syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
     //value_root(value, lcl);
     syntax* out = (syntax*)mem_alloc(sizeof(syntax), a);
-    out->type = SValue;
-    out->data.val = value;
+    out->type = SLiteral;
+    out->data.lit_i64 = value;
     return out;
 }
-//syntax* mk_val_doc(const ob_value value, allocator a);
+//syntax* mk_val_doc(const pi_value value, allocator a);
 
 /* The Syntax Destructor */
 void delete_syntax(syntax syntax, allocator a) {
     switch (syntax.type)
         {
-        case SValue: 
+        case SLiteral: 
+            // Nothing 
             //value_unroot(syntax.data.val);
             break;
         case SApplication: {
@@ -55,8 +56,11 @@ void delete_syntax_pointer(syntax* syntax, allocator a) {
 document* pretty_syntax(syntax* syntax, allocator a) {
     document* out = NULL;
     switch (syntax->type) {
-    case SValue: {
-        out = pretty_value(syntax->data.val, a);
+    case SLiteral: {
+        pi_value val;
+        val.type = VI64;
+        val.term.int_64 = syntax->data.lit_i64;
+        out = pretty_value(val, a);
         break;
     }
     case SVariable: {

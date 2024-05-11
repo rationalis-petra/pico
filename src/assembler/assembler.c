@@ -23,6 +23,11 @@
  * 
  */ 
 
+void clear_assembler(assembler* assembler) {
+    assembler->len = 0;
+}
+                                            
+
 assembler* mk_assembler(allocator a) {
     assembler* out = (assembler*)mem_alloc(sizeof(assembler), a);
     *out = mk_u8_array(256, a);
@@ -51,6 +56,10 @@ location imm32(uint32_t immediate) {
 }
 
 // Return: the ModR/M byte
+uint8_t modrm_reg(regname r2) {
+    return 0b11010000 + (r2 & 0b111); 
+}
+
 uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     // R1 (dest) is encoded in ModR/M Reg + REX.R
     // R2 (src)  is encoded in ModR/M R/M + REX.B
@@ -64,39 +73,72 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
 
 asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a) {
     asm_result out;
-    out.succ = true;
+    out.type = Ok;
     bool use_prefix_byte = false;
     uint8_t prefix_byte;
+
+    bool use_mod_rm_byte = false;
+    uint8_t mod_rm_byte;
+
+    uint8_t num_immediate_bytes = 0;
+    uint8_t immediate_bytes[4];
+     
+    if (loc.reg & 0b1000) {
+        use_prefix_byte = true;
+        prefix_byte = 0x41;
+    }
 
     uint8_t opcode;
     switch (op) {
     case Pop:
         switch (loc.type) {
         case Register:
-            if (loc.reg & 0b1000) {
-                use_prefix_byte = true;
-                prefix_byte = 0x41;
-            }
             opcode = 0x58 + (loc.reg & 0b111);
             break;
         default:
-            out.succ = false;
-            out.msg = mk_string("Pop for non register locations not implemented", a);
+            out.type = Err;
+            out.error_message = mk_string("Pop for non register locations not implemented", a);
             break;
         }
         break;
     case Push:
         switch (loc.type) {
         case Register:
-            if (loc.reg & 0b1000) {
-                use_prefix_byte = true;
-                prefix_byte = 0x41;
-            }
             opcode = 0x50 + (loc.reg & 0b111);
             break;
+        case Immediate: {
+            // TODO: optionally shrink immediate
+            uint8_t* bytes = (uint8_t*) &loc.immediate;
+            if (loc.immediate <= 256) {
+                opcode = 0x6A;
+                num_immediate_bytes = 1;
+            } else if (loc.immediate <= 256 * 256) {
+                opcode = 0x68;
+                num_immediate_bytes = 2;
+            } else {
+                opcode = 0x68;
+                num_immediate_bytes = 4;
+            }
+            for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+                immediate_bytes[i] = bytes[i];
+            }
+            break;
+        }
         default:
-            out.succ = false;
-            out.msg = mk_string("Push for non register locations not implemented", a);
+            out.type = Err;
+            out.error_message = mk_string("Push for register dereference not implemented", a);
+        }
+        break;
+    case Call:
+        switch (loc.type) {
+        case Register:
+            opcode = 0xff;
+            use_mod_rm_byte = true;
+            mod_rm_byte = modrm_reg(loc.reg);
+            break;
+        default:
+            out.type = Err;
+            out.error_message = mk_string("Push for non register locations not implemented", a);
         }
         break;
     }
@@ -105,19 +147,22 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         push_u8(prefix_byte, assembler, a);
     }
     push_u8(opcode, assembler, a);
+    if (use_mod_rm_byte) {
+        push_u8(mod_rm_byte, assembler, a);
+    }
+    for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+        push_u8(immediate_bytes[i], assembler, a);
+    }
     return out;
 }
 
 asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
     // Most paths are successful, so default assume the operation succeeded.
     asm_result out;
-    out.succ = true;
-
-    // For addition spec - p
-    // For subtract spec - p1407 Vol 2 Intel Manual
+    out.type = Ok;
 
     // Note: the logic is simplified for now as we assume 32-bit immediates and
-    // 64-bit registers. This means we always use REX :) 
+    // 64-bit registers. This means we always use REX byte :) 
     bool use_rex = true;
     bool use_mod_rm_byte = false;
     uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
@@ -152,8 +197,8 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
             break;
             
         case Deref:
-            out.succ = false;
-            out.msg = mk_string("Cannot use two dereferences as a source/destination pair", a);
+            out.type = Err;
+            out.error_message = mk_string("Cannot use two dereferences as a source/destination pair", a);
             break;
 
         case Immediate:
@@ -162,8 +207,8 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
         break;
 
     case Immediate:
-        out.succ = false;
-        out.msg = mk_string("Cannot use an immediate as a destination register!", a);
+        out.type = Err;
+        out.error_message = mk_string("Cannot use an immediate as a destination register!", a);
         break;
     }
     // Finally, write out the opcode into the assembler

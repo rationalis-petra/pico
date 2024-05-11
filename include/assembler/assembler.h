@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "data/result.h"
 #include "data/array.h"
 #include "data/string.h"
 
@@ -24,6 +25,7 @@ typedef enum binary_op {
 typedef enum unary_op {
     Push,
     Pop,
+    Call,
 } unary_op;
 
 typedef enum regname {
@@ -63,8 +65,8 @@ typedef struct location {
 
 // result of assembling (might error due to inferior type system :()
 typedef struct asm_result {
-    bool succ;
-    string msg;
+    Result_t type;
+    string error_message;
 } asm_result;
 
 // Location Constructors 
@@ -78,5 +80,6 @@ asm_result build_binary_op(assembler* ass, binary_op op, location dest, location
 // Build a unary operation. May error.
 asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
 
+void clear_assembler(assembler* assembler);
 
 #endif

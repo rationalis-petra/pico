@@ -55,6 +55,8 @@ string string_from_UTF_32(u32_array arr, allocator a) {
 }
 
 int string_cmp(const string lhs, const string rhs) {
+    // TODO: this assumed char == uint8_t. Implement thine own
+    //       method, instead of relying on strcmp!
     return strcmp((char*)lhs.bytes, (char*)rhs.bytes);
 }
 

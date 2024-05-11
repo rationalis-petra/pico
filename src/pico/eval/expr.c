@@ -1,6 +1,6 @@
 #include "pico/eval/expr.h"
 
-eval_result exec_primop2int64(ob_primop_t po, syntax lhs, syntax rhs, environment* env, allocator a) {
+eval_result exec_primop2int64(pi_primop_t po, syntax lhs, syntax rhs, environment* env, allocator a) {
     eval_result out;
     // TODO: eval lhs & rhs
     eval_result lhout = eval_expr(lhs, env, a);
@@ -48,13 +48,14 @@ eval_result exec_primop2int64(ob_primop_t po, syntax lhs, syntax rhs, environmen
 eval_result eval_expr(syntax term, environment* env, allocator a) {
     eval_result out;
     switch (term.type) {
-    case SValue: {
+    case SLiteral: {
         out.type = Ok;
-        out.data.out = term.data.val;
+        out.data.out.type = VI64;
+        out.data.out.term.int_64 = term.data.lit_i64;
         break;
     }
     case SVariable: {
-        ob_value* ptr = env_lookup(term.data.variable, env);
+        pi_value* ptr = env_lookup(term.data.variable, env);
         if (ptr) {
             out.type = Ok;
             out.data.out = *ptr;

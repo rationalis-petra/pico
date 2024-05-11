@@ -11,17 +11,17 @@ typedef struct resolve_env {
     environment* env;
     sym_array shadowed;
 } resolve_env;
-resolve_result resolve_dynamic_i(ob_rawtree raw, resolve_env env, allocator a);
+resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a);
 
-bool is_symbol(ob_rawtree* raw) {
+bool is_symbol(pi_rawtree* raw) {
     return (raw->type == RawAtom && raw->data.value.type == VSymbol);
 }
 
-bool get_symbol_list(symbol_array* arr, ob_rawtree nodes, allocator a) {
+bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     if (nodes.type == RawAtom) { return false; }
 
     for (size_t i = 0; i < nodes.data.nodes.len; i++) {
-        ob_rawtree* node = aref_ptr(i, nodes.data.nodes);
+        pi_rawtree* node = aref_ptr(i, nodes.data.nodes);
         if (node->type != RawAtom) { return false; }
         if (node->data.value.type != VSymbol) { return false;  }
         push_u64(node->data.value.term.symbol, arr, a);
@@ -29,8 +29,8 @@ bool get_symbol_list(symbol_array* arr, ob_rawtree nodes, allocator a) {
     return true;
 }
 
-resolve_result mk_application(ob_rawtree raw, resolve_env env, allocator a) {
-    resolve_result fn_res = resolve_dynamic_i(*(ob_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
+resolve_result mk_application(pi_rawtree raw, resolve_env env, allocator a) {
+    resolve_result fn_res = resolve_dynamic_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
     if (fn_res.type == Err) {
         return fn_res;
     }
@@ -43,7 +43,7 @@ resolve_result mk_application(ob_rawtree raw, resolve_env env, allocator a) {
     res.data.out.data.application.args = mk_ptr_array(raw.data.nodes.len - 1, a);
 
     for (size_t i = 1; i < raw.data.nodes.len; i++) {
-        resolve_result arg_res = resolve_dynamic_i(*(ob_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+        resolve_result arg_res = resolve_dynamic_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
         if (arg_res.type == Ok) {
             syntax* arg = mem_alloc(sizeof(syntax), a);
             *arg = arg_res.data.out;
@@ -59,7 +59,7 @@ resolve_result mk_application(ob_rawtree raw, resolve_env env, allocator a) {
     return res;
 }
 
-resolve_result mk_term(ob_term_former_t former, ob_rawtree raw, resolve_env env, allocator a) {
+resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, resolve_env env, allocator a) {
     resolve_result res;
     switch (former) {
     case FProcedure: {
@@ -70,7 +70,7 @@ resolve_result mk_term(ob_term_former_t former, ob_rawtree raw, resolve_env env,
         }
 
         symbol_array arguments = mk_u64_array(2, a);
-        if (!get_symbol_list(&arguments, *(ob_rawtree*)aref_ptr(1, raw.data.nodes), a)) {
+        if (!get_symbol_list(&arguments, *(pi_rawtree*)aref_ptr(1, raw.data.nodes), a)) {
             res.type = Err;
             res.data.error_message = mk_string("Function term former requires first arguments to be a symbol-list!", a);
             return res;
@@ -79,7 +79,7 @@ resolve_result mk_term(ob_term_former_t former, ob_rawtree raw, resolve_env env,
         for (size_t i = 0; i < arguments.len; i++) {
             push_u64(aref_u64(i, arguments), &env.shadowed, a);
         }
-        resolve_result rbody = resolve_dynamic_i(*(ob_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
+        resolve_result rbody = resolve_dynamic_i(*(pi_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
         if (rbody.type == Err) {
             return rbody;
         }
@@ -133,7 +133,7 @@ resolve_result mk_term(ob_term_former_t former, ob_rawtree raw, resolve_env env,
         }
         syn_array terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            ob_rawtree* rptr = aref_ptr(i, raw.data.nodes);
+            pi_rawtree* rptr = aref_ptr(i, raw.data.nodes);
             resolve_result rterm = resolve_dynamic_i(*rptr, env, a);
             if (rterm.type == Err) {
                 delete_ptr_array(terms, (void(*)(void*, allocator))delete_syntax_pointer, a);
@@ -167,18 +167,22 @@ resolve_result mk_term(ob_term_former_t former, ob_rawtree raw, resolve_env env,
 }
 
 // Convert to AST at runtime
-resolve_result resolve_dynamic_i(ob_rawtree raw, resolve_env env, allocator a) {
+resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a) {
     resolve_result res;
     switch (raw.type) {
     case RawAtom: {
-        res.type = Ok;
         if (raw.data.value.type == VSymbol) {
+            res.type = Ok;
             res.data.out.type = SVariable;
             res.data.out.data.variable = raw.data.value.term.symbol;
         }
-        else {
-            res.data.out.type = SValue;
-            res.data.out.data.val = raw.data.value;
+        else if (raw.data.value.type == VI64) {
+            res.type = Ok;
+            res.data.out.type = SLiteral;
+            res.data.out.data.lit_i64 = raw.data.value.term.int_64;
+        } else  {
+            res.type = Err;
+            res.data.error_message = mk_string("Currently, can only make literal values out of type i64." , a);
         }
         break;
     }
@@ -190,8 +194,8 @@ resolve_result resolve_dynamic_i(ob_rawtree raw, resolve_env env, allocator a) {
             return res;
         }
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
-            ob_symbol sym = ((ob_rawtree*)aref_ptr(0, raw.data.nodes))->data.value.term.symbol;
-            ob_value* val = env_lookup(sym, env.env);
+            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.value.term.symbol;
+            pi_value* val = env_lookup(sym, env.env);
             if (!val) {
                 res.type = Err;
                 res.data.error_message = mk_string("Can't find symbol!", a);
@@ -216,7 +220,7 @@ resolve_result resolve_dynamic_i(ob_rawtree raw, resolve_env env, allocator a) {
     return res;
 }
 
-resolve_result resolve_dynamic(ob_rawtree raw, environment* env, allocator a) {
+resolve_result resolve_dynamic(pi_rawtree raw, environment* env, allocator a) {
     resolve_env r_env;
     r_env.env = env;
     r_env.shadowed = mk_u64_array(32, a);

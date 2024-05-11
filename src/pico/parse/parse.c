@@ -72,7 +72,7 @@ parse_result parse_list(istream* is, sourcepos* parse_state, allocator a) {
             break;
         }
         else {
-            ob_rawtree* node = (ob_rawtree*)mem_alloc(sizeof(ob_rawtree), a);
+            pi_rawtree* node = (pi_rawtree*)mem_alloc(sizeof(pi_rawtree), a);
             node->type = res.data.result.type;
             node->data = res.data.result.data;
             push_ptr(node, &nodes, a);
@@ -115,7 +115,7 @@ parse_result parse_symbol(istream* is, sourcepos* parse_state, allocator a) {
     }
     else {
         string str = string_from_UTF_32(arr, a);
-        ob_symbol sym_result = string_to_symbol(str);
+        pi_symbol sym_result = string_to_symbol(str);
         sdelete_u32_array(arr, a);
         delete_string(str, a);
 

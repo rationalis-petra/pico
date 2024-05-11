@@ -16,6 +16,6 @@ typedef struct resolve_result {
 } resolve_result;
 
 // Given a raw syntax tree, resolve into a syntax tree dynamically, i.e. using the runtime environment
-resolve_result resolve_dynamic(ob_rawtree raw, environment* env, allocator a);
+resolve_result resolve_dynamic(pi_rawtree raw, environment* env, allocator a);
 
 #endif

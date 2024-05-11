@@ -10,21 +10,21 @@
  * 
  */
 
-typedef enum ob_rawtype {
+typedef enum pi_rawtype {
     RawList,
     RawAtom
-} ob_rawtype;
+} pi_rawtype;
 
-typedef struct ob_rawtree {
-    ob_rawtype type;
+typedef struct pi_rawtree {
+    pi_rawtype type;
     union {
-        ob_value value;
+        pi_value value;
         ptr_array nodes;
     } data;
-} ob_rawtree;
+} pi_rawtree;
 
-document* pretty_rawtree(ob_rawtree tree, allocator a);
-void delete_rawtree(ob_rawtree tree, allocator a);
-void delete_rawtree_ptr(ob_rawtree* tree_ptr, allocator a);
+document* pretty_rawtree(pi_rawtree tree, allocator a);
+void delete_rawtree(pi_rawtree tree, allocator a);
+void delete_rawtree_ptr(pi_rawtree* tree_ptr, allocator a);
 
 #endif

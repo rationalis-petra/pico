@@ -7,8 +7,8 @@
 #include "pretty/standard_types.h"
 #include "pico/values/values.h"
 
-AMAP_IMPL(ob_symbol, ob_value, sym_val)
-     AMAP_IMPL(ob_symbol, void*, sym_ptr)
+AMAP_IMPL(pi_symbol, pi_value, sym_val)
+     AMAP_IMPL(pi_symbol, void*, sym_ptr)
 
 
 // The global symbol table
@@ -43,18 +43,18 @@ void clear_symbols() {
     sdelete_str_u64_amap(symbol_table, a);
 }
 
-string* symbol_to_string(ob_symbol symbol) {
+string* symbol_to_string(pi_symbol symbol) {
     allocator a = get_std_allocator();
     if (!initialized) init_symtable(a);
     return (string*)aref_ptr(symbol, symbol_names);
 }
 
-ob_symbol string_to_symbol(string str) {
+pi_symbol string_to_symbol(string str) {
     allocator a = get_std_allocator();
     if (!initialized) init_symtable(a);
 
     uint64_t new_symbol_id = symbol_names.len;
-    ob_symbol* sym = str_u64_lookup(str, symbol_table);
+    pi_symbol* sym = str_u64_lookup(str, symbol_table);
     if (!sym) {
 
         string* map_str = (string*)mem_alloc(sizeof(string), a);
@@ -68,7 +68,7 @@ ob_symbol string_to_symbol(string str) {
     return *sym;
 }
 
-document* pretty_primop(ob_primop_t op, allocator a) {
+document* pretty_primop(pi_primop_t op, allocator a) {
     document* out = NULL;
     switch(op) {
     case AddI64: {
@@ -87,7 +87,7 @@ document* pretty_primop(ob_primop_t op, allocator a) {
     return out;
 }
 
-document* pretty_value(ob_value val, allocator a) {
+document* pretty_value(pi_value val, allocator a) {
     document* out = NULL;
     switch (val.type) {
     case VI64: {

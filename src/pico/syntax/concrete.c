@@ -1,7 +1,7 @@
 #include "pico/syntax/concrete.h"
 
 
-document* pretty_rawtree(ob_rawtree tree, allocator a) {
+document* pretty_rawtree(pi_rawtree tree, allocator a) {
     document* out = NULL;
     switch (tree.type) {
     case RawAtom: {
@@ -12,7 +12,7 @@ document* pretty_rawtree(ob_rawtree tree, allocator a) {
         ptr_array doc_arr = mk_ptr_array(tree.data.nodes.len + 2, a);
         push_ptr(mv_str_doc(mk_string("(", a), a), &doc_arr, a);
         for (size_t i = 0; i < tree.data.nodes.len; i++) {
-            ob_rawtree node = *((ob_rawtree*)aref_ptr(i, tree.data.nodes));
+            pi_rawtree node = *((pi_rawtree*)aref_ptr(i, tree.data.nodes));
             document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr, a);
         }
@@ -24,15 +24,15 @@ document* pretty_rawtree(ob_rawtree tree, allocator a) {
     return out;
 }
 
-void delete_rawtree_ptr(ob_rawtree* tree_ptr, allocator a) {
+void delete_rawtree_ptr(pi_rawtree* tree_ptr, allocator a) {
     delete_rawtree(*tree_ptr, a);
     mem_free(tree_ptr, a);
 }
 
-void delete_rawtree(ob_rawtree tree, allocator a) {
+void delete_rawtree(pi_rawtree tree, allocator a) {
     switch (tree.type) {
     case RawAtom:
-        // TODO: correct this when ob values get garbage collection!
+        // TODO: correct this when pi values get garbage collection!
         break;
     case RawList:
         delete_ptr_array(tree.data.nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
