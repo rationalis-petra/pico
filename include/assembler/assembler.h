@@ -13,6 +13,8 @@
 
 typedef u8_array assembler; 
 assembler* mk_assembler(allocator a);
+void make_executable(assembler* assembler);
+void make_writable(assembler* assembler);
 
 // Integral operations
 typedef enum binary_op {
@@ -27,6 +29,10 @@ typedef enum unary_op {
     Pop,
     Call,
 } unary_op;
+
+typedef enum nullary_op {
+    Ret,
+} nullary_op;
 
 typedef enum regname {
     RAX = 0b0000,
@@ -63,22 +69,19 @@ typedef struct location {
     uint32_t immediate;
 } location;
 
-// result of assembling (might error due to inferior type system :()
-typedef struct asm_result {
-    Result_t type;
-    string error_message;
-} asm_result;
-
 // Location Constructors 
 location reg(regname name);
 location rref(regname name, uint8_t offset);
 location imm32(uint32_t immediate);
 
 // Build a Binary (+,-,etc.) operation. May error
-asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
+result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
 
 // Build a unary operation. May error.
-asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
+result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
+
+// Build a unary operation. May error.
+result build_nullary_op(assembler* assembler, nullary_op op, allocator a);
 
 void clear_assembler(assembler* assembler);
 

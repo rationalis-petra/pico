@@ -1,3 +1,6 @@
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include "assembler/assembler.h"
 #include "data/binary.h"
 
@@ -27,12 +30,23 @@ void clear_assembler(assembler* assembler) {
     assembler->len = 0;
 }
                                             
+void make_executable(assembler* assembler) {
+    mprotect(assembler->data, 256, PROT_EXEC);
+}
+void make_writable (assembler* assembler) {
+    mprotect(assembler->data, 256, PROT_WRITE);
+}
 
 assembler* mk_assembler(allocator a) {
     assembler* out = (assembler*)mem_alloc(sizeof(assembler), a);
-    *out = mk_u8_array(256, a);
+    out->len = 0;
+    out->size = getpagesize();
+    void* memory = mmap(NULL, out->size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FILE | MAP_PRIVATE, -1, 0);
+    out->data = memory;
     return out;
 }
+
+
 
 location reg(regname reg) {
     location out;
@@ -71,8 +85,71 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     return 0b11000000 | ((r2 & 0b111 ) << 3) | (r1 & 0b111); 
 }
 
-asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a) {
-    asm_result out;
+result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
+    // Most paths are successful, so default assume the operation succeeded.
+    result out;
+    out.type = Ok;
+
+    // Note: the logic is simplified for now as we assume 32-bit immediates and
+    // 64-bit registers. This means we always use REX byte :) 
+    bool use_rex = true;
+    bool use_mod_rm_byte = false;
+    uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
+    uint8_t opcode;
+    uint8_t mod_rm_byte;
+    //uint8_t sib_byte;
+
+    // Switch based on the location type.
+    switch (dest.type) {
+    case Register:
+        switch (src.type) {
+        case Register:
+            use_mod_rm_byte = true;
+            mod_rm_byte = encode_reg_reg(dest.reg, src.reg, &rex_byte);
+            set_bit(&rex_byte, 3);
+            switch (op) {
+            case Add: opcode = 0x01; break;
+            case Sub: opcode = 0x29; break;
+            case And: opcode = 0x21; break;
+            case Or:  opcode = 0x09; break;
+            }
+            break;
+            
+        case Deref:
+
+        case Immediate:
+        }
+
+    case Deref:
+        switch (src.type) {
+        case Register:
+            break;
+            
+        case Deref:
+            out.type = Err;
+            out.error_message = mk_string("Cannot use two dereferences as a source/destination pair", a);
+            break;
+
+        case Immediate:
+
+        }
+        break;
+
+    case Immediate:
+        out.type = Err;
+        out.error_message = mk_string("Cannot use an immediate as a destination register!", a);
+        break;
+    }
+    // Finally, write out the opcode into the assembler
+    if (use_rex) push_u8(rex_byte, assembler, a);
+    push_u8(opcode, assembler, a);
+    if (use_mod_rm_byte) push_u8(mod_rm_byte, assembler, a);
+
+    return out;
+}
+
+result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a) {
+    result out;
     out.type = Ok;
     bool use_prefix_byte = false;
     uint8_t prefix_byte;
@@ -83,7 +160,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     uint8_t num_immediate_bytes = 0;
     uint8_t immediate_bytes[4];
      
-    if (loc.reg & 0b1000) {
+    if (loc.type == Register && (loc.reg & 0b1000)) {
         use_prefix_byte = true;
         prefix_byte = 0x41;
     }
@@ -156,66 +233,16 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     return out;
 }
 
-asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
-    // Most paths are successful, so default assume the operation succeeded.
-    asm_result out;
+result build_nullary_op(assembler* assembler, nullary_op op, allocator a) {
+    result out;
     out.type = Ok;
 
-    // Note: the logic is simplified for now as we assume 32-bit immediates and
-    // 64-bit registers. This means we always use REX byte :) 
-    bool use_rex = true;
-    bool use_mod_rm_byte = false;
-    uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
     uint8_t opcode;
-    uint8_t mod_rm_byte;
-    //uint8_t sib_byte;
-
-    // Switch based on the location type.
-    switch (dest.type) {
-    case Register:
-        switch (src.type) {
-        case Register:
-            use_mod_rm_byte = true;
-            mod_rm_byte = encode_reg_reg(dest.reg, src.reg, &rex_byte);
-            set_bit(&rex_byte, 3);
-            switch (op) {
-            case Add: opcode = 0x01; break;
-            case Sub: opcode = 0x29; break;
-            case And: opcode = 0x21; break;
-            case Or:  opcode = 0x09; break;
-            }
-            break;
-            
-        case Deref:
-
-        case Immediate:
-        }
-
-    case Deref:
-        switch (src.type) {
-        case Register:
-            break;
-            
-        case Deref:
-            out.type = Err;
-            out.error_message = mk_string("Cannot use two dereferences as a source/destination pair", a);
-            break;
-
-        case Immediate:
-
-        }
-        break;
-
-    case Immediate:
-        out.type = Err;
-        out.error_message = mk_string("Cannot use an immediate as a destination register!", a);
+    switch (op) {
+    case Ret:
+        opcode = 0xC3;
         break;
     }
-    // Finally, write out the opcode into the assembler
-    if (use_rex) push_u8(rex_byte, assembler, a);
     push_u8(opcode, assembler, a);
-    if (use_mod_rm_byte) push_u8(mod_rm_byte, assembler, a);
-
     return out;
 }
-

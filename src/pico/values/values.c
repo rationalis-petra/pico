@@ -8,7 +8,7 @@
 #include "pico/values/values.h"
 
 AMAP_IMPL(pi_symbol, pi_value, sym_val)
-     AMAP_IMPL(pi_symbol, void*, sym_ptr)
+AMAP_IMPL(pi_symbol, void*, sym_ptr)
 
 
 // The global symbol table

@@ -1,15 +1,22 @@
-#include <stdio.h>
 #include "data/array.h"
 #include "pico/codegen/codegen.h"
 
 
+// 
+pi_value* static_eval(syntax syn, environment* env) {
+    if (syn.type == SVariable) {
+        return env_lookup(syn.data.variable, env);
+    } else {
+        return NULL;
+    }
+};
 
 /* Relevant assembly:
  * 
  */
 
-asm_result generate(syntax syn, assembler* ass, allocator a) {
-    asm_result out;
+result generate(syntax syn, environment* env, assembler* ass, allocator a) {
+    result out;
 
     switch (syn.type) {
     case SLiteral:
@@ -32,21 +39,51 @@ asm_result generate(syntax syn, assembler* ass, allocator a) {
         out.type = Err;
         out.error_message = mk_string("Functions cannot yet be assembled.",a);
         break;
-    case SApplication:
+    case SApplication: {
         for (size_t i = 0; i < syn.data.application.args.len; i++) {
             syntax* arg = (syntax*) syn.data.application.args.data[i];
-            out = generate(*arg, ass, a);
+            out = generate(*arg, env, ass, a);
             if (out.type == Err) return out;
         }
-        // evaluate the function
-        out = generate(*syn.data.application.function, ass, a);
-        if (out.type == Err) return out;
-
-        // pop the function into RAX; call the function
-        out = build_unary_op(ass, Pop, reg(RAX), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Call, reg(RAX), a);
+        // First, do a static check to see if the value is a primitive etc. 
+        pi_value* val = static_eval(*syn.data.application.function, env);
+        if (val && val->type == VPrimOp) {
+            // generate primop code
+            // for now, we know it's a binary binop
+            out = build_unary_op(ass, Pop, reg(RAX), a);
+            if (out.type == Err) return out;
+            out = build_unary_op(ass, Pop, reg(RDI), a);
+            if (out.type == Err) return out;
+            binary_op op;
+            switch (val->term.primop) {
+            case AddI64:
+                op = Add;
+                break;
+            case SubI64:
+                op = Sub;
+                break;
+            case MulI64:
+            case QuotI64:
+                out.type = Err;
+                out.error_message = mk_string("Mul+Quot cannot yet be assembled", a);
+                break;
+            }
+            if (out.type == Err) return out;
+            out = build_binary_op(ass, op, reg (RAX), reg(RDI), a);
+            if (out.type == Err) return out;
+            out = build_unary_op(ass, Push, reg (RAX), a);
+        } else {
+            // evaluate the function
+            out = generate(*syn.data.application.function, env, ass, a);
+            if (out.type == Err) return out;
+            // pop the function into RAX; call the function
+            out = build_unary_op(ass, Pop, reg(RAX), a);
+            if (out.type == Err) return out;
+            out = build_unary_op(ass, Call, reg(RAX), a);
+        }
         break;
+    }
+
     case SConstructor:
     case SRecursor:
     case SDestructor:
