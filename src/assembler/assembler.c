@@ -1,8 +1,18 @@
-#include <sys/mman.h>
-#include <unistd.h>
-
 #include "assembler/assembler.h"
 #include "data/binary.h"
+#include "pretty/standard_types.h"
+
+#ifdef __unix__
+  #define OS_LINUX
+  #include <sys/mman.h>
+  #include <unistd.h>
+#elif defined(_WIN32) || defined(WIN32)
+  #define OS_WINDOWS
+  #include <windows.h>
+  #include <memoryapi.h>
+#else 
+  #error "Only support linux/windows"
+#endif
 
 /* Personal Notes/hints
  * 
@@ -40,10 +50,37 @@ void make_writable (assembler* assembler) {
 assembler* mk_assembler(allocator a) {
     assembler* out = (assembler*)mem_alloc(sizeof(assembler), a);
     out->len = 0;
+#ifdef OS_LINUX
     out->size = getpagesize();
     void* memory = mmap(NULL, out->size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FILE | MAP_PRIVATE, -1, 0);
     out->data = memory;
+#elif OS_WINDOWS
+    out->size = 1024;
+    void* memory = VirtualAlloc(NULL, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    out->data = memory;
+#endif
+
     return out;
+}
+
+void delete_assembler (assembler* ass, allocator a) {
+
+#ifdef OS_LINUX
+    munmap(ass->data, ass->size);
+#elif OS_WINDOWS
+    VirtualFree(ass->data, ass->size, MEM_DECOMMIT);
+#endif
+
+    mem_free(ass, a);
+}
+
+document* pretty_assembler(assembler* assembler, allocator a) {
+    ptr_array nodes = mk_ptr_array(4 + assembler->len, a);
+    for (size_t i = 0; i < assembler->len; i++) {
+        document* arg = pretty_hex_u8(assembler->data[i], a);
+        push_ptr(arg, &nodes, a);
+    }
+    return mv_sep_doc(nodes, a);
 }
 
 

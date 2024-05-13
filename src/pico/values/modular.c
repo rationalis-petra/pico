@@ -5,11 +5,19 @@
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
 
+/* Module and package implementation details
+ * Modules
+ * • The module table maps symbols to entries, which contain: 
+ *   • The address of the value
+ *   • The type of the value
+ *   • An array of pointers to all addresses where this term is referenced
+ */
+
 
 typedef struct module_entry {
-    pi_symbol name;
     void* value;
     pi_type type;
+    ptr_array backrefs;
 } module_entry;
 
 AMAP_HEADER(pi_symbol, module_entry, entry)
@@ -27,7 +35,9 @@ typedef struct pi_module {
     entry_amap entries;
 } pi_module;
 
-// Pi_Package interface
+// -----------------------------------------------------------------------------
+// Package Implementation
+// -----------------------------------------------------------------------------
 pi_package* mk_package(string name, allocator a) {
     pi_package* package = (pi_package*) mem_alloc(sizeof(pi_package), a);
     package->name = string_to_symbol(name);
@@ -45,7 +55,10 @@ result add_module(string name, pi_module* module, pi_package* package, allocator
 }
 
 
-// Module interface
+// -----------------------------------------------------------------------------
+// Module Implementation
+// -----------------------------------------------------------------------------
+
 pi_module* mk_module(allocator a) {
     pi_module* mdle = (pi_module*) mem_alloc(sizeof(pi_module), a);
     mdle->has_name = false;

@@ -195,7 +195,7 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a) {
         }
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
             pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.value.term.symbol;
-            pi_value* val = env_lookup(sym, env.env);
+            pi_value* val = env_lookup_static(sym, env.env);
             if (!val) {
                 res.type = Err;
                 res.data.error_message = mk_string("Can't find symbol!", a);

@@ -1,10 +1,10 @@
 #ifndef __ASSEMBLER_ASSEMBLER_H
 #define __ASSEMBLER_ASSEMBLER_H
 
-#include <stddef.h>
 
 #include "data/result.h"
 #include "data/array.h"
+#include "pretty/document.h"
 #include "data/string.h"
 
 /* The assembler writes encoded instructions directly to a byte-array. 
@@ -13,8 +13,13 @@
 
 typedef u8_array assembler; 
 assembler* mk_assembler(allocator a);
+void delete_assembler(assembler* ass, allocator a);
+void clear_assembler(assembler* assembler);
+document* pretty_assembler(assembler* assembler, allocator a);
+
 void make_executable(assembler* assembler);
 void make_writable(assembler* assembler);
+
 
 // Integral operations
 typedef enum binary_op {
@@ -74,15 +79,9 @@ location reg(regname name);
 location rref(regname name, uint8_t offset);
 location imm32(uint32_t immediate);
 
-// Build a Binary (+,-,etc.) operation. May error
 result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
-
-// Build a unary operation. May error.
 result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
-
-// Build a unary operation. May error.
 result build_nullary_op(assembler* assembler, nullary_op op, allocator a);
 
-void clear_assembler(assembler* assembler);
 
 #endif

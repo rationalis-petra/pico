@@ -1,14 +1,11 @@
-﻿#include <stdio.h>
-#include <stddef.h>
-#include <string.h>
-
-#include "assembler/assembler.h"
-#include "encodings/utf8.h"
+﻿#include "assembler/assembler.h"
 #include "data/string.h"
 #include "data/stream.h"
 #include "memory/std_allocator.h"
 #include "pretty/stream_printer.h"
+#include "pretty/standard_types.h"
 #include "pretty/document.h"
+
 #include "pico/syntax/concrete.h"
 #include "pico/parse/parse.h"
 #include "pico/binding/environment.h"
@@ -92,7 +89,10 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass) {
     write_string(mv_string("\n"), cout);
     delete_doc(doc, a);
 
+    // -------------------------------------------------------------------------
     // Resolution
+    // -------------------------------------------------------------------------
+
     environment* env = default_env(a);
     resolve_result rlve = resolve_dynamic(res.data.result, env, a);
     delete_rawtree(res.data.result, a);
@@ -114,6 +114,9 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass) {
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
 
+    // -------------------------------------------------------------------------
+    // Code Generation
+    // -------------------------------------------------------------------------
 
     result gen_res = generate(rlve.data.out, env, ass, a);
     if (gen_res.type == Ok) {
@@ -139,37 +142,38 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass) {
         return false;
     }
 
-    // TODO: make pretty print!
     write_string(mv_string("Pretty Printing Assembler\n"), cout);
-    for (int i = 0; i < ass->len; i++) {
-        if (i > 0) printf (" ");
-        printf("%02X", ass->data[i]);
-    }
-    printf("\n");
+    doc = pretty_assembler(ass, a);
+    write_doc(doc, cout);
+    write_string(mv_string("\n"), cout);
+    delete_doc(doc, a);
 
-    // 
+    // -------------------------------------------------------------------------
+    // Evaluation
+    // -------------------------------------------------------------------------
+
     write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
-    make_executable(ass);
-    int64_t call_res = pico_call(ass->data);
-    make_writable(ass);
-    //int64_t (*func )(void) = (int64_t(*)(void))ass->data;
-    printf("%ld\n", call_res);
+    int64_t call_res = pico_run_expr(ass->data);
+    doc = pretty_i64(call_res, a);
+    write_doc(doc, cout);
+    write_string(mv_string("\n"), cout);
+    delete_doc(doc, a);
 
     return true;
 }
 
 
-int main() {
+int main(int argc, char** argv) {
+    // Setup
     allocator stdalloc = get_std_allocator();
     istream* cin = get_stdin_stream();
     ostream* cout = get_stdout_stream();
-
-    // Test Function: try assembling sub rax rbx
     assembler* ass = mk_assembler(stdalloc);
 
     while (repl_iter(cin, cout, stdalloc, ass));
 
     // Cleanup
+    delete_assembler(ass, stdalloc);
     clear_symbols();
 
     return 0;

@@ -19,7 +19,7 @@ void env_insert_inplace(pi_symbol sym, pi_value val, environment* env, allocator
     sym_val_insert(sym, val, &env->local_bindings, a);
 }
 
-pi_value* env_lookup(pi_symbol sym, environment* env) {
+pi_value* env_lookup_static(pi_symbol sym, environment* env) {
     return sym_val_lookup(sym, env->local_bindings);
 }
 

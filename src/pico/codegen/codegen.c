@@ -1,11 +1,16 @@
 #include "data/array.h"
 #include "pico/codegen/codegen.h"
 
+/* Code Generation Assumptions:
+ * • All expressions evaluate to integers or functions 
+ * • All functions are just an address to call to (or jmp to for tail calls) 
+ * • All terms are well-typed
+ */
 
 // 
 pi_value* static_eval(syntax syn, environment* env) {
     if (syn.type == SVariable) {
-        return env_lookup(syn.data.variable, env);
+        return env_lookup_static(syn.data.variable, env);
     } else {
         return NULL;
     }

@@ -16,6 +16,7 @@ AMAP_IMPL(pi_symbol, void*, sym_ptr)
 static str_u64_amap symbol_table;
 static ptr_array symbol_names;
 
+
 void init_symtable(allocator a) {
     str_u64_amap map = mk_str_u64_amap(100, a);
     symbol_table.capacity = map.capacity;
