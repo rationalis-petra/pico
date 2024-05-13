@@ -13,7 +13,6 @@
 #include "pico/parse/parse.h"
 #include "pico/binding/environment.h"
 #include "pico/analysis/name_resolution.h"
-#include "pico/eval/expr.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
@@ -93,7 +92,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass) {
     write_string(mv_string("\n"), cout);
     delete_doc(doc, a);
 
-    // Evaluate!
+    // Resolution
     environment* env = default_env(a);
     resolve_result rlve = resolve_dynamic(res.data.result, env, a);
     delete_rawtree(res.data.result, a);
@@ -115,52 +114,27 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass) {
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
 
-    eval_result evl = eval_expr(rlve.data.out, env, a);
 
-    if (evl.type == Err) {
-        delete_syntax(rlve.data.out, a);
-        delete_env(env, a);
-
-        write_string(mv_string("Eval Failed\n"), cout);
-        write_string(evl.data.error_message, cout);
-        delete_string(evl.data.error_message, a);
-        write_string(mv_string("\n"), cout);
-        return false;
-    }
-    if (evl.type != Ok) {
-        delete_syntax(rlve.data.out, a);
-        delete_env(env, a);
-
-        write_string(mv_string("Eval Returned invalid result\n"), cout);
-        return false;
-    }
-    write_string(mv_string("Pretty Printing Evaluated Result:\n"), cout);
-    doc = pretty_value(evl.data.out, a);
-    write_doc(doc, cout);
-    delete_doc(doc, a);
-    write_string(mv_string("\n"), cout);
-
-
-    result out = generate(rlve.data.out, env, ass, a);
-    if (out.type == Ok) {
+    result gen_res = generate(rlve.data.out, env, ass, a);
+    if (gen_res.type == Ok) {
         // genereate a return call
-        out = build_unary_op(ass, Pop, reg(RAX), a);
+        gen_res = build_unary_op(ass, Pop, reg(RAX), a);
 
-        if (out.type == Ok) {
-            out = build_nullary_op(ass, Ret, a);
+        if (gen_res.type == Ok) {
+            gen_res = build_nullary_op(ass, Ret, a);
         }
     }
     delete_syntax(rlve.data.out, a);
     delete_env(env, a);
 
-    if (out.type == Err) {
+    if (gen_res.type == Err) {
         write_string(mv_string("Codegen Failed\n"), cout);
-        write_string(out.error_message, cout);
-        delete_string(out.error_message, a);
+        write_string(gen_res.error_message, cout);
+        delete_string(gen_res.error_message, a);
         write_string(mv_string("\n"), cout);
         return false;
     }
-    if (evl.type != Ok) {
+    if (gen_res.type != Ok) {
         write_string(mv_string("Codegen returned an invalid result\n"), cout);
         return false;
     }
