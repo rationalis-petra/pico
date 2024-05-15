@@ -23,10 +23,28 @@ void make_writable(assembler* assembler);
 
 // Integral operations
 typedef enum binary_op {
+    // ------------------
+    // Arithmetic
+    // ------------------
     Add,
     Sub,
     And,
+
+    // ------------------
+    // Logic
+    // ------------------
     Or,
+
+    // ------------------
+    // Bit Manipulation
+    // ------------------
+    LShift,
+    RShift,
+
+    // ------------------
+    // Memory
+    // ------------------
+    Mov,   // p769.
 } binary_op;
 
 typedef enum unary_op {
@@ -61,7 +79,8 @@ typedef enum regname {
 typedef enum dest_t {
     Register,
     Deref,
-    Immediate
+    Immediate,
+    Immediate64,
 } dest_t;
 
 // Location: Can be one of
@@ -72,12 +91,14 @@ typedef struct location {
     dest_t type;
     regname reg;
     uint32_t immediate;
+    uint64_t immediate_64;
 } location;
 
 // Location Constructors 
 location reg(regname name);
 location rref(regname name, uint8_t offset);
 location imm32(uint32_t immediate);
+location imm64(uint64_t immediate);
 
 result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
 result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);

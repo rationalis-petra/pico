@@ -14,6 +14,11 @@
 
 typedef struct pi_package pi_package;
 typedef struct pi_module pi_module;
+typedef struct module_entry {
+    void* value;
+    pi_type type;
+    ptr_array backrefs;
+} module_entry;
 
 // Package Interface
 pi_package* mk_package(string name, allocator a);
@@ -24,6 +29,9 @@ result add_module(string name, pi_module* module, pi_package* package, allocator
 // Module Interface
 pi_module* mk_module(allocator a);
 void delete_module(pi_module* module, allocator a);
-result add_def (pi_module* module, string name, pi_type type, void* data); 
+result add_def (pi_module* module, pi_symbol name, pi_type type, void* data, allocator a); 
+module_entry* get_def(pi_symbol sym, pi_module* module);
+
+symbol_array get_symbols(pi_module* module, allocator a);
 
 #endif

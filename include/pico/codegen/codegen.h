@@ -7,7 +7,10 @@
 
 // For Now, Generate Assembly directly from syntax!
 
-result generate(syntax syn, environment* env, assembler* ass, allocator a);
+// generate some assembly that can be called into
+result generate_toplevel(syntax syn, environment* env, assembler* ass, allocator a);
+
+//result generate_expr(syntax syn, environment* env, assembler* ass, allocator a);
 
 
 #endif

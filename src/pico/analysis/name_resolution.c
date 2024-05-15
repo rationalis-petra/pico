@@ -5,13 +5,14 @@
 #include "pico/values/values.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
+#include "pico/binding/shadow_env.h"
 
-typedef u64_array sym_array;
-typedef struct resolve_env {
-    environment* env;
-    sym_array shadowed;
-} resolve_env;
-resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a);
+
+// Declarations for mutual recursion
+// ---
+// "Internal" implementation of resolve_dynamic 
+resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a);
+
 
 bool is_symbol(pi_rawtree* raw) {
     return (raw->type == RawAtom && raw->data.value.type == VSymbol);
@@ -29,7 +30,7 @@ bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     return true;
 }
 
-resolve_result mk_application(pi_rawtree raw, resolve_env env, allocator a) {
+resolve_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     resolve_result fn_res = resolve_dynamic_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
     if (fn_res.type == Err) {
         return fn_res;
@@ -59,13 +60,13 @@ resolve_result mk_application(pi_rawtree raw, resolve_env env, allocator a) {
     return res;
 }
 
-resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, resolve_env env, allocator a) {
+resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
     resolve_result res;
     switch (former) {
     case FProcedure: {
         if (raw.data.nodes.len != 3) {
             res.type = Err;
-            res.data.error_message = mk_string("Function term former requires 2 arguments!", a);
+            res.data.error_message = mk_string("Procedure term former requires 2 arguments!", a);
             return res;
         }
 
@@ -76,9 +77,7 @@ resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, resolve_env env,
             return res;
         }
 
-        for (size_t i = 0; i < arguments.len; i++) {
-            push_u64(aref_u64(i, arguments), &env.shadowed, a);
-        }
+        shadow_vars(arguments, env, a);
         resolve_result rbody = resolve_dynamic_i(*(pi_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
         if (rbody.type == Err) {
             return rbody;
@@ -167,7 +166,7 @@ resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, resolve_env env,
 }
 
 // Convert to AST at runtime
-resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a) {
+resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
     resolve_result res;
     switch (raw.type) {
     case RawAtom: {
@@ -195,16 +194,24 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a) {
         }
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
             pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.value.term.symbol;
-            pi_value* val = env_lookup_static(sym, env.env);
-            if (!val) {
+            shadow_entry entry = shadow_env_lookup(sym, env);
+            switch (entry.type) {
+            case SErr:
                 res.type = Err;
-                res.data.error_message = mk_string("Can't find symbol!", a);
-            }
-            else if (val->type == VFormer) {
-                return mk_term(val->term.former, raw, env, a);
-            }
-            else {
+                string str1 = mk_string("Can't find symbol! ", a);
+                string* str2 = symbol_to_string(sym);
+                res.data.error_message = string_cat(str1, *str2, a);
+                delete_string(str1, a);
+                break;
+            case SShadowed: 
                 return mk_application(raw, env, a);
+                break;
+            case SGlobal:
+                if (entry.vtype.sort == TFormer) {
+                    return mk_term(*((pi_term_former_t*)entry.value), raw, env, a);
+                } else {
+                    return mk_application(raw, env, a);
+                }
             }
         }
         else {
@@ -221,10 +228,8 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, resolve_env env, allocator a) {
 }
 
 resolve_result resolve_dynamic(pi_rawtree raw, environment* env, allocator a) {
-    resolve_env r_env;
-    r_env.env = env;
-    r_env.shadowed = mk_u64_array(32, a);
-    resolve_result out = resolve_dynamic_i(raw, r_env, a);
-    sdelete_u64_array(r_env.shadowed, a);
+    shadow_env* s_env = mk_shadow_env(a, env);
+    resolve_result out = resolve_dynamic_i(raw, s_env, a);
+    delete_shadow_env(s_env, a);
     return out;
 }

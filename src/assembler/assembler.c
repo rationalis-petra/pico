@@ -1,3 +1,6 @@
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "assembler/assembler.h"
 #include "data/binary.h"
 #include "pretty/standard_types.h"
@@ -76,10 +79,16 @@ void delete_assembler (assembler* ass, allocator a) {
 
 document* pretty_assembler(assembler* assembler, allocator a) {
     ptr_array nodes = mk_ptr_array(4 + assembler->len, a);
+
     for (size_t i = 0; i < assembler->len; i++) {
-        document* arg = pretty_hex_u8(assembler->data[i], a);
+        int len = snprintf(NULL, 0, "%02x", assembler->data[i]) + 1;
+        char* str = (char*)mem_alloc(sizeof(char) * len, a);
+        snprintf(str, len, "%02" PRIx8, assembler->data[i]);
+        document* arg = mv_str_doc(mv_string(str), a);
+
         push_ptr(arg, &nodes, a);
     }
+
     return mv_sep_doc(nodes, a);
 }
 
@@ -106,6 +115,13 @@ location imm32(uint32_t immediate) {
     return out;
 }
 
+location imm64(uint64_t immediate) {
+    location out;
+    out.type = Immediate64;
+    out.immediate = immediate;
+    return out;
+}
+
 // Return: the ModR/M byte
 uint8_t modrm_reg(regname r2) {
     return 0b11010000 + (r2 & 0b111); 
@@ -122,6 +138,13 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     return 0b11000000 | ((r2 & 0b111 ) << 3) | (r1 & 0b111); 
 }
 
+void reg_in_opcode(regname r, uint8_t* opcode_byte, uint8_t* rex_byte) {
+    // set REX.B if needed
+    if (r & 010) set_bit(rex_byte, 0);
+    // store regname in opcode
+    *opcode_byte += r & 0b111;
+}
+
 result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
     // Most paths are successful, so default assume the operation succeeded.
     result out;
@@ -130,11 +153,15 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
     // Note: the logic is simplified for now as we assume 32-bit immediates and
     // 64-bit registers. This means we always use REX byte :) 
     bool use_rex = true;
-    bool use_mod_rm_byte = false;
     uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
+
     uint8_t opcode;
+
+    bool use_mod_rm_byte = false;
     uint8_t mod_rm_byte;
-    //uint8_t sib_byte;
+
+    uint8_t num_immediate_bytes = 0;
+    uint8_t immediate_bytes[8];
 
     // Switch based on the location type.
     switch (dest.type) {
@@ -143,23 +170,52 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
         case Register:
             use_mod_rm_byte = true;
             mod_rm_byte = encode_reg_reg(dest.reg, src.reg, &rex_byte);
-            set_bit(&rex_byte, 3);
+            set_bit(&rex_byte, 3); // Set REX.W
             switch (op) {
             case Add: opcode = 0x01; break;
             case Sub: opcode = 0x29; break;
             case And: opcode = 0x21; break;
             case Or:  opcode = 0x09; break;
+            case Mov:  opcode = 0x8B; break;
+            default:
+                out.type = Err;
+                out.error_message = mk_string("Reg/Reg for this Op is not implemented", a);
             }
             break;
             
         case Deref:
-
+            out.type = Err;
+            out.error_message = mk_string("Register/Deref not implemented", a);
         case Immediate:
+            
+        case Immediate64:
+            switch (op) {
+            case Mov:
+                // TODO: opcode + rd(w)
+                // TODO: + rd io
+                opcode = 0xB8;
+                set_bit(&rex_byte, 3); // Set REX.W
+                reg_in_opcode(dest.reg, &opcode, &rex_byte);
+
+                num_immediate_bytes = 8;
+                uint8_t* bytes = (uint8_t*) &src.immediate_64;
+                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+                    immediate_bytes[i] = bytes[i];
+                }
+                break;
+                break;
+            default:
+                out.type = Err;
+                out.error_message = mk_string("This operand does not support 64-bit immmediates", a);
+            }
         }
+        break;
 
     case Deref:
         switch (src.type) {
         case Register:
+            out.type = Err;
+            out.error_message = mk_string("Deref/register pair not implemented", a);
             break;
             
         case Deref:
@@ -168,19 +224,28 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
             break;
 
         case Immediate:
-
+        case Immediate64:
+            out.type = Err;
+            out.error_message = mk_string("Deref/Immediate not implemented", a);
         }
         break;
 
     case Immediate:
+    case Immediate64:
         out.type = Err;
         out.error_message = mk_string("Cannot use an immediate as a destination register!", a);
         break;
     }
+    if (out.type == Err) return out;
+
     // Finally, write out the opcode into the assembler
     if (use_rex) push_u8(rex_byte, assembler, a);
     push_u8(opcode, assembler, a);
     if (use_mod_rm_byte) push_u8(mod_rm_byte, assembler, a);
+
+    for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+        push_u8(immediate_bytes[i], assembler, a);
+    }
 
     return out;
 }
