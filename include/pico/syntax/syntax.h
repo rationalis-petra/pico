@@ -131,10 +131,6 @@ struct syntax {
 };
 
 
-syntax* mv_val_syn(const pi_value value, allocator a);
-//syntax* mk_val_doc(const pi_value value, local_collector* lcl, allocator a);
-
-
 /* The Syntax Destructor */
 void delete_syntax(syntax syntax, allocator a);
 void delete_syntax_pointer(syntax* syntax, allocator a);

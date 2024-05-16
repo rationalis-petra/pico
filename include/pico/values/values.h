@@ -8,7 +8,6 @@
 #include "data/string.h"
 #include "pretty/document.h"
 
-typedef struct pi_value pi_value;
 typedef uint64_t pi_symbol;
 typedef u64_array symbol_array;
 
@@ -22,18 +21,8 @@ void clear_symbols();
 
 AMAP_HEADER(pi_symbol, void*, sym_ptr)
 
-
-// Total value
-typedef enum pi_value_t {
-    VI64,
-    VPrimOp,
-    VSymbol,
-    VFormer,
-    VProcedure,
-    VRef,
-} pi_value_t;
-
 typedef enum pi_term_former_t {
+    FDefine,
     FApplication,
     FProcedure,
     FDestructor,
@@ -53,21 +42,6 @@ typedef enum pi_primop_t {
     QuotI64,
 } pi_primop_t;
 
-// Total value
-typedef struct pi_value {
-    pi_value_t type;
-    union {
-        int64_t int_64;
-        pi_primop_t primop;
-        pi_symbol symbol;
-        pi_term_former_t former;
-        pi_value* ref;
-    } term;
-} pi_value;
-
-AMAP_HEADER(pi_symbol, pi_value, sym_val)
-
 document* pretty_primop(pi_primop_t op, allocator a);
-document* pretty_value(pi_value val, allocator a);
 
 #endif

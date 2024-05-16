@@ -39,5 +39,6 @@ env_entry env_lookup(pi_symbol sym, environment* env) {
 
 void delete_env(environment* env, allocator a) {
     // TODO: garbage collect/unroot bound variables
+    sdelete_sym_ptr_amap(env->modules, a);
     mem_free(env, a);
 }

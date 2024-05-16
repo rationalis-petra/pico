@@ -10,6 +10,23 @@
  * 
  */
 
+typedef enum pi_atom_t {
+    AI64,
+    ASymbol,
+} pi_atom_t;
+
+// Total value
+typedef struct pi_atom {
+    pi_atom_t type;
+    union {
+        int64_t int_64;
+        pi_symbol symbol;
+    };
+} pi_atom;
+
+AMAP_HEADER(pi_symbol, pi_atom, sym_atom)
+
+
 typedef enum pi_rawtype {
     RawList,
     RawAtom
@@ -18,7 +35,7 @@ typedef enum pi_rawtype {
 typedef struct pi_rawtree {
     pi_rawtype type;
     union {
-        pi_value value;
+        pi_atom atom;
         ptr_array nodes;
     } data;
 } pi_rawtree;
@@ -27,4 +44,5 @@ document* pretty_rawtree(pi_rawtree tree, allocator a);
 void delete_rawtree(pi_rawtree tree, allocator a);
 void delete_rawtree_ptr(pi_rawtree* tree_ptr, allocator a);
 
+document* pretty_atom(pi_atom val, allocator a);
 #endif

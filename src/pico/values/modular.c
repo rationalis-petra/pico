@@ -68,8 +68,20 @@ pi_module* mk_module(allocator a) {
     return mdle;
 }
 
+
+void delete_symbol(pi_symbol s, allocator a) {}
+void delete_entry(module_entry entry, allocator a) {
+    if (entry.type.sort != TProc) {
+        mem_free(entry.value, a);
+    }
+    delete_pi_type(entry.type, a);
+    sdelete_ptr_array(entry.backrefs, a);
+}
+
 void delete_module(pi_module* module, allocator a) {
-    //delete_entry_amap();
+    // TODO: module should take ownership of allocated memory for executable code.
+    delete_entry_amap(module->entries, &delete_symbol, &delete_entry, a);
+    mem_free(module, a);
 }
 
 result add_def (pi_module* module, pi_symbol name, pi_type type, void* data, allocator a) {

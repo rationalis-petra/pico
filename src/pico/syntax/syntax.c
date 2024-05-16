@@ -1,4 +1,5 @@
 #include "pico/syntax/syntax.h"
+#include "pretty/standard_types.h"
 
 typedef struct syntax_call {
     pi_symbol field;
@@ -14,7 +15,6 @@ syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
     out->data.lit_i64 = value;
     return out;
 }
-//syntax* mk_val_doc(const pi_value value, allocator a);
 
 /* The Syntax Destructor */
 void delete_syntax(syntax syntax, allocator a) {
@@ -57,10 +57,7 @@ document* pretty_syntax(syntax* syntax, allocator a) {
     document* out = NULL;
     switch (syntax->type) {
     case SLiteral: {
-        pi_value val;
-        val.type = VI64;
-        val.term.int_64 = syntax->data.lit_i64;
-        out = pretty_value(val, a);
+        out = pretty_u64(syntax->data.lit_i64, a);
         break;
     }
     case SVariable: {

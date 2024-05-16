@@ -36,5 +36,6 @@ typedef struct pi_type {
 } pi_type;
 
 
+void delete_pi_type(pi_type t, allocator a);
 
 #endif

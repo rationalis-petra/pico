@@ -1,11 +1,12 @@
 #include "pico/syntax/concrete.h"
+#include "pretty/standard_types.h"
 
 
 document* pretty_rawtree(pi_rawtree tree, allocator a) {
     document* out = NULL;
     switch (tree.type) {
     case RawAtom: {
-        out = pretty_value(tree.data.value, a);
+        out = pretty_atom(tree.data.atom, a);
         break;
     }
     case RawList: {
@@ -38,4 +39,25 @@ void delete_rawtree(pi_rawtree tree, allocator a) {
         delete_ptr_array(tree.data.nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
         break;
     }
+}
+
+document* pretty_atom(pi_atom atom, allocator a) {
+    document* out = NULL;
+    switch (atom.type) {
+    case AI64: {
+        out = pretty_i64(atom.int_64, a);
+        break;
+    }
+    case ASymbol: {
+        string* str = symbol_to_string(atom.symbol);
+        if (str) {
+            out = mk_str_doc(*str, a);
+        }
+        else {
+            out = mv_str_doc(mk_string("Can't find symbol!", a), a);
+        }
+        break;
+    }
+    }
+    return out;
 }

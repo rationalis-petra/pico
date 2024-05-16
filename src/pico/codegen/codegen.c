@@ -39,6 +39,7 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
             break;
         case AGlobal:
             // Use RAX as a temp
+            // Note: casting void* to uint64_t only works for 64-bit systems...
             out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
             out = build_unary_op(ass, Push, reg(RCX), a);
             break;

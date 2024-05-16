@@ -121,8 +121,8 @@ parse_result parse_symbol(istream* is, sourcepos* parse_state, allocator a) {
 
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
-        out.data.result.data.value.type = VSymbol;
-        out.data.result.data.value.term.symbol = sym_result;
+        out.data.result.data.atom.type = ASymbol;
+        out.data.result.data.atom.symbol = sym_result;
     }
     return out;
 }
@@ -152,8 +152,8 @@ parse_result parse_number(istream* is, sourcepos* parse_state, allocator a) {
         }
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
-        out.data.result.data.value.type = VI64;;
-        out.data.result.data.value.term.int_64 = int_result;;
+        out.data.result.data.atom.type = AI64;
+        out.data.result.data.atom.int_64 = int_result;;
     }
     sdelete_u8_array(arr, a);
     return out;

@@ -15,7 +15,7 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a);
 
 
 bool is_symbol(pi_rawtree* raw) {
-    return (raw->type == RawAtom && raw->data.value.type == VSymbol);
+    return (raw->type == RawAtom && raw->data.atom.type == ASymbol);
 }
 
 bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
@@ -24,8 +24,8 @@ bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     for (size_t i = 0; i < nodes.data.nodes.len; i++) {
         pi_rawtree* node = aref_ptr(i, nodes.data.nodes);
         if (node->type != RawAtom) { return false; }
-        if (node->data.value.type != VSymbol) { return false;  }
-        push_u64(node->data.value.term.symbol, arr, a);
+        if (node->data.atom.type != ASymbol) { return false;  }
+        push_u64(node->data.atom.symbol, arr, a);
     }
     return true;
 }
@@ -170,15 +170,15 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
     resolve_result res;
     switch (raw.type) {
     case RawAtom: {
-        if (raw.data.value.type == VSymbol) {
+        if (raw.data.atom.type == ASymbol) {
             res.type = Ok;
             res.data.out.type = SVariable;
-            res.data.out.data.variable = raw.data.value.term.symbol;
+            res.data.out.data.variable = raw.data.atom.symbol;
         }
-        else if (raw.data.value.type == VI64) {
+        else if (raw.data.atom.type == AI64) {
             res.type = Ok;
             res.data.out.type = SLiteral;
-            res.data.out.data.lit_i64 = raw.data.value.term.int_64;
+            res.data.out.data.lit_i64 = raw.data.atom.int_64;
         } else  {
             res.type = Err;
             res.data.error_message = mk_string("Currently, can only make literal values out of type i64." , a);
@@ -193,7 +193,7 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
             return res;
         }
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
-            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.value.term.symbol;
+            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
             shadow_entry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:

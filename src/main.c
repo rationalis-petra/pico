@@ -19,6 +19,13 @@ pi_type mk_int_binop_type(allocator a) {
     pi_type* i2 = mem_alloc(sizeof(pi_type), a);
     pi_type* i3 = mem_alloc(sizeof(pi_type), a);
 
+    i1->sort = TPrim;
+    i1->prim = Int_64;
+    i2->sort = TPrim;
+    i2->prim = Int_64;
+    i3->sort = TPrim;
+    i3->prim = Int_64;
+
     pi_type type;
     type.sort = TProc;
     ptr_array args = mk_ptr_array(2, a);
@@ -112,6 +119,11 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string("let"));
     add_def(module, sym, type, former, a);
 
+    former = mem_alloc(sizeof(pi_term_former_t), a);
+    *former = FDefine;
+    sym = string_to_symbol(mv_string("def"));
+    add_def(module, sym, type, former, a);
+
     return module;
 }
 
@@ -182,7 +194,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
 
-    write_string(mv_string("Pretty Printing Assembler\n"), cout);
+    write_string(mv_string("Pretty Printing Binary\n"), cout);
     doc = pretty_assembler(ass, a);
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
@@ -203,7 +215,6 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     return true;
 }
 
-
 int main(int argc, char** argv) {
     // Setup
     allocator stdalloc = get_std_allocator();
@@ -216,9 +227,9 @@ int main(int argc, char** argv) {
     while (repl_iter(cin, cout, stdalloc, ass, module));
 
     // Cleanup
-    delete_assembler(ass, stdalloc);
-    delete_assembler(ass_base, stdalloc);
     delete_module(module, stdalloc);
+    delete_assembler(ass_base, stdalloc);
+    delete_assembler(ass, stdalloc);
     clear_symbols();
 
     return 0;

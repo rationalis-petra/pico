@@ -5,11 +5,8 @@
 #include "data/result.h"
 #include "data/array.h"
 #include "pretty/document.h"
-#include "data/string.h"
 
-/* The assembler writes encoded instructions directly to a byte-array. 
- * 
- */
+/* The assembler writes encoded instructions directly to a byte-array. */
 
 typedef u8_array assembler; 
 assembler* mk_assembler(allocator a);
@@ -19,7 +16,6 @@ document* pretty_assembler(assembler* assembler, allocator a);
 
 void make_executable(assembler* assembler);
 void make_writable(assembler* assembler);
-
 
 // Integral operations
 typedef enum binary_op {

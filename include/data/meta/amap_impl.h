@@ -18,6 +18,7 @@
       delete_key(map.data[i].key, a);\
       delete_val(map.data[i].val, a);\
     }\
+    mem_free(map.data, a);\
   } \
   \
   void sdelete_##prefix##_amap(prefix##_amap map, allocator a) { \

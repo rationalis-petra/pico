@@ -3,7 +3,6 @@
 
 #include "assembler/assembler.h"
 #include "data/binary.h"
-#include "pretty/standard_types.h"
 
 #ifdef __unix__
   #define OS_LINUX
@@ -118,7 +117,7 @@ location imm32(uint32_t immediate) {
 location imm64(uint64_t immediate) {
     location out;
     out.type = Immediate64;
-    out.immediate = immediate;
+    out.immediate_64 = immediate;
     return out;
 }
 
@@ -321,6 +320,7 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
         }
         break;
     }
+    if (out.type == Err) return out;
 
     if (use_prefix_byte) {
         push_u8(prefix_byte, assembler, a);

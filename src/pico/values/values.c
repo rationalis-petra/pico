@@ -4,10 +4,8 @@
 #include "data/amap.h"
 #include "data/array.h"
 #include "memory/std_allocator.h"
-#include "pretty/standard_types.h"
 #include "pico/values/values.h"
 
-AMAP_IMPL(pi_symbol, pi_value, sym_val)
 AMAP_IMPL(pi_symbol, void*, sym_ptr)
 
 
@@ -84,35 +82,6 @@ document* pretty_primop(pi_primop_t op, allocator a) {
     case QuotI64: {
         out = mv_str_doc(mk_string("quot", a), a);
     }
-    }
-    return out;
-}
-
-document* pretty_value(pi_value val, allocator a) {
-    document* out = NULL;
-    switch (val.type) {
-    case VI64: {
-        out = pretty_i64(val.term.int_64, a);
-        break;
-    }
-    case VPrimOp: {
-        out = pretty_primop(val.term.primop, a);
-        break;
-    }
-
-    case VSymbol: {
-        string* str = symbol_to_string(val.term.symbol);
-        if (str) {
-            out = mk_str_doc(*str, a);
-        }
-        else {
-            out = mv_str_doc(mk_string("Can't find symbol!", a), a);
-        }
-        break;
-    }
-    case VRef:
-    default:
-        out = mv_str_doc(mk_string("Unimplemented!", a), a);
     }
     return out;
 }
