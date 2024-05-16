@@ -79,7 +79,6 @@ void delete_entry(module_entry entry, allocator a) {
 }
 
 void delete_module(pi_module* module, allocator a) {
-    // TODO: module should take ownership of allocated memory for executable code.
     delete_entry_amap(module->entries, &delete_symbol, &delete_entry, a);
     mem_free(module, a);
 }
