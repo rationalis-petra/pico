@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "data/meta/amap_header.h"
+#include "data/meta/assoc_header.h"
 #include "data/array.h"
 #include "data/string.h"
 #include "pretty/document.h"
@@ -20,6 +21,7 @@ pi_symbol string_to_symbol(string string);
 void clear_symbols();
 
 AMAP_HEADER(pi_symbol, void*, sym_ptr)
+ASSOC_HEADER(pi_symbol, void*, sym_ptr)
 
 typedef enum pi_term_former_t {
     FDefine,

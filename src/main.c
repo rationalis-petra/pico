@@ -10,6 +10,7 @@
 #include "pico/parse/parse.h"
 #include "pico/binding/environment.h"
 #include "pico/analysis/name_resolution.h"
+#include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
@@ -56,7 +57,6 @@ pi_module* base_module(assembler* ass, allocator a) {
     pi_symbol sym;
 
     pi_type type;
-    type.sort = TFormer;
 
     void* assembly;
 
@@ -77,7 +77,8 @@ pi_module* base_module(assembler* ass, allocator a) {
     /* add_def(module, sym, type, assembly, a); */
 
     pi_term_former_t* former;
-    type.sort = TFormer;
+    type.sort = TPrim;
+    type.prim = TFormer;
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FProcedure;
@@ -174,6 +175,33 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     write_string(mv_string("\n"), cout);
 
     // -------------------------------------------------------------------------
+    // Type Checking
+    // -------------------------------------------------------------------------
+
+    // Note: typechecking annotates the syntax tree, but otherwise doesn't 
+    type_result tc_res = type_infer(&rlve.data.out, env, a);
+    if (tc_res.type == Err) {
+        write_string(mv_string("Typechecking Failed\n"), cout);
+        write_string(tc_res.error_message, cout);
+        delete_string(tc_res.error_message, a);
+        write_string(mv_string("\n"), cout);
+        delete_env(env, a);
+        tc_res.release_type_memory(tc_res.type_mem);
+        return false;
+    }
+    if (tc_res.type != Ok) {
+        write_string(mv_string("Typechecking returned an invalid result\n"), cout);
+        delete_env(env, a);
+        tc_res.release_type_memory(tc_res.type_mem);
+        return false;
+    }
+    write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
+    doc = pretty_type(rlve.data.out.ptype, a);
+    write_doc(doc, cout);
+    delete_doc(doc, a);
+    write_string(mv_string("\n"), cout);
+
+    // -------------------------------------------------------------------------
     // Code Generation
     // -------------------------------------------------------------------------
 
@@ -186,11 +214,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         delete_string(gen_res.error_message, a);
         write_string(mv_string("\n"), cout);
         delete_env(env, a);
+        tc_res.release_type_memory(tc_res.type_mem);
         return false;
     }
     if (gen_res.type != Ok) {
         write_string(mv_string("Codegen returned an invalid result\n"), cout);
         delete_env(env, a);
+        tc_res.release_type_memory(tc_res.type_mem);
         return false;
     }
 
@@ -210,7 +240,9 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
     delete_doc(doc, a);
+
     delete_env(env, a);
+    tc_res.release_type_memory(tc_res.type_mem);
 
     return true;
 }

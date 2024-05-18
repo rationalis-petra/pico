@@ -168,6 +168,9 @@ resolve_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
 // Convert to AST at runtime
 resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
     resolve_result res;
+    // Resolution does not perform type analysis, so we set the type pointer to NULL
+    // This is then resolved in the typechecking stage;
+    res.data.out.ptype = NULL;
     switch (raw.type) {
     case RawAtom: {
         if (raw.data.atom.type == ASymbol) {
@@ -207,7 +210,7 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
                 return mk_application(raw, env, a);
                 break;
             case SGlobal:
-                if (entry.vtype.sort == TFormer) {
+                if (entry.vtype.sort == TPrim && entry.vtype.prim == TFormer) {
                     return mk_term(*((pi_term_former_t*)entry.value), raw, env, a);
                 } else {
                     return mk_application(raw, env, a);

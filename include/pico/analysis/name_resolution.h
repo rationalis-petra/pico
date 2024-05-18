@@ -1,5 +1,5 @@
-#ifndef __PICO_ANALYSIS_NAME_RESOLUTINO_H
-#define __PICO_ANALYSIS_NAME_RESOLUTINO_H
+#ifndef __PICO_ANALYSIS_NAME_RESOLUTION_H
+#define __PICO_ANALYSIS_NAME_RESOLUTION_H
 
 #include "data/string.h"
 #include "data/result.h"
@@ -15,7 +15,6 @@ typedef struct resolve_result {
     } data;
 } resolve_result;
 
-// Given a raw syntax tree, resolve into a syntax tree dynamically, i.e. using the runtime environment
 resolve_result resolve_dynamic(pi_rawtree raw, environment* env, allocator a);
 
 #endif

@@ -1,12 +1,14 @@
 #include <stdio.h>
 
 #include "data/meta/amap_impl.h"
+#include "data/meta/assoc_impl.h"
 #include "data/amap.h"
 #include "data/array.h"
 #include "memory/std_allocator.h"
 #include "pico/values/values.h"
 
 AMAP_IMPL(pi_symbol, void*, sym_ptr)
+ASSOC_IMPL(pi_symbol, void*, sym_ptr)
 
 
 // The global symbol table

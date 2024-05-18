@@ -25,5 +25,4 @@
   val_t* prefix##_lookup(key_t key, prefix ## _amap map); \
   void prefix##_insert(key_t key, val_t val, prefix ## _amap* map, allocator a); \
 
-
 #endif

@@ -83,6 +83,7 @@ void delete_module(pi_module* module, allocator a) {
     mem_free(module, a);
 }
 
+// TODO: if type is of sort PROC, module should move the relevant memory
 result add_def (pi_module* module, pi_symbol name, pi_type type, void* data, allocator a) {
     module_entry_internal entry;
     entry.value = data;

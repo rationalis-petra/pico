@@ -1,7 +1,7 @@
 #ifndef __DATA_META_ARRAY_IMPL_H
 #define __DATA_META_ARRAY_IMPL_H
 
-#include <stddef.h>
+#include <string.h>
 
 #define ARRAY_IMPL(type, prefix) \
   prefix ## _array mk_ ## prefix ## _array(const size_t size, allocator a) { \

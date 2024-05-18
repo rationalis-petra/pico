@@ -3,6 +3,7 @@
 
 #include "memory/allocator.h"
 #include "pico/values/values.h"
+#include "pico/values/types.h"
 
 /* A syntax tree has the following grammar
  * E = call <field> <function> <argument>
@@ -128,6 +129,7 @@ struct syntax {
         syn_let let_expr;
         syn_if if_expr;
     } data;
+    pi_type* ptype;
 };
 
 

@@ -20,25 +20,25 @@ void make_writable(assembler* assembler);
 // Integral operations
 typedef enum binary_op {
     // ------------------
-    // Arithmetic
+    //  Arithmetic
     // ------------------
     Add,
     Sub,
     And,
 
     // ------------------
-    // Logic
+    //  Logic
     // ------------------
     Or,
 
     // ------------------
-    // Bit Manipulation
+    //  Bit Manipulation
     // ------------------
     LShift,
     RShift,
 
     // ------------------
-    // Memory
+    //  Memory
     // ------------------
     Mov,   // p769.
 } binary_op;
