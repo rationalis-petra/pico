@@ -24,9 +24,9 @@ env_entry env_lookup(pi_symbol sym, environment* env) {
     pi_module** module = (pi_module**)sym_ptr_lookup(sym, env->modules);
     if (module) {
         module_entry* mentry = get_def(sym, *module); 
-        if (mentry) {
+        if (mentry != NULL) {
             result.success = Ok;
-            result.type = mentry->type;
+            result.type = &mentry->type;
             result.value = mentry->value;
         } else {
             result.success = Err;

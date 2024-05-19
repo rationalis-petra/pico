@@ -8,8 +8,8 @@
 typedef struct type_result {
     Result_t type;
     string error_message;
-    void (*release_type_memory)(void* type_mem);
-    void* type_mem;
+    void (*release_type_memory)(allocator arena);
+    allocator arena;
 } type_result;
 
 type_result type_check(syntax* untyped, pi_type type, environment* env, allocator a);

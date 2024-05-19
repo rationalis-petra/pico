@@ -13,7 +13,7 @@ typedef enum shadow_entry_t {
 } shadow_entry_t;
 typedef struct shadow_entry {
     shadow_entry_t type;
-    pi_type vtype;
+    pi_type* vtype;
     void* value;
 } shadow_entry;
 

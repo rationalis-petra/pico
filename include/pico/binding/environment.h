@@ -20,7 +20,7 @@ typedef struct env_capture env_capture;
 
 typedef struct env_entry {
     Result_t success;
-    pi_type type;
+    pi_type* type;
     void* value;
 } env_entry;
 

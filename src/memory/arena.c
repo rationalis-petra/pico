@@ -80,5 +80,14 @@ allocator mk_arena_allocator(size_t blocksize, allocator a) {
     return arena;
 }
 
+void delete_block(arena_block block, allocator a) {
+    mem_free(block.data, a);
+}
+
 void release_arena_allocator(allocator a) {
+    arena_context* ctx = (arena_context*)a.ctx;
+    allocator ialloc = ctx->internal_allocator;
+
+    delete_block_array(ctx->memory_blocks, &delete_block, ialloc);
+    mem_free(ctx, ialloc);
 }

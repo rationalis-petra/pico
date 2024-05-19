@@ -28,10 +28,8 @@ type_result type_infer(syntax* untyped, environment* env, allocator a) {
         out.error_message = copy_string(impl.error_message, a);
     }
 
-    out.release_type_memory = (void(*)(void*))&release_arena_allocator;
-    allocator* arena_ptr = mem_alloc(sizeof(allocator), a);
-    *arena_ptr = arena;
-    out.type_mem = arena_ptr;
+    out.release_type_memory = &release_arena_allocator;
+    out.arena = arena;
     return out;
 }
 
@@ -53,10 +51,8 @@ type_result type_check(syntax* untyped, pi_type type, environment* env, allocato
         out.error_message = copy_string(impl.error_message, a);
     }
 
-    out.release_type_memory = (void(*)(void*))&release_arena_allocator;
-    allocator* arena_ptr = mem_alloc(sizeof(allocator), a);
-    *arena_ptr = arena;
-    out.type_mem = arena_ptr;
+    out.release_type_memory = &release_arena_allocator;
+    out.arena = arena;
     return out;
 }
 

@@ -210,7 +210,7 @@ resolve_result resolve_dynamic_i(pi_rawtree raw, shadow_env* env, allocator a) {
                 return mk_application(raw, env, a);
                 break;
             case SGlobal:
-                if (entry.vtype.sort == TPrim && entry.vtype.prim == TFormer) {
+                if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     return mk_term(*((pi_term_former_t*)entry.value), raw, env, a);
                 } else {
                     return mk_application(raw, env, a);

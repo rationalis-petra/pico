@@ -12,13 +12,13 @@ type_env* mk_type_env(environment* env, allocator a) {
     return t_env; 
 }
 
-address_entry type_env_lookup(pi_symbol s, type_env* env) {
+type_entry type_env_lookup(pi_symbol s, type_env* env) {
     // Search locally
-    address_entry out;
-    pi_type* lresult = (pi_type*) sym_ptr_alookup(s, env->locals);
+    type_entry out;
+    pi_type** lresult = (pi_type**) sym_ptr_alookup(s, env->locals);
     if (lresult != NULL) {
         out.type = TELocal;
-        out.ptype = lresult;
+        out.ptype = *lresult;
         return out;
     }
 
@@ -28,7 +28,7 @@ address_entry type_env_lookup(pi_symbol s, type_env* env) {
         out.type = TENotFound;
     } else {
         out.type = TEGlobal;
-        out.ptype = &e.type;
+        out.ptype = e.type;
     }
 
     return out;
@@ -38,9 +38,6 @@ address_entry type_env_lookup(pi_symbol s, type_env* env) {
 void type_var (pi_symbol var, pi_type* type, type_env* env, allocator a) {
     sym_ptr_bind(var, type, &env->locals, a);
 }
-
-/* void type_vars (sym_ptr_amap vars, type_env* env, allocator a) { */
-/* } */
 
 void pop_type(type_env* env) {
     sym_ptr_unbind(&env->locals);

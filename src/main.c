@@ -186,13 +186,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         delete_string(tc_res.error_message, a);
         write_string(mv_string("\n"), cout);
         delete_env(env, a);
-        tc_res.release_type_memory(tc_res.type_mem);
+        tc_res.release_type_memory(tc_res.arena);
         return false;
     }
     if (tc_res.type != Ok) {
         write_string(mv_string("Typechecking returned an invalid result\n"), cout);
         delete_env(env, a);
-        tc_res.release_type_memory(tc_res.type_mem);
+        tc_res.release_type_memory(tc_res.arena);
         return false;
     }
     write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
@@ -214,13 +214,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         delete_string(gen_res.error_message, a);
         write_string(mv_string("\n"), cout);
         delete_env(env, a);
-        tc_res.release_type_memory(tc_res.type_mem);
+        tc_res.release_type_memory(tc_res.arena);
         return false;
     }
     if (gen_res.type != Ok) {
         write_string(mv_string("Codegen returned an invalid result\n"), cout);
         delete_env(env, a);
-        tc_res.release_type_memory(tc_res.type_mem);
+        tc_res.release_type_memory(tc_res.arena);
         return false;
     }
 
@@ -234,15 +234,15 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Evaluation
     // -------------------------------------------------------------------------
 
-    write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     int64_t call_res = pico_run_expr(ass->data);
+    write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     doc = pretty_i64(call_res, a);
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
     delete_doc(doc, a);
 
     delete_env(env, a);
-    tc_res.release_type_memory(tc_res.type_mem);
+    tc_res.release_type_memory(tc_res.arena);
 
     return true;
 }
