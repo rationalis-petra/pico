@@ -12,7 +12,9 @@ typedef struct type_result {
     allocator arena;
 } type_result;
 
-type_result type_check(syntax* untyped, pi_type type, environment* env, allocator a);
-type_result type_infer(syntax* untyped, environment* env, allocator a);
+type_result type_check(toplevel* untyped, environment* env, allocator a);
+
+type_result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a);
+type_result type_infer_expr(syntax* untyped, environment* env, allocator a);
 
 #endif

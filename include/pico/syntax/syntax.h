@@ -12,23 +12,17 @@
  *   | proj <structure> <field list>
  *   | structure <field assignments>
  *   | constructor <values>
- *   | recursor <bind?> <values> <match expressions>
- *   | destructor <values>
- *   | corecursor <bind> <values> <destructor assignments>
+ *   | recursor <bind>? <values> <match expressions>
  *
- * Note on contexts, environments & vars:
- *  When converting from a raw tree to a syntax tree, symbols will be replaced with locations.
- *  A location will indicate that a variable is either in a local environment, or in a module,
- *  and will contain a payload that allows it to be looked up in either. 
- * 
- *  With this in mind, it is worth noting that an Environment is a mapping of locations to values,
- *  while a context is a mapping of symbols to locations.
- * 
+ * A toplevel term has the form:
+ * TL = Expr 
+ *    | Def <symbol> <value>
+ *    | Ann <symbol> <value>
  */
 
 // Use visitor pattern for tree-walkers
 
-typedef enum SyntaxType {
+typedef enum syntax_t {
     SLiteral,
     SVariable,
     SFunction,
@@ -42,7 +36,7 @@ typedef enum SyntaxType {
 
     SLet,
     SIf,
-} SyntaxType;
+} syntax_t;
 
 
 typedef struct syntax syntax;
@@ -112,7 +106,7 @@ typedef struct syn_if {
 
 
 struct syntax {
-    SyntaxType type;
+    syntax_t type;
     union {
         int64_t lit_i64;
         pi_symbol variable;
@@ -140,5 +134,35 @@ void delete_syntax_pointer(syntax* syntax, allocator a);
 
 /* Other instances */
 document* pretty_syntax(syntax* syntax, allocator a);
+
+// -----------------------------------------------------------------------------
+//   Toplevel
+// -----------------------------------------------------------------------------
+
+typedef enum toplevel_t {
+    TLDef,
+    TLExpr,
+} toplevel_t;
+
+typedef struct definition {
+    pi_symbol bind;
+    syntax* value;
+} definition;
+
+typedef struct toplevel {
+    toplevel_t type;
+    union {
+        definition def;
+        syntax expr;
+    };
+} toplevel;
+
+void delete_def(definition def, allocator a);
+void delete_toplevel(toplevel top, allocator a);
+
+document* pretty_def(definition* def, allocator a);
+document* pretty_toplevel(toplevel* toplevel, allocator a);
+
+pi_type* toplevel_type(toplevel top);
 
 #endif

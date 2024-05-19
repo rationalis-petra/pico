@@ -9,7 +9,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/parse/parse.h"
 #include "pico/binding/environment.h"
-#include "pico/analysis/name_resolution.h"
+#include "pico/analysis/abstraction.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
@@ -153,13 +153,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Resolution
     // -------------------------------------------------------------------------
 
-    resolve_result rlve = resolve_dynamic(res.data.result, env, a);
+    abs_result rlve = abstract(res.data.result, env, a);
     delete_rawtree(res.data.result, a);
     if (rlve.type == Err) {
         write_string(mv_string("Resolve Faled :(\n"), cout);
-        write_string(rlve.data.error_message, cout);
+        write_string(rlve.error_message, cout);
         write_string(mv_string("\n"), cout);
-        delete_string(rlve.data.error_message, a);
+        delete_string(rlve.error_message, a);
         delete_env(env, a);
         return false;
     }
@@ -169,7 +169,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
     write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
-    doc = pretty_syntax(&rlve.data.out, a);
+    doc = pretty_toplevel(&rlve.out, a);
     write_doc(doc, cout);
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
@@ -179,7 +179,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // -------------------------------------------------------------------------
 
     // Note: typechecking annotates the syntax tree, but otherwise doesn't 
-    type_result tc_res = type_infer(&rlve.data.out, env, a);
+    type_result tc_res = type_check(&rlve.out, env, a);
     if (tc_res.type == Err) {
         write_string(mv_string("Typechecking Failed\n"), cout);
         write_string(tc_res.error_message, cout);
@@ -195,8 +195,9 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         tc_res.release_type_memory(tc_res.arena);
         return false;
     }
+
     write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-    doc = pretty_type(rlve.data.out.ptype, a);
+    doc = pretty_type(toplevel_type(rlve.out), a);
     write_doc(doc, cout);
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
@@ -205,8 +206,8 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Code Generation
     // -------------------------------------------------------------------------
 
-    result gen_res = generate_toplevel(rlve.data.out, env, ass, a);
-    delete_syntax(rlve.data.out, a);
+    result gen_res = generate_toplevel(rlve.out, env, ass, a);
+    delete_toplevel(rlve.out, a);
 
     if (gen_res.type == Err) {
         write_string(mv_string("Codegen Failed\n"), cout);

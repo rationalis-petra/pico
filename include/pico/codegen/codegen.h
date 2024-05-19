@@ -10,9 +10,9 @@
 // Generate some assembly that can be called into
 // This code:
 // + 
-result generate_toplevel(syntax syn, environment* env, assembler* ass, allocator a);
+result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a);
 
-//result generate_expr(syntax syn, environment* env, assembler* ass, allocator a);
+result generate_expr(syntax syn, environment* env, assembler* ass, allocator a);
 
 
 #endif

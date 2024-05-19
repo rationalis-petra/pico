@@ -94,7 +94,7 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
     return out;
 }
                                                  
-result generate_toplevel(syntax syn, environment* env, assembler* ass, allocator a) {
+result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, a);
     result generated = generate(syn, a_env, ass, a);
 
@@ -109,4 +109,17 @@ result generate_toplevel(syntax syn, environment* env, assembler* ass, allocator
 
     delete_address_env(a_env, a);
     return generated;
+}
+
+result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a) {
+    result out;
+    switch(top.type) {
+    case TLDef:
+        out = generate_expr(*top.def.value, env, ass, a);
+        break;
+    case TLExpr:
+        out = generate_expr(top.expr, env, ass, a);
+        break;
+    }
+    return out;
 }

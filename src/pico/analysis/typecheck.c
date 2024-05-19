@@ -1,18 +1,47 @@
+#include "pico/analysis/typecheck.h"
+
 #include "memory/arena.h"
+#include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
 
-#include "pico/analysis/typecheck.h"
+
+// Check a toplevel expression
+
+type_result type_check(toplevel* top, environment* env, allocator a) {
+    // If this is a definition, lookup the type to check against 
+    pi_type* check_against = NULL;
+    syntax* term = NULL; 
+
+    switch (top->type) {
+    case TLDef: {
+        term = top->def.value;
+        env_entry e = env_lookup(top->def.bind, env);
+        if (e.success == Ok) {
+            check_against = e.type;
+        }
+        break;
+    }
+    case TLExpr:
+        term = &top->expr;
+        break;
+    }
+
+    if (check_against != NULL) {
+        return type_check_expr(term, *check_against, env, a);
+    } else {
+        return type_infer_expr(term, env, a);
+    }
+}
 
 // Forward declarations for implementation
 result type_infer_i(syntax* untyped, type_env* env, allocator a);
 result type_check_i(syntax* untyped, pi_type* type, type_env* env, allocator a);
 
-
 // -----------------------------------------------------------------------------
 // Interface
 // -----------------------------------------------------------------------------
-type_result type_infer(syntax* untyped, environment* env, allocator a) {
+type_result type_infer_expr(syntax* untyped, environment* env, allocator a) {
     // Arena allocator to place types
     allocator arena = mk_arena_allocator(2048, a);
     type_env *t_env = mk_type_env(env, arena);
@@ -33,7 +62,7 @@ type_result type_infer(syntax* untyped, environment* env, allocator a) {
     return out;
 }
 
-type_result type_check(syntax* untyped, pi_type type, environment* env, allocator a) {
+type_result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a) {
     // copy type
     pi_type stype = squash_type(type, a);
 

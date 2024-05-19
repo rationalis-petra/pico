@@ -130,3 +130,53 @@ document* pretty_syntax(syntax* syntax, allocator a) {
     }
     return out;
 }
+
+void delete_def(definition def, allocator a) {
+    delete_syntax_pointer(def.value, a);
+}
+
+void delete_toplevel(toplevel top, allocator a) {
+    switch(top.type) {
+    case TLExpr:
+        delete_syntax(top.expr, a);
+        break;
+    case TLDef:
+        delete_def(top.def, a);
+        break;
+    }
+}
+
+document* pretty_def(definition* def, allocator a) {
+    ptr_array nodes = mk_ptr_array(4, a);
+    push_ptr(mv_str_doc(mk_string("(def", a), a), &nodes, a);
+    push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes, a);
+    push_ptr(pretty_syntax(def->value, a), &nodes, a);
+    push_ptr(mv_str_doc(mk_string(")", a), a), &nodes, a);
+    return mv_sep_doc(nodes, a);
+}
+
+document* pretty_toplevel(toplevel* toplevel, allocator a) {
+    document* out = NULL;
+    switch (toplevel->type) {
+    case TLExpr:
+        out = pretty_syntax(&toplevel->expr, a);
+        break;
+    case TLDef:
+        out = pretty_def(&toplevel->def, a);
+        break;
+    }
+    return out;
+}
+
+pi_type* toplevel_type(toplevel top) {
+    pi_type* out = NULL;
+    switch (top.type) {
+    case TLExpr:
+        out = top.expr.ptype;
+        break;
+    case TLDef:
+        out = top.def.value->ptype;
+        break;
+    }
+    return out;
+}

@@ -2,13 +2,6 @@
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
 
-/* typedef struct allocator { */
-/*     void* (*malloc)(size_t memsize, void* ctx); */
-/*     void* (*realloc)(void* ptr, size_t memsize, void* ctx); */
-/*     void (*free)(void* location, void* ctx); */
-/*     void* ctx; */
-/* } allocator; */
-
 typedef struct arena_block {
     void* data;
     size_t bmp;
