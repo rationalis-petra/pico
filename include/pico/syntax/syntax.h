@@ -105,7 +105,7 @@ typedef struct syn_if {
 } syn_if;
 
 
-struct syntax {
+typedef struct syntax {
     syntax_t type;
     union {
         int64_t lit_i64;
@@ -124,7 +124,7 @@ struct syntax {
         syn_if if_expr;
     } data;
     pi_type* ptype;
-};
+} syntax;
 
 
 /* The Syntax Destructor */

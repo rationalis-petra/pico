@@ -15,6 +15,15 @@ typedef struct abs_result {
     };
 } abs_result;
 
+typedef struct abs_expr_result {
+    Result_t type;
+    union {
+        string error_message;
+        syntax out;
+    };
+} abs_expr_result;
+
 abs_result abstract(pi_rawtree raw, environment* env, allocator a);
+abs_expr_result abstract_expr(pi_rawtree raw, environment* env, allocator a);
 
 #endif

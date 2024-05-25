@@ -12,8 +12,7 @@ syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
     //value_root(value, lcl);
     syntax* out = (syntax*)mem_alloc(sizeof(syntax), a);
     out->type = SLiteral;
-    out->data.lit_i64 = value;
-    return out;
+    out->data.lit_i64 = value; return out;
 }
 
 /* The Syntax Destructor */
@@ -148,7 +147,7 @@ void delete_toplevel(toplevel top, allocator a) {
 
 document* pretty_def(definition* def, allocator a) {
     ptr_array nodes = mk_ptr_array(4, a);
-    push_ptr(mv_str_doc(mk_string("(def", a), a), &nodes, a);
+    push_ptr(mv_str_doc(mk_string("( def", a), a), &nodes, a);
     push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes, a);
     push_ptr(pretty_syntax(def->value, a), &nodes, a);
     push_ptr(mv_str_doc(mk_string(")", a), a), &nodes, a);

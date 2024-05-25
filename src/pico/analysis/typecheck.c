@@ -130,11 +130,13 @@ result type_infer_i(syntax* untyped, type_env* env, allocator a) {
         if (fn_type.sort != TProc) {
             out.type = Err;
             out.error_message = mk_string("Expected LHS of application to be a proc", a);
+            return out;
         }
         
         if (fn_type.proc.args.len != untyped->data.application.args.len) {
             out.type = Err;
             out.error_message = mk_string("Incorrect number of function arguments", a);
+            return out;
         }
 
         for (size_t i = 0; i < fn_type.proc.args.len; i++) {

@@ -9,7 +9,7 @@ environment* env_from_module(pi_module* module, allocator a) {
     environment* env = mem_alloc(sizeof(environment), a);
     env->modules = mk_sym_ptr_amap(32, a);
     // loop for entry in module:
-    symbol_array arr = get_symbols(module, a);
+    symbol_array arr = get_symbols(module);
     for (size_t i = 0; i < arr.len; i++ ) {
         sym_ptr_insert(arr.data[i], (void*)module, &(env->modules), a);
     }

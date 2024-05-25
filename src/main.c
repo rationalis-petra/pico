@@ -2,6 +2,7 @@
 #include "data/string.h"
 #include "data/stream.h"
 #include "memory/std_allocator.h"
+#include "memory/executable.h"
 #include "pretty/stream_printer.h"
 #include "pretty/standard_types.h"
 #include "pretty/document.h"
@@ -39,17 +40,14 @@ pi_type mk_int_binop_type(allocator a) {
     return type;
 }
 
-void* build_binary_fun(assembler* ass, binary_op op, allocator a) {
-    void* begin = ass->data + ass->len;
-    build_unary_op (ass, Pop, reg(RBP), a);
-    build_unary_op (ass, Pop, reg(RBX), a);
-    build_unary_op (ass, Pop, reg(RAX), a);
-    build_binary_op (ass, op, reg(RAX), reg(RBX), a);
-    build_unary_op (ass, Push, reg(RAX), a);
-    build_unary_op (ass, Push, reg(RBP), a);
-    build_nullary_op (ass, Ret, a);
-
-    return begin;
+void build_binary_fun(assembler* ass, binary_op op, allocator a) {
+    build_unary_op (ass, Pop, reg(RBP));
+    build_unary_op (ass, Pop, reg(RBX));
+    build_unary_op (ass, Pop, reg(RAX));
+    build_binary_op (ass, op, reg(RAX), reg(RBX));
+    build_unary_op (ass, Push, reg(RAX));
+    build_unary_op (ass, Push, reg(RBP));
+    build_nullary_op (ass, Ret);
 }
 
 pi_module* base_module(assembler* ass, allocator a) {
@@ -58,17 +56,17 @@ pi_module* base_module(assembler* ass, allocator a) {
 
     pi_type type;
 
-    void* assembly;
-
-    assembly = build_binary_fun(ass, Add, a);
+    build_binary_fun(ass, Add, a);
     type = mk_int_binop_type(a);
     sym = string_to_symbol(mv_string("+"));
-    add_def(module, sym, type, assembly, a);
+    add_fn_def(module, sym, type, ass);
+    clear_assembler(ass);
 
-    assembly = build_binary_fun(ass, Sub, a);
+    build_binary_fun(ass, Sub, a);
     type = mk_int_binop_type(a);
     sym = string_to_symbol(mv_string("-"));
-    add_def(module, sym, type, assembly, a);
+    add_fn_def(module, sym, type, ass);
+    clear_assembler(ass);
 
     /* sym = string_to_symbol(mv_string("*")); */
     /* add_def(module, sym, type, assembly, a); */
@@ -83,47 +81,47 @@ pi_module* base_module(assembler* ass, allocator a) {
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FProcedure;
     sym = string_to_symbol(mv_string("proc"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FApplication;
     sym = string_to_symbol(mv_string("$"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FConstructor;
     sym = string_to_symbol(mv_string(":"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FRecursor;
     sym = string_to_symbol(mv_string("match"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FProjector;
     sym = string_to_symbol(mv_string("."));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FIf;
     sym = string_to_symbol(mv_string("if"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FLet;
     sym = string_to_symbol(mv_string("let"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     former = mem_alloc(sizeof(pi_term_former_t), a);
     *former = FDefine;
     sym = string_to_symbol(mv_string("def"));
-    add_def(module, sym, type, former, a);
+    add_def(module, sym, type, former);
 
     return module;
 }
@@ -153,23 +151,23 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Resolution
     // -------------------------------------------------------------------------
 
-    abs_result rlve = abstract(res.data.result, env, a);
+    abs_result abs = abstract(res.data.result, env, a);
     delete_rawtree(res.data.result, a);
-    if (rlve.type == Err) {
-        write_string(mv_string("Resolve Faled :(\n"), cout);
-        write_string(rlve.error_message, cout);
+    if (abs.type == Err) {
+        write_string(mv_string("Abstract Faled :(\n"), cout);
+        write_string(abs.error_message, cout);
         write_string(mv_string("\n"), cout);
-        delete_string(rlve.error_message, a);
+        delete_string(abs.error_message, a);
         delete_env(env, a);
         return false;
     }
-    if (rlve.type != Ok) {
+    if (abs.type != Ok) {
         write_string(mv_string("Resolve Returned invalid result!\n"), cout);
         delete_env(env, a);
         return false;
     }
     write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
-    doc = pretty_toplevel(&rlve.out, a);
+    doc = pretty_toplevel(&abs.out, a);
     write_doc(doc, cout);
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
@@ -179,7 +177,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // -------------------------------------------------------------------------
 
     // Note: typechecking annotates the syntax tree, but otherwise doesn't 
-    type_result tc_res = type_check(&rlve.out, env, a);
+    type_result tc_res = type_check(&abs.out, env, a);
     if (tc_res.type == Err) {
         write_string(mv_string("Typechecking Failed\n"), cout);
         write_string(tc_res.error_message, cout);
@@ -197,7 +195,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     }
 
     write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-    doc = pretty_type(toplevel_type(rlve.out), a);
+    doc = pretty_type(toplevel_type(abs.out), a);
     write_doc(doc, cout);
     delete_doc(doc, a);
     write_string(mv_string("\n"), cout);
@@ -206,10 +204,10 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Code Generation
     // -------------------------------------------------------------------------
 
-    result gen_res = generate_toplevel(rlve.out, env, ass, a);
-    delete_toplevel(rlve.out, a);
+    result gen_res = generate_toplevel(abs.out, env, ass, a);
 
     if (gen_res.type == Err) {
+        delete_toplevel(abs.out, a);
         write_string(mv_string("Codegen Failed\n"), cout);
         write_string(gen_res.error_message, cout);
         delete_string(gen_res.error_message, a);
@@ -219,6 +217,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
     if (gen_res.type != Ok) {
+        delete_toplevel(abs.out, a);
         write_string(mv_string("Codegen returned an invalid result\n"), cout);
         delete_env(env, a);
         tc_res.release_type_memory(tc_res.arena);
@@ -235,9 +234,10 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Evaluation
     // -------------------------------------------------------------------------
 
-    int64_t call_res = pico_run_expr(ass->data);
+    eval_result call_res = pico_run_toplevel(abs.out, ass, module, a);
+    delete_toplevel(abs.out, a);
     write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
-    doc = pretty_i64(call_res, a);
+    doc = pretty_i64(call_res.val, a); // TODO
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
     delete_doc(doc, a);
@@ -253,16 +253,17 @@ int main(int argc, char** argv) {
     allocator stdalloc = get_std_allocator();
     istream* cin = get_stdin_stream();
     ostream* cout = get_stdout_stream();
-    assembler* ass = mk_assembler(stdalloc);
-    assembler* ass_base = mk_assembler(stdalloc);
+    allocator exalloc = mk_executable_allocator(stdalloc);
+    assembler* ass = mk_assembler(exalloc);
+    assembler* ass_base = mk_assembler(exalloc);
     pi_module* module = base_module(ass_base, stdalloc);
 
     while (repl_iter(cin, cout, stdalloc, ass, module));
 
     // Cleanup
-    delete_module(module, stdalloc);
-    delete_assembler(ass_base, stdalloc);
-    delete_assembler(ass, stdalloc);
+    delete_module(module);
+    delete_assembler(ass_base);
+    delete_assembler(ass);
     clear_symbols();
 
     return 0;

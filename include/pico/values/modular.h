@@ -1,6 +1,7 @@
 #ifndef __PICO_VALUES_MODULAR_H
 #define __PICO_VALUES_MODULAR_H
 
+#include "assembler/assembler.h"
 #include "memory/allocator.h"
 #include "data/string.h"
 #include "data/result.h"
@@ -28,10 +29,11 @@ result add_module(string name, pi_module* module, pi_package* package, allocator
 
 // Module Interface
 pi_module* mk_module(allocator a);
-void delete_module(pi_module* module, allocator a);
-result add_def (pi_module* module, pi_symbol name, pi_type type, void* data, allocator a); 
+void delete_module(pi_module* module);
+result add_def(pi_module* module, pi_symbol name, pi_type type, void* data); 
+result add_fn_def(pi_module* module, pi_symbol name, pi_type type, assembler* fn); 
 module_entry* get_def(pi_symbol sym, pi_module* module);
 
-symbol_array get_symbols(pi_module* module, allocator a);
+symbol_array get_symbols(pi_module* module);
 
 #endif

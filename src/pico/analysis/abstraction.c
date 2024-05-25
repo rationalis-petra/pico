@@ -12,16 +12,7 @@
 // ---
 // "Internal" implementation of resolve_dynamic 
 
-typedef struct abs_internal {
-    Result_t type;
-    union {
-        string error_message;
-        syntax out;
-    };
-} abs_internal;
-
-abs_internal abstract_i(pi_rawtree raw, shadow_env* env, allocator a);
-
+abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a);
 
 bool is_symbol(pi_rawtree* raw) {
     return (raw->type == RawAtom && raw->data.atom.type == ASymbol);
@@ -39,13 +30,30 @@ bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     return true;
 }
 
-abs_internal mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_internal fn_res = abstract_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
+abs_result to_toplevel(abs_expr_result res) {
+    abs_result out;
+    switch (res.type) {
+    case Ok: {
+        out.type = Ok;
+        out.out.type = TLExpr;
+        out.out.expr = res.out;
+        break;
+    }
+    case Err:
+        out.type = Err;
+        out.error_message = res.error_message;
+    }
+    return out;
+}
+
+
+abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
+    abs_expr_result fn_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
     if (fn_res.type == Err) {
         return fn_res;
     }
 
-    abs_internal res;
+    abs_expr_result res;
     res.type = Ok;
     res.out.type = SApplication;
     res.out.data.application.function = mem_alloc(sizeof(syntax), a);
@@ -53,7 +61,7 @@ abs_internal mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     res.out.data.application.args = mk_ptr_array(raw.data.nodes.len - 1, a);
 
     for (size_t i = 1; i < raw.data.nodes.len; i++) {
-        abs_internal arg_res = abstract_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+        abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
         if (arg_res.type == Ok) {
             syntax* arg = mem_alloc(sizeof(syntax), a);
             *arg = arg_res.out;
@@ -69,8 +77,8 @@ abs_internal mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     return res;
 }
 
-abs_internal mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_internal res;
+abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
+    abs_expr_result res;
     switch (former) {
     case FProcedure: {
         if (raw.data.nodes.len != 3) {
@@ -87,7 +95,7 @@ abs_internal mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, a
         }
 
         shadow_vars(arguments, env, a);
-        abs_internal rbody = abstract_i(*(pi_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
+        abs_expr_result rbody = abstract_expr_i(*(pi_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
         if (rbody.type == Err) {
             return rbody;
         }
@@ -142,7 +150,7 @@ abs_internal mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, a
         syn_array terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
             pi_rawtree* rptr = aref_ptr(i, raw.data.nodes);
-            abs_internal rterm = abstract_i(*rptr, env, a);
+            abs_expr_result rterm = abstract_expr_i(*rptr, env, a);
             if (rterm.type == Err) {
                 delete_ptr_array(terms, (void(*)(void*, allocator))delete_syntax_pointer, a);
                 return rterm;
@@ -175,8 +183,8 @@ abs_internal mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, a
 }
 
 // Convert to AST at runtime
-abs_internal abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_internal res;
+abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
+    abs_expr_result res;
     // Resolution does not perform type analysis, so we set the type pointer to NULL
     // This is then resolved in the typechecking stage;
     res.out.ptype = NULL;
@@ -198,7 +206,7 @@ abs_internal abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
         break;
     }
     case RawList: {
-        // Currently, can only have function calls, so all RawLists compile down to an application
+        // Currently, can only have function calls, so all Rawaists compile down to an application
         if (raw.data.nodes.len < 1) {
             res.type = Err;
             res.error_message = mk_string("Raw Syntax must have at least one element!", a);
@@ -239,21 +247,92 @@ abs_internal abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
     return res;
 }
 
-abs_result abstract(pi_rawtree raw, environment* env, allocator a) {
-    shadow_env* s_env = mk_shadow_env(a, env);
-    abs_internal ai = abstract_i(raw, s_env, a);
-    abs_result out; 
-    out.type = ai.type;
-    switch (ai.type) {
-    case Ok:
-        out.out.type = TLExpr;
-        out.out.expr = ai.out;
-        break;
-    case Err:
-        out.error_message = ai.error_message;
+
+abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
+    abs_result res;
+    switch (former) {
+    case FDefine: {
+        if (raw.data.nodes.len != 3) {
+            res.type = Err;
+            res.error_message = mk_string("Definitions expect exactly 2 terms", a);
+            return res;
+        }
+
+        if (!is_symbol(raw.data.nodes.data[1])) {
+            res.type = Err;
+            res.error_message = mk_string("First argument to definitions should be a symbol", a);
+            return res;
+        }
+
+        pi_symbol sym = ((pi_rawtree*)aref_ptr(1, raw.data.nodes))->data.atom.symbol;
+        
+        pi_rawtree* raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+        abs_expr_result inter = abstract_expr_i(*raw_term, env, a);
+        if (inter.type == Err) {
+            res.type = Err;
+            res.error_message = inter.error_message;
+            return res;
+        }
+
+        syntax* term = (syntax*) mem_alloc(sizeof(syntax), a);
+        *term = inter.out;
+        // res.out;
+
+        res.type = Ok;
+        res.out.type = TLDef;
+        res.out.def.bind = sym;
+        res.out.def.value = term;
+
         break;
     }
+    default:
+        // fallback: make term. 
+        res = to_toplevel(mk_term(former, raw, env, a));
+        break;
+    }
+    return res;
+}
 
+abs_result abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
+    // first: try a unique toplevel-form
+    bool unique_toplevel = false;
+
+    if (raw.type == RawList && raw.data.nodes.len > 1) {
+        if (is_symbol(aref_ptr(0, raw.data.nodes))) {
+            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
+            shadow_entry entry = shadow_env_lookup(sym, env);
+            switch (entry.type) {
+            case SGlobal:
+                if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
+                    unique_toplevel = true;
+                    return mk_toplevel(*((pi_term_former_t*)entry.value), raw, env, a);
+                }
+            default:
+                break;
+            }
+        }
+    } 
+
+    if (!unique_toplevel) {
+        return to_toplevel(abstract_expr_i(raw, env, a));
+    }
+
+    abs_result out; 
+    out.type = Err;
+    out.error_message = mk_string("Logic error in abstract_i: reached unreachable area.", a);
+    return out;
+}
+
+abs_expr_result abstract_expr(pi_rawtree raw, environment* env, allocator a) {
+    shadow_env* s_env = mk_shadow_env(a, env);
+    abs_expr_result out = abstract_expr_i(raw, s_env, a);
+    delete_shadow_env(s_env, a);
+    return out; 
+}
+
+abs_result abstract(pi_rawtree raw, environment* env, allocator a) {
+    shadow_env* s_env = mk_shadow_env(a, env);
+    abs_result out = abstract_i(raw, s_env, a);
     delete_shadow_env(s_env, a);
     return out;
 }

@@ -8,11 +8,12 @@
 
 /* The assembler writes encoded instructions directly to a byte-array. */
 
-typedef u8_array assembler; 
+typedef struct assembler assembler; 
 assembler* mk_assembler(allocator a);
-void delete_assembler(assembler* ass, allocator a);
+void delete_assembler(assembler* assembler);
 void clear_assembler(assembler* assembler);
 document* pretty_assembler(assembler* assembler, allocator a);
+u8_array get_instructions(assembler* assembler);
 
 void make_executable(assembler* assembler);
 void make_writable(assembler* assembler);
@@ -44,9 +45,9 @@ typedef enum binary_op {
 } binary_op;
 
 typedef enum unary_op {
+    Call,
     Push,
     Pop,
-    Call,
 } unary_op;
 
 typedef enum nullary_op {
@@ -96,9 +97,9 @@ location rref(regname name, uint8_t offset);
 location imm32(uint32_t immediate);
 location imm64(uint64_t immediate);
 
-result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator a);
-result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a);
-result build_nullary_op(assembler* assembler, nullary_op op, allocator a);
+result build_binary_op(assembler* ass, binary_op op, location dest, location src);
+result build_unary_op(assembler* assembler, unary_op op, location loc);
+result build_nullary_op(assembler* assembler, nullary_op op);
 
 
 #endif

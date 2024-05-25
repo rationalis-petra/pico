@@ -3,18 +3,7 @@
 
 #include "assembler/assembler.h"
 #include "data/binary.h"
-
-#ifdef __unix__
-  #define OS_LINUX
-  #include <sys/mman.h>
-  #include <unistd.h>
-#elif defined(_WIN32) || defined(WIN32)
-  #define OS_WINDOWS
-  #include <windows.h>
-  #include <memoryapi.h>
-#else 
-  #error "Only support linux/windows"
-#endif
+#include "data/array.h"
 
 /* Personal Notes/hints
  * 
@@ -38,51 +27,45 @@
  * 
  */ 
 
+struct assembler {
+    u8_array instructions;
+    allocator allocator;
+};
+
 void clear_assembler(assembler* assembler) {
-    assembler->len = 0;
+    assembler->instructions.len = 0;
 }
                                             
 void make_executable(assembler* assembler) {
-    mprotect(assembler->data, 256, PROT_EXEC);
+    //mprotect(assembler->data, 256, PROT_EXEC);
 }
 void make_writable (assembler* assembler) {
-    mprotect(assembler->data, 256, PROT_WRITE);
+    //mprotect(assembler->data, 256, PROT_WRITE);
 }
 
 assembler* mk_assembler(allocator a) {
     assembler* out = (assembler*)mem_alloc(sizeof(assembler), a);
-    out->len = 0;
-#ifdef OS_LINUX
-    out->size = getpagesize();
-    void* memory = mmap(NULL, out->size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FILE | MAP_PRIVATE, -1, 0);
-    out->data = memory;
-#elif OS_WINDOWS
-    out->size = 1024;
-    void* memory = VirtualAlloc(NULL, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    out->data = memory;
-#endif
-
+    out->instructions = mk_u8_array(1024, a);
+    out->allocator = a;
     return out;
 }
 
-void delete_assembler (assembler* ass, allocator a) {
+u8_array get_instructions(assembler* ass) {
+    return ass->instructions;
+}
 
-#ifdef OS_LINUX
-    munmap(ass->data, ass->size);
-#elif OS_WINDOWS
-    VirtualFree(ass->data, ass->size, MEM_DECOMMIT);
-#endif
-
-    mem_free(ass, a);
+void delete_assembler (assembler* ass) {
+    sdelete_u8_array(ass->instructions, ass->allocator);
+    mem_free(ass, ass->allocator);
 }
 
 document* pretty_assembler(assembler* assembler, allocator a) {
-    ptr_array nodes = mk_ptr_array(4 + assembler->len, a);
+    ptr_array nodes = mk_ptr_array(4 + assembler->instructions.len, a);
 
-    for (size_t i = 0; i < assembler->len; i++) {
-        int len = snprintf(NULL, 0, "%02x", assembler->data[i]) + 1;
+    for (size_t i = 0; i < assembler->instructions.len; i++) {
+        int len = snprintf(NULL, 0, "%02x", assembler->instructions.data[i]) + 1;
         char* str = (char*)mem_alloc(sizeof(char) * len, a);
-        snprintf(str, len, "%02" PRIx8, assembler->data[i]);
+        snprintf(str, len, "%02" PRIx8, assembler->instructions.data[i]);
         document* arg = mv_str_doc(mv_string(str), a);
 
         push_ptr(arg, &nodes, a);
@@ -103,6 +86,7 @@ location reg(regname reg) {
 location rref(regname name, uint8_t offset) {
     location out;
     out.type = Deref;
+    out.reg = name;
     out.immediate = offset;
     return out;
 }
@@ -137,6 +121,17 @@ uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
     return 0b11000000 | ((r2 & 0b111 ) << 3) | (r1 & 0b111); 
 }
 
+uint8_t encode_reg_mem(regname r1, location mem, uint8_t* rex_byte) {
+    // R1 (dest) is encoded in ModR/M Reg + REX.R
+    // R2 (src)  is encoded in ModR/M R/M + REX.B
+
+    // set REX.R, Rex.B if needed 
+    if (r1 & 010) set_bit(rex_byte, 0);
+    if (mem.reg & 010) set_bit(rex_byte, 2);
+
+    return 0b00000000 | ((mem.reg & 0b111 ) << 3) | (r1 & 0b111); 
+}
+
 void reg_in_opcode(regname r, uint8_t* opcode_byte, uint8_t* rex_byte) {
     // set REX.B if needed
     if (r & 010) set_bit(rex_byte, 0);
@@ -144,7 +139,8 @@ void reg_in_opcode(regname r, uint8_t* opcode_byte, uint8_t* rex_byte) {
     *opcode_byte += r & 0b111;
 }
 
-result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator a) {
+result build_binary_op(assembler* assembler, binary_op op, location dest, location src) {
+    allocator a = assembler->allocator;
     // Most paths are successful, so default assume the operation succeeded.
     result out;
     out.type = Ok;
@@ -175,6 +171,7 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
             case Sub: opcode = 0x29; break;
             case And: opcode = 0x21; break;
             case Or:  opcode = 0x09; break;
+
             case Mov:  opcode = 0x8B; break;
             default:
                 out.type = Err;
@@ -183,8 +180,18 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
             break;
             
         case Deref:
-            out.type = Err;
-            out.error_message = mk_string("Register/Deref not implemented", a);
+            use_mod_rm_byte = true;
+            mod_rm_byte = encode_reg_mem(dest.reg, src, &rex_byte);
+            set_bit(&rex_byte, 3); // Set REX.W
+            switch (op)  {
+            case Mov:
+                opcode =  0x8B; 
+                break;
+            default:
+                out.type = Err;
+                out.error_message = mk_string("Register/Deref not implemented", a);
+            }
+            break;
         case Immediate:
             
         case Immediate64:
@@ -237,19 +244,22 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
     }
     if (out.type == Err) return out;
 
+
+    u8_array* instructions = &assembler->instructions;
     // Finally, write out the opcode into the assembler
-    if (use_rex) push_u8(rex_byte, assembler, a);
-    push_u8(opcode, assembler, a);
-    if (use_mod_rm_byte) push_u8(mod_rm_byte, assembler, a);
+    if (use_rex) push_u8(rex_byte, instructions, a);
+    push_u8(opcode, instructions, a);
+    if (use_mod_rm_byte) push_u8(mod_rm_byte, instructions, a);
 
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-        push_u8(immediate_bytes[i], assembler, a);
+        push_u8(immediate_bytes[i], &assembler->instructions, a);
     }
 
     return out;
 }
 
-result build_unary_op(assembler* assembler, unary_op op, location loc, allocator a) {
+result build_unary_op(assembler* assembler, unary_op op, location loc) {
+    allocator a = assembler->allocator;
     result out;
     out.type = Ok;
     bool use_prefix_byte = false;
@@ -268,6 +278,18 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
 
     uint8_t opcode;
     switch (op) {
+    case Call:
+        switch (loc.type) {
+        case Register:
+            opcode = 0xff;
+            use_mod_rm_byte = true;
+            mod_rm_byte = modrm_reg(loc.reg);
+            break;
+        default:
+            out.type = Err;
+            out.error_message = mk_string("Push for non register locations not implemented", a);
+        }
+        break;
     case Pop:
         switch (loc.type) {
         case Register:
@@ -307,35 +329,25 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
             out.error_message = mk_string("Push for register dereference not implemented", a);
         }
         break;
-    case Call:
-        switch (loc.type) {
-        case Register:
-            opcode = 0xff;
-            use_mod_rm_byte = true;
-            mod_rm_byte = modrm_reg(loc.reg);
-            break;
-        default:
-            out.type = Err;
-            out.error_message = mk_string("Push for non register locations not implemented", a);
-        }
-        break;
     }
     if (out.type == Err) return out;
 
+    u8_array* instructions = &assembler->instructions;
     if (use_prefix_byte) {
-        push_u8(prefix_byte, assembler, a);
+        push_u8(prefix_byte, instructions, a);
     }
-    push_u8(opcode, assembler, a);
+    push_u8(opcode, instructions, a);
     if (use_mod_rm_byte) {
-        push_u8(mod_rm_byte, assembler, a);
+        push_u8(mod_rm_byte,instructions, a);
     }
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-        push_u8(immediate_bytes[i], assembler, a);
+        push_u8(immediate_bytes[i], instructions, a);
     }
     return out;
 }
 
-result build_nullary_op(assembler* assembler, nullary_op op, allocator a) {
+result build_nullary_op(assembler* assembler, nullary_op op) {
+    allocator a = assembler->allocator;
     result out;
     out.type = Ok;
 
@@ -345,6 +357,7 @@ result build_nullary_op(assembler* assembler, nullary_op op, allocator a) {
         opcode = 0xC3;
         break;
     }
-    push_u8(opcode, assembler, a);
+    u8_array* instructions = &assembler->instructions;
+    push_u8(opcode, instructions, a);
     return out;
 }

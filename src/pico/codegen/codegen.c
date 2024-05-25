@@ -22,7 +22,7 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         // Does it fit into 32 bits?
         if (syn.data.lit_i64 < 0x80000000) {
             int32_t immediate = syn.data.lit_i64;
-            out = build_unary_op(ass, Push, imm32(immediate), a);
+            out = build_unary_op(ass, Push, imm32(immediate));
         } else {
             out.type = Err;
             out.error_message = mk_string("literals must fit into less than 64 bits", a);
@@ -40,8 +40,17 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
-            out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
-            out = build_unary_op(ass, Push, reg(RCX), a);
+            if (syn.ptype->sort == TProc) {
+                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value));
+                if (out.type == Err) return out;
+                out = build_unary_op(ass, Push, reg(RCX));
+            } else {
+                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value));
+                if (out.type == Err) return out;
+                out = build_binary_op(ass, Mov, reg(RCX), rref(RCX, 0));
+                if (out.type == Err) return out;
+                out = build_unary_op(ass, Push, reg(RCX));
+            }
             break;
         case ANotFound:
             out.type = Err;
@@ -71,9 +80,9 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         if (out.type == Err) return out; 
         
         // pop the function into RCX; call the function
-        out = build_unary_op(ass, Pop, reg(RCX), a);
+        out = build_unary_op(ass, Pop, reg(RCX));
         if (out.type == Err) return out;
-        out = build_unary_op(ass, Call, reg(RCX), a);
+        out = build_unary_op(ass, Call, reg(RCX));
         break;
     }
 
@@ -97,15 +106,6 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
 result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, a);
     result generated = generate(syn, a_env, ass, a);
-
-    if (generated.type == Ok) {
-        // genereate a return call
-        generated = build_unary_op(ass, Pop, reg(RAX), a);
-
-        if (generated.type == Ok) {
-            generated = build_nullary_op(ass, Ret, a);
-        }
-    }
 
     delete_address_env(a_env, a);
     return generated;

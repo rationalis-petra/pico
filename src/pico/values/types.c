@@ -1,4 +1,5 @@
 #include "pico/values/types.h"
+#include "pico/values/values.h"
 
 void delete_pi_ptr(void* t, allocator a) {
     delete_pi_type(*(pi_type*)t, a);
@@ -58,4 +59,23 @@ document* pretty_type(pi_type* type, allocator a) {
         break;
     }
     return out;
+}
+
+size_t pi_size_of(pi_type type) {
+    switch (type.sort) {
+    case TPrim:
+        switch (type.prim) {
+        case Int_64:
+            return sizeof(uint64_t);
+        case TFormer:
+            return sizeof(pi_term_former_t);
+        }
+        return sizeof(uint64_t);
+    case TProc:
+        return 0;
+    case TUVar:
+        return 0;
+    default:
+        return 0;
+    }
 }

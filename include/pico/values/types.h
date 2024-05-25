@@ -2,7 +2,7 @@
 #define __PICO_VALUES_TYPES_H
 
 #include "data/array.h"
-#include "pico/values/values.h"
+#include "pretty/document.h"
 
 /* Basic types in pico typesystem
  */
@@ -45,5 +45,6 @@ typedef struct pi_type {
 
 document* pretty_type(pi_type* type, allocator a);
 void delete_pi_type(pi_type t, allocator a);
+size_t pi_size_of(pi_type t);
 
 #endif
