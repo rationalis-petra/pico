@@ -11,6 +11,6 @@ bool has_unification_vars_p(pi_type type);
 
 // Return a deep copy of the original type, with all unification vars replaced
 // by their subsitutions.
-pi_type squash_type(pi_type type, allocator a);
+void squash_type(pi_type* type);
 
 #endif

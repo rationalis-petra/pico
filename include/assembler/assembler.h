@@ -15,9 +15,6 @@ void clear_assembler(assembler* assembler);
 document* pretty_assembler(assembler* assembler, allocator a);
 u8_array get_instructions(assembler* assembler);
 
-void make_executable(assembler* assembler);
-void make_writable(assembler* assembler);
-
 // Integral operations
 typedef enum binary_op {
     // ------------------
@@ -41,12 +38,12 @@ typedef enum binary_op {
     // ------------------
     //  Memory
     // ------------------
-    Mov,   // p769.
+    Mov,   // p 769.
 } binary_op;
 
 typedef enum unary_op {
     Call,
-    Push,
+    Push, // p 1250.
     Pop,
 } unary_op;
 
@@ -87,19 +84,19 @@ typedef enum dest_t {
 typedef struct location {
     dest_t type;
     regname reg;
-    uint32_t immediate;
-    uint64_t immediate_64;
+    int32_t immediate;
+    int64_t immediate_64;
 } location;
 
 // Location Constructors 
 location reg(regname name);
-location rref(regname name, uint8_t offset);
-location imm32(uint32_t immediate);
-location imm64(uint64_t immediate);
+location rref(regname name, int8_t offset);
+location imm32(int32_t immediate);
+location imm64(int64_t immediate);
 
-result build_binary_op(assembler* ass, binary_op op, location dest, location src);
-result build_unary_op(assembler* assembler, unary_op op, location loc);
-result build_nullary_op(assembler* assembler, nullary_op op);
+result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
+result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
+result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
 
 
 #endif

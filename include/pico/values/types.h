@@ -8,6 +8,7 @@
  */
 
 typedef struct pi_type pi_type;
+typedef struct uvar_generator uvar_generator;
 
 typedef enum prim_type {
     Int_64,
@@ -46,5 +47,9 @@ typedef struct pi_type {
 document* pretty_type(pi_type* type, allocator a);
 void delete_pi_type(pi_type t, allocator a);
 size_t pi_size_of(pi_type t);
+
+pi_type* mk_uvar(uvar_generator* gen, allocator a);
+uvar_generator* mk_gen(allocator a);
+void delete_gen(uvar_generator* gen, allocator a);
 
 #endif

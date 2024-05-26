@@ -20,9 +20,9 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
     switch (syn.type) {
     case SLiteral:
         // Does it fit into 32 bits?
-        if (syn.data.lit_i64 < 0x80000000) {
-            int32_t immediate = syn.data.lit_i64;
-            out = build_unary_op(ass, Push, imm32(immediate));
+        if (syn.lit_i64 < 0x80000000) {
+            int32_t immediate = syn.lit_i64;
+            out = build_unary_op(ass, Push, imm32(immediate), a);
         } else {
             out.type = Err;
             out.error_message = mk_string("literals must fit into less than 64 bits", a);
@@ -31,25 +31,24 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         break;
     case SVariable: {
         // Lookup the variable in the assembly envionrment
-        address_entry e = address_env_lookup(syn.data.variable, env);
+        address_entry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocal:
-            out.type = Err;
-            out.error_message = mk_string("Local variables cannot yet be assembled.",a);
+            out = build_unary_op(ass, Push, rref(RBP, e.stack_offset), a);
             break;
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
             if (syn.ptype->sort == TProc) {
-                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value));
+                out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
-                out = build_unary_op(ass, Push, reg(RCX));
+                out = build_unary_op(ass, Push, reg(RBX), a);
             } else {
-                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value));
+                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
-                out = build_binary_op(ass, Mov, reg(RCX), rref(RCX, 0));
+                out = build_binary_op(ass, Mov, reg(RCX), rref(RCX, 0), a);
                 if (out.type == Err) return out;
-                out = build_unary_op(ass, Push, reg(RCX));
+                out = build_unary_op(ass, Push, reg(RCX), a);
             }
             break;
         case ANotFound:
@@ -60,36 +59,72 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
             out.type = Err;
             out.error_message = mk_string("Too Many Local variables!", a);
             break;
-        } 
+        }
         break;
     }
-    case SFunction:
-        out.type = Err;
-        out.error_message = mk_string("Functions cannot yet be assembled.",a);
+    case SProcedure:
+        // Codegen function setup
+        out = build_unary_op(ass, Push, reg(RBP), a);
+        if (out.type == Err) return out;
+        out = build_binary_op(ass, Mov, reg(RBP), reg(RSP), a);
+        if (out.type == Err) return out;
+
+        // codegen procedure body 
+        address_fn_vars(syn.procedure.args, env, a);
+        out = generate(*syn.procedure.body, env, ass, a);
+        pop_fn_vars(env);
+
+        // Codegen function teardown:
+        // + store output in RAX
+        // + restore rbp to original value
+        // + pop all arguments from stack
+        // + store return address in RCX
+        // + push value (RAX)
+        // + push return address (RCX)
+        // + return ()
+
+        // storage of function output 
+        out = build_unary_op(ass, Pop, reg(RAX), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Pop, reg(RBP), a);
+        if (out.type == Err) return out;
+        // storage of return address
+        out = build_unary_op(ass, Pop, reg(RBX), a);
+        if (out.type == Err) return out;
+        
+        // pop args
+        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8),a );
+        if (out.type == Err) return out;
+
+        // push value
+        out = build_unary_op(ass, Push, reg(RAX), a);
+        if (out.type == Err) return out;
+        // push return address 
+        out = build_unary_op(ass, Push, reg(RBX), a);
+        if (out.type == Err) return out;
+        out = build_nullary_op(ass, Ret, a);
         break;
     case SApplication: {
         // Generate the arguments
-        for (size_t i = 0; i < syn.data.application.args.len; i++) {
-            syntax* arg = (syntax*) syn.data.application.args.data[i];
+        for (size_t i = 0; i < syn.application.args.len; i++) {
+            syntax* arg = (syntax*) syn.application.args.data[i];
             out = generate(*arg, env, ass, a);
             if (out.type == Err) return out;
         }
 
         // This will push a function pointer onto the stack
-        out = generate(*syn.data.application.function, env, ass, a);
+        out = generate(*syn.application.function, env, ass, a);
         if (out.type == Err) return out; 
         
-        // pop the function into RCX; call the function
-        out = build_unary_op(ass, Pop, reg(RCX));
+        // Pop the function into RCX; call the function
+        out = build_unary_op(ass, Pop, reg(RCX), a);
         if (out.type == Err) return out;
-        out = build_unary_op(ass, Call, reg(RCX));
+        out = build_unary_op(ass, Call, reg(RCX), a);
         break;
     }
 
     case SConstructor:
     case SRecursor:
-    case SDestructor:
-    case SCorecursor:
     case SStructure:
     case SProjector:
 

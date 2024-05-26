@@ -22,9 +22,9 @@
   \
   static inline void aset_ ## prefix(const size_t index, type val, const prefix ## _array arr) { \
         arr.data[index] = val;\
-  }; \
+  } \
   static inline type aref_ ## prefix(const size_t index, const prefix ## _array arr) { \
         return arr.data[index];\
-  }; \
+  } \
 
 #endif

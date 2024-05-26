@@ -13,6 +13,7 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, pi_module* module, a
         case TProc:
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass);
             res.val = 0;
+            break;
         case TPrim: {
             // assume int64 for now!
             int64_t val = pico_run_expr(ass, a);
@@ -35,8 +36,8 @@ int64_t pico_run_expr(assembler* ass, allocator a) {
     /* generated.type = Ok; */
 
     // code which will return to C
-    build_unary_op(ass, Pop, reg(RAX));
-    build_nullary_op(ass, Ret);
+    build_unary_op(ass, Pop, reg(RAX),a );
+    build_nullary_op(ass, Ret, a);
     u8_array instructions = get_instructions(ass);
 
     int64_t out;

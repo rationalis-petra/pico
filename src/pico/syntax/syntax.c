@@ -12,7 +12,7 @@ syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
     //value_root(value, lcl);
     syntax* out = (syntax*)mem_alloc(sizeof(syntax), a);
     out->type = SLiteral;
-    out->data.lit_i64 = value; return out;
+    out->lit_i64 = value; return out;
 }
 
 /* The Syntax Destructor */
@@ -24,21 +24,17 @@ void delete_syntax(syntax syntax, allocator a) {
             //value_unroot(syntax.data.val);
             break;
         case SApplication: {
-            delete_syntax_pointer(syntax.data.application.function, a);
-            for (size_t i = 0; i < syntax.data.application.args.len; i++) {
-                delete_syntax_pointer(aref_ptr(i, syntax.data.application.args), a);
+            delete_syntax_pointer(syntax.application.function, a);
+            for (size_t i = 0; i < syntax.application.args.len; i++) {
+                delete_syntax_pointer(aref_ptr(i, syntax.application.args), a);
             }
-            sdelete_ptr_array(syntax.data.application.args, a);
-            break;
-        }
-        case SDestructor: {
-            delete_syntax_pointer(syntax.data.destructor.value, a);
+            sdelete_ptr_array(syntax.application.args, a);
             break;
         }
         case SIf: {
-            delete_syntax_pointer(syntax.data.if_expr.condition, a);
-            delete_syntax_pointer(syntax.data.if_expr.true_branch, a);
-            delete_syntax_pointer(syntax.data.if_expr.false_branch, a);
+            delete_syntax_pointer(syntax.if_expr.condition, a);
+            delete_syntax_pointer(syntax.if_expr.true_branch, a);
+            delete_syntax_pointer(syntax.if_expr.false_branch, a);
             break;
         }
         default:
@@ -56,32 +52,32 @@ document* pretty_syntax(syntax* syntax, allocator a) {
     document* out = NULL;
     switch (syntax->type) {
     case SLiteral: {
-        out = pretty_u64(syntax->data.lit_i64, a);
+        out = pretty_u64(syntax->lit_i64, a);
         break;
     }
     case SVariable: {
-        out = mk_str_doc(*symbol_to_string(syntax->data.variable), a);
+        out = mk_str_doc(*symbol_to_string(syntax->variable), a);
         break;
     }
-    case SFunction: {
-        ptr_array nodes = mk_ptr_array(4 + syntax->data.function.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(fn (", a)), a), &nodes, a);
-        for (size_t i = 0; i < syntax->data.function.args.len; i++) {
-            document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->data.function.args)), a);
+    case SProcedure: {
+        ptr_array nodes = mk_ptr_array(4 + syntax->procedure.args.len, a);
+        push_ptr(mv_str_doc((mk_string("(proc (", a)), a), &nodes, a);
+        for (size_t i = 0; i < syntax->procedure.args.len; i++) {
+            document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->procedure.args)), a);
             push_ptr(arg, &nodes, a);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->data.function.body, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes, a);
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
         out = mv_sep_doc(nodes, a);
         break;
     }
     case SApplication: {
-        document* head = pretty_syntax(syntax->data.application.function, a);
-        ptr_array nodes = mk_ptr_array(1 + syntax->data.application.args.len, a);
+        document* head = pretty_syntax(syntax->application.function, a);
+        ptr_array nodes = mk_ptr_array(1 + syntax->application.args.len, a);
         push_ptr(head, &nodes, a);
-        for (size_t i = 0; i < syntax->data.application.args.len; i++) {
-            document* node = pretty_syntax(aref_ptr(i, syntax->data.application.args), a);
+        for (size_t i = 0; i < syntax->application.args.len; i++) {
+            document* node = pretty_syntax(aref_ptr(i, syntax->application.args), a);
             push_ptr(node, &nodes, a);
         }
         out = mv_sep_doc(nodes, a);
@@ -95,20 +91,6 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         out = mv_str_doc(mk_string("pretty_syntax not implemented on recursor", a), a);
         break;
     }
-    case SDestructor: {
-        string* co_name = symbol_to_string(syntax->data.destructor.name);
-        document* head = mv_str_doc(string_cat(mv_string(";"), *co_name, a), a);
-
-        document* codata = pretty_syntax(syntax->data.destructor.value, a);
-        ptr_array final_doc = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc(mk_string("(", a), a), &final_doc, a);
-        push_ptr(head, &final_doc, a);
-        push_ptr(codata, &final_doc, a);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &final_doc, a);
-        out = mv_sep_doc(final_doc, a);
-        break;
-    }
-    case SCorecursor:
     case SStructure:
     case SProjector:
 
@@ -116,9 +98,9 @@ document* pretty_syntax(syntax* syntax, allocator a) {
     case SIf: {
         ptr_array nodes = mk_ptr_array(6, a);
         push_ptr(mv_str_doc(mk_string("(if", a), a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->data.if_expr.condition, a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->data.if_expr.true_branch, a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->data.if_expr.false_branch, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes, a);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes, a);
         out = mv_sep_doc(nodes, a);
         break;

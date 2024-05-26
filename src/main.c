@@ -41,13 +41,13 @@ pi_type mk_int_binop_type(allocator a) {
 }
 
 void build_binary_fun(assembler* ass, binary_op op, allocator a) {
-    build_unary_op (ass, Pop, reg(RBP));
-    build_unary_op (ass, Pop, reg(RBX));
-    build_unary_op (ass, Pop, reg(RAX));
-    build_binary_op (ass, op, reg(RAX), reg(RBX));
-    build_unary_op (ass, Push, reg(RAX));
-    build_unary_op (ass, Push, reg(RBP));
-    build_nullary_op (ass, Ret);
+    build_unary_op (ass, Pop, reg(RBP),a );
+    build_unary_op (ass, Pop, reg(RBX), a);
+    build_unary_op (ass, Pop, reg(RAX), a);
+    build_binary_op (ass, op, reg(RAX), reg(RBX), a);
+    build_unary_op (ass, Push, reg(RAX), a);
+    build_unary_op (ass, Push, reg(RBP), a);
+    build_nullary_op (ass, Ret, a);
 }
 
 pi_module* base_module(assembler* ass, allocator a) {

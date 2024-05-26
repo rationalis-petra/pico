@@ -102,36 +102,25 @@ pi_type* trace_uvar(pi_type* uvar) {
 }
 
 
-// Remember, squash does a deep copy!
-pi_type squash_type(pi_type type, allocator a) {
-    switch (type.sort) {
+void squash_type(pi_type* type) {
+    switch (type->sort) {
     case TPrim:
-        return type;
+        break;
     case TProc: {
-        pi_type proc_out;
-        proc_out.sort = TProc;
-        proc_out.proc.args = mk_ptr_array(type.proc.args.len, a);
-        for (size_t i = 0; i < type.proc.args.len; i++) {
-            pi_type* arg = mem_alloc(sizeof(pi_type), a);
-            *arg = squash_type(*(pi_type*)type.proc.args.data[i], a);
-            push_ptr(arg, &proc_out.proc.args, a);
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            squash_type((pi_type*)type->proc.args.data + i);
         }
-        pi_type* ret = mem_alloc(sizeof(pi_type), a);
-        *ret = squash_type(*type.proc.ret, a);
-        proc_out.proc.ret = ret;
-        return proc_out;
+        squash_type(type->proc.ret);
         break;
     }
 
     // Special sort: unification variable
     case TUVar:
-        if (type.uvar->subst == NULL) {
-            return type;
-        } else {
-            return squash_type(*type.uvar->subst, a);
-        }
-
-    default:
-        return type;
+        if (type->uvar->subst != NULL) {
+            squash_type(type->uvar->subst);
+            *type = *type->uvar->subst;
+        } 
     }
 }
+
+//pi_type* copy_type(pi_type* type, allocator a) {}

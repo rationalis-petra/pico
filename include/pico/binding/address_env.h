@@ -12,6 +12,7 @@ typedef enum address_entry_t {
     ANotFound,
     ATooManyLocals,
 } address_entry_t;
+
 typedef struct address_entry {
     address_entry_t type;
     union {
@@ -24,9 +25,13 @@ address_env* mk_address_env(environment* env, allocator a);
 void delete_address_env(address_env* env, allocator a);
 
 address_entry address_env_lookup(pi_symbol s, address_env* env);
+
+// Add a set of variables to the address environment.
+// offsets are adjusted to compensate for the return address
+void address_fn_vars (symbol_array vars, address_env* env, allocator a);
+void pop_fn_vars(address_env* env);
+
 void push_stack_address (pi_symbol var, address_env* env, allocator a);
-void address_vars (symbol_array vars, address_env* env, allocator a);
 void pop_address(address_env* env);
-void pop_addresses(address_env* env, size_t n);
 
 #endif

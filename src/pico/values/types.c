@@ -32,7 +32,7 @@ document* pretty_type(pi_type* type, allocator a) {
     case TProc: {
 
         ptr_array nodes = mk_ptr_array(4 + type->proc.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(fn (", a)), a), &nodes, a);
+        push_ptr(mv_str_doc((mk_string("(Proc (", a)), a), &nodes, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
             document* arg = pretty_type(aref_ptr(i, type->proc.args), a);
             push_ptr(arg, &nodes, a);
@@ -78,4 +78,27 @@ size_t pi_size_of(pi_type type) {
     default:
         return 0;
     }
+}
+
+struct uvar_generator {
+    uint64_t counter;
+};
+
+pi_type* mk_uvar(uvar_generator* gen, allocator a) {
+    pi_type* uvar = mem_alloc(sizeof(pi_type), a);
+    uvar->sort = TUVar;
+    uvar->uvar = mem_alloc(sizeof(uvar_type), a) ;
+    uvar->uvar->id = gen->counter++;
+    
+    return uvar;
+}
+
+uvar_generator* mk_gen(allocator a) {
+    uvar_generator* gen = mem_alloc(sizeof(uvar_generator), a);
+    gen->counter = 0;
+    return gen;
+}
+
+void delete_gen(uvar_generator* gen, allocator a) {
+    mem_free(gen, a);
 }

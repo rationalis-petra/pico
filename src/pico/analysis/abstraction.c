@@ -56,16 +56,16 @@ abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     abs_expr_result res;
     res.type = Ok;
     res.out.type = SApplication;
-    res.out.data.application.function = mem_alloc(sizeof(syntax), a);
-    *res.out.data.application.function = fn_res.out;
-    res.out.data.application.args = mk_ptr_array(raw.data.nodes.len - 1, a);
+    res.out.application.function = mem_alloc(sizeof(syntax), a);
+    *res.out.application.function = fn_res.out;
+    res.out.application.args = mk_ptr_array(raw.data.nodes.len - 1, a);
 
     for (size_t i = 1; i < raw.data.nodes.len; i++) {
         abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
         if (arg_res.type == Ok) {
             syntax* arg = mem_alloc(sizeof(syntax), a);
             *arg = arg_res.out;
-            push_ptr(arg, &res.out.data.application.args, a);
+            push_ptr(arg, &res.out.application.args, a);
         }
         else {
             delete_syntax(res.out, a);
@@ -90,7 +90,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         symbol_array arguments = mk_u64_array(2, a);
         if (!get_symbol_list(&arguments, *(pi_rawtree*)aref_ptr(1, raw.data.nodes), a)) {
             res.type = Err;
-            res.error_message = mk_string("Function term former requires first arguments to be a symbol-list!", a);
+            res.error_message = mk_string("Procedure term former requires first arguments to be a symbol-list!", a);
             return res;
         }
 
@@ -101,10 +101,10 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         }
         else 
             res.type = Ok;
-        res.out.type = SFunction;
-        res.out.data.function.args = arguments;
-        res.out.data.function.body = mem_alloc(sizeof(syntax), a);
-        *res.out.data.function.body = rbody.out;
+        res.out.type = SProcedure;
+        res.out.procedure.args = arguments;
+        res.out.procedure.body = mem_alloc(sizeof(syntax), a);
+        *res.out.procedure.body = rbody.out;
         break;
     }
     case FApplication: {
@@ -164,9 +164,9 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
 
         res.type = Ok;
         res.out.type = SIf;
-        res.out.data.if_expr.condition = aref_ptr(0, terms);
-        res.out.data.if_expr.true_branch = aref_ptr(1, terms);
-        res.out.data.if_expr.false_branch = aref_ptr(2, terms);
+        res.out.if_expr.condition = aref_ptr(0, terms);
+        res.out.if_expr.true_branch = aref_ptr(1, terms);
+        res.out.if_expr.false_branch = aref_ptr(2, terms);
         sdelete_ptr_array(terms, a);
         break;
     }
@@ -193,12 +193,12 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
         if (raw.data.atom.type == ASymbol) {
             res.type = Ok;
             res.out.type = SVariable;
-            res.out.data.variable = raw.data.atom.symbol;
+            res.out.variable = raw.data.atom.symbol;
         }
         else if (raw.data.atom.type == AI64) {
             res.type = Ok;
             res.out.type = SLiteral;
-            res.out.data.lit_i64 = raw.data.atom.int_64;
+            res.out.lit_i64 = raw.data.atom.int_64;
         } else  {
             res.type = Err;
             res.error_message = mk_string("Currently, can only make literal values out of type i64." , a);

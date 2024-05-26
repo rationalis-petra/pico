@@ -39,8 +39,8 @@
       map->capacity *= 2; \
       map->data = mem_realloc(map->data, sizeof(prefix ## _cell) * map->capacity, a);\
     } \
-    map->data[map->len - 1].key = key; \
-    map->data[map->len - 1].val = val; \
+    map->data[map->len].key = key; \
+    map->data[map->len].val = val; \
     map->len++; \
   } \
   \

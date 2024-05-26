@@ -74,15 +74,19 @@ document* pretty_primop(pi_primop_t op, allocator a) {
     switch(op) {
     case AddI64: {
         out = mv_str_doc(mk_string("+", a), a);
+        break;
     }
     case SubI64: {
         out = mv_str_doc(mk_string("-", a), a);
+        break;
     }
     case MulI64: {
         out = mv_str_doc(mk_string("*", a), a);
+        break;
     }
     case QuotI64: {
         out = mv_str_doc(mk_string("quot", a), a);
+        break;
     }
     }
     return out;
