@@ -7,6 +7,6 @@
 // A custom allocator is planned.
 
 allocator mk_executable_allocator(allocator a);
-void release_executable_allocator();
+void release_executable_allocator(allocator a);
 
 #endif

@@ -92,6 +92,8 @@ void delete_module(pi_module* module) {
         sdelete_ptr_array(entry.backrefs, module->allocator);
     };
     sdelete_entry_amap(module->entries, module->allocator);
+
+    release_executable_allocator(module->executable_allocator);
     mem_free(module, module->allocator);
 }
 
@@ -132,10 +134,10 @@ module_entry* get_def(pi_symbol sym, pi_module* module) {
     return (module_entry*)entry_lookup(sym, module->entries);
 }
 
-symbol_array get_symbols(pi_module* module) {
-    symbol_array syms = mk_u64_array(module->entries.len, module->allocator);
+symbol_array get_symbols(pi_module* module, allocator a) {
+    symbol_array syms = mk_u64_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
-        push_u64(module->entries.data[i].key, &syms, module->allocator);
+        push_u64(module->entries.data[i].key, &syms, a);
     };
     return syms;
 }

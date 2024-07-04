@@ -34,6 +34,6 @@ result add_def(pi_module* module, pi_symbol name, pi_type type, void* data);
 result add_fn_def(pi_module* module, pi_symbol name, pi_type type, assembler* fn); 
 module_entry* get_def(pi_symbol sym, pi_module* module);
 
-symbol_array get_symbols(pi_module* module);
+symbol_array get_symbols(pi_module* module, allocator a);
 
 #endif

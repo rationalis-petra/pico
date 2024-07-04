@@ -8,7 +8,7 @@
 
 // Check a toplevel expression
 
-type_result type_check(toplevel* top, environment* env, allocator a) {
+result type_check(toplevel* top, environment* env, allocator a) {
     // If this is a definition, lookup the type to check against 
     pi_type* check_against = NULL;
     syntax* term = NULL; 
@@ -42,15 +42,14 @@ result squash_types(syntax* untyped, allocator a);
 // -----------------------------------------------------------------------------
 // Interface
 // -----------------------------------------------------------------------------
-type_result type_infer_expr(syntax* untyped, environment* env, allocator a) {
+result type_infer_expr(syntax* untyped, environment* env, allocator a) {
     // Arena allocator to place types
-    allocator arena = mk_arena_allocator(2048, a);
-    type_env *t_env = mk_type_env(env, arena);
+    type_env *t_env = mk_type_env(env, a);
     uvar_generator* gen = mk_gen(a);
-    result impl = type_infer_i (untyped, t_env, gen, arena);
+    result impl = type_infer_i (untyped, t_env, gen, a);
     delete_gen(gen, a);
 
-    type_result out;
+    result out;
     if (impl.type == Ok) {
         out.type = Ok;
     } else {
@@ -71,21 +70,18 @@ type_result type_infer_expr(syntax* untyped, environment* env, allocator a) {
         }
     }
 
-    out.release_type_memory = &release_arena_allocator;
-    out.arena = arena;
     return out;
 }
 
-type_result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a) {
+result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a) {
     // TODO copy type, use in type_check_i
 
-    allocator arena = mk_arena_allocator(2048, a);
-    type_env *t_env = mk_type_env(env, arena);
+    type_env *t_env = mk_type_env(env, a);
     uvar_generator* gen = mk_gen(a);
-    result impl = type_check_i (untyped, &type, t_env, gen, arena);
+    result impl = type_check_i (untyped, &type, t_env, gen, a);
     delete_gen(gen, a);
 
-    type_result out;
+    result out;
     out.type = Ok;
     if (impl.type == Err) {
         out.type = Err;
@@ -105,8 +101,6 @@ type_result type_check_expr(syntax* untyped, pi_type type, environment* env, all
         }
     }
 
-    out.release_type_memory = &release_arena_allocator;
-    out.arena = arena;
     return out;
 }
 

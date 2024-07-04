@@ -5,16 +5,9 @@
 #include "pico/binding/environment.h"
 #include "pico/syntax/syntax.h"
 
-typedef struct type_result {
-    Result_t type;
-    string error_message;
-    void (*release_type_memory)(allocator arena);
-    allocator arena;
-} type_result;
+result type_check(toplevel* untyped, environment* env, allocator a);
 
-type_result type_check(toplevel* untyped, environment* env, allocator a);
-
-type_result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a);
-type_result type_infer_expr(syntax* untyped, environment* env, allocator a);
+result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a);
+result type_infer_expr(syntax* untyped, environment* env, allocator a);
 
 #endif

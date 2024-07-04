@@ -65,7 +65,7 @@ typedef struct small_block {
     size_t num_chunks;
     u8_array free_slots;
 } small_block;
-const static size_t small_chunk_size = 8;
+static const size_t small_chunk_size = 8;
 
 typedef struct medium_block {
     ex_mem block_memory;
@@ -123,10 +123,14 @@ void* alloc_medium(size_t size, exec_context* ctx) {
     medium_block* new = mem_alloc(sizeof(medium_block), ctx->metadata_allocator);
     new->block_memory = alloc_ex_mem(size);
     new->next = NULL;
-    ctx->medium_blocks_end = new;
 
     medium_block* blk = ctx->medium_blocks_end;
     if (blk) blk->next = new;
+    ctx->medium_blocks_end = new;
+
+    if (!ctx->medium_blocks) {
+        ctx->medium_blocks = new;
+    }
 
     return new->block_memory.data;
 }
@@ -154,6 +158,7 @@ void* exec_alloc(size_t size, void* ctx) {
         return alloc_large(size, ectx);
     }
 }
+
 void* exec_realloc(void* ptr, size_t new_size, void* ctx) {
     return NULL;
 }
@@ -245,6 +250,33 @@ allocator mk_executable_allocator(allocator a) {
         };
     return out;
 }
-void release_executable_allocator();
+
+void release_executable_allocator(allocator a) {
+    exec_context* ctx = (exec_context*) a.ctx;
+    allocator mda = ctx->metadata_allocator;
+
+    for (size_t i = 0; i < ctx->small_blocks.len; i++) {
+        small_block* b = (small_block*) ctx->small_blocks.data[i];
+        free_ex_mem(b->block_memory);
+        mem_free(b, mda);
+    }
+    sdelete_ptr_array(ctx->small_blocks, mda);
+
+    medium_block* mb = ctx->medium_blocks;
+    while (mb) {
+        medium_block* next = mb->next;
+        mem_free(mb, mda);
+        mb = next;
+    }
+
+    large_block* lb = ctx->large_blocks;
+    while (lb) {
+        large_block* next = lb->next;
+        mem_free(lb, mda);
+        lb = next;
+    }
+
+    mem_free(ctx, mda);
+}
 
 
