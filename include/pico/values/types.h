@@ -12,6 +12,7 @@ typedef struct uvar_generator uvar_generator;
 
 typedef enum prim_type {
     Int_64,
+    Bool,
     TFormer,
 } prim_type;
 

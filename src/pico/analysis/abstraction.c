@@ -197,7 +197,12 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
         }
         else if (raw.data.atom.type == AI64) {
             res.type = Ok;
-            res.out.type = SLiteral;
+            res.out.type = SLitI64;
+            res.out.lit_i64 = raw.data.atom.int_64;
+        }
+        else if (raw.data.atom.type == ABool) {
+            res.type = Ok;
+            res.out.type = SLitBool;
             res.out.lit_i64 = raw.data.atom.int_64;
         } else  {
             res.type = Err;

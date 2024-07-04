@@ -48,6 +48,9 @@ document* pretty_type(pi_type* type, allocator a) {
         break;
     case TPrim:
         switch (type->prim) {
+        case Bool: 
+            out = mv_str_doc(mk_string("Bool", a), a);
+            break;
         case Int_64: 
             out = mv_str_doc(mk_string("I64", a), a);
             break;
@@ -65,6 +68,8 @@ size_t pi_size_of(pi_type type) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
+        case Bool:
+            return sizeof(uint64_t);
         case Int_64:
             return sizeof(uint64_t);
         case TFormer:

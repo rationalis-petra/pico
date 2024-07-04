@@ -48,6 +48,14 @@ document* pretty_atom(pi_atom atom, allocator a) {
         out = pretty_i64(atom.int_64, a);
         break;
     }
+    case ABool: {
+        if (atom.int_64 == 0) {
+            out = mk_str_doc(mv_string("false"), a);
+        } else {
+            out = mk_str_doc(mv_string("true"), a);
+        }
+        break;
+    }
     case ASymbol: {
         string* str = symbol_to_string(atom.symbol);
         if (str) {

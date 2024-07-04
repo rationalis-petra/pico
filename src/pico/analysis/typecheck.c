@@ -126,11 +126,17 @@ result type_check_i(syntax* untyped, pi_type* type, type_env* env, uvar_generato
 result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocator a) {
     result out;
     switch (untyped->type) {
-    case SLiteral:
+    case SLitI64:
         out.type = Ok;
         untyped->ptype = mem_alloc(sizeof(pi_type),a);
         untyped->ptype->sort = TPrim; 
         untyped->ptype->prim = Int_64;
+        break;
+    case SLitBool:
+        out.type = Ok;
+        untyped->ptype = mem_alloc(sizeof(pi_type),a);
+        untyped->ptype->sort = TPrim; 
+        untyped->ptype->prim = Bool;
         break;
     case SVariable: {
         type_entry te = type_env_lookup(untyped->variable, env);
@@ -193,10 +199,27 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
     case SStructure:
     case SProjector:
     case SLet:
-    case SIf:
         out.type = Err;
         out.error_message = mk_string("Type inference not implemented for this syntactic form", a);
         break;
+    case SIf: {
+        pi_type* t = mem_alloc(sizeof(pi_type), a);
+        t->sort = TPrim;
+        t->prim = Bool;
+        out = type_check_i(untyped->if_expr.condition,
+                           t,
+                           env, gen, a);
+        if (out.type == Err) return out;
+
+        out = type_infer_i(untyped->if_expr.true_branch, env, gen, a);
+
+        if (out.type == Err) return out;
+        out = type_check_i(untyped->if_expr.false_branch,
+                           untyped->if_expr.true_branch->ptype,
+                           env, gen, a);
+        untyped->ptype = untyped->if_expr.false_branch->ptype;
+        break;
+    }
     default:
         out.type = Err;
         out.error_message = mk_string("Internal Error: unrecognized syntactic form", a);
@@ -208,7 +231,8 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
 result squash_types(syntax* typed, allocator a) {
     result out;
     switch (typed->type) {
-    case SLiteral:
+    case SLitI64:
+    case SLitBool:
     case SVariable:
         out.type = Ok;
         break;
@@ -232,15 +256,23 @@ result squash_types(syntax* typed, allocator a) {
     case SStructure:
     case SProjector:
     case SLet:
-    case SIf:
         out.type = Err;
-        out.error_message = mk_string("Type inference not implemented for this syntactic form", a);
+        out.error_message = mk_string("squash_types not implemented for this syntactic form", a);
         break;
+    case SIf: {
+        out = squash_types(typed->if_expr.condition, a);
+        if (out.type == Err) return out;
+        out = squash_types(typed->if_expr.true_branch, a);
+        if (out.type == Err) return out;
+        out = squash_types(typed->if_expr.false_branch, a);
+        break;
+    }
     default:
         out.type = Err;
         out.error_message = mk_string("Internal Error: unrecognized syntactic form", a);
         break;
     }
+
     if (out.type == Ok) {
         if (!has_unification_vars_p(*typed->ptype)) {
             squash_type(typed->ptype);

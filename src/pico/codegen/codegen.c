@@ -13,12 +13,11 @@
 /* Relevant assembly:
  * 
  */
-
-result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
-    result out;
+asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
+    asm_result out;
 
     switch (syn.type) {
-    case SLiteral:
+    case SLitI64: {
         // Does it fit into 32 bits?
         if (syn.lit_i64 < 0x80000000) {
             int32_t immediate = syn.lit_i64;
@@ -29,6 +28,13 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         }
         // push literal onto stack
         break;
+    }
+    case SLitBool: {
+        // TODO: squash to smallest size (8 bits)
+        int32_t immediate = syn.lit_i64;
+        out = build_unary_op(ass, Push, imm32(immediate), a);
+        break;
+    }
     case SVariable: {
         // Lookup the variable in the assembly envionrment
         address_entry e = address_env_lookup(syn.variable, env);
@@ -129,10 +135,67 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
     case SProjector:
 
     case SLet:
-    case SIf:
         out.type = Err;
         out.error_message = mk_string("Not yet assembled.", a);
         break;
+    case SIf: {
+        // generate the condition
+        out = generate(*syn.if_expr.condition, env, ass, a);
+        if (out.type == Err) return out;
+
+        // Pop the bool into RBX; compare with 0
+        out = build_unary_op(ass, Pop, reg(RBX), a);
+        if (out.type == Err) return out;
+        out = build_binary_op(ass, Cmp, reg(RBX), imm32(0), a);
+        if (out.type == Err) return out;
+
+        // ---------- CONDITIONAL JUMP ----------
+        // compare the value to 0
+        // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
+        out = build_unary_op(ass, JE, imm8(0), a);
+        if (out.type == Err) return out;
+        size_t start_pos = get_instructions(ass).len;
+
+        uint8_t* jmp_loc = out.backlink;
+
+        // ---------- TRUE BRANCH ----------
+        // now, generate the code to run (if true)
+        out = generate(*syn.if_expr.true_branch, env, ass, a);
+        if (out.type == Err) return out;
+
+        // Generate jump to end of false branch to be backlinked later
+        out = build_unary_op(ass, JMP, imm8(0), a);
+        if (out.type == Err) return out;
+
+        // calc backlink offset
+        size_t end_pos = get_instructions(ass).len;
+        if (end_pos - start_pos > INT8_MAX) {
+            out.type = Err;
+            out.error_message = mk_string("Jump in conditional too large", a);
+            return out;
+        } 
+
+        // backlink
+        *jmp_loc = (end_pos - start_pos);
+        jmp_loc = out.backlink;
+        start_pos = get_instructions(ass).len;
+
+
+        // ---------- FALSE BRANCH ----------
+        // Generate code for the false branch
+        out = generate(*syn.if_expr.false_branch, env, ass, a);
+        if (out.type == Err) return out;
+
+        // calc backlink offset
+        end_pos = get_instructions(ass).len;
+        if (end_pos - start_pos > INT8_MAX) {
+            out.type = Err;
+            out.error_message = mk_string("Jump in conditional too large", a);
+            return out;
+        } 
+        *jmp_loc = (uint8_t)(end_pos - start_pos);
+        break;
+    }
     }
 
     return out;
@@ -140,10 +203,14 @@ result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
                                                  
 result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, a);
-    result generated = generate(syn, a_env, ass, a);
+    asm_result generated = generate(syn, a_env, ass, a);
+    result out;
+    out.type = generated.type;
+    if (generated.type == Err)
+        out.error_message = generated.error_message;
 
     delete_address_env(a_env, a);
-    return generated;
+    return out;
 }
 
 result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a) {

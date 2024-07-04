@@ -24,6 +24,8 @@ typedef enum binary_op {
     Sub,
     And,
 
+    Cmp, // p289. Compare two operands
+
     // ------------------
     //  Logic
     // ------------------
@@ -42,9 +44,22 @@ typedef enum binary_op {
 } binary_op;
 
 typedef enum unary_op {
+    // ------------------
+    //  Functions
+    // ------------------
     Call,
     Push, // p 1250.
     Pop,
+
+    // ------------------
+    //  Jumps
+    // ------------------
+    JE,  // p658, jump if equal
+
+
+    JNE, // p658, jump if equal
+    JMP, // p663, unconditional jump
+
 } unary_op;
 
 typedef enum nullary_op {
@@ -73,7 +88,9 @@ typedef enum regname {
 typedef enum dest_t {
     Register,
     Deref,
-    Immediate,
+    Immediate8,
+    Immediate16,
+    Immediate32,
     Immediate64,
 } dest_t;
 
@@ -84,19 +101,32 @@ typedef enum dest_t {
 typedef struct location {
     dest_t type;
     regname reg;
-    int32_t immediate;
+    int8_t immediate_8;
+    int16_t immediate_16;
+    int32_t immediate_32;
     int64_t immediate_64;
 } location;
 
 // Location Constructors 
 location reg(regname name);
 location rref(regname name, int8_t offset);
+location imm8(int8_t immediate);
+location imm16(int16_t immediate);
 location imm32(int32_t immediate);
 location imm64(int64_t immediate);
 
-result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
-result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
-result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
+// Result 
+typedef struct asm_result {
+    Result_t type;
+    union {
+        uint8_t* backlink; // backlink to immediate (if it exists)
+        string error_message;
+    }; 
+} asm_result;
+
+asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
+asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
+asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
 
 
 #endif

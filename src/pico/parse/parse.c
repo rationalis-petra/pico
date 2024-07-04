@@ -19,6 +19,7 @@ parse_result parse_rawtree(istream* is, allocator a) {
 parse_result parse_list(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_symbol(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_number(istream* is, sourcepos* parse_state, allocator a);
+parse_result parse_ctor(istream* is, sourcepos* parse_state, allocator a);
 
 // Helper functions
 stream_result consume_whitespace(istream* is, sourcepos* parse_state);
@@ -38,6 +39,9 @@ parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
         }
         else if (is_numchar(point)) {
             res = parse_number(is, parse_state, a);
+        }
+        else if (point == ':') {
+            res = parse_ctor(is, parse_state, a);
         }
         else {
             res = parse_symbol(is, parse_state, a);
@@ -153,9 +157,49 @@ parse_result parse_number(istream* is, sourcepos* parse_state, allocator a) {
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
         out.data.result.data.atom.type = AI64;
-        out.data.result.data.atom.int_64 = int_result;;
+        out.data.result.data.atom.int_64 = int_result;
     }
     sdelete_u8_array(arr, a);
+    return out;
+}
+
+parse_result parse_ctor(istream* is, sourcepos* parse_state, allocator a) {
+    uint32_t codepoint;
+    stream_result result;
+    parse_result out;
+    u32_array arr = mk_u32_array(10, a);
+
+    next(is, &codepoint); // consume ':'
+
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
+        next(is, &codepoint);
+        push_u32(codepoint, &arr, a);
+    }
+    if (result != StreamSuccess) {
+        out.type = ParseFail;
+        out.data.range.start = *parse_state;
+        out.data.range.end = *parse_state;
+    }
+    else {
+        string str = string_from_UTF_32(arr, a);
+        if (string_cmp(str, mv_string("true")) == 0) {
+            out.type = ParseSuccess;
+            out.data.result.type = RawAtom;
+            out.data.result.data.atom.type = ABool;
+            out.data.result.data.atom.int_64 = 1;
+        }
+        else if (string_cmp(str, mv_string("false")) == 0) {
+            out.type = ParseSuccess;
+            out.data.result.type = RawAtom;
+            out.data.result.data.atom.type = ABool;
+            out.data.result.data.atom.int_64 = 0;
+        }
+        else {
+            out.type = ParseFail;
+            out.data.range.start = *parse_state;
+            out.data.range.end = *parse_state;
+        }
+    }
     return out;
 }
 

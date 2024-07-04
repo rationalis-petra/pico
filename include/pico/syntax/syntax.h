@@ -23,7 +23,9 @@
 // Use visitor pattern for tree-walkers
 
 typedef enum syntax_t {
-    SLiteral,
+    SLitI64,
+    SLitBool,
+
     SVariable,
     SProcedure,
     SApplication,

@@ -11,6 +11,7 @@
  */
 
 typedef enum pi_atom_t {
+    ABool,
     AI64,
     ASymbol,
 } pi_atom_t;

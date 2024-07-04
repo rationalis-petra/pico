@@ -80,14 +80,27 @@ location rref(regname name, int8_t offset) {
     location out;
     out.type = Deref;
     out.reg = name;
-    out.immediate = offset;
+    out.immediate_32 = offset;
+    return out;
+}
+
+location imm8(int8_t immediate) {
+    location out;
+    out.type = Immediate8;
+    out.immediate_8 = immediate;
+    return out;
+}
+location imm16(int16_t immediate) {
+    location out;
+    out.type = Immediate16;
+    out.immediate_16 = immediate;
     return out;
 }
 
 location imm32(int32_t immediate) {
     location out;
-    out.type = Immediate;
-    out.immediate = immediate;
+    out.type = Immediate32;
+    out.immediate_32 = immediate;
     return out;
 }
 
@@ -103,10 +116,21 @@ uint8_t modrm_reg(regname r2) {
     return 0b11010000 | (r2 & 0b111); 
 }
 
+// encode register in r/m field;
+void modrm_reg_rm(uint8_t* modrm_byte, regname reg) {
+    *modrm_byte |= reg & 0b111;
+}
+
+// encode mod 
+void modrm_reg_mod(uint8_t* modrm_byte, uint8_t mod) {
+    *modrm_byte |= (mod & 0b11) << 6;
+}
+
 // See: page 112 of Intel Vol 2.
 uint8_t modrm_reg_imm(regname r2) {
     return 0b11000000 | (r2 & 0b111); 
 }
+
 
 // Return: the ModR/M byte for a register deref
 uint8_t modrm_mem(location mem) {
@@ -142,10 +166,15 @@ void reg_in_opcode(regname r, uint8_t* opcode_byte, uint8_t* rex_byte) {
     *opcode_byte += r & 0b111;
 }
 
-result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
+void opcode_in_reg(uint8_t* modrm_byte, uint8_t opcode) {
+    // store opcode extension in reg bits
+    *modrm_byte |= (opcode & 0b111) << 3;
+}
+
+asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
     allocator a = assembler->allocator;
     // Most paths are successful, so default assume the operation succeeded.
-    result out;
+    asm_result out;
     out.type = Ok;
 
     // Note: the logic is simplified for now as we assume 32-bit immediates and
@@ -174,6 +203,7 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
             case Sub: opcode = 0x2B; break;
             case And: opcode = 0x23; break;
             case Or:  opcode = 0x0B; break;
+            case Cmp: opcode = 0x3B; break;
 
             case Mov:  opcode = 0x8B; break;
             default:
@@ -195,7 +225,13 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
                 out.error_message = mk_string("Register/Deref not implemented", err_allocator);
             }
             break;
-        case Immediate:
+        case Immediate8:
+        case Immediate16:
+            out.type = Err;
+            out.error_message = mk_string("Immediate 16/32 not implemented", err_allocator);
+            break;
+
+        case Immediate32:
             switch (op) {
             case Add: {
                 // TODO: opcode + rd(w)
@@ -207,7 +243,7 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
                 mod_rm_byte = modrm_reg_imm(dest.reg);  // /0 id
 
                 num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate;
+                uint8_t* bytes = (uint8_t*) &src.immediate_32;
                 for (uint8_t i = 0; i < num_immediate_bytes; i++) {
                     immediate_bytes[i] = bytes[i];
                 }
@@ -221,7 +257,26 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
                 reg_in_opcode(dest.reg, &opcode, &rex_byte);
 
                 num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate;
+                uint8_t* bytes = (uint8_t*) &src.immediate_32;
+                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+                    immediate_bytes[i] = bytes[i];
+                }
+                break;
+            }
+            case Cmp: {
+                // encode 
+                use_rex = true;
+                use_mod_rm_byte = true;
+
+                opcode = 0x81;
+                set_bit(&rex_byte, 3); // Set REX.W
+                opcode_in_reg(&mod_rm_byte, 7);
+                modrm_reg_rm(&mod_rm_byte, dest.reg);
+                // Why 01??
+                modrm_reg_mod(&mod_rm_byte, 0b11);
+
+                num_immediate_bytes = 4;
+                uint8_t* bytes = (uint8_t*) &src.immediate_32;
                 for (uint8_t i = 0; i < num_immediate_bytes; i++) {
                     immediate_bytes[i] = bytes[i];
                 }
@@ -266,14 +321,18 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
             out.error_message = mk_string("Cannot use two dereferences as a source/destination pair", err_allocator);
             break;
 
-        case Immediate:
+        case Immediate8:
+        case Immediate16:
+        case Immediate32:
         case Immediate64:
             out.type = Err;
             out.error_message = mk_string("Deref/Immediate not implemented", err_allocator);
         }
         break;
 
-    case Immediate:
+    case Immediate8:
+    case Immediate16:
+    case Immediate32:
     case Immediate64:
         out.type = Err;
         out.error_message = mk_string("Cannot use an immediate as a destination register!", err_allocator);
@@ -288,6 +347,8 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
     push_u8(opcode, instructions, a);
     if (use_mod_rm_byte) push_u8(mod_rm_byte, instructions, a);
 
+    if (num_immediate_bytes != 0)
+        out.backlink = instructions->data + instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
         push_u8(immediate_bytes[i], &assembler->instructions, a);
     }
@@ -295,9 +356,9 @@ result build_binary_op(assembler* assembler, binary_op op, location dest, locati
     return out;
 }
 
-result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator) {
+asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator) {
     allocator a = assembler->allocator;
-    result out;
+    asm_result out;
     out.type = Ok;
     bool use_prefix_byte = false;
     uint8_t prefix_byte;
@@ -349,15 +410,15 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
             use_mod_rm_byte = true;
             mod_rm_byte = modrm_mem(loc);
             num_immediate_bytes = 1;
-            immediate_bytes[0] = loc.immediate;
+            immediate_bytes[0] = loc.immediate_32;
             break;
-        case Immediate: {
+        case Immediate32: {
             // TODO: optionally shrink immediate
-            uint8_t* bytes = (uint8_t*) &loc.immediate;
-            if (loc.immediate <= 256) {
+            uint8_t* bytes = (uint8_t*) &loc.immediate_32;
+            if (loc.immediate_32 <= 256) {
                 opcode = 0x6A;
                 num_immediate_bytes = 1;
-            } else if (loc.immediate <= 256 * 256) {
+            } else if (loc.immediate_32 <= 256 * 256) {
                 opcode = 0x68;
                 num_immediate_bytes = 2;
             } else {
@@ -374,6 +435,40 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
             out.error_message = mk_string("Push for register dereference not implemented", err_allocator);
         }
         break;
+        // conditional jumps
+    case JE:
+        opcode = 0x74;
+        if (loc.type != Immediate8) {
+            out.type = Err;
+            out.error_message = mk_string("JE requires 8-bit immediate", err_allocator);
+        }
+        num_immediate_bytes = 1;
+        immediate_bytes[0] = loc.immediate_8;
+        break;
+    case JNE:
+        opcode = 0x75;
+        if (loc.type != Immediate8) {
+            out.type = Err;
+            out.error_message = mk_string("JNE requires 8-bit immediate", err_allocator);
+        }
+        num_immediate_bytes = 1;
+        immediate_bytes[0] = loc.immediate_8;
+        break;
+
+    case JMP:
+        opcode = 0xEB;
+        switch (loc.type) {
+        case Immediate8:
+            num_immediate_bytes = 1;
+            immediate_bytes[0] = loc.immediate_8;
+            break;
+        default:
+
+            out.type = Err;
+            out.error_message = mk_string("JMP requires 8-bit immediate", err_allocator);
+            return out;
+        }
+        break;
     }
     if (out.type == Err) return out;
 
@@ -385,15 +480,17 @@ result build_unary_op(assembler* assembler, unary_op op, location loc, allocator
     if (use_mod_rm_byte) {
         push_u8(mod_rm_byte,instructions, a);
     }
+    if (num_immediate_bytes != 0)
+        out.backlink = instructions->data + instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
         push_u8(immediate_bytes[i], instructions, a);
     }
     return out;
 }
 
-result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator) {
+asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator) {
     allocator a = assembler->allocator;
-    result out;
+    asm_result out;
     out.type = Ok;
 
     uint8_t opcode;

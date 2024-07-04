@@ -11,7 +11,7 @@ typedef struct syntax_call {
 syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
     //value_root(value, lcl);
     syntax* out = (syntax*)mem_alloc(sizeof(syntax), a);
-    out->type = SLiteral;
+    out->type = SLitI64;
     out->lit_i64 = value; return out;
 }
 
@@ -19,9 +19,9 @@ syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
 void delete_syntax(syntax syntax, allocator a) {
     switch (syntax.type)
         {
-        case SLiteral: 
+        case SLitI64: 
+        case SLitBool: 
             // Nothing 
-            //value_unroot(syntax.data.val);
             break;
         case SApplication: {
             delete_syntax_pointer(syntax.application.function, a);
@@ -51,8 +51,16 @@ void delete_syntax_pointer(syntax* syntax, allocator a) {
 document* pretty_syntax(syntax* syntax, allocator a) {
     document* out = NULL;
     switch (syntax->type) {
-    case SLiteral: {
+    case SLitI64: {
         out = pretty_u64(syntax->lit_i64, a);
+        break;
+    }
+    case SLitBool: {
+        if (syntax->lit_i64 == 0) {
+            out = mk_str_doc(mv_string("false"), a);
+        } else {
+            out = mk_str_doc(mv_string("true"), a);
+        }
         break;
     }
     case SVariable: {
