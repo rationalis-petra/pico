@@ -1,20 +1,32 @@
 #include <stdio.h>
+
 #include "pico/eval/call.h"
+#include "pretty/standard_types.h"
 
 eval_result pico_run_toplevel(toplevel top, assembler* ass, pi_module* module, allocator a) {
     eval_result res;
     switch (top.type) {
     case TLExpr:
+        switch (top.expr.ptype->prim) {
+        case Int_64:
+            res.type = ERInt;
+            break;
+        case Bool:
+            res.type = ERBool;
+            break;
+        }
         res.val = pico_run_expr(ass, a);
         break;
     case TLDef:
         // copy into module
         switch (top.def.value->ptype->sort) {
         case TProc:
+            res.type = ERSucc;
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass);
             res.val = 0;
             break;
         case TPrim: {
+            res.type = ERSucc;
             // assume int64 for now!
             int64_t val = pico_run_expr(ass, a);
             res.val = val;
@@ -51,3 +63,23 @@ int64_t pico_run_expr(assembler* ass, allocator a) {
     return out;
 }
 
+document* pretty_res(eval_result res, allocator a) {
+    document* out = NULL;
+    switch (res.type) {
+    case ERSucc:
+        out = mk_str_doc(mv_string("Success"), a);
+        break;
+    case ERInt:
+        out = pretty_i64(res.val, a);
+        break;
+    case ERBool:
+        if (res.val == 0) 
+            out = mk_str_doc(mv_string(":false"), a);
+        else 
+            out = mk_str_doc(mv_string(":true"), a);
+        break;
+    default:
+            out = mk_str_doc(mv_string("Invalid Result!"), a);
+    }
+    return out;
+}

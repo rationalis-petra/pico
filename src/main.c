@@ -221,7 +221,9 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 
     eval_result call_res = pico_run_toplevel(abs.out, ass, module, arena);
     write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
-    doc = pretty_i64(call_res.val, a); // TODO
+
+    doc = pretty_res(call_res, arena);
+
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
 
