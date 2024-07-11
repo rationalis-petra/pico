@@ -272,7 +272,11 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
         pi_symbol sym = ((pi_rawtree*)aref_ptr(1, raw.data.nodes))->data.atom.symbol;
         
         pi_rawtree* raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+
+        shadow_var(sym, env, a);
         abs_expr_result inter = abstract_expr_i(*raw_term, env, a);
+        pop_shadow(env, 1);
+
         if (inter.type == Err) {
             res.type = Err;
             res.error_message = inter.error_message;

@@ -6,6 +6,8 @@
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
+#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/sym_sarr_amap.h"
 
 /* Module and package implementation details
  * Modules
@@ -15,12 +17,11 @@
  *   • An array of pointers to all addresses where this term is referenced
  */
 
-typedef struct module_entry module_entry_internal;
-/* typedef struct module_entry_internal { */
-/*     void* value; */
-/*     pi_type type; */
-/*     ptr_array backrefs; */
-/* } module_entry_internal; */
+typedef struct module_entry_internal {
+    void* value;
+    pi_type type;
+    sym_sarr_amap* backlinks;
+} module_entry_internal;
 
 AMAP_HEADER(pi_symbol, module_entry_internal, entry)
 
@@ -71,6 +72,9 @@ result add_module(string name, pi_module* module, pi_package* package, allocator
 // Module Implementation
 // -----------------------------------------------------------------------------
 
+// Forward declaration of utility functions
+void update_function(uint8_t* val, sym_ptr_amap new_vals, sym_sarr_amap links);
+
 pi_module* mk_module(allocator a) {
     pi_module* module = (pi_module*) mem_alloc(sizeof(pi_module), a);
     module->has_name = false;
@@ -89,7 +93,8 @@ void delete_module(pi_module* module) {
             mem_free(entry.value, module->allocator);
         }
         delete_pi_type(entry.type, module->allocator);
-        sdelete_ptr_array(entry.backrefs, module->allocator);
+        // TODO
+        //sdelete_ptr_array(entry.backrefs, module->allocator);
     };
     sdelete_entry_amap(module->entries, module->allocator);
 
@@ -97,7 +102,6 @@ void delete_module(pi_module* module) {
     mem_free(module, module->allocator);
 }
 
-// TODO: if type is of sort PROC, module should move the relevant memory
 result add_def (pi_module* module, pi_symbol name, pi_type type, void* data) {
     module_entry_internal entry;
     size_t size = pi_size_of(type);
@@ -105,7 +109,7 @@ result add_def (pi_module* module, pi_symbol name, pi_type type, void* data) {
     entry.value = mem_alloc(size, module->allocator);
     memcpy(entry.value, data, size);
     entry.type = type;
-    entry.backrefs = mk_ptr_array(0, module->allocator);
+    entry.backlinks = NULL;
     entry_insert(name, entry, &(module->entries), module->allocator);
 
     result out;
@@ -113,7 +117,7 @@ result add_def (pi_module* module, pi_symbol name, pi_type type, void* data) {
     return out;
 }
 
-result add_fn_def (pi_module* module, pi_symbol name, pi_type type, assembler* fn) {
+result add_fn_def (pi_module* module, pi_symbol name, pi_type type, assembler* fn, sym_sarr_amap* backlinks) {
     module_entry_internal entry;
     u8_array instrs = get_instructions(fn);
     size_t size = instrs.len;
@@ -122,8 +126,19 @@ result add_fn_def (pi_module* module, pi_symbol name, pi_type type, assembler* f
     entry.value = mem_alloc(size, module->executable_allocator);
     memcpy(entry.value, instrs.data, size);
     entry.type = type;
-    entry.backrefs = mk_ptr_array(0, module->allocator);
+    entry.backlinks = mem_alloc(sizeof(sym_sarr_amap), module->allocator);
+    if (backlinks) {
+        *(entry.backlinks) = *backlinks;
+
+        // swap out self-references
+        sym_ptr_amap self_ref = mk_sym_ptr_amap(1, module->allocator);
+        sym_ptr_insert(name, entry.value, &self_ref, module->allocator);
+        update_function(entry.value, self_ref, *backlinks);
+    } else {
+        entry.backlinks = NULL;
+    }
     entry_insert(name, entry, &(module->entries), module->allocator);
+
     
     result out;
     out.type = Ok;
@@ -140,4 +155,22 @@ symbol_array get_symbols(pi_module* module, allocator a) {
         push_u64(module->entries.data[i].key, &syms, a);
     };
     return syms;
+}
+
+void update_function(uint8_t* val, sym_ptr_amap new_vals, sym_sarr_amap links) {
+    for (size_t i = 0; i < new_vals.len; i++) {
+        pi_symbol sym = new_vals.data[i].key;
+        uint64_t new_loc = (uint64_t)new_vals.data[i].val;
+        uint8_t* src = (uint8_t*)&new_loc;
+
+        size_array* szarr = sym_sarr_lookup(sym, links);
+        if (szarr) {
+            for (size_t j = 0; j < szarr->len; j++) {
+                size_t offset = szarr->data[j];
+                for (size_t k = 0; k < sizeof(uint64_t); k++) {
+                    val[offset + k] = src[k];
+                }
+            }
+        }
+    }
 }

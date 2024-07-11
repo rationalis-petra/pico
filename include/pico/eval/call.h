@@ -23,7 +23,7 @@ typedef struct eval_result {
 } eval_result;
 
 
-eval_result pico_run_toplevel(toplevel top, assembler* ass, pi_module* module, allocator a);
+eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backlinks, pi_module* module, allocator a);
 
 int64_t pico_run_expr(assembler* ass, allocator a);
 

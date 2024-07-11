@@ -1,4 +1,5 @@
 #include "pico/binding/type_env.h"
+#include "pico/data/sym_ptr_assoc.h"
 
 typedef struct type_env {
     environment* env;
@@ -33,7 +34,6 @@ type_entry type_env_lookup(pi_symbol s, type_env* env) {
 
     return out;
 }
-
 
 void type_var (pi_symbol var, pi_type* type, type_env* env, allocator a) {
     sym_ptr_bind(var, type, &env->locals, a);

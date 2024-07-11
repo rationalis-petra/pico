@@ -9,7 +9,7 @@
     prefix##_assoc out; \
     out.capacity = capacity; \
     out.len = 0; \
-    out.data = mem_alloc(capacity * sizeof(prefix##_cell), a); \
+    out.data = mem_alloc(capacity * sizeof(prefix##_acell), a); \
     return out; \
   } \
   \
@@ -37,7 +37,7 @@
   void prefix##_bind(key_t key, val_t val, prefix ## _assoc* map, allocator a) { \
     if (map->len >= map->capacity) { \
       map->capacity *= 2; \
-      map->data = mem_realloc(map->data, sizeof(prefix ## _cell) * map->capacity, a);\
+      map->data = mem_realloc(map->data, sizeof(prefix ## _acell) * map->capacity, a);\
     } \
     map->data[map->len].key = key; \
     map->data[map->len].val = val; \

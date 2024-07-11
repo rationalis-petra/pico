@@ -12,8 +12,11 @@ typedef struct assembler assembler;
 assembler* mk_assembler(allocator a);
 void delete_assembler(assembler* assembler);
 void clear_assembler(assembler* assembler);
-document* pretty_assembler(assembler* assembler, allocator a);
+
 u8_array get_instructions(assembler* assembler);
+size_t get_pos(assembler* assembler);
+
+document* pretty_assembler(assembler* assembler, allocator a);
 
 // Integral operations
 typedef enum binary_op {
@@ -49,7 +52,7 @@ typedef enum unary_op {
     // ------------------
     Call,
     Push, // p 1250.
-    Pop,
+    Pop,  // 
 
     // ------------------
     //  Jumps
@@ -59,6 +62,13 @@ typedef enum unary_op {
 
     JNE, // p658, jump if equal
     JMP, // p663, unconditional jump
+
+    // ------------------------
+    //  Set Byte based on flag 
+    // ------------------------
+    SetE,
+    SetL,
+    SetG,
 
 } unary_op;
 
@@ -119,7 +129,7 @@ location imm64(int64_t immediate);
 typedef struct asm_result {
     Result_t type;
     union {
-        uint8_t* backlink; // backlink to immediate (if it exists)
+        size_t backlink; // backlink to immediate (if it exists)
         string error_message;
     }; 
 } asm_result;

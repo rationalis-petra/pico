@@ -11,6 +11,7 @@ typedef enum type_entry_t {
     TEGlobal,
     TENotFound,
 } type_entry_t;
+
 typedef struct type_entry {
     type_entry_t type;
     pi_type* ptype;

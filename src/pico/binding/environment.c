@@ -1,4 +1,5 @@
 #include "pico/binding/environment.h"
+#include "pico/data/sym_ptr_amap.h"
 
 struct environment {
     sym_ptr_amap modules;

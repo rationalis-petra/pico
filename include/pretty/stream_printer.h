@@ -1,4 +1,4 @@
-#ifndef  __PRETTY_STREAM_PRINTER_H
+#ifndef __PRETTY_STREAM_PRINTER_H
 #define __PRETTY_STREAM_PRINTER_H
 
 typedef struct document document;

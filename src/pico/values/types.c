@@ -93,6 +93,7 @@ pi_type* mk_uvar(uvar_generator* gen, allocator a) {
     pi_type* uvar = mem_alloc(sizeof(pi_type), a);
     uvar->sort = TUVar;
     uvar->uvar = mem_alloc(sizeof(uvar_type), a) ;
+    uvar->uvar->subst = NULL;
     uvar->uvar->id = gen->counter++;
     
     return uvar;

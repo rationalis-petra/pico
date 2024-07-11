@@ -21,7 +21,7 @@ typedef struct address_entry {
     };
 } address_entry;
 
-address_env* mk_address_env(environment* env, allocator a);
+address_env* mk_address_env(environment* env, pi_symbol* sym, allocator a);
 void delete_address_env(address_env* env, allocator a);
 
 address_entry address_env_lookup(pi_symbol s, address_env* env);

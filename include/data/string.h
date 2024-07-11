@@ -12,6 +12,7 @@ typedef struct string {
 
 string mk_string(const char* str, allocator a);
 string mv_string(const char* str);
+
 void delete_string(string str, allocator a);
 string copy_string(const string str, allocator a);
 

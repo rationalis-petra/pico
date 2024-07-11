@@ -3,7 +3,7 @@
 #include "pico/eval/call.h"
 #include "pretty/standard_types.h"
 
-eval_result pico_run_toplevel(toplevel top, assembler* ass, pi_module* module, allocator a) {
+eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backlinks, pi_module* module, allocator a) {
     eval_result res;
     switch (top.type) {
     case TLExpr:
@@ -22,7 +22,7 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, pi_module* module, a
         switch (top.def.value->ptype->sort) {
         case TProc:
             res.type = ERSucc;
-            add_fn_def(module, top.def.bind, *top.def.value->ptype, ass);
+            add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
             res.val = 0;
             break;
         case TPrim: {

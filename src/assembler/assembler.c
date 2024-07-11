@@ -47,6 +47,10 @@ u8_array get_instructions(assembler* ass) {
     return ass->instructions;
 }
 
+size_t get_pos(assembler* ass) {
+    return ass->instructions.len;
+}
+
 void delete_assembler (assembler* ass) {
     sdelete_u8_array(ass->instructions, ass->allocator);
     mem_free(ass, ass->allocator);
@@ -118,6 +122,11 @@ uint8_t modrm_reg(regname r2) {
 
 // encode register in r/m field;
 void modrm_reg_rm(uint8_t* modrm_byte, regname reg) {
+    *modrm_byte |= reg & 0b111;
+}
+
+void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte,regname reg) {
+    if (reg & 010) set_bit(rex_byte, 2);
     *modrm_byte |= reg & 0b111;
 }
 
@@ -348,7 +357,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
     if (use_mod_rm_byte) push_u8(mod_rm_byte, instructions, a);
 
     if (num_immediate_bytes != 0)
-        out.backlink = instructions->data + instructions->len;
+        out.backlink = instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
         push_u8(immediate_bytes[i], &assembler->instructions, a);
     }
@@ -360,11 +369,14 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     allocator a = assembler->allocator;
     asm_result out;
     out.type = Ok;
+    bool use_rex_byte = false;
+    uint8_t rex_byte = 0b01000000;
+
     bool use_prefix_byte = false;
     uint8_t prefix_byte;
 
     bool use_mod_rm_byte = false;
-    uint8_t mod_rm_byte;
+    uint8_t mod_rm_byte = 0;
 
     uint8_t num_immediate_bytes = 0;
     uint8_t immediate_bytes[4];
@@ -469,10 +481,71 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
             return out;
         }
         break;
+
+    case SetE:
+        //use_rex_byte = true;
+        use_prefix_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        prefix_byte = 0x0f;
+        opcode = 0x94;
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+
+            out.type = Err;
+            out.error_message = mk_string("SetE requires a register argument", err_allocator);
+            return out;
+        }
+        break;
+    case SetL:
+        //use_rex_byte = true;
+        use_prefix_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        prefix_byte = 0x0f;
+        opcode = 0x9C;
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+
+            out.type = Err;
+            out.error_message = mk_string("SetE requires a register argument", err_allocator);
+            return out;
+        }
+        break;
+    case SetG:
+        //use_rex_byte = true;
+        use_prefix_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        prefix_byte = 0x0f;
+        opcode = 0x9F;
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+
+            out.type = Err;
+            out.error_message = mk_string("SetE requires a register argument", err_allocator);
+            return out;
+        }
+        break;
     }
     if (out.type == Err) return out;
 
     u8_array* instructions = &assembler->instructions;
+    if (use_rex_byte) {
+        push_u8(rex_byte, instructions, a);
+    }
     if (use_prefix_byte) {
         push_u8(prefix_byte, instructions, a);
     }
@@ -481,7 +554,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         push_u8(mod_rm_byte,instructions, a);
     }
     if (num_immediate_bytes != 0)
-        out.backlink = instructions->data + instructions->len;
+        out.backlink = instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
         push_u8(immediate_bytes[i], instructions, a);
     }

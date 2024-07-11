@@ -1,4 +1,4 @@
-
+#include "pico/data/sym_pos_assoc.h" 
 #include "pico/codegen/codegen.h"
 #include "pico/binding/address_env.h"
 
@@ -6,14 +6,76 @@
  * • All expressions evaluate to integers or functions 
  * • All functions are just an address to call to (or jmp to for tail calls) 
  * • All terms are well-typed
+ * 
+ * On the calling convention used:
+ * Calling a function:
+ * • Push all arguments onto the stack in left-right order (i.e. rightmost arg
+ *   is top of stack)
+ * • 
  */
 
-// 
+// implementation details
+result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
+asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
+void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);
+
+gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
+    address_env* a_env = mk_address_env(env, NULL, a);
+    sym_sarr_amap backlinks = mk_sym_sarr_amap(16, a);
+    result m_err = generate_expr_i(syn, a_env, ass, &backlinks, a);
+    delete_address_env(a_env, a);
+
+    gen_result out;
+    out.backlinks = backlinks;
+    if (m_err.type == Err) {
+        out.error_message = m_err.error_message;
+    }
+
+    return out;
+}
+
+gen_result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a) {
+    result m_err;
+    sym_sarr_amap backlinks = mk_sym_sarr_amap(32, a);
+
+    switch(top.type) {
+    case TLDef: {
+        address_env* a_env = mk_address_env(env, &top.def.bind, a);
+        m_err = generate_expr_i(*top.def.value, a_env, ass, &backlinks, a);
+        delete_address_env(a_env, a);
+        break;
+    }
+    case TLExpr: {
+        address_env* a_env = mk_address_env(env, NULL, a);
+        m_err = generate_expr_i(top.expr, a_env, ass, &backlinks, a);
+        delete_address_env(a_env, a);
+        break;
+    }
+    }
+
+
+    gen_result out;
+    out.type = m_err.type;
+    out.error_message = m_err.error_message;
+    out.backlinks = backlinks;
+    return out;
+}
 
 /* Relevant assembly:
  * 
  */
-asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
+result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap *links, allocator a) {
+    asm_result generated = generate(syn, env, ass, links, a);
+
+    result out;
+    out.type = generated.type;
+    if (generated.type == Err)
+        out.error_message = generated.error_message;
+
+    return out;
+}
+
+asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a) {
     asm_result out;
 
     switch (syn.type) {
@@ -48,18 +110,24 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
             if (syn.ptype->sort == TProc) {
                 out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
+                backlink_global(syn.variable, out.backlink, links, a);
+
                 out = build_unary_op(ass, Push, reg(RBX), a);
             } else {
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
-                out = build_binary_op(ass, Mov, reg(RCX), rref(RCX, 0), a);
+                backlink_global(syn.variable, out.backlink, links, a);
+
+                out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
                 if (out.type == Err) return out;
-                out = build_unary_op(ass, Push, reg(RCX), a);
+                out = build_unary_op(ass, Push, reg(RBX), a);
             }
             break;
         case ANotFound:
             out.type = Err;
-            out.error_message = mk_string("Variable not found!", a);
+            string* sym = symbol_to_string(syn.variable);
+            string msg = mv_string("Couldn't find variable during codegen: ");
+            out.error_message = string_cat(msg, *sym, a);
             break;
         case ATooManyLocals:
             out.type = Err;
@@ -77,7 +145,8 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
 
         // codegen procedure body 
         address_fn_vars(syn.procedure.args, env, a);
-        out = generate(*syn.procedure.body, env, ass, a);
+        out = generate(*syn.procedure.body, env, ass, links, a);
+        if (out.type == Err) return out;
         pop_fn_vars(env);
 
         // Codegen function teardown:
@@ -114,12 +183,12 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         // Generate the arguments
         for (size_t i = 0; i < syn.application.args.len; i++) {
             syntax* arg = (syntax*) syn.application.args.data[i];
-            out = generate(*arg, env, ass, a);
+            out = generate(*arg, env, ass, links, a);
             if (out.type == Err) return out;
         }
 
         // This will push a function pointer onto the stack
-        out = generate(*syn.application.function, env, ass, a);
+        out = generate(*syn.application.function, env, ass, links, a);
         if (out.type == Err) return out; 
         
         // Pop the function into RCX; call the function
@@ -140,7 +209,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         break;
     case SIf: {
         // generate the condition
-        out = generate(*syn.if_expr.condition, env, ass, a);
+        out = generate(*syn.if_expr.condition, env, ass, links, a);
         if (out.type == Err) return out;
 
         // Pop the bool into RBX; compare with 0
@@ -154,13 +223,13 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
         out = build_unary_op(ass, JE, imm8(0), a);
         if (out.type == Err) return out;
-        size_t start_pos = get_instructions(ass).len;
+        size_t start_pos = get_pos(ass);
 
-        uint8_t* jmp_loc = out.backlink;
+        uint8_t* jmp_loc = get_instructions(ass).data + out.backlink;
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
-        out = generate(*syn.if_expr.true_branch, env, ass, a);
+        out = generate(*syn.if_expr.true_branch, env, ass, links, a);
         if (out.type == Err) return out;
 
         // Generate jump to end of false branch to be backlinked later
@@ -168,7 +237,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
         if (out.type == Err) return out;
 
         // calc backlink offset
-        size_t end_pos = get_instructions(ass).len;
+        size_t end_pos = get_pos(ass);
         if (end_pos - start_pos > INT8_MAX) {
             out.type = Err;
             out.error_message = mk_string("Jump in conditional too large", a);
@@ -177,17 +246,17 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
 
         // backlink
         *jmp_loc = (end_pos - start_pos);
-        jmp_loc = out.backlink;
-        start_pos = get_instructions(ass).len;
+        jmp_loc = get_instructions(ass).data + out.backlink;
+        start_pos = get_pos(ass);
 
 
         // ---------- FALSE BRANCH ----------
         // Generate code for the false branch
-        out = generate(*syn.if_expr.false_branch, env, ass, a);
+        out = generate(*syn.if_expr.false_branch, env, ass, links, a);
         if (out.type == Err) return out;
 
         // calc backlink offset
-        end_pos = get_instructions(ass).len;
+        end_pos = get_pos(ass);
         if (end_pos - start_pos > INT8_MAX) {
             out.type = Err;
             out.error_message = mk_string("Jump in conditional too large", a);
@@ -200,28 +269,18 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, allocator a) {
 
     return out;
 }
-                                                 
-result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
-    address_env* a_env = mk_address_env(env, a);
-    asm_result generated = generate(syn, a_env, ass, a);
-    result out;
-    out.type = generated.type;
-    if (generated.type == Err)
-        out.error_message = generated.error_message;
 
-    delete_address_env(a_env, a);
-    return out;
-}
+void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a) {
+    // Step 1: Try lookup or else create & insert 
+    size_array* sarr = NULL;
+    sarr = sym_sarr_lookup(sym, *links);
 
-result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a) {
-    result out;
-    switch(top.type) {
-    case TLDef:
-        out = generate_expr(*top.def.value, env, ass, a);
-        break;
-    case TLExpr:
-        out = generate_expr(top.expr, env, ass, a);
-        break;
+    if (!sarr) {
+        // create & insert
+        sym_sarr_insert(sym, mk_size_array(4, a), links, a);
+        sarr = sym_sarr_lookup(sym, *links);
     }
-    return out;
+
+    // Step 2: insert offset into array
+    push_size(offset, sarr, a);
 }

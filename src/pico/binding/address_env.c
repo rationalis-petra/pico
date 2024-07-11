@@ -13,11 +13,18 @@ ARRAY_IMPL(saddr, saddr)
 
 typedef struct address_env {
     environment* env;
+
+    bool rec;
+    pi_symbol recname;
+    
     saddr_array locals;
 } address_env;
 
-address_env* mk_address_env(environment* env, allocator a) {
+address_env* mk_address_env(environment* env, pi_symbol* sym, allocator a) {
     address_env* a_env = (address_env*)mem_alloc(sizeof(address_env), a);
+    a_env->rec = sym != NULL;
+    if (a_env->rec)
+        a_env->recname = *sym;
     a_env->locals = mk_saddr_array(32, a);
     a_env->env = env;
     return a_env; 
@@ -39,6 +46,13 @@ address_entry address_env_lookup(pi_symbol s, address_env* env) {
             out.stack_offset = (env->locals.len - i) * 8; 
             return out;
         };
+    }
+
+    // now search the recsym
+    if (env->rec && env->recname == s) {
+        out.type = AGlobal;
+        out.value = NULL;
+        return out;
     }
 
     // Now search globally

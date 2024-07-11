@@ -2,6 +2,8 @@
 #define __PICO_SYNTAX_SYNTAX_H
 
 #include "memory/allocator.h"
+
+#include "pico/data/sym_ptr_amap.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 

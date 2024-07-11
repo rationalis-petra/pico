@@ -1,6 +1,7 @@
 #ifndef __PICO_SYNTAX_CONCRETE_H
 #define __PICO_SYNTAX_CONCRETE_H
 
+#include "data/meta/amap_header.h"
 #include "data/array.h"
 #include "memory/allocator.h"
 #include "pretty/document.h"
@@ -26,7 +27,6 @@ typedef struct pi_atom {
 } pi_atom;
 
 AMAP_HEADER(pi_symbol, pi_atom, sym_atom)
-
 
 typedef enum pi_rawtype {
     RawList,

@@ -1,37 +1,50 @@
 #include "pico/analysis/typecheck.h"
 
-#include "memory/arena.h"
+#include "data/string.h"
+#include "pretty/string_printer.h"
+
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
 
+// forward declarations
+result type_check_expr(syntax* untyped, pi_type type, type_env* env, uvar_generator* gen, allocator a);
+result type_infer_expr(syntax* untyped, type_env* env, uvar_generator* gen, allocator a);
 
 // Check a toplevel expression
 
 result type_check(toplevel* top, environment* env, allocator a) {
     // If this is a definition, lookup the type to check against 
-    pi_type* check_against = NULL;
-    syntax* term = NULL; 
+    result out;
+    type_env *t_env = mk_type_env(env, a);
+    uvar_generator* gen = mk_gen(a);
 
     switch (top->type) {
     case TLDef: {
-        term = top->def.value;
+        pi_type* check_against;
         env_entry e = env_lookup(top->def.bind, env);
+        syntax* term = top->def.value;
+
         if (e.success == Ok) {
             check_against = e.type;
+        } else {
+            check_against = mk_uvar(gen, a);
         }
+        type_var(top->def.bind, check_against, t_env, a);
+        out = type_check_expr(term, *check_against, t_env, gen, a);
+        pop_type(t_env);
         break;
     }
-    case TLExpr:
-        term = &top->expr;
+    case TLExpr: {
+        syntax* term = &top->expr;
+        out = type_infer_expr(term, t_env, gen, a);
         break;
+    }
     }
 
-    if (check_against != NULL) {
-        return type_check_expr(term, *check_against, env, a);
-    } else {
-        return type_infer_expr(term, env, a);
-    }
+    // TODO: delete_type_env (ok for now as we arena allocate!)
+    delete_gen(gen, a);
+    return out;
 }
 
 // Forward declarations for implementation
@@ -42,12 +55,9 @@ result squash_types(syntax* untyped, allocator a);
 // -----------------------------------------------------------------------------
 // Interface
 // -----------------------------------------------------------------------------
-result type_infer_expr(syntax* untyped, environment* env, allocator a) {
+result type_infer_expr(syntax* untyped, type_env* env, uvar_generator* gen, allocator a) {
     // Arena allocator to place types
-    type_env *t_env = mk_type_env(env, a);
-    uvar_generator* gen = mk_gen(a);
-    result impl = type_infer_i (untyped, t_env, gen, a);
-    delete_gen(gen, a);
+    result impl = type_infer_i (untyped, env, gen, a);
 
     result out;
     if (impl.type == Ok) {
@@ -73,13 +83,9 @@ result type_infer_expr(syntax* untyped, environment* env, allocator a) {
     return out;
 }
 
-result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a) {
+result type_check_expr(syntax* untyped, pi_type type, type_env* env, uvar_generator* gen, allocator a) {
     // TODO copy type, use in type_check_i
-
-    type_env *t_env = mk_type_env(env, a);
-    uvar_generator* gen = mk_gen(a);
-    result impl = type_check_i (untyped, &type, t_env, gen, a);
-    delete_gen(gen, a);
+    result impl = type_check_i (untyped, &type, env, gen, a);
 
     result out;
     out.type = Ok;
@@ -139,7 +145,9 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
             out.type = Ok;
         } else {
             out.type = Err;
-            out.error_message = mk_string("Couldn't find type of variable!", a);
+            string* sym = symbol_to_string(untyped->variable);
+            string msg = mv_string("Couldn't find type of variable: ");
+            out.error_message = string_cat(msg, *sym, a);
         }
         break;
     }
@@ -166,7 +174,20 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
         out = type_infer_i(untyped->application.function, env, gen, a);
         if (out.type == Err) return out;
         pi_type fn_type = *untyped->application.function->ptype;
-        if (fn_type.sort != TProc) {
+        if (fn_type.sort == TUVar) {
+            // fill in structure 
+            pi_type* ret = mk_uvar(gen, a);
+            ptr_array args = mk_ptr_array(16, a);
+            for (size_t i = 0; i < untyped->application.args.len; i++) {
+                push_ptr(mk_uvar(gen, a), &args, a);
+            };
+
+            fn_type.sort = TProc;
+            fn_type.proc.args = args;
+            fn_type.proc.ret = ret;
+            *untyped->application.function->ptype = fn_type;
+        }
+        else if (fn_type.sort != TProc) {
             out.type = Err;
             out.error_message = mk_string("Expected LHS of application to be a proc", a);
             return out;
@@ -273,7 +294,13 @@ result squash_types(syntax* typed, allocator a) {
         }
         else {
             out.type = Err;
-            out.error_message = mk_string("Typechecking error: not all unification vars were instantiated.", a);
+            squash_type(typed->ptype);
+            document* doc = pretty_type(typed->ptype, a);
+            string str = doc_to_str(doc, a);
+            out.error_message =
+                string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
+                           str, a);
+            delete_string(str, a);
         }
     }
     return out;

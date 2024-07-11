@@ -7,7 +7,6 @@
 
 #include "assembler/assembler.h"
 #include "pretty/stream_printer.h"
-#include "pretty/standard_types.h"
 #include "pretty/document.h"
 
 #include "pico/syntax/concrete.h"
@@ -19,17 +18,17 @@
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 
-pi_type mk_int_binop_type(allocator a) {
+pi_type mk_binop_type(allocator a, prim_type a1, prim_type a2, prim_type r) {
     pi_type* i1 = mem_alloc(sizeof(pi_type), a);
     pi_type* i2 = mem_alloc(sizeof(pi_type), a);
     pi_type* i3 = mem_alloc(sizeof(pi_type), a);
 
     i1->sort = TPrim;
-    i1->prim = Int_64;
+    i1->prim = a1;
     i2->sort = TPrim;
-    i2->prim = Int_64;
+    i2->prim = a2;
     i3->sort = TPrim;
-    i3->prim = Int_64;
+    i3->prim = r;
 
     pi_type type;
     type.sort = TProc;
@@ -44,12 +43,24 @@ pi_type mk_int_binop_type(allocator a) {
 }
 
 void build_binary_fun(assembler* ass, binary_op op, allocator a) {
-    build_unary_op (ass, Pop, reg(RBP),a );
+
+    build_unary_op (ass, Pop, reg(RCX),a );
     build_unary_op (ass, Pop, reg(RBX), a);
     build_unary_op (ass, Pop, reg(RAX), a);
     build_binary_op (ass, op, reg(RAX), reg(RBX), a);
     build_unary_op (ass, Push, reg(RAX), a);
-    build_unary_op (ass, Push, reg(RBP), a);
+    build_unary_op (ass, Push, reg(RCX), a);
+    build_nullary_op (ass, Ret, a);
+}
+
+void build_comp_fun(assembler* ass, unary_op op, allocator a) {
+    build_unary_op (ass, Pop, reg(RCX),a );
+    build_unary_op (ass, Pop, reg(RBX), a);
+    build_unary_op (ass, Pop, reg(RAX), a);
+    build_binary_op (ass, Cmp, reg(RAX), reg(RBX), a);
+    build_unary_op (ass, op, reg(RAX), a);
+    build_unary_op (ass, Push, reg(RAX), a);
+    build_unary_op (ass, Push, reg(RCX), a);
     build_nullary_op (ass, Ret, a);
 }
 
@@ -60,15 +71,15 @@ pi_module* base_module(assembler* ass, allocator a) {
     pi_type type;
 
     build_binary_fun(ass, Add, a);
-    type = mk_int_binop_type(a);
+    type = mk_binop_type(a, Int_64, Int_64, Int_64);
     sym = string_to_symbol(mv_string("+"));
-    add_fn_def(module, sym, type, ass);
+    add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_binary_fun(ass, Sub, a);
-    type = mk_int_binop_type(a);
+    type = mk_binop_type(a, Int_64, Int_64, Int_64);
     sym = string_to_symbol(mv_string("-"));
-    add_fn_def(module, sym, type, ass);
+    add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     /* sym = string_to_symbol(mv_string("*")); */
@@ -76,6 +87,24 @@ pi_module* base_module(assembler* ass, allocator a) {
 
     /* sym = string_to_symbol(mv_string("/")); */
     /* add_def(module, sym, type, assembly, a); */
+
+    build_comp_fun(ass, SetL, a);
+    type = mk_binop_type(a, Int_64, Int_64, Bool);
+    sym = string_to_symbol(mv_string("<"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_comp_fun(ass, SetG, a);
+    type = mk_binop_type(a, Int_64, Int_64, Bool);
+    sym = string_to_symbol(mv_string(">"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_comp_fun(ass, SetE, a);
+    type = mk_binop_type(a, Int_64, Int_64, Bool);
+    sym = string_to_symbol(mv_string("="));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
 
     pi_term_former_t former;
     type.sort = TPrim;
@@ -122,7 +151,7 @@ pi_module* base_module(assembler* ass, allocator a) {
 
 bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_module* module) {
     // Create an arena allocator to use in this iteration.
-    allocator arena = mk_arena_allocator(2048, a);
+    allocator arena = mk_arena_allocator(4096, a);
 
     clear_assembler(ass);
     environment* env = env_from_module(module, arena);
@@ -195,7 +224,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Code Generation
     // -------------------------------------------------------------------------
 
-    result gen_res = generate_toplevel(abs.out, env, ass, arena);
+    gen_result gen_res = generate_toplevel(abs.out, env, ass, arena);
 
     if (gen_res.type == Err) {
         write_string(mv_string("Codegen Failed\n"), cout);
@@ -219,7 +248,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Evaluation
     // -------------------------------------------------------------------------
 
-    eval_result call_res = pico_run_toplevel(abs.out, ass, module, arena);
+    eval_result call_res = pico_run_toplevel(abs.out, ass, &(gen_res.backlinks), module, arena);
     write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
 
     doc = pretty_res(call_res, arena);

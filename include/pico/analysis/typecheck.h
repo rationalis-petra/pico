@@ -7,7 +7,4 @@
 
 result type_check(toplevel* untyped, environment* env, allocator a);
 
-result type_check_expr(syntax* untyped, pi_type type, environment* env, allocator a);
-result type_infer_expr(syntax* untyped, environment* env, allocator a);
-
 #endif

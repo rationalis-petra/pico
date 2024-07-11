@@ -15,7 +15,7 @@
     size_t len; \
     void (*delete_key)(key_t key, allocator a); \
     void (*delete_val)(val_t val, allocator a); \
-    prefix ## _cell* data; \
+    prefix ## _acell* data; \
   } prefix ## _assoc; \
   \
   prefix##_assoc mk_##prefix##_assoc(size_t capacity, allocator a);       \
