@@ -108,19 +108,20 @@ void squash_type(pi_type* type) {
         break;
     case TProc: {
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            squash_type((pi_type*)type->proc.args.data + i);
+            squash_type((pi_type*)(type->proc.args.data + i));
         }
         squash_type(type->proc.ret);
         break;
     }
 
     // Special sort: unification variable
-    case TUVar:
-        if (type->uvar->subst != NULL) {
-            squash_type(type->uvar->subst);
-            *type = *type->uvar->subst;
+    case TUVar: {
+        pi_type* subst = type->uvar->subst;
+        if (subst) {
+            squash_type(subst);
+            *type = *subst;
         } 
+        break;
+    }
     }
 }
-
-//pi_type* copy_type(pi_type* type, allocator a) {}

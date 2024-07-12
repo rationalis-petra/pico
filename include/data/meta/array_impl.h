@@ -11,8 +11,19 @@
     out.len = 0; \
     return out; \
   } \
+  prefix ## _array copy_ ## prefix ## _array(const prefix ## _array source, type (*copy_elt)(type, allocator), allocator a) { \
+    size_t memsize = sizeof(type) * source.size; \
+    prefix ## _array out; \
+    out.data = mem_alloc(memsize, a); \
+    out.len = source.len; \
+    out.size = source.size; \
+    for (size_t i = 0; i < out.size; i++) { \
+        out.data[i] = copy_elt(source.data[i], a);  \
+    } \
+    return out;\
+  } \
   \
-  prefix ## _array copy_ ## prefix ## _array(const prefix ## _array source, allocator a) { \
+  prefix ## _array scopy_ ## prefix ## _array(const prefix ## _array source, allocator a) { \
     size_t memsize = sizeof(type) * source.size; \
     prefix ## _array out; \
     out.data = mem_alloc(memsize, a); \

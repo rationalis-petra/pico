@@ -47,6 +47,8 @@ typedef struct pi_type {
 
 document* pretty_type(pi_type* type, allocator a);
 void delete_pi_type(pi_type t, allocator a);
+pi_type copy_pi_type(pi_type t, allocator a);
+pi_type* copy_pi_type_p(pi_type* t, allocator a);
 size_t pi_size_of(pi_type t);
 
 pi_type* mk_uvar(uvar_generator* gen, allocator a);

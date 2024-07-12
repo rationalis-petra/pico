@@ -61,7 +61,7 @@ document* mv_cat_doc(const ptr_array source, allocator a) {
 }
 
 document* mk_cat_doc(const ptr_array source, allocator a) {
-    ptr_array copy = copy_ptr_array(source, a);
+    ptr_array copy = scopy_ptr_array(source, a);
     document* doc = mem_alloc(sizeof(document), a);
     doc->doc_type = CatDocument;
     doc->data.docs = copy;
@@ -76,7 +76,7 @@ document* mv_sep_doc(const ptr_array source, allocator a) {
 }
 
 document* mk_sep_doc(const ptr_array source, allocator a) {
-    ptr_array copy = copy_ptr_array(source, a);
+    ptr_array copy = scopy_ptr_array(source, a);
     document* doc = mem_alloc(sizeof(document), a);
     doc->doc_type = SepDocument;
     doc->data.docs = copy;
@@ -91,7 +91,7 @@ document* mv_vsep_doc(const ptr_array source, allocator a) {
 }
 
 document* mk_vsep_doc(const ptr_array source, allocator a) {
-    ptr_array copy = copy_ptr_array(source, a);
+    ptr_array copy = scopy_ptr_array(source, a);
     document* doc = mem_alloc(sizeof(document), a);
     doc->doc_type = VSepDocument;
     doc->data.docs = copy;

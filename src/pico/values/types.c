@@ -26,6 +26,39 @@ void delete_pi_type(pi_type t, allocator a) {
     }
 }
 
+pi_type* copy_pi_type_p(pi_type* t, allocator a)  {
+    pi_type* out = mem_alloc(sizeof(pi_type), a);
+    *out = copy_pi_type(*t, a);
+    return out;
+}
+
+pi_type copy_pi_type(pi_type t, allocator a) {
+    pi_type out;
+    out.sort = t.sort;
+    switch(t.sort) {
+    case TProc:
+        out.proc.ret = copy_pi_type_p(t.proc.ret, a);
+        out.proc.args = copy_ptr_array(t.proc.args, (void*(*)(void*, allocator)) copy_pi_type_p, a);
+        break;
+
+    case TUVar:
+        out.uvar = mem_alloc(sizeof(uvar_type), a);
+        out.uvar->id = t.uvar->id; 
+        if (t.uvar->subst) {
+            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
+        } else {
+            out.uvar->subst = NULL;
+        }
+        break;
+    case TPrim:
+        out.prim = t.prim;
+        break;
+            
+    }
+
+    return out;
+}
+
 document* pretty_type(pi_type* type, allocator a) {
     document* out = NULL;
     switch (type->sort) {
@@ -108,3 +141,4 @@ uvar_generator* mk_gen(allocator a) {
 void delete_gen(uvar_generator* gen, allocator a) {
     mem_free(gen, a);
 }
+

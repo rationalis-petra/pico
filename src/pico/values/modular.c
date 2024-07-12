@@ -84,6 +84,8 @@ pi_module* mk_module(allocator a) {
     return module;
 }
 
+void del_sym(pi_symbol s, allocator a) { }
+
 void delete_module(pi_module* module) {
     for (size_t i = 0; i < module->entries.len; i++) {
         module_entry_internal entry = module->entries.data[i].val;
@@ -93,8 +95,10 @@ void delete_module(pi_module* module) {
             mem_free(entry.value, module->allocator);
         }
         delete_pi_type(entry.type, module->allocator);
-        // TODO
-        //sdelete_ptr_array(entry.backrefs, module->allocator);
+        if (entry.backlinks) {
+            delete_sym_sarr_amap(*entry.backlinks, del_sym, sdelete_size_array, module->allocator);
+            mem_free(entry.backlinks, module->allocator);
+        }
     };
     sdelete_entry_amap(module->entries, module->allocator);
 
@@ -108,7 +112,7 @@ result add_def (pi_module* module, pi_symbol name, pi_type type, void* data) {
 
     entry.value = mem_alloc(size, module->allocator);
     memcpy(entry.value, data, size);
-    entry.type = type;
+    entry.type = copy_pi_type(type, module->allocator);
     entry.backlinks = NULL;
     entry_insert(name, entry, &(module->entries), module->allocator);
 
@@ -125,9 +129,9 @@ result add_fn_def (pi_module* module, pi_symbol name, pi_type type, assembler* f
     // copy the function definition into the module's executable memory
     entry.value = mem_alloc(size, module->executable_allocator);
     memcpy(entry.value, instrs.data, size);
-    entry.type = type;
-    entry.backlinks = mem_alloc(sizeof(sym_sarr_amap), module->allocator);
+    entry.type = copy_pi_type(type, module->allocator);
     if (backlinks) {
+        entry.backlinks = mem_alloc(sizeof(sym_sarr_amap), module->allocator);
         *(entry.backlinks) = *backlinks;
 
         // swap out self-references

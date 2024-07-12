@@ -77,10 +77,10 @@ pi_module* base_module(assembler* ass, allocator a) {
     clear_assembler(ass);
 
     build_binary_fun(ass, Sub, a);
-    type = mk_binop_type(a, Int_64, Int_64, Int_64);
     sym = string_to_symbol(mv_string("-"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
+    delete_pi_type(type, a);
 
     /* sym = string_to_symbol(mv_string("*")); */
     /* add_def(module, sym, type, assembly, a); */
@@ -95,16 +95,15 @@ pi_module* base_module(assembler* ass, allocator a) {
     clear_assembler(ass);
 
     build_comp_fun(ass, SetG, a);
-    type = mk_binop_type(a, Int_64, Int_64, Bool);
     sym = string_to_symbol(mv_string(">"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_comp_fun(ass, SetE, a);
-    type = mk_binop_type(a, Int_64, Int_64, Bool);
     sym = string_to_symbol(mv_string("="));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
+    delete_pi_type(type, a);
 
     pi_term_former_t former;
     type.sort = TPrim;

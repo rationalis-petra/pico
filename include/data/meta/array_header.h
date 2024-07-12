@@ -12,7 +12,8 @@
   } prefix ## _array; \
   \
   prefix ## _array mk_ ## prefix ## _array (const size_t size, allocator a); \
-  prefix ## _array copy_ ## prefix ## _array(const prefix ## _array source, allocator a); \
+  prefix ## _array scopy_ ## prefix ## _array(const prefix ## _array source, allocator a); \
+  prefix ## _array copy_ ## prefix ## _array(const prefix ## _array source, type (*copy_elt)(type val, allocator a), allocator a); \
   \
   void delete_ ## prefix ## _array(prefix ## _array arr, void (*delete_elem)(type elem, allocator allocator), allocator a); \
   void sdelete_ ## prefix ## _array(prefix ## _array arr, allocator a); \
