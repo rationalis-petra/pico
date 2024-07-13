@@ -1,4 +1,3 @@
-#include "pico/data/sym_pos_assoc.h" 
 #include "pico/codegen/codegen.h"
 #include "pico/binding/address_env.h"
 
@@ -143,7 +142,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         out = build_binary_op(ass, Mov, reg(RBP), reg(RSP), a);
         if (out.type == Err) return out;
 
-        // codegen procedure body 
+        // Codegen Procedure Body 
         address_fn_vars(syn.procedure.args, env, a);
         out = generate(*syn.procedure.body, env, ass, links, a);
         if (out.type == Err) return out;
@@ -168,7 +167,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         if (out.type == Err) return out;
         
         // pop args
-        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8),a );
+        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8), a);
         if (out.type == Err) return out;
 
         // push value
@@ -191,6 +190,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         out = generate(*syn.application.function, env, ass, links, a);
         if (out.type == Err) return out; 
         
+        // Regular Function Call
         // Pop the function into RCX; call the function
         out = build_unary_op(ass, Pop, reg(RCX), a);
         if (out.type == Err) return out;

@@ -257,9 +257,9 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
     abs_result res;
     switch (former) {
     case FDefine: {
-        if (raw.data.nodes.len != 3) {
+        if (raw.data.nodes.len < 3) {
             res.type = Err;
-            res.error_message = mk_string("Definitions expect exactly 2 terms", a);
+            res.error_message = mk_string("Definitions expect at least 2 terms", a);
             return res;
         }
 
@@ -271,7 +271,17 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
 
         pi_symbol sym = ((pi_rawtree*)aref_ptr(1, raw.data.nodes))->data.atom.symbol;
         
-        pi_rawtree* raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+        pi_rawtree* raw_term;
+        if (raw.data.nodes.len == 3) {
+            raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+        } else {
+            raw_term = mem_alloc (sizeof(pi_rawtree), a);
+
+            raw_term->data.nodes.len = raw.data.nodes.len - 2;
+            raw_term->data.nodes.size = raw.data.nodes.size - 2;
+            raw_term->data.nodes.data = raw.data.nodes.data + 2;
+            raw_term->type = RawList;
+        }
 
         shadow_var(sym, env, a);
         abs_expr_result inter = abstract_expr_i(*raw_term, env, a);
