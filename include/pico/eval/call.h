@@ -13,13 +13,19 @@
 // Note: currently cannot proviide args/require no arguments!
 typedef enum eval_result_t  {
     ERSucc,
+    ERFail,
+
     ERInt,
     ERBool,
+    ERType,
 } eval_result_t;
 
 typedef struct eval_result {
     eval_result_t type;
-    int64_t val;
+    union {
+        int64_t val;
+        string error_message;
+    };
 } eval_result;
 
 

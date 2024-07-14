@@ -90,6 +90,8 @@ document* pretty_type(pi_type* type, allocator a) {
         case TFormer: 
             out = mv_str_doc(mk_string("Former", a), a);
             break;
+        case TType: 
+            out = mv_str_doc(mk_string("Type", a), a);
             break;
         }
         break;
@@ -107,6 +109,8 @@ size_t pi_size_of(pi_type type) {
             return sizeof(uint64_t);
         case TFormer:
             return sizeof(pi_term_former_t);
+        case TType:
+            return sizeof(pi_type);
         }
         return sizeof(uint64_t);
     case TProc:
@@ -116,6 +120,13 @@ size_t pi_size_of(pi_type type) {
     default:
         return 0;
     }
+}
+
+pi_type mk_prim_type(prim_type t) {
+    pi_type type;
+    type.sort = TPrim;
+    type.prim = t;
+    return type;
 }
 
 struct uvar_generator {

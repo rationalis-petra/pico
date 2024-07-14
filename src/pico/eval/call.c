@@ -1,21 +1,37 @@
 #include <stdio.h>
 
 #include "pico/eval/call.h"
+#include "pico/values/types.h"
 #include "pretty/standard_types.h"
 
 eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backlinks, pi_module* module, allocator a) {
     eval_result res;
     switch (top.type) {
     case TLExpr:
+        if (top.expr.ptype->sort != TPrim) {
+            res.type = ERFail;
+            res.error_message = mv_string("Can only evaluate primitive values");
+            return res;
+        }
+
         switch (top.expr.ptype->prim) {
         case Int_64:
             res.type = ERInt;
+            res.val = pico_run_expr(ass, a);
             break;
         case Bool:
             res.type = ERBool;
+            res.val = pico_run_expr(ass, a);
+            break;
+        case TType:
+            res.type = ERType;
+            res.val = pico_run_expr(ass, a);
+            break;
+        default:
+            res.type = ERFail;
+            res.error_message = mv_string("Unrecognized primitive to evaluate");
             break;
         }
-        res.val = pico_run_expr(ass, a);
         break;
     case TLDef:
         // copy into module
@@ -78,6 +94,11 @@ document* pretty_res(eval_result res, allocator a) {
         else 
             out = mk_str_doc(mv_string(":true"), a);
         break;
+    case ERType: {
+        pi_type* pt = (pi_type*)res.val;
+        out = pretty_type(pt, a);
+        break;
+    }
     default:
             out = mk_str_doc(mv_string("Invalid Result!"), a);
     }

@@ -69,6 +69,16 @@ pi_module* base_module(assembler* ass, allocator a) {
     pi_symbol sym;
 
     pi_type type;
+    pi_type type_val;
+    type = mk_prim_type(TType);
+    type_val = mk_prim_type(Int_64);
+
+    sym = string_to_symbol(mv_string("I64"));
+    add_def(module, sym, type, &type_val);
+
+    type_val = mk_prim_type(Bool);
+    sym = string_to_symbol(mv_string("Bool"));
+    add_def(module, sym, type, &type_val);
 
     build_binary_fun(ass, Add, a);
     type = mk_binop_type(a, Int_64, Int_64, Int_64);
@@ -81,12 +91,6 @@ pi_module* base_module(assembler* ass, allocator a) {
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
-
-    /* sym = string_to_symbol(mv_string("*")); */
-    /* add_def(module, sym, type, assembly, a); */
-
-    /* sym = string_to_symbol(mv_string("/")); */
-    /* add_def(module, sym, type, assembly, a); */
 
     build_comp_fun(ass, SetL, a);
     type = mk_binop_type(a, Int_64, Int_64, Bool);

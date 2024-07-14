@@ -14,8 +14,8 @@ typedef enum prim_type {
     Int_64,
     Bool,
     TFormer,
+    TType,
 } prim_type;
-
 
 typedef enum pi_type_t {
     TPrim,
@@ -50,6 +50,9 @@ void delete_pi_type(pi_type t, allocator a);
 pi_type copy_pi_type(pi_type t, allocator a);
 pi_type* copy_pi_type_p(pi_type* t, allocator a);
 size_t pi_size_of(pi_type t);
+
+// Utilities for generating types
+pi_type mk_prim_type(prim_type t);
 
 pi_type* mk_uvar(uvar_generator* gen, allocator a);
 uvar_generator* mk_gen(allocator a);

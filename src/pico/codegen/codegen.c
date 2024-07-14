@@ -112,14 +112,21 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 out = build_unary_op(ass, Push, reg(RBX), a);
-            } else {
+            } else if (syn.ptype->sort == TPrim) {
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
                 backlink_global(syn.variable, out.backlink, links, a);
+                if (syn.ptype->prim == TType) {
+                    out = build_unary_op(ass, Push, reg(RCX), a);
+                } else {
+                    out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
+                    if (out.type == Err) return out;
+                    out = build_unary_op(ass, Push, reg(RBX), a);
+                }
 
-                out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
-                if (out.type == Err) return out;
-                out = build_unary_op(ass, Push, reg(RBX), a);
+            } else {
+                out.type = Err;
+                out.error_message = mv_string("Codegen: Global has unsupported sort: must be Primitive or Proc");
             }
             break;
         case ANotFound:

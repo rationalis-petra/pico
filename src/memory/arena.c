@@ -50,9 +50,12 @@ void* arena_malloc(size_t memsize, void* vctx) {
     }
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void* arena_realloc(void* ptr, size_t memsize, void* ctx) { return NULL; }
 
 void arena_free(void* ptr, void* ctx) { }
+#pragma GCC diagnostic pop
 
 allocator mk_arena_allocator(size_t blocksize, allocator a) {
     arena_context* ctx = mem_alloc(sizeof(arena_context), a);
