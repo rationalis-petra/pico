@@ -9,7 +9,6 @@ typedef struct syntax_call {
 
 
 syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
-    //value_root(value, lcl);
     syntax* out = (syntax*)mem_alloc(sizeof(syntax), a);
     out->type = SLitI64;
     out->lit_i64 = value; return out;

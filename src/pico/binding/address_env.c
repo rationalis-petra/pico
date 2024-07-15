@@ -6,6 +6,8 @@
 typedef struct saddr {
     option_t type;
     pi_symbol symbol;
+    
+    size_t stack_offset;
 } saddr;
 
 ARRAY_HEADER(saddr, saddr)
@@ -43,7 +45,7 @@ address_entry address_env_lookup(pi_symbol s, address_env* env) {
         if (maddr.type == Some && maddr.symbol == s) {
             // Check if the offset can fit into an immediate
             out.type = ALocal;
-            out.stack_offset = (env->locals.len - i) * 8; 
+            out.stack_offset = maddr.stack_offset; 
             return out;
         };
     }
@@ -68,18 +70,34 @@ address_entry address_env_lookup(pi_symbol s, address_env* env) {
 }
 
 
-void address_fn_vars (symbol_array vars, address_env* env, allocator a) {
-    for (size_t i = 0; i < vars.len; i++) {
-        saddr local;
-        local.type = Some;
-        local.symbol = vars.data[i];
-        push_saddr(local, &env->locals, a);
+/* void address_vars (sym_size_assoc vars, address_env* env, allocator a); */
+/* void pop_fn_vars(address_env* env); */
+void address_fn_vars (sym_size_assoc vars, address_env* env, allocator a) {
+    size_t stack_offset = 0;
+    if (env->locals.len > 0) {
+        stack_offset = env->locals.data[env->locals.len - 1].stack_offset;
     }
+
     saddr padding;
     padding.type = None;
     padding.symbol = 0;
+    stack_offset += 8; // 8 = num bytes in uint64_t
+    padding.stack_offset = stack_offset;
     push_saddr(padding, &env->locals, a);
-    push_saddr(padding, &env->locals, a);
+
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
+    for (size_t i = vars.len; i > 0; i--) {
+        saddr local;
+        local.type = Some;
+
+        local.symbol = vars.data[i - 1].key;
+        stack_offset += vars.data[i - 1].val;
+        local.stack_offset = stack_offset;
+
+        push_saddr(local, &env->locals, a);
+    }
+
 }
 
 void pop_fn_vars(address_env* env) {
@@ -87,11 +105,4 @@ void pop_fn_vars(address_env* env) {
         saddr local = pop_saddr(&env->locals);
         if (local.type == None) break;
     }
-}
-
-void push_stack_address (pi_symbol var, address_env* env, allocator a) {
-}
-
-
-void pop_addresses(address_env* env, size_t n) {
 }

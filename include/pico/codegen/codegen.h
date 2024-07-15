@@ -3,14 +3,10 @@
 
 #include "data/result.h"
 
-#include "data/meta/amap_header.h"
-#include "data/meta/array_header.h"
-
 #include "assembler/assembler.h"
 
 #include "pico/binding/environment.h"
 #include "pico/syntax/syntax.h"
-#include "pico/data/size_array.h"
 #include "pico/data/sym_sarr_amap.h"
 
 typedef struct gen_result {

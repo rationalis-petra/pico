@@ -2,6 +2,7 @@
 #define __PICO_BINDING_ADDRESS_ENV_H
 
 #include "memory/allocator.h"
+#include "pico/data/sym_size_assoc.h"
 #include "pico/binding/environment.h"
 
 typedef struct address_env address_env;
@@ -28,10 +29,7 @@ address_entry address_env_lookup(pi_symbol s, address_env* env);
 
 // Add a set of variables to the address environment.
 // offsets are adjusted to compensate for the return address
-void address_fn_vars (symbol_array vars, address_env* env, allocator a);
+void address_fn_vars (sym_size_assoc vars, address_env* env, allocator a);
 void pop_fn_vars(address_env* env);
-
-void push_stack_address (pi_symbol var, address_env* env, allocator a);
-void pop_address(address_env* env);
 
 #endif

@@ -4,8 +4,7 @@
 #include "data/array.h"
 #include "pretty/document.h"
 
-/* Basic types in pico typesystem
- */
+/* Basic types in pico typesystem */
 
 typedef struct pi_type pi_type;
 typedef struct uvar_generator uvar_generator;

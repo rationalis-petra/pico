@@ -17,6 +17,7 @@ parse_result parse_rawtree(istream* is, allocator a) {
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
 parse_result parse_list(istream* is, sourcepos* parse_state, allocator a);
+parse_result parse_slist(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_symbol(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_number(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_ctor(istream* is, sourcepos* parse_state, allocator a);
@@ -36,6 +37,9 @@ parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
     case StreamSuccess:
         if (point == '(') {
             res = parse_list(is, parse_state, a);
+        }
+        else if (point == '[') {
+            res = parse_slist(is, parse_state, a);
         }
         else if (is_numchar(point)) {
             res = parse_number(is, parse_state, a);
@@ -98,6 +102,52 @@ parse_result parse_list(istream* is, sourcepos* parse_state, allocator a) {
         out.data.result.type = RawList;
         out.data.result.data.nodes = nodes;
         // consume closing ')'
+        next(is, &codepoint);
+    }
+    return out;
+}
+
+parse_result parse_slist(istream* is, sourcepos* parse_state, allocator a) {
+    parse_result res;
+    res.type = ParseFail;
+    res.data.range.start = *parse_state;
+    parse_result out;
+    ptr_array nodes = mk_ptr_array(5, a);
+    uint32_t codepoint;
+
+    // assume '[' is next character
+    next(is, &codepoint);
+    consume_whitespace(is, parse_state);
+    stream_result sres;
+    while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == ']')) {
+        res = parse_main(is, parse_state, a);
+        if (res.type == ParseFail) {
+            out = res;
+            break;
+        }
+        else {
+            pi_rawtree* node = (pi_rawtree*)mem_alloc(sizeof(pi_rawtree), a);
+            node->type = res.data.result.type;
+            node->data = res.data.result.data;
+            push_ptr(node, &nodes, a);
+        }
+        consume_whitespace(is, parse_state);
+    }
+    if (sres != StreamSuccess) {
+        out.type = ParseFail;
+        out.data.range.start = *parse_state;
+        out.data.range.end = *parse_state;
+        delete_ptr_array(nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
+    }
+    else if (res.type == ParseFail) {
+        out = res;
+        delete_ptr_array(nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
+    }
+    else {
+        out.type = ParseSuccess;
+        out.data.result.type = RawList;
+        out.data.result.data.nodes = nodes;
+        // consume closing ']'
         next(is, &codepoint);
     }
     return out;

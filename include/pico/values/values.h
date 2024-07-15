@@ -30,6 +30,10 @@ typedef enum pi_term_former_t {
     FProjector,
     FIf,
     FLet,
+
+    // Type formers
+    FStructType,
+    FProcType,
 } pi_term_former_t;
 
 typedef enum pi_primop_t {

@@ -134,7 +134,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     add_def(module, sym, type, &former);
 
     former = FStructure;
-    sym = string_to_symbol(mv_string("struct"));
+    sym = string_to_symbol(mv_string("Struct"));
     add_def(module, sym, type, &former);
 
     former = FIf;

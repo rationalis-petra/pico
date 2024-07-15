@@ -150,7 +150,14 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         if (out.type == Err) return out;
 
         // Codegen Procedure Body 
-        address_fn_vars(syn.procedure.args, env, a);
+        sym_size_assoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
+        for (size_t i = 0; i < syn.procedure.args.len; i++) {
+            sym_size_bind(syn.procedure.args.data[i]
+                         , pi_size_of(*(pi_type*)syn.ptype->proc.args.data[i])
+                         , &arg_sizes, a);
+        }
+
+        address_fn_vars(arg_sizes, env, a);
         out = generate(*syn.procedure.body, env, ass, links, a);
         if (out.type == Err) return out;
         pop_fn_vars(env);
