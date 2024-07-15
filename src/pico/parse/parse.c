@@ -16,11 +16,12 @@ parse_result parse_rawtree(istream* is, allocator a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-parse_result parse_list(istream* is, sourcepos* parse_state, allocator a);
-parse_result parse_slist(istream* is, sourcepos* parse_state, allocator a);
+parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allocator a);
 parse_result parse_symbol(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_number(istream* is, sourcepos* parse_state, allocator a);
 parse_result parse_ctor(istream* is, sourcepos* parse_state, allocator a);
+parse_result field_modify(istream* is, sourcepos* parse_state, pi_rawtree* raw, allocator a);
+parse_result parse_field(istream* is, sourcepos* parse_state, allocator a);
 
 // Helper functions
 stream_result consume_whitespace(istream* is, sourcepos* parse_state);
@@ -36,16 +37,19 @@ parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
     switch (peek(is, &point)) {
     case StreamSuccess:
         if (point == '(') {
-            res = parse_list(is, parse_state, a);
+            res = parse_list(is, parse_state, ')', a);
         }
         else if (point == '[') {
-            res = parse_slist(is, parse_state, a);
+            res = parse_list(is, parse_state, ']', a);
         }
         else if (is_numchar(point)) {
             res = parse_number(is, parse_state, a);
         }
         else if (point == ':') {
             res = parse_ctor(is, parse_state, a);
+        }
+        else if (point == '.') {
+            res = parse_field(is, parse_state, a);
         }
         else {
             res = parse_symbol(is, parse_state, a);
@@ -61,7 +65,7 @@ parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
     return res;
 }
 
-parse_result parse_list(istream* is, sourcepos* parse_state, allocator a) {
+parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allocator a) {
     parse_result res;
     res.type = ParseFail;
     res.data.range.start = *parse_state;
@@ -73,8 +77,16 @@ parse_result parse_list(istream* is, sourcepos* parse_state, allocator a) {
     next(is, &codepoint);
     consume_whitespace(is, parse_state);
     stream_result sres;
-    while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == ')')) {
-        res = parse_main(is, parse_state, a);
+    bool first = true;
+    while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == term)) {
+        if (!first && codepoint == '.') {
+            pi_rawtree* ptr = pop_ptr(&nodes);
+            res = field_modify(is, parse_state, ptr, a);
+        } else { 
+            res = parse_main(is, parse_state, a);
+        }
+
+        first = false;
         if (res.type == ParseFail) {
             out = res;
             break;
@@ -119,8 +131,16 @@ parse_result parse_slist(istream* is, sourcepos* parse_state, allocator a) {
     next(is, &codepoint);
     consume_whitespace(is, parse_state);
     stream_result sres;
+    bool first = true;
     while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == ']')) {
-        res = parse_main(is, parse_state, a);
+        if (!first && codepoint == '.') {
+            pi_rawtree* ptr = pop_ptr(&nodes);
+            res = field_modify(is, parse_state, ptr, a);
+        } else { 
+            res = parse_main(is, parse_state, a);
+        }
+
+        first = false;
         if (res.type == ParseFail) {
             out = res;
             break;
@@ -253,6 +273,119 @@ parse_result parse_ctor(istream* is, sourcepos* parse_state, allocator a) {
     return out;
 }
 
+parse_result parse_field(istream* is, sourcepos* parse_state, allocator a) {
+    uint32_t codepoint;
+    stream_result result;
+    parse_result out;
+    u32_array arr = mk_u32_array(10, a);
+
+    next(is, &codepoint); // consume '.'
+
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
+        next(is, &codepoint);
+        push_u32(codepoint, &arr, a);
+    }
+
+    if (result != StreamSuccess) {
+        out.type = ParseFail;
+        out.data.range.start = *parse_state;
+        out.data.range.end = *parse_state;
+    } else if (arr.len == 0) {
+        string str = mv_string(".");
+        pi_symbol sym_result = string_to_symbol(str);
+
+        out.type = ParseSuccess;
+        out.data.result.type = RawAtom;
+        out.data.result.data.atom.type = ASymbol;
+        out.data.result.data.atom.symbol = sym_result;
+
+    } else {
+        string str = mv_string(".");
+        pi_symbol sym_result = string_to_symbol(str);
+        pi_rawtree* proj = mem_alloc(sizeof(pi_rawtree), a);
+        proj->type = RawAtom;
+        proj->data.atom.type = ASymbol;
+        proj->data.atom.symbol = sym_result;
+
+        str = string_from_UTF_32(arr, a);
+        sym_result = string_to_symbol(str);
+        delete_string(str, a);
+        pi_rawtree* field = mem_alloc(sizeof(pi_rawtree), a);
+        field->type = RawAtom;
+        field->data.atom.type = ASymbol;
+        field->data.atom.symbol = sym_result;
+
+        ptr_array nodes = mk_ptr_array(2, a);
+        push_ptr(proj, &nodes, a);
+        push_ptr(field, &nodes, a);
+
+        out.type = ParseSuccess;
+        out.data.result.type = RawList;
+        out.data.result.data.nodes = nodes;
+    }
+
+    // cleanup
+    sdelete_u32_array(arr, a);
+    
+    return out;
+}
+
+parse_result field_modify(istream* is, sourcepos* parse_state, pi_rawtree* raw, allocator a) {
+    uint32_t codepoint;
+    stream_result result;
+    parse_result out;
+    u32_array arr = mk_u32_array(10, a);
+
+    next(is, &codepoint); // Consume '.'
+
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
+        next(is, &codepoint);
+        push_u32(codepoint, &arr, a);
+    }
+    if (result != StreamSuccess) {
+        out.type = ParseFail;
+        out.data.range.start = *parse_state;
+        out.data.range.end = *parse_state;
+    }
+    else {
+        string str = string_from_UTF_32(arr, a);
+        pi_symbol sym_result = string_to_symbol(str);
+        sdelete_u32_array(arr, a);
+        delete_string(str, a);
+
+        pi_rawtree* field = mem_alloc(sizeof(pi_rawtree), a);
+        field->type = RawAtom;
+        field->data.atom.type = ASymbol;
+        field->data.atom.symbol = sym_result;
+
+        // form projection
+        str = mv_string(".");
+        sym_result = string_to_symbol(str);
+        pi_rawtree* proj = mem_alloc(sizeof(pi_rawtree), a);
+        proj->type = RawAtom;
+        proj->data.atom.type = ASymbol;
+        proj->data.atom.symbol = sym_result;
+
+        str = string_from_UTF_32(arr, a);
+        sym_result = string_to_symbol(str);
+        delete_string(str, a);
+
+        ptr_array nodes = mk_ptr_array(3, a);
+        push_ptr(proj,  &nodes, a);
+        push_ptr(field, &nodes, a);
+        push_ptr(raw,   &nodes, a);
+
+        out.type = ParseSuccess;
+        out.data.result.type = RawList;
+        out.data.result.data.nodes = nodes;
+    }
+
+    // Cleanup
+    sdelete_u32_array(arr, a);
+    
+    return out;
+}
+
 stream_result consume_whitespace(istream* is, sourcepos* parse_state) {
     uint32_t codepoint;
     stream_result result;
@@ -278,5 +411,9 @@ bool is_whitespace(uint32_t codepoint) {
 }
 
 bool is_symchar(uint32_t codepoint) {
-    return !is_whitespace(codepoint) && !(codepoint == ')' || codepoint == '(') ;
+    return !is_whitespace(codepoint) && !(codepoint == ')'
+                                          || codepoint == '('
+                                          || codepoint == '['
+                                          || codepoint == ']'
+                                          || codepoint == '.');
 }

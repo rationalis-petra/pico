@@ -18,6 +18,21 @@ bool is_symbol(pi_rawtree* raw) {
     return (raw->type == RawAtom && raw->data.atom.type == ASymbol);
 }
 
+bool get_fieldname(pi_rawtree* raw, pi_symbol* fieldname) {
+    if (raw->type == RawList && raw->data.nodes.len == 2) {
+        raw = raw->data.nodes.data[1];
+        if (is_symbol(raw)) {
+            *fieldname = raw->data.atom.symbol;
+            return true;
+        } else {
+            return false;
+        }
+    }
+    else {
+        return false;
+    }
+}
+
 bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     if (nodes.type == RawAtom) { return false; }
 
@@ -172,12 +187,57 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
     }
     case FLet: {
         res.type = Err;
-        res.error_message = mk_string("Let term former not implemented!", a);
+        res.error_message = mv_string("Let term former not implemented!");
+        break;
+    }
+    case FProcType: {
+        res.type = Err;
+        res.error_message = mv_string("Proc type former not implemented!");
+        break;
+    }
+    case FStructType: {
+        // Construct a structure type
+
+        sym_ptr_amap fields = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        for (size_t i = 1; i < raw.data.nodes.len; i++) {
+            pi_rawtree* fdesc = raw.data.nodes.data[i];
+            if (fdesc->type != RawList) {
+                res.type = Err;
+                res.error_message = mv_string("Structure type expects all field descriptors to be lists.");
+                return res;
+            };
+            
+            if (fdesc->data.nodes.len != 2) {
+                res.type = Err;
+                res.error_message = mv_string("Structure type expects all field descriptors to have 2 elements.");
+                return res;
+            };
+
+            pi_symbol field;
+            if (!get_fieldname(fdesc->data.nodes.data[0], &field)) {
+                res.type = Err;
+                res.error_message = mv_string("Structure type has malformed field name.");
+                return res;
+            };
+
+            res = abstract_expr_i(*(pi_rawtree*) fdesc->data.nodes.data[1], env, a);
+            if (res.type == Err) {
+                return res;
+            }
+            syntax* syn = mem_alloc(sizeof(syntax), a);
+            *syn = res.out;
+
+            sym_ptr_insert(field, syn, &fields, a);
+        }
+
+        res.type = Ok;
+        res.out.type = SStructType;
+        res.out.structure.fields = fields;
         break;
     }
     default:
         res.type = Err;
-        res.error_message = mk_string("Internal Error: Invalid term former!", a);
+        res.error_message = mv_string("Internal Error: Invalid term former!");
     }
     return res;
 }

@@ -134,7 +134,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     add_def(module, sym, type, &former);
 
     former = FStructure;
-    sym = string_to_symbol(mv_string("Struct"));
+    sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
 
     former = FIf;
@@ -148,6 +148,16 @@ pi_module* base_module(assembler* ass, allocator a) {
     former = FDefine;
     sym = string_to_symbol(mv_string("def"));
     add_def(module, sym, type, &former);
+
+    // Types 
+    former = FStructType;
+    sym = string_to_symbol(mv_string("Struct"));
+    add_def(module, sym, type, &former);
+
+    former = FProcType;
+    sym = string_to_symbol(mv_string("Proc"));
+    add_def(module, sym, type, &former);
+
 
     return module;
 }

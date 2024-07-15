@@ -36,6 +36,9 @@ typedef enum syntax_t {
     SStructure,
     SProjector,
 
+    SStructType,
+    SProcType,
+
     SLet,
     SIf,
 } syntax_t;
