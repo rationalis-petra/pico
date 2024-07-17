@@ -15,7 +15,6 @@ typedef enum prim_type {
     Bool,
     TFormer,
     TType,
-            document* arg = pretty_type(type->structure.fields.data[i].val, a);
 } prim_type;
 
 typedef enum pi_type_t {
