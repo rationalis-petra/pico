@@ -19,6 +19,7 @@
   } prefix ## _amap; \
   \
   prefix##_amap mk_##prefix##_amap(size_t capacity, allocator a);       \
+  prefix##_amap copy_##prefix##_amap(prefix##_amap map, key_t (*copy_key)(key_t key, allocator a), val_t (*copy_val)(val_t val, allocator a), allocator a); \
   void delete_##prefix##_amap(prefix##_amap map, void (*delete_key)(key_t key, allocator a), void (*delete_val)(val_t val, allocator a), allocator a); \
   void sdelete_##prefix##_amap(prefix##_amap map, allocator a); \
   \

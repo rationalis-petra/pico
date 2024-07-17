@@ -3,6 +3,7 @@
 
 #include "data/array.h"
 #include "pretty/document.h"
+#include "pico/data/sym_ptr_amap.h"
 
 /* Basic types in pico typesystem */
 
@@ -14,11 +15,13 @@ typedef enum prim_type {
     Bool,
     TFormer,
     TType,
+            document* arg = pretty_type(type->structure.fields.data[i].val, a);
 } prim_type;
 
 typedef enum pi_type_t {
     TPrim,
     TProc,
+    TStruct,
 
     // Special sort: unification variable
     TUVar
@@ -28,6 +31,10 @@ typedef struct proc_type {
     ptr_array args;
     pi_type* ret;
 } proc_type;
+
+typedef struct struct_type {
+    sym_ptr_amap fields;
+} struct_type;
 
 typedef struct uvar_type {
     uint64_t id;
@@ -39,6 +46,7 @@ typedef struct pi_type {
     union {
         prim_type prim;
         proc_type proc;
+        struct_type structure;
         uvar_type* uvar;
     };
 } pi_type;

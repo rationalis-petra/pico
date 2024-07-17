@@ -13,6 +13,17 @@
     return out; \
   } \
   \
+  prefix##_amap copy_##prefix##_amap(prefix##_amap map, key_t (*copy_key)(key_t key, allocator a), val_t (*copy_val)(val_t val, allocator a), allocator a) { \
+    prefix##_amap out; \
+    out.capacity = map.capacity; \
+    out.len = map.len; \
+    out.data = mem_alloc(map.capacity * sizeof(prefix##_cell), a); \
+    for (size_t i = 0; i < map.len; i++) { \
+      out.data[i].key = copy_key(map.data[i].key, a); \
+      out.data[i].val = copy_val(map.data[i].val, a); \
+    } \
+    return out; \
+  } \
   void delete_##prefix##_amap(prefix##_amap map, void (*delete_key)(key_t key, allocator a), void (*delete_val)(val_t val, allocator a), allocator a) { \
     for (size_t i = 0; i < map.len; i++) { \
       delete_key(map.data[i].key, a);\

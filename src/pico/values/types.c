@@ -6,11 +6,16 @@ void delete_pi_ptr(void* t, allocator a) {
     mem_free(t, a);
 }
 
+void symbol_nod(pi_symbol s, allocator a) { }
+
 void delete_pi_type(pi_type t, allocator a) {
     switch(t.sort) {
     case TProc:
         delete_pi_ptr(t.proc.ret, a);
         delete_ptr_array(t.proc.args, &delete_pi_ptr, a);
+        break;
+    case TStruct:
+        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, &delete_pi_ptr, a);
         break;
 
     case TUVar:
@@ -32,6 +37,10 @@ pi_type* copy_pi_type_p(pi_type* t, allocator a)  {
     return out;
 }
 
+pi_symbol symbol_id(pi_symbol s, allocator a) {
+    return s;
+}
+
 pi_type copy_pi_type(pi_type t, allocator a) {
     pi_type out;
     out.sort = t.sort;
@@ -39,6 +48,9 @@ pi_type copy_pi_type(pi_type t, allocator a) {
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
         out.proc.args = copy_ptr_array(t.proc.args, (void*(*)(void*, allocator)) copy_pi_type_p, a);
+        break;
+    case TStruct:
+        out.structure.fields = copy_sym_ptr_amap(t.structure.fields, symbol_id, (void*(*)(void*, allocator)) copy_pi_type_p, a);
         break;
 
     case TUVar:
@@ -63,11 +75,10 @@ document* pretty_type(pi_type* type, allocator a) {
     document* out = NULL;
     switch (type->sort) {
     case TProc: {
-
         ptr_array nodes = mk_ptr_array(4 + type->proc.args.len, a);
         push_ptr(mv_str_doc((mk_string("(Proc (", a)), a), &nodes, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            document* arg = pretty_type(aref_ptr(i, type->proc.args), a);
+            document* arg = pretty_type(type->proc.args.data[i], a);
             push_ptr(arg, &nodes, a);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
@@ -95,6 +106,31 @@ document* pretty_type(pi_type* type, allocator a) {
             break;
         }
         break;
+    case TStruct: {
+        ptr_array nodes = mk_ptr_array(2 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("(Struct ", a)), a), &nodes, a);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            ptr_array fd_nodes = mk_ptr_array(4, a);
+            document* pre = mk_str_doc(mv_string("[."), a);
+            document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
+            document* arg = pretty_type(type->structure.fields.data[i].val, a);
+            document* post = mk_str_doc(mv_string("]"), a);
+
+            push_ptr(pre,   &fd_nodes, a);
+            push_ptr(fname, &fd_nodes, a);
+            push_ptr(arg,   &fd_nodes, a);
+            push_ptr(post,  &fd_nodes, a);
+            document* fd_doc = mv_sep_doc(fd_nodes, a);
+
+            push_ptr(fd_doc, &nodes, a);
+        }
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    default:
+        out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
+        break;
     }
     return out;
 }
@@ -114,7 +150,7 @@ size_t pi_size_of(pi_type type) {
         }
         return sizeof(uint64_t);
     case TProc:
-        return 0;
+        return sizeof(uint64_t);
     case TUVar:
         return 0;
     default:

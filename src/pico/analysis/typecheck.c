@@ -235,6 +235,20 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
+    case SStructType: {
+        pi_type* ty = mem_alloc(sizeof(pi_type), a);
+        ty->sort = TPrim;
+        ty->prim = TType; 
+        untyped->ptype = ty;
+
+        for (size_t i = 0; i < untyped->structure.fields.len; i++) {
+            syntax* syn = untyped->structure.fields.data[i].val;
+            out = type_check_i(syn, ty, env, gen, a);
+            if (out.type == Err) return out;
+        }
+        out.type = Ok;
+        break;
+    }
     default:
         out.type = Err;
         out.error_message = mk_string("Internal Error: unrecognized syntactic form", a);
@@ -280,6 +294,14 @@ result squash_types(syntax* typed, allocator a) {
         out = squash_types(typed->if_expr.true_branch, a);
         if (out.type == Err) return out;
         out = squash_types(typed->if_expr.false_branch, a);
+        break;
+    }
+    case SStructType: {
+        for (size_t i = 0; i < typed->structure.fields.len; i++) {
+            syntax* syn = typed->structure.fields.data[i].val;
+            out = squash_types(syn, a);
+            if (out.type == Err) return out;
+        }
         break;
     }
     default:

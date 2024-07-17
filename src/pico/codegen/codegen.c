@@ -1,3 +1,5 @@
+#include <stdarg.h>
+#include "memory/std_allocator.h"
 #include "pico/codegen/codegen.h"
 #include "pico/binding/address_env.h"
 
@@ -12,6 +14,25 @@
  *   is top of stack)
  * • 
  */
+
+// C functions that are called by Pico (mostly to generate types)
+pi_type* mk_struct(uint64_t len, uint64_t* data) {
+    allocator a = get_std_allocator();
+    sym_ptr_amap fields = mk_sym_ptr_amap(len, a);
+
+    // Traverse in the order they were placed on the stack
+    // high addresses to lower addresses
+    for (uint64_t i = len; i > 0; i-=2) {
+        pi_symbol sym = *((pi_symbol*)data + (i - 2));
+        pi_type* ty = *((pi_type**)data + (i - 1));
+        sym_ptr_insert(sym, ty, &fields, a);
+    }
+    pi_type* ret = mem_alloc(sizeof(pi_type), a);
+    ret->sort = TStruct;
+    ret->structure.fields = fields;
+    return ret;
+}
+
 
 // implementation details
 result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
@@ -278,6 +299,52 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         } 
         *jmp_loc = (uint8_t)(end_pos - start_pos);
         break;
+    }
+    case SStructType: {
+#ifdef __unix__
+        // Generate a call to the c function mk_struct(int64_t len, uint64_t* data)
+        // data: points to the top of stack  
+        for (size_t i = 0; i < syn.structure.fields.len; i++) {
+            out = generate(*(syntax*)syn.structure.fields.data[i].val, env, ass, links, a);
+            if (out.type == Err) return out;
+
+            out = build_binary_op(ass, Mov, reg(RBX), imm64(syn.structure.fields.data[i].key), a);
+            if (out.type == Err) return out;
+            out = build_unary_op(ass, Push, reg(RBX), a);
+            if (out.type == Err) return out;
+        }
+
+        // Now, call the C function
+        // We are on SystemV AMD64 ABI, therefore the two arguments (len & data)
+        // are passed in rdi and rsi, respectively:
+        uint64_t len = syn.structure.fields.len*2;
+        out = build_binary_op(ass, Mov, reg(RDI), imm64(len), a);
+        if (out.type == Err) return out;
+        // pass data
+        out = build_binary_op(ass, Mov, reg(RSI), reg(RSP), a);
+        if (out.type == Err) return out;
+
+        // setup call & pop args once done
+        out = build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)&mk_struct), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Call, reg(RDX), a);
+        if (out.type == Err) return out;
+        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.structure.fields.len * 2 * 8), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Push, reg(RAX), a);
+
+
+#elif defined(_WIN32) || defined(WIN32)
+#error "Do not yet support SStructType codegen on Windows "
+#else 
+#error "Only support unix/windows"
+#endif
+
+        break;
+    }
+    default: {
+        out.type = Err;
+        out.error_message = mv_string("Unrecognized abstract term in codegen.");
     }
     }
 
