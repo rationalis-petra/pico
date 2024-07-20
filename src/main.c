@@ -72,13 +72,14 @@ pi_module* base_module(assembler* ass, allocator a) {
     pi_type type_val;
     type = mk_prim_type(TType);
     type_val = mk_prim_type(Int_64);
+    pi_type* type_data = &type_val;
 
     sym = string_to_symbol(mv_string("I64"));
-    add_def(module, sym, type, &type_val);
+    add_def(module, sym, type, &type_data);
 
     type_val = mk_prim_type(Bool);
     sym = string_to_symbol(mv_string("Bool"));
-    add_def(module, sym, type, &type_val);
+    add_def(module, sym, type, &type_data);
 
     build_binary_fun(ass, Add, a);
     type = mk_binop_type(a, Int_64, Int_64, Int_64);

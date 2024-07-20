@@ -84,19 +84,22 @@ pi_module* mk_module(allocator a) {
     return module;
 }
 
-void del_sym(pi_symbol s, allocator a) { }
-
 void delete_module(pi_module* module) {
     for (size_t i = 0; i < module->entries.len; i++) {
         module_entry_internal entry = module->entries.data[i].val;
         if (entry.type.sort == TProc) {
             mem_free(entry.value, module->executable_allocator);
+        } else if (entry.type.sort == TPrim && entry.type.prim == TType) {
+            delete_pi_type_p(entry.value, module->allocator);
         } else {
             mem_free(entry.value, module->allocator);
         }
         delete_pi_type(entry.type, module->allocator);
         if (entry.backlinks) {
-            delete_sym_sarr_amap(*entry.backlinks, del_sym, sdelete_size_array, module->allocator);
+            delete_sym_sarr_amap(*entry.backlinks,
+                                 delete_symbol,
+                                 sdelete_size_array,
+                                 module->allocator);
             mem_free(entry.backlinks, module->allocator);
         }
     };
@@ -110,8 +113,13 @@ result add_def (pi_module* module, pi_symbol name, pi_type type, void* data) {
     module_entry_internal entry;
     size_t size = pi_size_of(type);
 
-    entry.value = mem_alloc(size, module->allocator);
-    memcpy(entry.value, data, size);
+    if (type.sort == TPrim && type.prim == TType) {
+        pi_type* t_val = *(pi_type**)data; 
+        entry.value = copy_pi_type_p(t_val, module->allocator);
+    } else {
+        entry.value = mem_alloc(size, module->allocator);
+        memcpy(entry.value, data, size);
+    }
     entry.type = copy_pi_type(type, module->allocator);
     entry.backlinks = NULL;
     entry_insert(name, entry, &(module->entries), module->allocator);
@@ -132,12 +140,16 @@ result add_fn_def (pi_module* module, pi_symbol name, pi_type type, assembler* f
     entry.type = copy_pi_type(type, module->allocator);
     if (backlinks) {
         entry.backlinks = mem_alloc(sizeof(sym_sarr_amap), module->allocator);
-        *(entry.backlinks) = *backlinks;
+        *(entry.backlinks) = copy_sym_sarr_amap(*backlinks,
+                                                copy_symbol,
+                                                scopy_size_array,
+                                                module->allocator);
 
         // swap out self-references
         sym_ptr_amap self_ref = mk_sym_ptr_amap(1, module->allocator);
         sym_ptr_insert(name, entry.value, &self_ref, module->allocator);
         update_function(entry.value, self_ref, *backlinks);
+        sdelete_sym_ptr_amap(self_ref, module->allocator);
     } else {
         entry.backlinks = NULL;
     }

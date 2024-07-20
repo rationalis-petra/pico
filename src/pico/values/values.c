@@ -39,6 +39,9 @@ void clear_symbols() {
     sdelete_str_u64_amap(symbol_table, a);
 }
 
+void delete_symbol(pi_symbol s, allocator a) { }
+pi_symbol copy_symbol(pi_symbol s, allocator a) { return s; };
+
 string* symbol_to_string(pi_symbol symbol) {
     allocator a = get_std_allocator();
     if (!initialized) init_symtable(a);

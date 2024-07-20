@@ -49,8 +49,9 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backl
             add_def(module, top.def.bind, *top.def.value->ptype, &val);
             break;
         }
-        case TUVar:
-            res.val = 0;
+        default:
+            res.type = ERFail;
+            res.error_message = mv_string("Unrecognized type to define.");
             break;
         }
     }

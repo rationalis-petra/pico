@@ -62,6 +62,10 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         }
         break;
     }
+    case SType: {
+        out = pretty_type(syntax->type_val, a);
+        break;
+    }
     case SVariable: {
         out = mk_str_doc(*symbol_to_string(syntax->variable), a);
         break;
@@ -99,31 +103,8 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         break;
     }
     case SStructure: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on structure", a), a);
-        break;
-    }
-    case SProjector: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on projector", a), a);
-        break;
-    }
-
-    case SLet: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on let", a), a);
-        break;
-    }
-    case SIf: {
-        ptr_array nodes = mk_ptr_array(6, a);
-        push_ptr(mv_str_doc(mk_string("(if", a), a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes, a);
-        push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes, a);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes, a);
-        out = mv_sep_doc(nodes, a);
-        break;
-    }
-    case SStructType: {
         ptr_array nodes = mk_ptr_array(2 + syntax->structure.fields.len, a);
-        push_ptr(mv_str_doc(mk_string("(Struct", a), a), &nodes, a);
+        push_ptr(mv_str_doc(mk_string("(struct", a), a), &nodes, a);
         for (size_t i = 0; i < syntax->structure.fields.len; i++) {
             ptr_array field_nodes = mk_ptr_array(4, a);
             document* temp;
@@ -146,8 +127,23 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SProcType: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on proc type", a), a);
+    case SProjector: {
+        out = mv_str_doc(mk_string("pretty_syntax not implemented on projector", a), a);
+        break;
+    }
+
+    case SLet: {
+        out = mv_str_doc(mk_string("pretty_syntax not implemented on let", a), a);
+        break;
+    }
+    case SIf: {
+        ptr_array nodes = mk_ptr_array(6, a);
+        push_ptr(mv_str_doc(mk_string("(if", a), a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes, a);
+        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes, a);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     default: {

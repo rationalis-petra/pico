@@ -8,6 +8,11 @@ void delete_pi_ptr(void* t, allocator a) {
 
 void symbol_nod(pi_symbol s, allocator a) { }
 
+void delete_pi_type_p(pi_type* t, allocator a) {
+    delete_pi_type(*t, a);
+    mem_free(t, a);
+}
+
 void delete_pi_type(pi_type t, allocator a) {
     switch(t.sort) {
     case TProc:

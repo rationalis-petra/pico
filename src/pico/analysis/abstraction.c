@@ -45,6 +45,21 @@ bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     return true;
 }
 
+pi_type* get_type(pi_rawtree raw, shadow_env* env) {
+    pi_type* out = NULL;
+    if (raw.type != RawAtom || raw.data.atom.type != ASymbol) {
+        return out;
+    }
+
+    shadow_entry entry = shadow_env_lookup(raw.data.atom.symbol, env);
+    if (entry.type == SGlobal
+        && entry.vtype->sort == TPrim
+        && entry.vtype->prim == TType) {
+            out = entry.value;
+    }
+    return out;
+}
+
 abs_result to_toplevel(abs_expr_result res) {
     abs_result out;
     switch (res.type) {
@@ -152,8 +167,54 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         break;
     }
     case FStructure: {
-        res.type = Err;
-        res.error_message = mk_string("Structure term former not implemented!", a);
+        if (raw.data.nodes.len < 2) {
+            res.type = Err;
+            res.error_message = mk_string("Structure term former needs a structure type argument", a);
+            return res;
+        }
+
+        // Get the type of the structure
+        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[1], env, a);
+        if (res.type == Err) return res;
+
+        syntax* stype = mem_alloc(sizeof(syntax), a);
+        *stype = res.out;
+
+        // Construct a structure
+        sym_ptr_amap fields = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        for (size_t i = 2; i < raw.data.nodes.len; i++) {
+            pi_rawtree* fdesc = raw.data.nodes.data[i];
+            if (fdesc->type != RawList) {
+                res.type = Err;
+                res.error_message = mv_string("Structure expects all field descriptors to be lists.");
+                return res;
+            }
+            
+            if (fdesc->data.nodes.len != 2) {
+                res.type = Err;
+                res.error_message = mv_string("Structure expects all field descriptors to have 2 elements.");
+                return res;
+            }
+
+            pi_symbol field;
+            if (!get_fieldname(fdesc->data.nodes.data[0], &field)) {
+                res.type = Err;
+                res.error_message = mv_string("Structure has malformed field name.");
+                return res;
+            }
+
+            res = abstract_expr_i(*(pi_rawtree*) fdesc->data.nodes.data[1], env, a);
+            if (res.type == Err) return res;
+            syntax* syn = mem_alloc(sizeof(syntax), a);
+            *syn = res.out;
+
+            sym_ptr_insert(field, syn, &fields, a);
+        }
+
+        res.type = Ok;
+        res.out.type = SStructure;
+        res.out.structure.ptype = stype;
+        res.out.structure.fields = fields;
         break;
     }
     case FIf: {
@@ -198,7 +259,9 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
     case FStructType: {
         // Construct a structure type
 
-        sym_ptr_amap fields = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        pi_type* out_ty = mem_alloc(sizeof(pi_type), a);
+        sym_ptr_amap field_types = mk_sym_ptr_amap(raw.data.nodes.len, a);
+
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
             pi_rawtree* fdesc = raw.data.nodes.data[i];
             if (fdesc->type != RawList) {
@@ -224,15 +287,23 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             if (res.type == Err) {
                 return res;
             }
-            syntax* syn = mem_alloc(sizeof(syntax), a);
-            *syn = res.out;
+            if (res.out.type != SType) {
+                res.type = Err;
+                res.error_message = mv_string("Structure type fields must have their own types.");
+                return res;
+            }
 
-            sym_ptr_insert(field, syn, &fields, a);
+            pi_type* field_ty = res.out.type_val;
+
+            sym_ptr_insert(field, field_ty, &field_types, a);
         }
 
+        out_ty->sort = TStruct;
+        out_ty->structure.fields = field_types;
+
         res.type = Ok;
-        res.out.type = SStructType;
-        res.out.structure.fields = fields;
+        res.out.type = SType;
+        res.out.type_val = out_ty;
         break;
     }
     default:
@@ -251,9 +322,17 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
     switch (raw.type) {
     case RawAtom: {
         if (raw.data.atom.type == ASymbol) {
-            res.type = Ok;
-            res.out.type = SVariable;
-            res.out.variable = raw.data.atom.symbol;
+            pi_type* ty = get_type(raw, env);
+            if (ty) {
+                res.type = Ok;
+                res.out.type = SType;
+                res.out.type_val = ty;
+            } else {
+                res.type = Ok;
+                res.out.type = SVariable;
+                res.out.variable = raw.data.atom.symbol;
+            }
+
         }
         else if (raw.data.atom.type == AI64) {
             res.type = Ok;

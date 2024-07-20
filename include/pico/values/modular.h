@@ -21,7 +21,7 @@ typedef struct pi_module pi_module;
 typedef struct module_entry {
     void* value;
     pi_type type;
-    sym_sarr_amap backrefs;
+    sym_sarr_amap* backlinks;
 } module_entry;
 
 // Package Interface

@@ -18,6 +18,10 @@ string* symbol_to_string(pi_symbol symbol);
 pi_symbol string_to_symbol(string string);
 void clear_symbols();
 
+// useful for container methods
+void delete_symbol(pi_symbol s, allocator a);
+pi_symbol copy_symbol(pi_symbol s, allocator a);
+
 typedef enum pi_term_former_t {
     FDefine,
     FApplication,

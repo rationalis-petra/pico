@@ -16,7 +16,7 @@
  */
 
 // C functions that are called by Pico (mostly to generate types)
-pi_type* mk_struct(uint64_t len, uint64_t* data) {
+pi_type* mk_struct_type(uint64_t len, uint64_t* data) {
     allocator a = get_std_allocator();
     sym_ptr_amap fields = mk_sym_ptr_amap(len, a);
 
@@ -115,6 +115,12 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         // TODO: squash to smallest size (8 bits)
         int32_t immediate = syn.lit_i64;
         out = build_unary_op(ass, Push, imm32(immediate), a);
+        break;
+    }
+    case SType: {
+        out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Push, reg(RBX), a);
         break;
     }
     case SVariable: {
@@ -298,48 +304,6 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
             return out;
         } 
         *jmp_loc = (uint8_t)(end_pos - start_pos);
-        break;
-    }
-    case SStructType: {
-#ifdef __unix__
-        // Generate a call to the c function mk_struct(int64_t len, uint64_t* data)
-        // data: points to the top of stack  
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            out = generate(*(syntax*)syn.structure.fields.data[i].val, env, ass, links, a);
-            if (out.type == Err) return out;
-
-            out = build_binary_op(ass, Mov, reg(RBX), imm64(syn.structure.fields.data[i].key), a);
-            if (out.type == Err) return out;
-            out = build_unary_op(ass, Push, reg(RBX), a);
-            if (out.type == Err) return out;
-        }
-
-        // Now, call the C function
-        // We are on SystemV AMD64 ABI, therefore the two arguments (len & data)
-        // are passed in rdi and rsi, respectively:
-        uint64_t len = syn.structure.fields.len*2;
-        out = build_binary_op(ass, Mov, reg(RDI), imm64(len), a);
-        if (out.type == Err) return out;
-        // pass data
-        out = build_binary_op(ass, Mov, reg(RSI), reg(RSP), a);
-        if (out.type == Err) return out;
-
-        // setup call & pop args once done
-        out = build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)&mk_struct), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Call, reg(RDX), a);
-        if (out.type == Err) return out;
-        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.structure.fields.len * 2 * 8), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Push, reg(RAX), a);
-
-
-#elif defined(_WIN32) || defined(WIN32)
-#error "Do not yet support SStructType codegen on Windows "
-#else 
-#error "Only support unix/windows"
-#endif
-
         break;
     }
     default: {
