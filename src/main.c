@@ -18,6 +18,10 @@
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 
+typedef struct repl_opts {
+    bool debug_print;
+} repl_opts;
+
 pi_type mk_binop_type(allocator a, prim_type a1, prim_type a2, prim_type r) {
     pi_type* i1 = mem_alloc(sizeof(pi_type), a);
     pi_type* i2 = mem_alloc(sizeof(pi_type), a);
@@ -163,7 +167,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     return module;
 }
 
-bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_module* module) {
+bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_module* module, repl_opts opts) {
     // Create an arena allocator to use in this iteration.
     allocator arena = mk_arena_allocator(4096, a);
 
@@ -182,10 +186,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
 
-    document* doc = pretty_rawtree(res.data.result, arena);
-    write_string(mv_string("Pretty Printing Raw Syntax\n"), cout);
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+    document* doc;
+    if (opts.debug_print) {
+        doc = pretty_rawtree(res.data.result, arena);
+        write_string(mv_string("Pretty Printing Raw Syntax\n"), cout);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     // -------------------------------------------------------------------------
     // Resolution
@@ -204,10 +211,13 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         release_arena_allocator(arena);
         return false;
     }
-    write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
-    doc = pretty_toplevel(&abs.out, arena);
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+
+    if (opts.debug_print) {
+        write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
+        doc = pretty_toplevel(&abs.out, arena);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     // -------------------------------------------------------------------------
     // Type Checking
@@ -229,10 +239,12 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
 
-    write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-    doc = pretty_type(toplevel_type(abs.out), arena);
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+    if (opts.debug_print) {
+        write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
+        doc = pretty_type(toplevel_type(abs.out), arena);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     // -------------------------------------------------------------------------
     // Code Generation
@@ -253,17 +265,21 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
 
-    write_string(mv_string("Pretty Printing Binary\n"), cout);
-    doc = pretty_assembler(ass, arena);
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+    if (opts.debug_print) {
+        write_string(mv_string("Pretty Printing Binary\n"), cout);
+        doc = pretty_assembler(ass, arena);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     // -------------------------------------------------------------------------
     // Evaluation
     // -------------------------------------------------------------------------
 
     eval_result call_res = pico_run_toplevel(abs.out, ass, &(gen_res.backlinks), module, arena);
-    write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
+    if (opts.debug_print) {
+        write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
+    }
 
     doc = pretty_res(call_res, arena);
 
@@ -274,7 +290,33 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     return true;
 }
 
+int cstrcmp (const char* lhs, const char* rhs) {
+    int result = 0; 
+    while (result == 0 && !lhs && !rhs) {
+        lhs++;
+        rhs++;
+        if (*lhs < *rhs) {
+            result = -1;
+        } else if (*lhs > *rhs) {
+            result = 1;
+        }
+    }
+    return result;
+}
+
 int main(int argc, char** argv) {
+    // Argument parsing
+    repl_opts opts;
+    opts.debug_print = false;
+    if (argc > 1) {
+        for (int i = 1; i < argc; i++) {
+            if (cstrcmp("-d", argv[i]) == 0) {
+                opts.debug_print = true;
+            }
+        }
+    }
+
+
     // Setup
     allocator stdalloc = get_std_allocator();
     istream* cin = get_stdin_stream();
@@ -284,7 +326,7 @@ int main(int argc, char** argv) {
     assembler* ass_base = mk_assembler(exalloc);
     pi_module* module = base_module(ass_base, stdalloc);
 
-    while (repl_iter(cin, cout, stdalloc, ass, module));
+    while (repl_iter(cin, cout, stdalloc, ass, module, opts));
 
     // Cleanup
     delete_module(module);
