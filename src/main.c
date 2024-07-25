@@ -305,6 +305,7 @@ int cstrcmp (const char* lhs, const char* rhs) {
 }
 
 int main(int argc, char** argv) {
+
     // Argument parsing
     repl_opts opts;
     opts.debug_print = false;
@@ -326,6 +327,7 @@ int main(int argc, char** argv) {
     assembler* ass_base = mk_assembler(exalloc);
     pi_module* module = base_module(ass_base, stdalloc);
 
+    // Main Loop
     while (repl_iter(cin, cout, stdalloc, ass, module, opts));
 
     // Cleanup

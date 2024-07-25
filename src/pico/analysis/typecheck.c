@@ -51,6 +51,7 @@ result type_check(toplevel* top, environment* env, allocator a) {
 result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocator a);
 result type_check_i(syntax* untyped, pi_type* type, type_env* env, uvar_generator* gen, allocator a);
 result squash_types(syntax* untyped, allocator a);
+result get_type(syntax* type, pi_type* out);
 
 // -----------------------------------------------------------------------------
 // Interface
@@ -221,14 +222,27 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
     case SRecursor:
     case SStructure: {
         pi_type* ty = mem_alloc(sizeof(pi_type), a);
-        ty->sort = TStruct;
-        ty->prim = TType; 
-        untyped->ptype = ty;
+        untyped->ptype = ty; 
+        out = get_type(untyped->structure.ptype, ty);
+        if (out.type == Err) return out;
 
-        for (size_t i = 0; i < untyped->structure.fields.len; i++) {
-            syntax* syn = untyped->structure.fields.data[i].val;
-            out = type_check_i(syn, ty, env, gen, a);
-            if (out.type == Err) return out;
+        if (untyped->structure.fields.len != ty->structure.fields.len) {
+            out.type = Err;
+            out.error_message = mv_string("Structure must have exactly n fields.");
+            return out;
+        }
+
+        for (size_t i = 0; i < ty->structure.fields.len; i++) {
+            syntax** field_syn = (syntax**)sym_ptr_lookup(ty->structure.fields.data[i].key, untyped->structure.fields);
+            if (field_syn) {
+                pi_type* field_ty = ty->structure.fields.data[i].val;
+                out = type_check_i(*field_syn, field_ty, env, gen, a);
+                if (out.type == Err) return out;
+            } else {
+                out.type = Err;
+                out.error_message = mv_string("Structure is missing a field");
+                return out;
+            }
         }
         out.type = Ok;
         break;
@@ -236,7 +250,7 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
     case SProjector:
     case SLet:
         out.type = Err;
-        out.error_message = mk_string("Type inference not implemented for this syntactic form", a);
+        out.error_message = mv_string("Type inference not implemented for this syntactic form");
         break;
     case SIf: {
         pi_type* t = mem_alloc(sizeof(pi_type), a);
@@ -290,13 +304,15 @@ result squash_types(syntax* typed, allocator a) {
     }
     case SConstructor:
     case SRecursor:
-    case SStructure:
+    case SStructure: {
+        // Loop for each element in the 
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             syntax* syn = typed->structure.fields.data[i].val;
             out = squash_types(syn, a);
             if (out.type == Err) return out;
         }
         break;
+    }
     case SProjector:
     case SLet:
         out.type = Err;
@@ -326,10 +342,27 @@ result squash_types(syntax* typed, allocator a) {
             document* doc = pretty_type(typed->ptype, a);
             string str = doc_to_str(doc, a);
             out.error_message =
-                string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
-                           str, a);
+                string_cat(
+                           string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
+                                      str, a),
+                           string_cat(mv_string("\nType:\n"),
+                                      doc_to_str(pretty_type(typed->ptype, a), a),
+                                      a),
+                           a);
             delete_string(str, a);
         }
     }
     return out;
+}
+
+result get_type(syntax* type, pi_type* out) {
+    result ret;
+    if (type->type == SType) {
+        ret.type = Ok;
+        *out = *type->type_val;
+    } else {
+        ret.type = Err;
+        ret.error_message = mv_string("Typechecking error: expecting node to be a type.");
+    }
+    return ret;
 }

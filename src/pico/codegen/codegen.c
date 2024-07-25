@@ -169,7 +169,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         }
         break;
     }
-    case SProcedure:
+    case SProcedure: {
         // Codegen function setup
         out = build_unary_op(ass, Push, reg(RBP), a);
         if (out.type == Err) return out;
@@ -219,6 +219,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         if (out.type == Err) return out;
         out = build_nullary_op(ass, Ret, a);
         break;
+    }
     case SApplication: {
         // Generate the arguments
         for (size_t i = 0; i < syn.application.args.len; i++) {
@@ -239,10 +240,40 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         break;
     }
 
+    case SStructure: {
+        // For structures, we have to be careful - this is because the order in
+        // which arguments are evaluated is not necessarily the order in which
+        // arguments are inserted into the structure.
+
+        // Step 1: Make room on the stack for our struct
+        size_t sz = pi_size_of(*syn.ptype);
+        out = build_binary_op(ass, Sub, reg(RSP), imm32(sz), a);
+        if (out.type == Err) return out;
+
+        // Step 2: evaluate each element/variable binding
+        for (size_t i = 0; i < syn.structure.fields.len; i++) {
+            out = generate(*(syntax*)syn.structure.fields.data[i].val, env, ass, links, a);
+            if (out.type == Err) return out;
+        }
+        
+        // Step 3: copy each element of the array into it's place on the stack.
+        // Note: for, e.g. Struct [.x I64] [.y I64] we expect the memory to be laid
+        // out in stack as follows
+        // ...  ..
+        // 112  y
+        // 120  x
+        // 128 <top of stack>
+
+        // Copy from bottom to top 
+        for (size_t i = 0; i < syn.ptype->structure.fields.len; i++) {
+            // 
+        }
+
+    }
+    case SProjector:
+
     case SConstructor:
     case SRecursor:
-    case SStructure:
-    case SProjector:
 
     case SLet:
         out.type = Err;

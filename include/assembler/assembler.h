@@ -98,6 +98,7 @@ typedef enum regname {
 typedef enum dest_t {
     Register,
     Deref,
+    DerefDisp8,
     Immediate8,
     Immediate16,
     Immediate32,
@@ -111,10 +112,12 @@ typedef enum dest_t {
 typedef struct location {
     dest_t type;
     regname reg;
-    int8_t immediate_8;
-    int16_t immediate_16;
-    int32_t immediate_32;
-    int64_t immediate_64;
+    union {
+        int8_t immediate_8;
+        int16_t immediate_16;
+        int32_t immediate_32;
+        int64_t immediate_64;
+    };
 } location;
 
 // Location Constructors 

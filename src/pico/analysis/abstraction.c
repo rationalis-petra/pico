@@ -45,7 +45,7 @@ bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
     return true;
 }
 
-pi_type* get_type(pi_rawtree raw, shadow_env* env) {
+pi_type* get_raw_type(pi_rawtree raw, shadow_env* env) {
     pi_type* out = NULL;
     if (raw.type != RawAtom || raw.data.atom.type != ASymbol) {
         return out;
@@ -322,7 +322,7 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
     switch (raw.type) {
     case RawAtom: {
         if (raw.data.atom.type == ASymbol) {
-            pi_type* ty = get_type(raw, env);
+            pi_type* ty = get_raw_type(raw, env);
             if (ty) {
                 res.type = Ok;
                 res.out.type = SType;

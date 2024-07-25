@@ -81,6 +81,14 @@ bool has_unification_vars_p(pi_type type) {
         return has_unification_vars_p(*type.proc.ret);
         break;
     }
+    case TStruct: {
+        for (size_t i = 0; i < type.structure.fields.len; i++) {
+            if (has_unification_vars_p(*(pi_type*)type.structure.fields.data[i].val))
+                return true;
+        }
+        return false;
+        break;
+    }
 
     // Special sort: unification variable
     case TUVar:
@@ -111,6 +119,12 @@ void squash_type(pi_type* type) {
             squash_type((pi_type*)(type->proc.args.data + i));
         }
         squash_type(type->proc.ret);
+        break;
+    }
+    case TStruct: {
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            squash_type((pi_type*)((type->structure.fields.data + i)->val));
+        }
         break;
     }
 
