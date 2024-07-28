@@ -2,6 +2,7 @@
 #define __DATA_META_AMAP_IMPL_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include "memory/allocator.h"
 
 #define AMAP_IMPL(key_t, val_t, prefix) \
@@ -43,6 +44,15 @@
         } \
     } \
     return NULL; \
+  } \
+  bool prefix##_find(size_t* idx, key_t key, prefix ## _amap map) {   \
+    for (size_t i = 0; i < map.len; i++) { \
+        if (key == map.data[i].key) { \
+            *idx = i; \
+            return true; \
+        } \
+    } \
+    return false; \
   } \
   \
   void prefix##_insert(key_t key, val_t val, prefix ## _amap* map, allocator a) { \
@@ -93,6 +103,15 @@
         } \
     } \
     return NULL; \
+  } \
+  bool prefix##_find(size_t* idx, key_t key, prefix ## _amap map) {   \
+    for (size_t i = 0; i < map.len; i++) { \
+        if (cmpfun(key, map.data[i].key) == 0) { \
+            *idx = i; \
+            return true; \
+        } \
+    } \
+    return false; \
   } \
   \
   void prefix##_insert(key_t key, val_t val, prefix ## _amap* map, allocator a) { \

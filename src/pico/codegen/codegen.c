@@ -38,6 +38,7 @@ pi_type* mk_struct_type(uint64_t len, uint64_t* data) {
 result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);
+result generate_stack_move(size_t dest_offset, size_t src_offset, size_t size);
 
 gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, NULL, a);
@@ -257,17 +258,49 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         }
         
         // Step 3: copy each element of the array into it's place on the stack.
-        // Note: for, e.g. Struct [.x I64] [.y I64] we expect the memory to be laid
-        // out in stack as follows
+        // Note: for, e.g. Struct [.x I64] [.y I64] we expect the stack to look 
+        // something like the below.
         // ...  ..
-        // 112  y
-        // 120  x
-        // 128 <top of stack>
+        // 144 y  } Destination - elements are ordered bottom-top
+        // 136 x  } 
+        // --- 
+        // 128 x   } Source - elements can be in any arbitrary order 
+        // 120 y   }
+        // ------------
+        // 112 <`top' of stack - grows down>
 
-        // Copy from bottom to top 
+        // Copy from the bottom (of the destination) to the top (also of the destination) 
+        size_t struct_size = pi_size_of(*syn.ptype);
+        size_t dest_offset = 0;
         for (size_t i = 0; i < syn.ptype->structure.fields.len; i++) {
-            // 
+
+            // Find the field in the source & compute offset
+            size_t src_offset = 0;
+            for (size_t i = 0; i < syn.structure.fields.len; i++) {
+                if (syn.structure.fields.data[i].key == syn.ptype->structure.fields.data[i].key) {
+                    break; // offset is correct, end the loop
+                } else {
+                    pi_type* t = sym_ptr_lookup(syn.structure.fields.data[i].key, syn.ptype->structure.fields);
+                    src_offset += pi_size_of(*((syntax*)syn.structure.fields.data[i].val)->ptype); 
+                }
+            }
+
+            // We now both the source_offset and dest_offset. These are both
+            // relative to the 'bottom' of their respective structures.
+            // Therefore, we now need to find their offsets relative to the `top'
+            // of the stack.
+            size_t src_stack_offset = struct_size + (struct_size - src_offset);
+            size_t dest_stack_offset = struct_size - dest_offset;
+            size_t field_size = pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
+
+            // Now, move the data.
+            generate_stack_move(dest_stack_offset, src_stack_offset, field_size);
+
+            // Compute dest_offset for next loop
+            dest_offset += pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
         }
+
+        
 
     }
     case SProjector:
@@ -359,4 +392,19 @@ void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocat
 
     // Step 2: insert offset into array
     push_size(offset, sarr, a);
+}
+
+result generate_stack_move(size dest_stack_offset, size src_stack_offset, size_t size) {
+    result_t out;
+
+    // first, assert that size_t is divisible by 8 ( we use rax for copies )
+    if (size % 8 != 0)  {
+        out.type = Err;
+        out.error_message = mv_string("Error in stack_copy: expected copy size to be divisible by 8");
+    };
+
+    out.type = Err;
+    out.error_message = mv_string("Error in stack_copy: unimplemented main body");
+
+    return out;
 }
