@@ -115,6 +115,68 @@ location imm64(int64_t immediate) {
     return out;
 }
 
+
+string nullary_op_name(nullary_op op) {
+    switch (op) {
+    case Ret:
+        return mv_string("Ret");
+    default: 
+        return mv_string("unknown-nullary-op");
+    }
+}
+
+string unary_op_name(unary_op op) {
+    switch (op) {
+    case Call:
+        return mv_string("Call");
+    case Push:
+        return mv_string("Push");
+    case Pop: 
+        return mv_string("Pop");
+    case JE:
+        return mv_string("JE");
+    case JNE:
+        return mv_string("JNE");
+    case JMP:
+        return mv_string("JMP");
+    case SetE:
+        return mv_string("SetE");
+    case SetL:
+        return mv_string("SetL");
+    case SetG:
+        return mv_string("SetG");
+    default: 
+        return mv_string("unknown-unary-op");
+    }
+}
+
+string binary_op_name(binary_op op) {
+    switch (op) {
+    case Add:
+        return mv_string("Add");
+    case Sub:
+        return mv_string("Sub");
+    case Cmp:
+        return mv_string("Cmp");
+    case And:
+        return mv_string("And");
+    case Or:
+        return mv_string("Or");
+    case LShift:
+        return mv_string("LShift");
+    case RShift:
+        return mv_string("RShift");
+    case Mov:
+        return mv_string("Mov");
+    default: 
+        return mv_string("unknown-binary-op");
+    }
+}
+
+//------------------------------------------------------------------------------
+// Assembly utilities/implementation
+//------------------------------------------------------------------------------
+
 // Return: the ModR/M byte for a single register src/dest
 uint8_t modrm_reg(regname r2) {
     return 0b11010000 | (r2 & 0b111); 
@@ -258,6 +320,22 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
                 }
                 break;
             }
+            case Sub: {
+                // TODO: opcode + rd(w)
+                // TODO: + rd io
+                opcode = 0x81;
+
+                set_bit(&rex_byte, 3); // Set REX.W
+                use_mod_rm_byte = true;
+                mod_rm_byte = modrm_reg_imm(dest.reg);  // /0 id
+
+                num_immediate_bytes = 4;
+                uint8_t* bytes = (uint8_t*) &src.immediate_32;
+                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
+                    immediate_bytes[i] = bytes[i];
+                }
+                break;
+            }
             case Mov: {
                 // TODO: opcode + rd(w)
                 // TODO: + rd io
@@ -291,9 +369,12 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
                 }
                 break;
             }
-            default:
+            default: {
                 out.type = Err;
-                out.error_message = mk_string("This operand does not support 64-bit immmediates", err_allocator);
+                out.error_message = string_cat(mv_string("This operand does not support 32-bit immediates: "),
+                                               binary_op_name(op),
+                                               err_allocator);
+            }
             }
             break;
             

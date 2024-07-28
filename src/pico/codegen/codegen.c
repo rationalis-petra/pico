@@ -38,7 +38,7 @@ pi_type* mk_struct_type(uint64_t len, uint64_t* data) {
 result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);
-result generate_stack_move(size_t dest_offset, size_t src_offset, size_t size);
+asm_result generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, assembler* ass, allocator a);
 
 gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, NULL, a);
@@ -280,8 +280,14 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
                 if (syn.structure.fields.data[i].key == syn.ptype->structure.fields.data[i].key) {
                     break; // offset is correct, end the loop
                 } else {
-                    pi_type* t = sym_ptr_lookup(syn.structure.fields.data[i].key, syn.ptype->structure.fields);
-                    src_offset += pi_size_of(*((syntax*)syn.structure.fields.data[i].val)->ptype); 
+                    pi_type** t = (pi_type**)sym_ptr_lookup(syn.structure.fields.data[i].key, syn.ptype->structure.fields);
+                    if (t) {
+                        src_offset += pi_size_of(*((syntax*)syn.structure.fields.data[i].val)->ptype); 
+                    } else {
+                        out.type = Err;
+                        out.error_message = mv_string("Error code-generating for structure: field not found.");
+                        return out;
+                    };
                 }
             }
 
@@ -294,14 +300,13 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
             size_t field_size = pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
 
             // Now, move the data.
-            generate_stack_move(dest_stack_offset, src_stack_offset, field_size);
+            out = generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a);
+            if (out.type == Err) return out;
 
             // Compute dest_offset for next loop
             dest_offset += pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
         }
-
-        
-
+        break;
     }
     case SProjector:
 
@@ -394,8 +399,8 @@ void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocat
     push_size(offset, sarr, a);
 }
 
-result generate_stack_move(size dest_stack_offset, size src_stack_offset, size_t size) {
-    result_t out;
+asm_result generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, assembler* ass, allocator a) {
+    asm_result out;
 
     // first, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size % 8 != 0)  {
@@ -403,8 +408,18 @@ result generate_stack_move(size dest_stack_offset, size src_stack_offset, size_t
         out.error_message = mv_string("Error in stack_copy: expected copy size to be divisible by 8");
     };
 
-    out.type = Err;
-    out.error_message = mv_string("Error in stack_copy: unimplemented main body");
+    if (dest_stack_offset > 255 || src_stack_offset > 255)  {
+        out.type = Err;
+        out.error_message = mv_string("Error in stack_copy: offsets must be smaller than 255!");
+    };
+
+    for (size_t i = 0; i < size / 8; i++) {
+        out = build_binary_op(ass, Mov, reg(RAX), rref(RSP, src_stack_offset), a);
+        if (out.type == Err) return out;
+
+        out = build_binary_op(ass, Mov, rref(RSP, dest_stack_offset), reg(RAX), a);
+        if (out.type == Err) return out;
+    }
 
     return out;
 }

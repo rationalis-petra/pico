@@ -18,6 +18,7 @@ size_t get_pos(assembler* assembler);
 
 document* pretty_assembler(assembler* assembler, allocator a);
 
+
 // Integral operations
 typedef enum binary_op {
     // ------------------
@@ -25,13 +26,13 @@ typedef enum binary_op {
     // ------------------
     Add,
     Sub,
-    And,
 
     Cmp, // p289. Compare two operands
 
     // ------------------
     //  Logic
     // ------------------
+    And,
     Or,
 
     // ------------------
@@ -69,7 +70,6 @@ typedef enum unary_op {
     SetE,
     SetL,
     SetG,
-
 } unary_op;
 
 typedef enum nullary_op {
@@ -98,7 +98,6 @@ typedef enum regname {
 typedef enum dest_t {
     Register,
     Deref,
-    DerefDisp8,
     Immediate8,
     Immediate16,
     Immediate32,
@@ -120,6 +119,10 @@ typedef struct location {
     };
 } location;
 
+string nullary_op_name(nullary_op op);
+string unary_op_name(unary_op op);
+string binary_op_name(binary_op op);
+
 // Location Constructors 
 location reg(regname name);
 location rref(regname name, int8_t offset);
@@ -140,6 +143,5 @@ typedef struct asm_result {
 asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
 asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
 asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
-
 
 #endif
