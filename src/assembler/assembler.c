@@ -552,8 +552,6 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
         }
     }
 
-    // 
-
     // Step 5: write bytes
     asm_result out;
     out.type = Ok;
