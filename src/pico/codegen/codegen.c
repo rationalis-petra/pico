@@ -12,7 +12,6 @@
  * Calling a function:
  * • Push all arguments onto the stack in left-right order (i.e. rightmost arg
  *   is top of stack)
- * • 
  */
 
 // C functions that are called by Pico (mostly to generate types)
