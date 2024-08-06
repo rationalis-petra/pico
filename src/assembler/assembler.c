@@ -71,120 +71,516 @@ document* pretty_assembler(assembler* assembler, allocator a) {
     return mv_sep_doc(nodes, a);
 }
 
-
-
 location reg(regname reg) {
     location out;
     out.type = Register;
+    out.sz = sz_64;
     out.reg = reg;
+    return out;
+}
+
+location ref(regname name) {
+    location out;
+    out.type = Deref;
+    out.reg = name;
+    out.disp_sz = 0;
     return out;
 }
 
 location rref(regname name, int8_t offset) {
     location out;
     out.type = Deref;
+    out.sz = sz_64;
     out.reg = name;
-    out.immediate_32 = offset;
+
+    out.disp_sz = 1;
+    out.disp_8 = offset;
     return out;
 }
 
 location imm8(int8_t immediate) {
     location out;
-    out.type = Immediate8;
+    out.type = Immediate;
+    out.sz = sz_8;
     out.immediate_8 = immediate;
     return out;
 }
 location imm16(int16_t immediate) {
     location out;
-    out.type = Immediate16;
+    out.type = Immediate;
+    out.sz = sz_16;
     out.immediate_16 = immediate;
     return out;
 }
 
 location imm32(int32_t immediate) {
     location out;
-    out.type = Immediate32;
+    out.type = Immediate;
+    out.sz = sz_32;
     out.immediate_32 = immediate;
     return out;
 }
 
 location imm64(int64_t immediate) {
     location out;
-    out.type = Immediate64;
+    out.type = Immediate;
+    out.sz = sz_64;
     out.immediate_64 = immediate;
     return out;
 }
 
+/* Encoding relevant to binary operations:
+ * • ModRm byte:  
+ */
 
-string nullary_op_name(nullary_op op) {
-    switch (op) {
-    case Ret:
-        return mv_string("Ret");
-    default: 
-        return mv_string("unknown-nullary-op");
+typedef enum enc_order {
+    RM,
+    MR,
+    MI,
+    OI,
+} enc_order;
+
+typedef struct {
+    bool valid;
+    bool use_rex_byte;
+    uint8_t init_rex_byte;
+    bool use_modrm_byte;
+    uint8_t num_immediate_bytes;
+    enc_order order;
+
+    bool has_opcode_ext;
+} binary_table_entry;
+
+static binary_table_entry binary_table[256];
+
+static uint8_t binary_opcode_table[Binary_Op_Count][256][2];
+
+uint8_t bindex(dest_t dest_ty, location_size dest_sz, dest_t src_ty, location_size src_sz) {
+    return dest_ty | (dest_sz << 2) | (src_ty << 4) | (src_sz << 6) ;
+};
+
+void build_binary_table() {
+    // populate the table with invalid entries
+    for (size_t i = 0; i < 256; i++) {
+        binary_table[i].valid = false;
     }
+
+    // r/m64, imm8-64
+    binary_table[bindex(Register, sz_64, Immediate, sz_8)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 1,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+    binary_table[bindex(Register, sz_64, Immediate, sz_32)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 4,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+    binary_table[bindex(Deref, sz_64, Immediate, sz_8)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 1,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+    binary_table[bindex(Deref, sz_64, Immediate, sz_32)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 4,
+        .order = MI,
+        .has_opcode_ext = true,
+    };
+
+    // r/m64, r64
+    binary_table[bindex(Register, sz_64, Register, sz_64)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = MR,
+        .has_opcode_ext = false,
+    };
+    binary_table[bindex(Deref, sz_64, Register, sz_64)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = MR,
+        .has_opcode_ext = false,
+    };
+
+
+    // r64, r/m64
+    binary_table[bindex(Register, sz_64, Register, sz_64)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+    binary_table[bindex(Deref, sz_64, Register, sz_64)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+
+    // r64, imm64
+    binary_table[bindex(Register, sz_64, Immediate, sz_64)] = (binary_table_entry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01001000, // REX.W
+        .use_modrm_byte = false,
+        .num_immediate_bytes = 8,
+        .order = OI,
+        .has_opcode_ext = false,
+    };
 }
 
-string unary_op_name(unary_op op) {
-    switch (op) {
-    case Call:
-        return mv_string("Call");
-    case Push:
-        return mv_string("Push");
-    case Pop: 
-        return mv_string("Pop");
-    case JE:
-        return mv_string("JE");
-    case JNE:
-        return mv_string("JNE");
-    case JMP:
-        return mv_string("JMP");
-    case SetE:
-        return mv_string("SetE");
-    case SetL:
-        return mv_string("SetL");
-    case SetG:
-        return mv_string("SetG");
-    default: 
-        return mv_string("unknown-unary-op");
+void build_binary_opcode_table() {
+    for (size_t i = 0; i < 256 * Binary_Op_Count; i++) {
+        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][0] = 0x90;
+        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][1] = 0x09;
     }
+
+    // Add
+    // r/m64, imm8 & imm64
+    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x0;
+
+    // r/m64, r64
+    binary_opcode_table[Add][bindex(Register, sz_64, Register, sz_64)][0] = 0x01;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Register, sz_64)][0] = 0x01;
+
+    // r64, r/m64
+    binary_opcode_table[Add][bindex(Register, sz_64, Register, sz_64)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Deref, sz_64, Register, sz_64)][0] = 0x03;
+
+    // Sub
+    // r/m64, imm8 & imm64
+    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x05;
+
+    // r/m64, r64
+    binary_opcode_table[Sub][bindex(Register, sz_64, Register, sz_64)][0] = 0x29;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Register, sz_64)][0] = 0x29;
+
+    // r64, r/m64
+    binary_opcode_table[Sub][bindex(Register, sz_64, Register, sz_64)][0] = 0x2B;
+    binary_opcode_table[Sub][bindex(Deref, sz_64, Register, sz_64)][0] = 0x2B;
+
+    // Cmp
+    // r/m64, imm8 & imm64
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x07;
+
+    // r/m64, r64
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Register, sz_64)][0] = 0x39;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Register, sz_64)][0] = 0x39;
+
+    // r64, r/m64
+    binary_opcode_table[Cmp][bindex(Register, sz_64, Register, sz_64)][0] = 0x3B;
+    binary_opcode_table[Cmp][bindex(Deref, sz_64, Register, sz_64)][0] = 0x3B;
+
+    // ------------------
+    //  Logic
+    // ------------------
+    // And
+    // r/m64, imm8 & imm64
+    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x04;
+    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x04;
+
+    // r/m64, r64
+    binary_opcode_table[And][bindex(Register, sz_64, Register, sz_64)][0] = 0x21;
+    binary_opcode_table[And][bindex(Deref, sz_64, Register, sz_64)][0] = 0x21;
+
+    // r64, r/m64
+    binary_opcode_table[And][bindex(Register, sz_64, Register, sz_64)][0] = 0x23;
+    binary_opcode_table[And][bindex(Deref, sz_64, Register, sz_64)][0] = 0x23;
+
+    // Or
+    // r/m64, imm8 & imm64
+    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x01;
+
+    // r/m64, r64
+    binary_opcode_table[Or][bindex(Register, sz_64, Register, sz_64)][0] = 0x09;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Register, sz_64)][0] = 0x09;
+
+    // r64, r/m64
+    binary_opcode_table[Or][bindex(Register, sz_64, Register, sz_64)][0] = 0x0B;
+    binary_opcode_table[Or][bindex(Deref, sz_64, Register, sz_64)][0] = 0x0B;
+
+    // ------------------
+    //  Bit Manipulation
+    // ------------------
+    // Shift Left
+    // r/m64, imm8 
+    binary_opcode_table[LShift][bindex(Register, sz_64, Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[LShift][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[LShift][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[LShift][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x04;
+
+    // Shift Right
+    // r/m64, imm8
+    binary_opcode_table[RShift][bindex(Register, sz_64, Immediate, sz_8)][0] = 0xD3;
+    binary_opcode_table[RShift][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[RShift][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0xD3;
+    binary_opcode_table[RShift][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x05;
+
+    // ------------------
+    //  Memory
+    // ------------------
+    //Mov,   // p 769.
+    // r64, imm64
+    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_64)][0] = 0xB8;
+    // r/m64, imm32
+    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_32)][0] = 0xC7;
+    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0xC7;
+    binary_opcode_table[Mov][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x00;
+
+    // r/m64, r64
+    binary_opcode_table[Mov][bindex(Register, sz_64, Register, sz_64)][0] = 0x89;
+    binary_opcode_table[Mov][bindex(Deref, sz_64, Register, sz_64)][0] = 0x89;
+
+    // r64, r/m64
+    binary_opcode_table[Mov][bindex(Register, sz_64, Register, sz_64)][0] = 0x8B;
+    binary_opcode_table[Mov][bindex(Deref, sz_64, Register, sz_64)][0] = 0x8B;
 }
 
-string binary_op_name(binary_op op) {
-    switch (op) {
-    case Add:
-        return mv_string("Add");
-    case Sub:
-        return mv_string("Sub");
-    case Cmp:
-        return mv_string("Cmp");
-    case And:
-        return mv_string("And");
-    case Or:
-        return mv_string("Or");
-    case LShift:
-        return mv_string("LShift");
-    case RShift:
-        return mv_string("RShift");
-    case Mov:
-        return mv_string("Mov");
-    default: 
-        return mv_string("unknown-binary-op");
+uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
+uint8_t modrm_reg(uint8_t reg_bits) { return (reg_bits & 0b111) << 3; }
+uint8_t modrm_mod(uint8_t reg_bits) { return (reg_bits & 0b11) << 6; }
+
+uint8_t sib_base(uint8_t base_bits) { return (base_bits & 0b111 ); }
+uint8_t sib_index(uint8_t index_bits) { return (index_bits & 0b111) << 3; }
+uint8_t sib_ss(uint8_t ss_bits) { return (ss_bits & 0b11) << 6; }
+
+uint8_t rex_reg_ext(uint8_t bit) { return (bit & 0b1) << 2; }
+uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1); }
+uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1); }
+
+
+asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
+    binary_table_entry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
+    if (!be.valid) {
+        return (asm_result) {
+            .type = Err,
+            .error_message = mv_string("Invalid binary table entry."),
+        };
     }
-}
 
-//------------------------------------------------------------------------------
-// Assembly utilities/implementation
-//------------------------------------------------------------------------------
+    uint8_t rex_byte = be.init_rex_byte;
+    uint8_t opcode_byte = 0;
+    uint8_t modrm_byte = 0;
 
-// Return: the ModR/M byte for a single register src/dest
-uint8_t modrm_reg(regname r2) {
-    return 0b11010000 | (r2 & 0b111); 
-}
+    bool use_sib_byte = false;
+    uint8_t sib_byte = 0;
 
-// encode register in r/m field;
-void modrm_reg_rm(uint8_t* modrm_byte, regname reg) {
-    *modrm_byte |= reg & 0b111;
+    uint8_t num_disp_bytes = 0;
+    uint8_t disp_bytes [4];
+
+    /* uint8_t num_imm_bytes = 0; */
+    /* uint8_t imm_bytes [8]; */
+
+    // Step1: Opcode
+    opcode_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][0];
+    if (opcode_byte == 0x90) {
+        return (asm_result) {
+            .type = Err,
+            .error_message = mv_string("Invalid binary opcode"),
+        };
+    }
+    if (be.has_opcode_ext) {
+        uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]; 
+        modrm_byte |= modrm_reg(ext_byte);
+        if (ext_byte == 0x09) {
+            return (asm_result) {
+                .type = Err,
+                .error_message = mv_string("Invalid binary opcode extension"),
+            };
+        }
+    }
+
+    // Step 2: Determine Operand Encoding type
+    // Store the r/m op
+    if (be.use_modrm_byte) {
+        location rm_loc; 
+        location reg_loc;
+
+        if (be.order == MR || be.order == MI) {
+            rm_loc = dest;
+            reg_loc = src;
+        }
+        else if (be.order == RM) {
+            rm_loc = src;
+            reg_loc = dest;
+        } else {
+            return (asm_result) {
+                .type = Err,
+                .error_message = mv_string("Unrecognized binary op operand order encoding"),
+            };
+        }
+
+        // Step 3: R/M encoding (most complex)
+        // Store the R/M location
+        switch (rm_loc.type) {
+        case Register:
+            // simplest : mod = 11, rm = register 
+            modrm_byte |= modrm_mod(0b11);
+            modrm_byte |= modrm_rm(rm_loc.reg);
+            rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
+            break;
+            
+        case Deref:
+            if (rm_loc.disp_sz == 0)  {
+                modrm_byte |= modrm_mod(0b00);
+            }
+            else if (rm_loc.disp_sz == 1)  {
+                modrm_byte |= modrm_mod(0b01);
+                num_disp_bytes = 1;
+                disp_bytes[0] = rm_loc.disp_bytes[0];
+
+            } else if (rm_loc.disp_sz == 4 ){
+                modrm_byte |= modrm_mod(0b10);
+                for (uint8_t i = 0; i < 4; i++) {
+                    disp_bytes[i]  = rm_loc.disp_bytes[i];
+                }
+            } else {
+                return (asm_result) {
+                    .type = Err,
+                    .error_message = mv_string("Bad displacement size: not 0, 1 or 4"),
+                };
+            }
+            if ((0b111 & rm_loc.reg) == RSP)  {
+                // Using RSP - necessary to use SIB byte
+                modrm_byte |= modrm_rm(RSP);
+            
+                use_sib_byte = true;
+                sib_byte |= sib_ss(0b00);
+                sib_byte |= sib_index(0b100);
+                sib_byte |= sib_base(RSP);
+                rex_byte |= rex_sb_ext((rm_loc.reg & 0b1000) >> 3);
+
+            } else if (((0b111 & rm_loc.reg) == RBP)) {
+                // As usual...
+                modrm_byte |= modrm_rm(RBP);
+                rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3);
+
+                // If there is no displacement, update to 8-bit displacement of 0
+                if (rm_loc.disp_sz == 0)  {
+                    modrm_byte |= modrm_mod(0b01);
+                    num_disp_bytes = 1;
+                    disp_bytes[0] = 0;
+                }
+
+            } else {
+                // Simple encoding
+                modrm_byte |= modrm_rm(rm_loc.reg);
+                rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
+            }
+        case Immediate:
+            // ??: proably error
+            break;
+        }
+
+        // Step 4: Reg encoding
+        // Store the Reg location
+        if (reg_loc.type == Register) {
+            rex_byte |= rex_reg_ext((reg_loc.reg & 0b1000) >> 3); 
+            modrm_byte |= modrm_reg(reg_loc.reg & 0b111);
+        }
+    } else {
+        if (be.order == OI)  {
+            opcode_byte |= (dest.reg & 0b111);
+            rex_byte |= rex_reg_ext((dest.reg & 0b1000) >> 3);
+        } else {
+            return (asm_result) {
+                .type = Err,
+                .error_message = mv_string("Unrecognized binary op operand order encoding"),
+            };
+        }
+    }
+
+    // 
+
+    // Step 5: write bytes
+    asm_result out;
+    out.type = Ok;
+
+    allocator a = assembler->allocator;
+    u8_array* instructions = &assembler->instructions;
+    if (be.use_rex_byte)
+        push_u8(rex_byte, instructions, a);
+
+    // opcode
+    push_u8(opcode_byte, instructions, a);
+
+    if (be.use_modrm_byte)
+        push_u8(modrm_byte, instructions, a);
+
+    if (use_sib_byte)
+        push_u8(sib_byte, instructions, a);
+    
+    for (uint8_t i = 0; i < num_disp_bytes; i++)
+        push_u8(disp_bytes[i], &assembler->instructions, a);
+
+    if (be.num_immediate_bytes != 0)
+        out.backlink = instructions->len;
+    for (uint8_t i = 0; i < be.num_immediate_bytes; i++)
+        push_u8(src.immediate_bytes[i], &assembler->instructions, a);
+
+    return out;
 }
 
 void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte,regname reg) {
@@ -192,258 +588,17 @@ void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte,regname reg) {
     *modrm_byte |= reg & 0b111;
 }
 
-// encode mod 
-void modrm_reg_mod(uint8_t* modrm_byte, uint8_t mod) {
-    *modrm_byte |= (mod & 0b11) << 6;
+
+// Old-style instruction encoding
+// 
+
+// Return: the ModR/M byte for a single register src/dest
+uint8_t modrm_reg_old(regname r2) {
+    return 0b11010000 | (r2 & 0b111); 
 }
 
-// See: page 112 of Intel Vol 2.
-uint8_t modrm_reg_imm(regname r2) {
-    return 0b11000000 | (r2 & 0b111); 
-}
-
-
-// Return: the ModR/M byte for a register deref
 uint8_t modrm_mem(location mem) {
     return 0b01110000 + (mem.reg & 0b111); 
-}
-
-uint8_t encode_reg_reg(regname r1, regname r2, uint8_t* rex_byte) {
-    // R1 (dest) is encoded in ModR/M Reg + REX.R
-    // R2 (src)  is encoded in ModR/M R/M + REX.B
-
-    // set REX.R, Rex.B if needed 
-    if (r1 & 010) set_bit(rex_byte, 0);
-    if (r2 & 010) set_bit(rex_byte, 2);
-
-    return 0b11000000 | ((r2 & 0b111 ) << 3) | (r1 & 0b111); 
-}
-
-uint8_t encode_reg_mem(regname r1, location mem, uint8_t* rex_byte) {
-    // R1 (dest) is encoded in ModR/M Reg + REX.R
-    // R2 (src)  is encoded in ModR/M R/M + REX.B
-
-    // set REX.R, Rex.B if needed 
-    if (r1 & 010) set_bit(rex_byte, 0);
-    if (mem.reg & 010) set_bit(rex_byte, 2);
-
-    return 0b00000000 | ((mem.reg & 0b111 ) << 3) | (r1 & 0b111); 
-}
-
-void reg_in_opcode(regname r, uint8_t* opcode_byte, uint8_t* rex_byte) {
-    // set REX.B if needed
-    if (r & 010) set_bit(rex_byte, 0);
-    // store regname in opcode
-    *opcode_byte += r & 0b111;
-}
-
-void opcode_in_reg(uint8_t* modrm_byte, uint8_t opcode) {
-    // store opcode extension in reg bits
-    *modrm_byte |= (opcode & 0b111) << 3;
-}
-
-asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
-    allocator a = assembler->allocator;
-    // Most paths are successful, so default assume the operation succeeded.
-    asm_result out;
-    out.type = Ok;
-
-    // Note: the logic is simplified for now as we assume 32-bit immediates and
-    // 64-bit registers. This means we always use REX byte :) 
-    bool use_rex = true;
-    uint8_t rex_byte = 0b01000000; // default: W,R,X,B = 0
-
-    uint8_t opcode;
-
-    bool use_mod_rm_byte = false;
-    uint8_t mod_rm_byte;
-
-    uint8_t num_immediate_bytes = 0;
-    uint8_t immediate_bytes[8];
-
-    // Switch based on the location type.
-    switch (dest.type) {
-    case Register:
-        switch (src.type) {
-        case Register:
-            use_mod_rm_byte = true;
-            mod_rm_byte = encode_reg_reg(src.reg, dest.reg, &rex_byte);
-            set_bit(&rex_byte, 3); // Set REX.W
-            switch (op) {
-            case Add: opcode = 0x03; break;
-            case Sub: opcode = 0x2B; break;
-            case And: opcode = 0x23; break;
-            case Or:  opcode = 0x0B; break;
-            case Cmp: opcode = 0x3B; break;
-
-            case Mov:  opcode = 0x8B; break;
-            default:
-                out.type = Err;
-                out.error_message = mk_string("Reg/Reg for this Op is not implemented", err_allocator);
-            }
-            break;
-            
-        case Deref:
-            use_mod_rm_byte = true;
-            mod_rm_byte = encode_reg_mem(dest.reg, src, &rex_byte);
-            set_bit(&rex_byte, 3); // Set REX.W
-            switch (op)  {
-            case Mov:
-                opcode =  0x8B; 
-                break;
-            default:
-                out.type = Err;
-                out.error_message = mk_string("Register/Deref not implemented", err_allocator);
-            }
-            break;
-        case Immediate8:
-        case Immediate16:
-            out.type = Err;
-            out.error_message = mk_string("Immediate 16/32 not implemented", err_allocator);
-            break;
-
-        case Immediate32:
-            switch (op) {
-            case Add: {
-                // TODO: opcode + rd(w)
-                // TODO: + rd io
-                opcode = 0x81;
-
-                set_bit(&rex_byte, 3); // Set REX.W
-                use_mod_rm_byte = true;
-                mod_rm_byte = modrm_reg_imm(dest.reg);  // /0 id
-
-                num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate_32;
-                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-                    immediate_bytes[i] = bytes[i];
-                }
-                break;
-            }
-            case Sub: {
-                // TODO: opcode + rd(w)
-                // TODO: + rd io
-                opcode = 0x81;
-
-                set_bit(&rex_byte, 3); // Set REX.W
-                use_mod_rm_byte = true;
-                mod_rm_byte = modrm_reg_imm(dest.reg);  // /0 id
-
-                num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate_32;
-                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-                    immediate_bytes[i] = bytes[i];
-                }
-                break;
-            }
-            case Mov: {
-                // TODO: opcode + rd(w)
-                // TODO: + rd io
-                opcode = 0x81;
-                set_bit(&rex_byte, 3); // Set REX.W
-                reg_in_opcode(dest.reg, &opcode, &rex_byte);
-
-                num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate_32;
-                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-                    immediate_bytes[i] = bytes[i];
-                }
-                break;
-            }
-            case Cmp: {
-                // encode 
-                use_rex = true;
-                use_mod_rm_byte = true;
-
-                opcode = 0x81;
-                set_bit(&rex_byte, 3); // Set REX.W
-                opcode_in_reg(&mod_rm_byte, 7);
-                modrm_reg_rm(&mod_rm_byte, dest.reg);
-                // Why 01??
-                modrm_reg_mod(&mod_rm_byte, 0b11);
-
-                num_immediate_bytes = 4;
-                uint8_t* bytes = (uint8_t*) &src.immediate_32;
-                for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-                    immediate_bytes[i] = bytes[i];
-                }
-                break;
-            }
-            default: {
-                out.type = Err;
-                out.error_message = string_cat(mv_string("This operand does not support 32-bit immediates: "),
-                                               binary_op_name(op),
-                                               err_allocator);
-            }
-            }
-            break;
-            
-            case Immediate64:
-                switch (op) {
-                case Mov:
-                    opcode = 0xB8;
-                    set_bit(&rex_byte, 3); // Set REX.W
-                    reg_in_opcode(dest.reg, &opcode, &rex_byte);
-
-                    num_immediate_bytes = 8;
-                    uint8_t* bytes = (uint8_t*) &src.immediate_64;
-                    for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-                        immediate_bytes[i] = bytes[i];
-                    }
-                    break;
-                    break;
-                default:
-                    out.type = Err;
-                    out.error_message = mk_string("This operand does not support 64-bit immmediates", err_allocator);
-                }
-            }
-            break;
-
-    case Deref:
-        switch (src.type) {
-        case Register:
-            out.type = Err;
-            out.error_message = mk_string("Deref/register pair not implemented", err_allocator);
-            break;
-            
-        case Deref:
-            out.type = Err;
-            out.error_message = mk_string("Cannot use two dereferences as a source/destination pair", err_allocator);
-            break;
-
-        case Immediate8:
-        case Immediate16:
-        case Immediate32:
-        case Immediate64:
-            out.type = Err;
-            out.error_message = mk_string("Deref/Immediate not implemented", err_allocator);
-        }
-        break;
-
-    case Immediate8:
-    case Immediate16:
-    case Immediate32:
-    case Immediate64:
-        out.type = Err;
-        out.error_message = mk_string("Cannot use an immediate as a destination register!", err_allocator);
-        break;
-    }
-    if (out.type == Err) return out;
-
-
-    u8_array* instructions = &assembler->instructions;
-    // Finally, write out the opcode into the assembler
-    if (use_rex) push_u8(rex_byte, instructions, a);
-    push_u8(opcode, instructions, a);
-    if (use_mod_rm_byte) push_u8(mod_rm_byte, instructions, a);
-
-    if (num_immediate_bytes != 0)
-        out.backlink = instructions->len;
-    for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-        push_u8(immediate_bytes[i], &assembler->instructions, a);
-    }
-
-    return out;
 }
 
 asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator) {
@@ -474,7 +629,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         case Register:
             opcode = 0xff;
             use_mod_rm_byte = true;
-            mod_rm_byte = modrm_reg(loc.reg);
+            mod_rm_byte = modrm_reg_old(loc.reg);
             break;
         default:
             out.type = Err;
@@ -503,9 +658,9 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
             use_mod_rm_byte = true;
             mod_rm_byte = modrm_mem(loc);
             num_immediate_bytes = 1;
-            immediate_bytes[0] = loc.immediate_32;
+            immediate_bytes[0] = loc.disp_8;
             break;
-        case Immediate32: {
+        case Immediate: {
             // TODO: optionally shrink immediate
             uint8_t* bytes = (uint8_t*) &loc.immediate_32;
             if (loc.immediate_32 <= 256) {
@@ -531,7 +686,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         // conditional jumps
     case JE:
         opcode = 0x74;
-        if (loc.type != Immediate8) {
+        if (loc.type != Immediate && loc.sz != sz_8) {
             out.type = Err;
             out.error_message = mk_string("JE requires 8-bit immediate", err_allocator);
         }
@@ -540,7 +695,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
         break;
     case JNE:
         opcode = 0x75;
-        if (loc.type != Immediate8) {
+        if (loc.type != Immediate && loc.sz != sz_8) {
             out.type = Err;
             out.error_message = mk_string("JNE requires 8-bit immediate", err_allocator);
         }
@@ -551,7 +706,7 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     case JMP:
         opcode = 0xEB;
         switch (loc.type) {
-        case Immediate8:
+        case Immediate:
             num_immediate_bytes = 1;
             immediate_bytes[0] = loc.immediate_8;
             break;
@@ -656,4 +811,10 @@ asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_a
     u8_array* instructions = &assembler->instructions;
     push_u8(opcode, instructions, a);
     return out;
+}
+
+
+void asm_init() {
+    build_binary_table();
+    build_binary_opcode_table();
 }

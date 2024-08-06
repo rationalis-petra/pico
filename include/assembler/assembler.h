@@ -18,7 +18,6 @@ size_t get_pos(assembler* assembler);
 
 document* pretty_assembler(assembler* assembler, allocator a);
 
-
 // Integral operations
 typedef enum binary_op {
     // ------------------
@@ -26,7 +25,6 @@ typedef enum binary_op {
     // ------------------
     Add,
     Sub,
-
     Cmp, // p289. Compare two operands
 
     // ------------------
@@ -45,6 +43,7 @@ typedef enum binary_op {
     //  Memory
     // ------------------
     Mov,   // p 769.
+    Binary_Op_Count,
 } binary_op;
 
 typedef enum unary_op {
@@ -98,11 +97,15 @@ typedef enum regname {
 typedef enum dest_t {
     Register,
     Deref,
-    Immediate8,
-    Immediate16,
-    Immediate32,
-    Immediate64,
+    Immediate,
 } dest_t;
+
+typedef enum location_size {
+    sz_8,
+    sz_16,
+    sz_32,
+    sz_64
+} location_size;
 
 // Location: Can be one of
 // + Register
@@ -110,18 +113,24 @@ typedef enum dest_t {
 // + Immediate
 typedef struct location {
     dest_t type;
+    location_size sz;
     regname reg;
     union {
         int8_t immediate_8;
         int16_t immediate_16;
         int32_t immediate_32;
         int64_t immediate_64;
-    };
-} location;
 
-string nullary_op_name(nullary_op op);
-string unary_op_name(unary_op op);
-string binary_op_name(binary_op op);
+        int8_t immediate_bytes[8];
+    };
+    uint8_t disp_sz;  
+    union {
+        int8_t disp_8;
+        int32_t disp_32;
+        int8_t disp_bytes[4];
+    };
+
+} location;
 
 // Location Constructors 
 location reg(regname name);
@@ -143,5 +152,7 @@ typedef struct asm_result {
 asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
 asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
 asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
+
+void asm_init();
 
 #endif

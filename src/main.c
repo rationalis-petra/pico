@@ -317,8 +317,9 @@ int main(int argc, char** argv) {
         }
     }
 
-
     // Setup
+    asm_init();
+
     allocator stdalloc = get_std_allocator();
     istream* cin = get_stdin_stream();
     ostream* cout = get_stdout_stream();

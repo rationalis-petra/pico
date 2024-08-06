@@ -22,7 +22,7 @@ typedef struct ex_mem {
 
 size_t platform_pagesize () {
 #ifdef OS_LINUX
-    size_t pagesize = getpagesize();
+    size_t pagesize = sysconf(_SC_PAGESIZE);
 #elif OS_WINDOWS
     size_t pagesize = 1024;
 #endif
