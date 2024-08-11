@@ -35,6 +35,7 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backl
             res.type = ERSucc;
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
             break;
+        case TStruct:
         case TPrim: {
             res.type = ERValue;
             // assume int64 for now!

@@ -247,7 +247,33 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
         out.type = Ok;
         break;
     }
-    case SProjector:
+    case SProjector: {
+        out = type_infer_i(untyped->projector.val, env, gen, a);
+        if (out.type == Err) return out;
+        pi_type struct_type = *untyped->projector.val->ptype;
+        if (struct_type.sort != TStruct) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Projection only works on structs."),
+            };
+        }
+
+        // search for field
+        pi_type* ret_ty = NULL;
+        for (size_t i = 0; i < struct_type.structure.fields.len; i++) {
+            if (struct_type.structure.fields.data[i].key == untyped->projector.field) {
+                ret_ty = struct_type.structure.fields.data[i].val;
+            }
+        }
+        if (ret_ty == NULL) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Projection only works on structs."),
+            };
+        }
+        untyped->ptype = ret_ty;
+        break;
+    }
     case SLet:
         out.type = Err;
         out.error_message = mv_string("Type inference not implemented for this syntactic form");
@@ -314,6 +340,9 @@ result squash_types(syntax* typed, allocator a) {
         break;
     }
     case SProjector:
+        squash_types(typed->projector.val, a);
+        break;
+        
     case SLet:
         out.type = Err;
         out.error_message = mk_string("squash_types not implemented for this syntactic form", a);

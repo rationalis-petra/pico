@@ -75,7 +75,7 @@ typedef struct syn_structure {
 } syn_structure;
 
 typedef struct syn_projector {
-    symbol_array fields;
+    pi_symbol field;
     syntax* val;
 } syn_projector;
 

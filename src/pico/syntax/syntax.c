@@ -128,7 +128,12 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         break;
     }
     case SProjector: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on projector", a), a);
+        ptr_array nodes = mk_ptr_array(3, a);
+
+        push_ptr(pretty_syntax(syntax->projector.val, a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string("."), a), &nodes, a);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->projector.field), a), &nodes, a);
+        out = mv_sep_doc(nodes, a);
         break;
     }
 

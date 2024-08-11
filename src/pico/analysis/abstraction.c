@@ -162,8 +162,34 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         break;
     }
     case FProjector: {
-        res.type = Err;
-        res.error_message = mk_string("Projector term former not implemented!", a);
+        if (raw.data.nodes.len != 3) {
+            res.type = Err;
+            res.error_message = mk_string("Projection term former needs two arguments!", a);
+            return res;
+        }
+        // Get the structure portion of the proector 
+        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+        if (res.type == Err) return res;
+
+        syntax* structure = mem_alloc(sizeof(syntax), a);
+        *structure = res.out;
+        
+        // Get the symbol portion of the projector
+        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+        if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
+            res = (abs_expr_result) {
+                .type = Err,
+                .error_message = mv_string("Second argument to projection term former should be symbol"),
+            };
+            return res;
+        }
+
+        res.type = Ok;
+        res.out = (syntax) {
+            .type = SProjector,
+            .projector.field = msym->data.atom.symbol,
+            .projector.val = structure,
+        };
         break;
     }
     case FStructure: {

@@ -19,6 +19,7 @@ result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_am
 asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);
 asm_result generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, assembler* ass, allocator a);
+asm_result generate_copy(regname dest, regname src, size_t size, assembler* ass, allocator a);
 
 gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, NULL, a);
@@ -131,6 +132,19 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
                     if (out.type == Err) return out;
                     out = build_unary_op(ass, Push, reg(RBX), a);
                 }
+            } else if (syn.ptype->sort == TStruct) {
+                size_t struct_size = pi_size_of(*syn.ptype);
+                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
+                if (out.type == Err) return out;
+                backlink_global(syn.variable, out.backlink, links, a);
+
+                // Allocate space on the stack for struct
+                out = build_binary_op(ass, Sub, reg(RSP), imm32(struct_size), a);
+                if (out.type == Err) return out;
+
+                // copy
+                out = generate_copy(RSP, RCX, struct_size, ass, a);
+                if (out.type == Err) return out;
 
             } else {
                 out.type = Err;
@@ -289,7 +303,31 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
 
         break;
     }
-    case SProjector:
+    case SProjector: {
+        // First, allocate space on the stack for the value
+        size_t out_sz = pi_size_of(*syn.ptype);
+        out = build_binary_op(ass, Sub, reg(RSP), imm32(out_sz), a);
+        if (out.type == Err) return out;
+
+        // Second, generate the structure object
+        out = generate(*syn.projector.val, env, ass, links, a);
+
+        // Now, copy the structure to the destination
+        // for this, we need the struct size + offset of field in the struct
+        size_t struct_sz = pi_size_of(*syn.projector.val->ptype);
+        size_t offset = 0;
+        for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
+            if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
+                break;
+            offset += pi_size_of(*(pi_type*)syn.projector.val->ptype->structure.fields.data[i].val);
+        }
+
+        out = generate_stack_move(struct_sz + out_sz - 0x8, offset, out_sz, ass, a);
+        if (out.type == Err) return out;
+        // now, remove the original struct from the stack
+        out = build_binary_op(ass, Add, reg(RSP), imm32(struct_sz), a);
+        break;
+    }
 
     case SConstructor:
     case SRecursor:
@@ -380,25 +418,60 @@ void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocat
     push_size(offset, sarr, a);
 }
 
+asm_result generate_copy(regname dest, regname src, size_t size, assembler* ass, allocator a) {
+    asm_result out;
+
+    // first, assert that size_t is divisible by 8 ( we use rax for copies )
+    if (size % 8 != 0)  {
+        out.type = Err;
+        out.error_message = mv_string("Error in generate_stack_copy: expected copy size to be divisible by 8");
+        return out;
+    };
+
+    if (size > 255)  {
+        out.type = Err;
+        out.error_message = mv_string("Error in generate_copy: copy size must be smaller than 255!");
+        return out;
+    };
+
+    if (src == RAX || dest == RAX)  {
+        out.type = Err;
+        out.error_message = mv_string("Error in generate_copy: offsets must be smaller than 255!");
+        return out;
+    };
+
+    for (size_t i = 0; i < size / 8; i++) {
+        out = build_binary_op(ass, Mov, reg(RAX), rref(src, i * 8), a);
+        if (out.type == Err) return out;
+
+        out = build_binary_op(ass, Mov, rref(dest, i * 8), reg(RAX), a);
+        if (out.type == Err) return out;
+    }
+
+    return out;
+}
+
 asm_result generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, assembler* ass, allocator a) {
     asm_result out;
 
     // first, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size % 8 != 0)  {
         out.type = Err;
-        out.error_message = mv_string("Error in stack_copy: expected copy size to be divisible by 8");
+        out.error_message = mv_string("Error in generate_stack_copy: expected copy size to be divisible by 8");
+        return out;
     };
 
-    if (dest_stack_offset > 255 || src_stack_offset > 255)  {
+    if ((dest_stack_offset + size) > 255 || (src_stack_offset + size) > 255)  {
         out.type = Err;
-        out.error_message = mv_string("Error in stack_copy: offsets must be smaller than 255!");
+        out.error_message = mv_string("Error in generate_stack_copy: offsets + size must be smaller than 255!");
+        return out;
     };
 
     for (size_t i = 0; i < size / 8; i++) {
-        out = build_binary_op(ass, Mov, reg(RAX), rref(RSP, src_stack_offset), a);
+        out = build_binary_op(ass, Mov, reg(RAX), rref(RSP, src_stack_offset + (i * 8) ), a);
         if (out.type == Err) return out;
 
-        out = build_binary_op(ass, Mov, rref(RSP, dest_stack_offset), reg(RAX), a);
+        out = build_binary_op(ass, Mov, rref(RSP, dest_stack_offset + (i * 8)), reg(RAX), a);
         if (out.type == Err) return out;
     }
 
