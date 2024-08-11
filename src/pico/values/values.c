@@ -67,6 +67,54 @@ pi_symbol string_to_symbol(string str) {
     return *sym;
 }
 
+document* pretty_former(pi_term_former_t op, allocator a) {
+    document* out = NULL;
+    switch(op) {
+    case FDefine:
+        out = mk_str_doc(mv_string("::Define"), a);
+        break;
+    case FApplication:
+        out = mk_str_doc(mv_string("::Application"), a);
+        break;
+    case FProcedure:
+        out = mk_str_doc(mv_string("::Procedure"), a);
+        break;
+    case FDestructor:
+        out = mk_str_doc(mv_string("::Destructor"), a);
+        break;
+    case FCorecursor:
+        out = mk_str_doc(mv_string("::Corecursor"), a);
+        break;
+    case FConstructor:
+        out = mk_str_doc(mv_string("::Constructor"), a);
+        break;
+    case FRecursor:
+        out = mk_str_doc(mv_string("::Recursor"), a);
+        break;
+    case FStructure:
+        out = mk_str_doc(mv_string("::Structure"), a);
+        break;
+    case FProjector:
+        out = mk_str_doc(mv_string("::Projector"), a);
+        break;
+    case FIf:
+        out = mk_str_doc(mv_string("::If"), a);
+        break;
+    case FLet:
+        out = mk_str_doc(mv_string("::Let"), a);
+        break;
+
+        // Type formers
+    case FStructType:
+        out = mk_str_doc(mv_string("::StructureType"), a);
+        break;
+    case FProcType:
+        out = mk_str_doc(mv_string("::ProcedureType"), a);
+        break;
+    }
+    return out;
+}
+
 document* pretty_primop(pi_primop_t op, allocator a) {
     document* out = NULL;
     switch(op) {

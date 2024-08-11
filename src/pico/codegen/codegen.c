@@ -14,25 +14,6 @@
  *   is top of stack)
  */
 
-// C functions that are called by Pico (mostly to generate types)
-pi_type* mk_struct_type(uint64_t len, uint64_t* data) {
-    allocator a = get_std_allocator();
-    sym_ptr_amap fields = mk_sym_ptr_amap(len, a);
-
-    // Traverse in the order they were placed on the stack
-    // high addresses to lower addresses
-    for (uint64_t i = len; i > 0; i-=2) {
-        pi_symbol sym = *((pi_symbol*)data + (i - 2));
-        pi_type* ty = *((pi_type**)data + (i - 1));
-        sym_ptr_insert(sym, ty, &fields, a);
-    }
-    pi_type* ret = mem_alloc(sizeof(pi_type), a);
-    ret->sort = TStruct;
-    ret->structure.fields = fields;
-    return ret;
-}
-
-
 // implementation details
 result generate_expr_i(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
 asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap* links, allocator a);
@@ -246,8 +227,8 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         // arguments are inserted into the structure.
 
         // Step 1: Make room on the stack for our struct
-        size_t sz = pi_size_of(*syn.ptype);
-        out = build_binary_op(ass, Sub, reg(RSP), imm32(sz), a);
+        size_t struct_size = pi_size_of(*syn.ptype);
+        out = build_binary_op(ass, Sub, reg(RSP), imm32(struct_size), a);
         if (out.type == Err) return out;
 
         // Step 2: evaluate each element/variable binding
@@ -264,29 +245,27 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         // 136 x  } 
         // --- 
         // 128 x   } Source - elements can be in any arbitrary order 
-        // 120 y   }
+        // 120 y   } <`top' of stack - grows down>
         // ------------
-        // 112 <`top' of stack - grows down>
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
-        size_t struct_size = pi_size_of(*syn.ptype);
         size_t dest_offset = 0;
         for (size_t i = 0; i < syn.ptype->structure.fields.len; i++) {
 
             // Find the field in the source & compute offset
             size_t src_offset = 0;
-            for (size_t i = 0; i < syn.structure.fields.len; i++) {
-                if (syn.structure.fields.data[i].key == syn.ptype->structure.fields.data[i].key) {
-                    break; // offset is correct, end the loop
+            for (size_t j = 0; j < syn.structure.fields.len; j++) {
+                pi_type** t = (pi_type**)sym_ptr_lookup(syn.structure.fields.data[j].key, syn.ptype->structure.fields);
+                if (t) {
+                    src_offset += pi_size_of(*((syntax*)syn.structure.fields.data[j].val)->ptype); 
                 } else {
-                    pi_type** t = (pi_type**)sym_ptr_lookup(syn.structure.fields.data[i].key, syn.ptype->structure.fields);
-                    if (t) {
-                        src_offset += pi_size_of(*((syntax*)syn.structure.fields.data[i].val)->ptype); 
-                    } else {
-                        out.type = Err;
-                        out.error_message = mv_string("Error code-generating for structure: field not found.");
-                        return out;
-                    };
+                    out.type = Err;
+                    out.error_message = mv_string("Error code-generating for structure: field not found.");
+                    return out;
+                }
+
+                if (syn.structure.fields.data[j].key == syn.ptype->structure.fields.data[i].key) {
+                    break; // offset is correct, end the loop
                 }
             }
 
@@ -294,8 +273,8 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
-            size_t src_stack_offset = struct_size + (struct_size - src_offset);
-            size_t dest_stack_offset = struct_size - dest_offset;
+            size_t src_stack_offset = struct_size - src_offset;
+            size_t dest_stack_offset = struct_size + dest_offset;
             size_t field_size = pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
 
             // Now, move the data.
@@ -305,6 +284,9 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
             // Compute dest_offset for next loop
             dest_offset += pi_size_of(*(pi_type*)syn.ptype->structure.fields.data[i].val);
         }
+        // Remove the space occupied by the temporary values 
+        out = build_binary_op(ass, Add, reg(RSP), imm32(struct_size), a);
+
         break;
     }
     case SProjector:

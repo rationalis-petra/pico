@@ -50,6 +50,7 @@ typedef struct pi_type {
     };
 } pi_type;
 
+document* pretty_pi_value(void* val, pi_type* types, allocator a);
 
 document* pretty_type(pi_type* type, allocator a);
 void delete_pi_type(pi_type t, allocator a);

@@ -47,6 +47,7 @@ typedef enum pi_primop_t {
     QuotI64,
 } pi_primop_t;
 
+document* pretty_former(pi_term_former_t op, allocator a);
 document* pretty_primop(pi_primop_t op, allocator a);
 
 #endif
