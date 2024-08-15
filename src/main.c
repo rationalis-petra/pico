@@ -142,6 +142,10 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
 
+    former = FRecursor;
+    sym = string_to_symbol(mv_string(":"));
+    add_def(module, sym, type, &former);
+
     former = FIf;
     sym = string_to_symbol(mv_string("if"));
     add_def(module, sym, type, &former);
@@ -155,14 +159,17 @@ pi_module* base_module(assembler* ass, allocator a) {
     add_def(module, sym, type, &former);
 
     // Types 
-    former = FStructType;
-    sym = string_to_symbol(mv_string("Struct"));
-    add_def(module, sym, type, &former);
-
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former);
 
+    former = FStructType;
+    sym = string_to_symbol(mv_string("Struct"));
+    add_def(module, sym, type, &former);
+
+    former = FRecursorType;
+    sym = string_to_symbol(mv_string("Enum"));
+    add_def(module, sym, type, &former);
 
     return module;
 }

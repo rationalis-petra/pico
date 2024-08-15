@@ -2,10 +2,6 @@
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 
-void delete_pi_ptr(void* t, allocator a) {
-    delete_pi_type(*(pi_type*)t, a);
-    mem_free(t, a);
-}
 
 void symbol_nod(pi_symbol s, allocator a) { }
 
@@ -15,13 +11,17 @@ void delete_pi_type_p(pi_type* t, allocator a) {
 }
 
 void delete_pi_type(pi_type t, allocator a) {
+    typedef void(*deleter)(void*, allocator a);
     switch(t.sort) {
     case TProc:
-        delete_pi_ptr(t.proc.ret, a);
-        delete_ptr_array(t.proc.args, &delete_pi_ptr, a);
+        delete_pi_type_p(t.proc.ret, a);
+        delete_ptr_array(t.proc.args, (deleter)&delete_pi_type_p, a);
         break;
     case TStruct:
-        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, &delete_pi_ptr, a);
+        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, (deleter)&delete_pi_type_p, a);
+        break;
+    case TEnum:
+        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, (deleter)&delete_pi_type_p, a);
         break;
 
     case TUVar:
@@ -47,6 +47,12 @@ pi_symbol symbol_id(pi_symbol s, allocator a) {
     return s;
 }
 
+void* copy_enum_variant(void* v, allocator a) {
+    ptr_array* out = mem_alloc(sizeof(ptr_array), a);
+    *out = copy_ptr_array(*(ptr_array*)v, (void*(*)(void*, allocator))&copy_pi_type_p, a);
+    return out;
+}
+
 pi_type copy_pi_type(pi_type t, allocator a) {
     pi_type out;
     out.sort = t.sort;
@@ -57,6 +63,9 @@ pi_type copy_pi_type(pi_type t, allocator a) {
         break;
     case TStruct:
         out.structure.fields = copy_sym_ptr_amap(t.structure.fields, symbol_id, (void*(*)(void*, allocator)) copy_pi_type_p, a);
+        break;
+    case TEnum:
+        out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (void*(*)(void*, allocator)) copy_enum_variant, a);
         break;
 
     case TUVar:
@@ -142,6 +151,33 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TEnum: {
+        size_t current_offset = 0;
+
+        ptr_array nodes = mk_ptr_array(2 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("(struct ", a)), a), &nodes, a);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            ptr_array fd_nodes = mk_ptr_array(4, a);
+            document* pre = mk_str_doc(mv_string("[."), a);
+            document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
+            pi_type* ftype = type->structure.fields.data[i].val;
+
+            document* arg = pretty_pi_value(val + current_offset, ftype, a);
+            document* post = mk_str_doc(mv_string("]"), a);
+
+            push_ptr(pre,   &fd_nodes, a);
+            push_ptr(fname, &fd_nodes, a);
+            push_ptr(arg,   &fd_nodes, a);
+            push_ptr(post,  &fd_nodes, a);
+            document* fd_doc = mv_sep_doc(fd_nodes, a);
+
+            push_ptr(fd_doc, &nodes, a);
+            current_offset += pi_size_of(*ftype);
+        }
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     default:
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
         break;
@@ -201,6 +237,35 @@ document* pretty_type(pi_type* type, allocator a) {
             document* fd_doc = mv_sep_doc(fd_nodes, a);
 
             push_ptr(fd_doc, &nodes, a);
+        }
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TEnum: {
+        ptr_array nodes = mk_ptr_array(2 + type->enumeration.variants.len, a);
+        push_ptr(mv_str_doc((mk_string("(Enum ", a)), a), &nodes, a);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            ptr_array var_nodes = mk_ptr_array(4, a);
+            document* pre = mk_str_doc(mv_string("[:"), a);
+            document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
+
+            ptr_array* types = type->structure.fields.data[i].val;
+            ptr_array ty_nodes = mk_ptr_array(types->len, a);
+            for (size_t j = 0; j < types->len; j++) {
+                document* arg = pretty_type((pi_type*)types->data[j], a);
+                push_ptr(arg, &ty_nodes, a);
+            }
+            document* ptypes = mv_sep_doc(ty_nodes, a);
+            document* post = mk_str_doc(mv_string("]"), a);
+
+            push_ptr(pre,   &var_nodes, a);
+            push_ptr(fname, &var_nodes, a);
+            push_ptr(ptypes,   &var_nodes, a);
+            push_ptr(post,  &var_nodes, a);
+            document* var_doc = mv_sep_doc(var_nodes, a);
+
+            push_ptr(var_doc, &nodes, a);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
         out = mv_sep_doc(nodes, a);

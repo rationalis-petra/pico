@@ -91,10 +91,6 @@ typedef struct syn_if {
     syntax* false_branch;
 } syn_if;
 
-typedef struct syn_struct_type {
-    sym_syn_amap fields;
-} syn_struct_type;
-
 
 typedef struct syntax {
     syntax_t type;
@@ -109,8 +105,6 @@ typedef struct syntax {
         syn_recursor recursor;
         syn_structure structure;
         syn_projector projector;
-
-        syn_struct_type struct_type;
 
         syn_let let_expr;
         syn_if if_expr;

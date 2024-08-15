@@ -26,10 +26,8 @@ typedef enum pi_term_former_t {
     FDefine,
     FApplication,
     FProcedure,
-    FDestructor,
-    FCorecursor,
-    FConstructor,
     FRecursor,
+    FConstructor,
     FStructure,
     FProjector,
     FIf,
@@ -38,6 +36,7 @@ typedef enum pi_term_former_t {
     // Type formers
     FStructType,
     FProcType,
+    FRecursorType,
 } pi_term_former_t;
 
 typedef enum pi_primop_t {

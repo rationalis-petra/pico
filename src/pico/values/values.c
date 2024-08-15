@@ -79,12 +79,6 @@ document* pretty_former(pi_term_former_t op, allocator a) {
     case FProcedure:
         out = mk_str_doc(mv_string("::Procedure"), a);
         break;
-    case FDestructor:
-        out = mk_str_doc(mv_string("::Destructor"), a);
-        break;
-    case FCorecursor:
-        out = mk_str_doc(mv_string("::Corecursor"), a);
-        break;
     case FConstructor:
         out = mk_str_doc(mv_string("::Constructor"), a);
         break;
@@ -107,6 +101,9 @@ document* pretty_former(pi_term_former_t op, allocator a) {
         // Type formers
     case FStructType:
         out = mk_str_doc(mv_string("::StructureType"), a);
+        break;
+    case FRecursorType:
+        out = mk_str_doc(mv_string("::RecursorType"), a);
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::ProcedureType"), a);

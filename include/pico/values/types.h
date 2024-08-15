@@ -21,6 +21,7 @@ typedef enum pi_type_t {
     TPrim,
     TProc,
     TStruct,
+    TEnum,
 
     // Special sort: unification variable
     TUVar
@@ -35,6 +36,10 @@ typedef struct struct_type {
     sym_ptr_amap fields;
 } struct_type;
 
+typedef struct enum_type {
+    sym_ptr_amap variants;
+} enum_type;
+
 typedef struct uvar_type {
     uint64_t id;
     pi_type* subst;
@@ -46,6 +51,7 @@ typedef struct pi_type {
         prim_type prim;
         proc_type proc;
         struct_type structure;
+        enum_type enumeration;
         uvar_type* uvar;
     };
 } pi_type;

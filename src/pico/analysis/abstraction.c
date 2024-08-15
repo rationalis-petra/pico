@@ -141,16 +141,6 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         res = mk_application(raw, env, a);
         break;
     }
-    case FDestructor: {
-        res.type = Err;
-        res.error_message = mk_string("Destructor term former not implemented!", a);
-        break;
-    }
-    case FCorecursor: {
-        res.type = Err;
-        res.error_message = mk_string("Corecursor term former not implemented!", a);
-        break;
-    }
     case FConstructor: {
         res.type = Err;
         res.error_message = mk_string("Constructor term former not implemented!", a);
@@ -326,6 +316,62 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
 
         out_ty->sort = TStruct;
         out_ty->structure.fields = field_types;
+
+        res.type = Ok;
+        res.out.type = SType;
+        res.out.type_val = out_ty;
+        break;
+    }
+    case FRecursorType: {
+        // Construct an enum type
+
+        pi_type* out_ty = mem_alloc(sizeof(pi_type), a);
+        sym_ptr_amap enum_variants = mk_sym_ptr_amap(raw.data.nodes.len, a);
+
+        for (size_t i = 1; i < raw.data.nodes.len; i++) {
+            pi_rawtree* edesc = raw.data.nodes.data[i];
+
+            if (edesc->type != RawList) {
+                res.type = Err;
+                res.error_message = mv_string("Enumeration type expects all enum descriptors to be lists.");
+                return res;
+            };
+            
+            if (edesc->data.nodes.len < 2) {
+                res.type = Err;
+                res.error_message = mv_string("Enumeration type expects all enum descriptors to have at least 2 elements.");
+                return res;
+            };
+
+            pi_symbol tagname;
+            ptr_array* types = mem_alloc(sizeof(ptr_array), a);
+            *types = mk_ptr_array(edesc->data.nodes.len - 1, a);
+
+            if (!get_fieldname(edesc->data.nodes.data[0], &tagname)) {
+                res.type = Err;
+                res.error_message = mv_string("Enum type has malformed field name.");
+                return res;
+            };
+
+            for (size_t i = 1; i < edesc->data.nodes.len; i++) {
+                res = abstract_expr_i(*(pi_rawtree*) edesc->data.nodes.data[i], env, a);
+                if (res.type == Err) {
+                    return res;
+                }
+                if (res.out.type != SType) {
+                    res.type = Err;
+                    res.error_message = mv_string("Structure type fields must have their own types.");
+                    return res;
+                }
+                pi_type* field_ty = res.out.type_val;
+                push_ptr(field_ty, types, a);
+            }
+
+            sym_ptr_insert(tagname, types, &enum_variants, a);
+        }
+
+        out_ty->sort = TEnum;
+        out_ty->enumeration.variants = enum_variants;
 
         res.type = Ok;
         res.out.type = SType;
