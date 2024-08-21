@@ -218,8 +218,120 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
         untyped->ptype = fn_type.proc.ret;
         break;
     }
-    case SConstructor:
+    case SConstructor: {
+        // Typecheck variant
+        out = type_infer_i (untyped->variant.enum_type, env, gen, a);
+        if (out.type == Err) return out;
+
+        // Typecheck is pretty simple: ensure that the tag is present in the
+        // variant type
+        if (untyped->variant.enum_type->type != SType) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Variant must be from a type."),
+            };
+        }
+
+        pi_type* enum_type = untyped->variant.enum_type->type_val;
+        if (enum_type->sort != TEnum) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Variant must be of enum type."),
+            };
+        }
+
+        bool found_variant = false;
+        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+            if (enum_type->enumeration.variants.data[i].key == untyped->variant.tagname) {
+                untyped->variant.tag = i;
+                found_variant = true;
+
+                // Generate variant has no args
+                ptr_array* args = enum_type->enumeration.variants.data[i].val;
+                if (args->len != 0) {
+                    return (result) {
+                        .type = Err,
+                        .error_message = mv_string("Incorrect number of args to variant constructor"),
+                    };
+                }
+                untyped->ptype = enum_type;
+                break;
+            }
+        }
+
+        if (!found_variant) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Could not find variant tag."),
+            };
+        }
+
+        out.type = Ok;
+        break;
+    }
+    case SVariant: {
+        // Typecheck variant
+        out = type_infer_i (untyped->variant.enum_type, env, gen, a);
+        if (out.type == Err) return out;
+
+        // Typecheck is pretty simple: ensure that the tag is present in the
+        // variant type
+        if (untyped->variant.enum_type->type != SType) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Variant must be from a type."),
+            };
+        }
+
+        pi_type* enum_type = untyped->variant.enum_type->type_val;
+        if (enum_type->sort != TEnum) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Variant must be of enum type."),
+            };
+        }
+
+        bool found_variant = false;
+        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+            if (enum_type->enumeration.variants.data[i].key == untyped->variant.tagname) {
+                untyped->variant.tag = i;
+                found_variant = true;
+
+                // Generate variant has no args
+                ptr_array* args = enum_type->enumeration.variants.data[i].val;
+                if (args->len != untyped->variant.args.len) {
+                    return (result) {
+                        .type = Err,
+                        .error_message = mv_string("Incorrect number of args to variant constructor"),
+                    };
+                }
+
+                for (size_t i = 0; i < args->len; i++) {
+                    out = type_check_i(untyped->variant.args.data[i], args->data[i], env, gen, a);
+                    if (out.type == Err) return out;
+                }
+                
+                untyped->ptype = enum_type;
+                break;
+            }
+        }
+
+        if (!found_variant) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Could not find variant tag."),
+            };
+        }
+
+        out.type = Ok;
+        break;
+    }
     case SRecursor:
+        out = (result) {
+            .type = Err,
+            .error_message = mv_string("Typecheck not implemented for recursor."),
+        };
+        break;
     case SStructure: {
         pi_type* ty = mem_alloc(sizeof(pi_type), a);
         untyped->ptype = ty; 
@@ -328,8 +440,24 @@ result squash_types(syntax* typed, allocator a) {
         }
         break;
     }
-    case SConstructor:
+    case SConstructor: {
+        out = squash_types(typed->variant.enum_type, a);
+        break;
+    }
+    case SVariant: {
+        out = squash_types(typed->variant.enum_type, a);
+        if (out.type == Err) return out;
+        
+        for (size_t i = 0; i < typed->variant.args.len; i++) {
+            out = squash_types(typed->variant.args.data[i], a);
+            if (out.type == Err) return out;
+        }
+        break;
+    }
     case SRecursor:
+        out.type = Err;
+        out.error_message = mk_string("squash_types not implemented for this syntactic form", a);
+        break;
     case SStructure: {
         // Loop for each element in the 
         for (size_t i = 0; i < typed->structure.fields.len; i++) {

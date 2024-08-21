@@ -126,14 +126,6 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string("$"));
     add_def(module, sym, type, &former);
 
-    former = FConstructor;
-    sym = string_to_symbol(mv_string(":"));
-    add_def(module, sym, type, &former);
-
-    former = FRecursor;
-    sym = string_to_symbol(mv_string("match"));
-    add_def(module, sym, type, &former);
-
     former = FProjector;
     sym = string_to_symbol(mv_string("."));
     add_def(module, sym, type, &former);
@@ -142,8 +134,12 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
 
-    former = FRecursor;
+    former = FVariant;
     sym = string_to_symbol(mv_string(":"));
+    add_def(module, sym, type, &former);
+
+    former = FRecursor;
+    sym = string_to_symbol(mv_string("match"));
     add_def(module, sym, type, &former);
 
     former = FIf;
@@ -167,7 +163,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string("Struct"));
     add_def(module, sym, type, &former);
 
-    former = FRecursorType;
+    former = FEnumType;
     sym = string_to_symbol(mv_string("Enum"));
     add_def(module, sym, type, &former);
 
@@ -300,19 +296,18 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 int cstrcmp (const char* lhs, const char* rhs) {
     int result = 0; 
     while (result == 0 && !lhs && !rhs) {
-        lhs++;
-        rhs++;
         if (*lhs < *rhs) {
             result = -1;
         } else if (*lhs > *rhs) {
             result = 1;
         }
+        lhs++;
+        rhs++;
     }
     return result;
 }
 
 int main(int argc, char** argv) {
-
     // Argument parsing
     repl_opts opts;
     opts.debug_print = false;

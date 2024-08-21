@@ -21,6 +21,11 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backl
             res.val.type = top.expr.ptype;
             res.val.val = pico_run_expr(ass, sz, a);
         }
+        else if (top.expr.ptype->sort == TEnum) {
+            res.type = ERValue;
+            res.val.type = top.expr.ptype;
+            res.val.val = pico_run_expr(ass, sz, a);
+        }
         else  {
             res.type = ERFail;
             res.error_message = mv_string("Cannot evaluate values of this type.");

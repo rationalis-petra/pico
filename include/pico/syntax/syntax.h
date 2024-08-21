@@ -34,6 +34,7 @@ typedef enum syntax_t {
     SProcedure,
     SApplication,
     SConstructor,
+    SVariant,
     SRecursor,
     SStructure,
     SProjector,
@@ -59,9 +60,17 @@ typedef struct syn_app {
 } syn_app;
 
 typedef struct syn_constructor {
-    pi_symbol name;
-    syn_array args;
+    syntax* enum_type;
+    pi_symbol tagname;
+    size_t tag;
 } syn_constructor;
+
+typedef struct syn_variant {
+    syntax* enum_type;
+    pi_symbol tagname;
+    size_t tag;
+    syn_array args;
+} syn_variant;
 
 typedef struct syn_recursor {
     pi_symbol recfn;
@@ -102,6 +111,7 @@ typedef struct syntax {
         syn_procedure procedure;
         syn_app application;
         syn_constructor constructor;
+        syn_variant variant;
         syn_recursor recursor;
         syn_structure structure;
         syn_projector projector;

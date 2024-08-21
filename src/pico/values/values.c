@@ -79,8 +79,8 @@ document* pretty_former(pi_term_former_t op, allocator a) {
     case FProcedure:
         out = mk_str_doc(mv_string("::Procedure"), a);
         break;
-    case FConstructor:
-        out = mk_str_doc(mv_string("::Constructor"), a);
+    case FVariant:
+        out = mk_str_doc(mv_string("::Variant"), a);
         break;
     case FRecursor:
         out = mk_str_doc(mv_string("::Recursor"), a);
@@ -102,8 +102,8 @@ document* pretty_former(pi_term_former_t op, allocator a) {
     case FStructType:
         out = mk_str_doc(mv_string("::StructureType"), a);
         break;
-    case FRecursorType:
-        out = mk_str_doc(mv_string("::RecursorType"), a);
+    case FEnumType:
+        out = mk_str_doc(mv_string("::EnumType"), a);
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::ProcedureType"), a);

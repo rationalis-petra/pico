@@ -15,13 +15,8 @@ typedef struct gen_result {
     sym_sarr_amap backlinks;
 } gen_result;
 
-
-// Generate some assembly that can be called into
-// This code:
-// + 
 gen_result generate_toplevel(toplevel top, environment* env, assembler* ass, allocator a);
 
 gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a);
-
 
 #endif

@@ -10,6 +10,11 @@ void delete_pi_type_p(pi_type* t, allocator a) {
     mem_free(t, a);
 }
 
+void delete_enum_variant_p(ptr_array* t, allocator a) {
+    typedef void(*deleter)(void*, allocator a);
+    delete_ptr_array(*t, (deleter)&delete_pi_type_p, a);
+}
+
 void delete_pi_type(pi_type t, allocator a) {
     typedef void(*deleter)(void*, allocator a);
     switch(t.sort) {
@@ -21,7 +26,7 @@ void delete_pi_type(pi_type t, allocator a) {
         delete_sym_ptr_amap(t.structure.fields, &symbol_nod, (deleter)&delete_pi_type_p, a);
         break;
     case TEnum:
-        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, (deleter)&delete_pi_type_p, a);
+        delete_sym_ptr_amap(t.enumeration.variants, &symbol_nod, (deleter)&delete_enum_variant_p, a);
         break;
 
     case TUVar:
@@ -100,7 +105,7 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
         switch (type->prim) {
         case Bool:  {
             uint64_t* uival = (uint64_t*) val;
-            if (uival == 0) {
+            if (*uival == 0) {
                 out = mk_str_doc(mv_string(":false"), a);
             } else {
                 out = mk_str_doc(mv_string(":true"), a);
@@ -152,29 +157,23 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
         break;
     }
     case TEnum: {
-        size_t current_offset = 0;
+        uint64_t tagidx = *(uint64_t*)val;
 
-        ptr_array nodes = mk_ptr_array(2 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("(struct ", a)), a), &nodes, a);
-        for (size_t i = 0; i < type->structure.fields.len; i++) {
-            ptr_array fd_nodes = mk_ptr_array(4, a);
-            document* pre = mk_str_doc(mv_string("[."), a);
-            document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            pi_type* ftype = type->structure.fields.data[i].val;
+        ptr_array variant_types = *(ptr_array*)type->enumeration.variants.data[tagidx].val;
+        ptr_array nodes = mk_ptr_array(2 + variant_types.len, a);
 
+        // Symbol 
+        pi_symbol tagname = type->enumeration.variants.data[tagidx].key;
+        push_ptr(mk_str_doc(string_cat(mv_string("[:"), *symbol_to_string(tagname), a), a), &nodes, a);
+
+        size_t current_offset = sizeof(uint64_t); // Start after current tag
+        for (size_t i = 0; i < variant_types.len; i++) {
+            pi_type* ftype = variant_types.data[i];
             document* arg = pretty_pi_value(val + current_offset, ftype, a);
-            document* post = mk_str_doc(mv_string("]"), a);
-
-            push_ptr(pre,   &fd_nodes, a);
-            push_ptr(fname, &fd_nodes, a);
-            push_ptr(arg,   &fd_nodes, a);
-            push_ptr(post,  &fd_nodes, a);
-            document* fd_doc = mv_sep_doc(fd_nodes, a);
-
-            push_ptr(fd_doc, &nodes, a);
+            push_ptr(arg, &nodes, a);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes, a);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -300,6 +299,21 @@ size_t pi_size_of(pi_type type) {
         for (size_t i = 0; i < type.structure.fields.len; i++)
             total += pi_size_of(*(pi_type*)type.structure.fields.data[i].val);
         return total;
+    }
+    case TEnum: {
+        size_t max = 0; 
+        for (size_t i = 0; i < type.enumeration.variants.len; i++) {
+            size_t total = 0;
+            ptr_array types = *(ptr_array*)type.enumeration.variants.data[i].val;
+            for (size_t i = 0; i < types.len; i++)
+                total += pi_size_of(*(pi_type*)types.data[i]);
+
+            if (total > max) {
+                max = total;
+            }
+        }
+        // Add 1 for tag!
+        return max + sizeof(uint64_t);
     }
     case TUVar:
         return 0;

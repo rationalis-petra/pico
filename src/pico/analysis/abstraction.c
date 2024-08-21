@@ -76,7 +76,6 @@ abs_result to_toplevel(abs_expr_result res) {
     return out;
 }
 
-
 abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     abs_expr_result fn_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
     if (fn_res.type == Err) {
@@ -84,23 +83,49 @@ abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     }
 
     abs_expr_result res;
-    res.type = Ok;
-    res.out.type = SApplication;
-    res.out.application.function = mem_alloc(sizeof(syntax), a);
-    *res.out.application.function = fn_res.out;
-    res.out.application.args = mk_ptr_array(raw.data.nodes.len - 1, a);
+    if (fn_res.out.type == SConstructor) {
+        res = (abs_expr_result) {
+            .type = Ok,
+            .out.type = SVariant,
+            .out.variant.enum_type = fn_res.out.constructor.enum_type,
+            .out.variant.tagname = fn_res.out.constructor.tagname,
+            .out.variant.args = mk_ptr_array(raw.data.nodes.len - 1, a),
+        };
 
-    for (size_t i = 1; i < raw.data.nodes.len; i++) {
-        abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
-        if (arg_res.type == Ok) {
-            syntax* arg = mem_alloc(sizeof(syntax), a);
-            *arg = arg_res.out;
-            push_ptr(arg, &res.out.application.args, a);
+        for (size_t i = 1; i < raw.data.nodes.len; i++) {
+            abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+            if (arg_res.type == Ok) {
+                syntax* arg = mem_alloc(sizeof(syntax), a);
+                *arg = arg_res.out;
+                push_ptr(arg, &res.out.variant.args, a);
+            }
+            else {
+                delete_syntax(res.out, a);
+                res = arg_res;
+                break;
+            }
         }
-        else {
-            delete_syntax(res.out, a);
-            res = arg_res;
-            break;
+    } else {
+        res = (abs_expr_result) {
+            .type = Ok,
+            .out.type = SApplication,
+            .out.application.function = mem_alloc(sizeof(syntax), a),
+            .out.application.args = mk_ptr_array(raw.data.nodes.len - 1, a),
+        };
+        *res.out.application.function = fn_res.out;
+
+        for (size_t i = 1; i < raw.data.nodes.len; i++) {
+            abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+            if (arg_res.type == Ok) {
+                syntax* arg = mem_alloc(sizeof(syntax), a);
+                *arg = arg_res.out;
+                push_ptr(arg, &res.out.application.args, a);
+            }
+            else {
+                delete_syntax(res.out, a);
+                res = arg_res;
+                break;
+            }
         }
     }
 
@@ -141,9 +166,73 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         res = mk_application(raw, env, a);
         break;
     }
-    case FConstructor: {
-        res.type = Err;
-        res.error_message = mk_string("Constructor term former not implemented!", a);
+    case FVariant: {
+        if (raw.data.nodes.len == 2) {
+            // Check that we are indeed getting a result
+            // Get the tag name of the variant
+            pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+            if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
+                res = (abs_expr_result) {
+                    .type = Err,
+                    .error_message = mv_string("Argument to variant term former should be symbol"),
+                };
+                return res;
+            }
+            pi_symbol lit = msym->data.atom.symbol;
+
+            if (lit == string_to_symbol(mv_string("true"))) {
+                return (abs_expr_result) {
+                    .type = Ok,
+                    .out.type = SLitBool,
+                    .out.lit_i64 = true,
+                };
+            }
+            else if (lit == string_to_symbol(mv_string("false"))) {
+                return (abs_expr_result) {
+                    .type = Ok,
+                    .out.type = SLitBool,
+                    .out.lit_i64 = false,
+                };
+            }
+
+            return (abs_expr_result) {
+                .type = Err,
+                .error_message = mv_string("Variant term former needs two arguments!"),
+            };
+        }
+        // : sym Type
+
+        else if (raw.data.nodes.len != 3) {
+            return (abs_expr_result) {
+                .type = Err,
+                .error_message = mv_string("Variant term former needs two arguments!"),
+            };
+        }
+
+        // Get the Type portion of the projector 
+        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+        if (res.type == Err) return res;
+
+        syntax* var_type = mem_alloc(sizeof(syntax), a);
+        *var_type = res.out;
+        
+        // Check that we are indeed getting a result
+        // Get the tag gname of the variant
+        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+        if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
+            res = (abs_expr_result) {
+                .type = Err,
+                .error_message = mv_string("Second argument to projection term former should be symbol"),
+            };
+            return res;
+        }
+
+        res.type = Ok;
+        res.out = (syntax) {
+            .type = SConstructor,
+            .constructor.enum_type = var_type,
+            .constructor.tagname = msym->data.atom.symbol,
+        };
         break;
     }
     case FRecursor: {
@@ -322,7 +411,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         res.out.type_val = out_ty;
         break;
     }
-    case FRecursorType: {
+    case FEnumType: {
         // Construct an enum type
 
         pi_type* out_ty = mem_alloc(sizeof(pi_type), a);
@@ -337,9 +426,9 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 return res;
             };
             
-            if (edesc->data.nodes.len < 2) {
+            if (edesc->data.nodes.len < 1) {
                 res.type = Err;
-                res.error_message = mv_string("Enumeration type expects all enum descriptors to have at least 2 elements.");
+                res.error_message = mv_string("Enumeration type expects all enum descriptors to have at least 1 elements.");
                 return res;
             };
 
@@ -462,7 +551,6 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
     }
     return res;
 }
-
 
 abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
     abs_result res;

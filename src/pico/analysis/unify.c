@@ -89,6 +89,17 @@ bool has_unification_vars_p(pi_type type) {
         return false;
         break;
     }
+    case TEnum: {
+        for (size_t i = 0; i < type.enumeration.variants.len; i++) {
+            ptr_array types = *(ptr_array*)type.enumeration.variants.data[i].val;
+            for (size_t j = 0; j < types.len; j++) {
+                if (has_unification_vars_p(*(pi_type*)types.data[j]))
+                    return true;
+            }
+        }
+        return false;
+        break;
+    }
 
     // Special sort: unification variable
     case TUVar:
@@ -124,6 +135,15 @@ void squash_type(pi_type* type) {
     case TStruct: {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             squash_type((pi_type*)((type->structure.fields.data + i)->val));
+        }
+        break;
+    }
+    case TEnum: {
+        for (size_t i = 0; i < type->enumeration.variants.len; i++) {
+            ptr_array types = *(ptr_array*)type->enumeration.variants.data[i].val;
+            for (size_t j = 0; j < types.len; j++) {
+                squash_type((pi_type*)types.data[j]);
+            }
         }
         break;
     }

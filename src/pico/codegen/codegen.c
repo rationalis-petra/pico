@@ -1,5 +1,4 @@
 #include <stdarg.h>
-#include "memory/std_allocator.h"
 #include "pico/codegen/codegen.h"
 #include "pico/binding/address_env.h"
 
@@ -20,6 +19,8 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
 void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);
 asm_result generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, assembler* ass, allocator a);
 asm_result generate_copy(regname dest, regname src, size_t size, assembler* ass, allocator a);
+asm_result get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out);
+size_t calc_variant_size(ptr_array* types);
 
 gen_result generate_expr(syntax syn, environment* env, assembler* ass, allocator a) {
     address_env* a_env = mk_address_env(env, NULL, a);
@@ -329,12 +330,73 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         break;
     }
 
-    case SConstructor:
+    case SConstructor: {
+        pi_type* enum_type = syn.constructor.enum_type->type_val;
+        size_t enum_size = pi_size_of(*enum_type);
+        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+
+        out = build_binary_op(ass, Sub, reg(RSP), imm32(enum_size - variant_size), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Push, imm32(syn.constructor.tag), a);
+        if (out.type == Err) return out;
+        break;
+    }
+    case SVariant: {
+        const size_t tag_size = sizeof(uint64_t);
+        pi_type* enum_type = syn.variant.enum_type->type_val;
+        size_t enum_size = pi_size_of(*enum_type);
+        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+
+        // Make space to fit the (final) variant
+        out = build_binary_op(ass, Sub, reg(RSP), imm32(enum_size), a);
+        if (out.type == Err) return out;
+
+        // Set the tag
+        out = build_binary_op(ass, Mov, rref(RSP, 0), imm32(syn.constructor.tag), a);
+        if (out.type == Err) return out;
+
+        // Generate each argument
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+            out = generate(*(syntax*)syn.variant.args.data[i], env, ass, links, a);
+            if (out.type == Err) return out;
+        }
+
+        // Now, move them into the space allocated in reverse order
+
+        ptr_array args = *(ptr_array*)syn.ptype->enumeration.variants.data[syn.variant.tag].val;
+        size_t src_stack_offset = variant_size - tag_size;
+        size_t dest_stack_offset = variant_size;
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+
+            // We now both the source_offset and dest_offset. These are both
+            // relative to the 'bottom' of their respective structures.
+            // Therefore, we now need to find their offsets relative to the `top'
+            // of the stack.
+            
+            size_t field_size = pi_size_of(*(pi_type*)args.data[syn.variant.args.len - (i + 1)]);
+            src_stack_offset -= field_size;
+
+            // Now, move the data.
+            out = generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a);
+            if (out.type == Err) return out;
+
+            // Now, increase the amount of data we have used
+            dest_stack_offset += field_size;
+        }
+        // Remove the space occupied by the temporary values 
+        out = build_binary_op(ass, Add, reg(RSP), imm32(variant_size - tag_size), a);
+
+
+        break;
+    }
+
     case SRecursor:
 
     case SLet:
-        out.type = Err;
-        out.error_message = mk_string("Not yet assembled.", a);
+        out = (asm_result) {
+            .type = Err,
+            .error_message = mk_string("Not yet assembled.", a)
+        };
         break;
     case SIf: {
         // generate the condition
@@ -476,4 +538,12 @@ asm_result generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset
     }
 
     return out;
+}
+
+size_t calc_variant_size(ptr_array* types) {
+    size_t total = sizeof(uint64_t);
+    for (size_t i = 0; i < types->len; i++) {
+        total += pi_size_of(*(pi_type*)types->data[i]);
+    }
+    return total;
 }

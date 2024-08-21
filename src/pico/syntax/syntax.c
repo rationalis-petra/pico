@@ -16,8 +16,7 @@ syntax* mk_lit_i64_syn(const int64_t value, allocator a) {
 
 /* The Syntax Destructor */
 void delete_syntax(syntax syntax, allocator a) {
-    switch (syntax.type)
-        {
+    switch (syntax.type) {
         case SLitI64: 
         case SLitBool: 
             // Nothing 
@@ -38,7 +37,6 @@ void delete_syntax(syntax syntax, allocator a) {
         }
         default:
             break;
-            //unrecognised_branch("in delete_syntax");
         }
 }
 
@@ -56,9 +54,9 @@ document* pretty_syntax(syntax* syntax, allocator a) {
     }
     case SLitBool: {
         if (syntax->lit_i64 == 0) {
-            out = mk_str_doc(mv_string("false"), a);
+            out = mk_str_doc(mv_string(":false"), a);
         } else {
-            out = mk_str_doc(mv_string("true"), a);
+            out = mk_str_doc(mv_string(":true"), a);
         }
         break;
     }
@@ -95,7 +93,30 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         break;
     }
     case SConstructor: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on constructor", a), a);
+        ptr_array nodes = mk_ptr_array(3, a);
+        push_ptr(pretty_syntax(syntax->constructor.enum_type, a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string(":"), a), &nodes, a);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &nodes, a);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case SVariant: {
+        ptr_array nodes = mk_ptr_array(6, a);
+
+        push_ptr(mk_str_doc(mv_string("("), a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->variant.enum_type, a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string(":"), a), &nodes, a);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &nodes, a);
+
+        ptr_array pretty_args = mk_ptr_array(syntax->variant.args.len, a);
+        for (size_t i = 0; i < syntax->variant.args.len; i++) {
+            push_ptr(pretty_syntax(syntax->variant.args.data[i], a), &pretty_args, a);
+        }
+        push_ptr(mv_sep_doc(pretty_args, a), &nodes, a);
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes, a);
+
+        out = mv_cat_doc(nodes, a);
         break;
     }
     case SRecursor: {
