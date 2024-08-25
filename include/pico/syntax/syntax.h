@@ -22,8 +22,6 @@
  *    | Ann <symbol> <value>
  */
 
-// Use visitor pattern for tree-walkers
-
 typedef enum syntax_t {
     SLitI64,
     SLitBool,
@@ -35,7 +33,7 @@ typedef enum syntax_t {
     SApplication,
     SConstructor,
     SVariant,
-    SRecursor,
+    SMatch,
     SStructure,
     SProjector,
 
@@ -46,7 +44,7 @@ typedef enum syntax_t {
 
 typedef struct syntax syntax;
 typedef ptr_array syn_array;
-typedef ptr_array ptn_array;
+typedef ptr_array clause_array;
 typedef sym_ptr_amap sym_syn_amap;
 
 typedef struct syn_procedure {
@@ -72,11 +70,18 @@ typedef struct syn_variant {
     syn_array args;
 } syn_variant;
 
-typedef struct syn_recursor {
+typedef struct syn_clause {
+    pi_symbol tagname;
+    size_t tag;
+    symbol_array vars;
+    syntax* body;
+} syn_clause;
+
+typedef struct syn_match {
     pi_symbol recfn;
-    syn_array vals;
-    ptn_array clauses;
-} syn_recursor;
+    syntax* val;
+    clause_array clauses;
+} syn_match;
 
 typedef struct syn_structure {
     syntax* ptype;
@@ -112,7 +117,7 @@ typedef struct syntax {
         syn_app application;
         syn_constructor constructor;
         syn_variant variant;
-        syn_recursor recursor;
+        syn_match match;
         syn_structure structure;
         syn_projector projector;
 

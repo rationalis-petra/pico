@@ -7,7 +7,6 @@
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
 
-
 // Declarations for mutual recursion
 // ---
 // "Internal" implementation of resolve_dynamic 
@@ -136,9 +135,9 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
     abs_expr_result res;
     switch (former) {
     case FProcedure: {
-        if (raw.data.nodes.len != 3) {
+        if (raw.data.nodes.len < 3) {
             res.type = Err;
-            res.error_message = mk_string("Procedure term former requires 2 arguments!", a);
+            res.error_message = mk_string("Procedure term former requires at least 2 arguments!", a);
             return res;
         }
 
@@ -150,7 +149,21 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         }
 
         shadow_vars(arguments, env, a);
-        abs_expr_result rbody = abstract_expr_i(*(pi_rawtree*)(aref_ptr(2, raw.data.nodes)), env, a);
+
+        pi_rawtree* raw_term;
+        if (raw.data.nodes.len == 3) {
+            raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+        } else {
+            raw_term = mem_alloc (sizeof(pi_rawtree), a);
+
+            raw_term->data.nodes.len = raw.data.nodes.len - 2;
+            raw_term->data.nodes.size = raw.data.nodes.size - 2;
+            raw_term->data.nodes.data = raw.data.nodes.data + 2;
+            raw_term->type = RawList;
+        }
+        abs_expr_result rbody = abstract_expr_i(*raw_term, env, a);
+
+
         if (rbody.type == Err) {
             return rbody;
         }
@@ -235,39 +248,91 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         };
         break;
     }
-    case FRecursor: {
-        res.type = Err;
-        res.error_message = mk_string("Recursor term former not implemented!", a);
-        break;
-    }
-    case FProjector: {
-        if (raw.data.nodes.len != 3) {
-            res.type = Err;
-            res.error_message = mk_string("Projection term former needs two arguments!", a);
-            return res;
-        }
-        // Get the structure portion of the proector 
-        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+    case FMatch: {
+        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[1], env, a);
         if (res.type == Err) return res;
+        syntax* sval = mem_alloc(sizeof(syntax), a);
+        *sval = res.out;
 
-        syntax* structure = mem_alloc(sizeof(syntax), a);
-        *structure = res.out;
+        clause_array clauses = mk_ptr_array(raw.data.nodes.len - 2, a);
         
-        // Get the symbol portion of the projector
-        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
-        if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
-            res = (abs_expr_result) {
-                .type = Err,
-                .error_message = mv_string("Second argument to projection term former should be symbol"),
+        for (size_t i = 2; i < raw.data.nodes.len; i++) {
+            // For each clause, we need three things:
+            // 1. The tag, corresponding to the enum
+            // 2. The variable(s) destructuring the enum
+            // 3. The body
+            // Get the clause
+            pi_rawtree* raw_clause = (pi_rawtree*)raw.data.nodes.data[i];
+            if (raw_clause->type != RawList || raw_clause->data.nodes.len < 2) {
+                return (abs_expr_result) {
+                    .type = Err,
+                    .error_message = mv_string("Match Clause has incorrect number of elements!"),
+                };
+            }
+
+            // Get the pattern
+            pi_rawtree* raw_pattern = (pi_rawtree*)raw_clause->data.nodes.data[0];
+            if (raw_pattern->type != RawList) {
+                return (abs_expr_result) {
+                    .type = Err,
+                    .error_message = mv_string("Match Pattern should be a list!"),
+                };
+            }
+
+            // The pattern has two parts: the variables & the tag
+            // The tag should be in a constructor (i.e. list)
+            pi_symbol clause_tagname; 
+            if (!get_fieldname(raw_pattern->data.nodes.data[0], &clause_tagname)) {
+                return (abs_expr_result) {
+                    .type = Err,
+                    .error_message = mv_string("Unable to get tagname in pattern."),
+                };
+            }
+
+            symbol_array clause_binds = mk_u64_array(raw_pattern->data.nodes.len - 1, a);
+            for (size_t s = 1; s < raw_pattern->data.nodes.len; s++) {
+                pi_rawtree* raw_name = raw_pattern->data.nodes.data[s];
+                if (!is_symbol(raw_name)) {
+                    return (abs_expr_result) {
+                        .type = Err,
+                        .error_message = mv_string("Pattern binding was not a symbol!"),
+                    };
+                }
+                push_u64(raw_name->data.atom.symbol, &clause_binds, a); 
+            }
+
+            // Get the term
+            pi_rawtree* raw_term;
+            if (raw_clause->data.nodes.len == 2) {
+                raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+            } else {
+                raw_term = mem_alloc (sizeof(pi_rawtree), a);
+
+                raw_term->data.nodes.len = raw.data.nodes.len - 2;
+                raw_term->data.nodes.size = raw.data.nodes.size - 2;
+                raw_term->data.nodes.data = raw.data.nodes.data + 2;
+                raw_term->type = RawList;
+            }
+
+            abs_expr_result clause_body_res = abstract_expr_i(*(pi_rawtree*)raw_clause->data.nodes.data[1], env, a);
+            if (clause_body_res.type == Err) return clause_body_res;
+            syntax* clause_body = mem_alloc(sizeof(syntax), a);
+            *clause_body = clause_body_res.out;
+
+            syn_clause* clause = mem_alloc(sizeof(syn_clause), a);
+            *clause = (syn_clause) {
+                .tagname = clause_tagname,
+                .vars = clause_binds,
+                .body = clause_body,
             };
-            return res;
+            push_ptr(clause, &clauses, a);
         }
 
         res.type = Ok;
         res.out = (syntax) {
-            .type = SProjector,
-            .projector.field = msym->data.atom.symbol,
-            .projector.val = structure,
+            .type = SMatch,
+            .match.val = sval,
+            .match.clauses = clauses,
         };
         break;
     }
@@ -320,6 +385,37 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         res.out.type = SStructure;
         res.out.structure.ptype = stype;
         res.out.structure.fields = fields;
+        break;
+    }
+    case FProjector: {
+        if (raw.data.nodes.len != 3) {
+            res.type = Err;
+            res.error_message = mk_string("Projection term former needs two arguments!", a);
+            return res;
+        }
+        // Get the structure portion of the proector 
+        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+        if (res.type == Err) return res;
+
+        syntax* structure = mem_alloc(sizeof(syntax), a);
+        *structure = res.out;
+        
+        // Get the symbol portion of the projector
+        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+        if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
+            res = (abs_expr_result) {
+                .type = Err,
+                .error_message = mv_string("Second argument to projection term former should be symbol"),
+            };
+            return res;
+        }
+
+        res.type = Ok;
+        res.out = (syntax) {
+            .type = SProjector,
+            .projector.field = msym->data.atom.symbol,
+            .projector.val = structure,
+        };
         break;
     }
     case FIf: {

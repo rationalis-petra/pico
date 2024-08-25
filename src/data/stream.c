@@ -2,6 +2,7 @@
 
 #include "data/stream.h"
 #include "encodings/types.h"
+#include "encodings/utf8.h"
 
 //--------------------------- istream definitions ---------------------------//
 

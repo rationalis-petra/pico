@@ -82,8 +82,8 @@ document* pretty_former(pi_term_former_t op, allocator a) {
     case FVariant:
         out = mk_str_doc(mv_string("::Variant"), a);
         break;
-    case FRecursor:
-        out = mk_str_doc(mv_string("::Recursor"), a);
+    case FMatch:
+        out = mk_str_doc(mv_string("::Match"), a);
         break;
     case FStructure:
         out = mk_str_doc(mv_string("::Structure"), a);

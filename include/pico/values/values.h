@@ -24,18 +24,18 @@ pi_symbol copy_symbol(pi_symbol s, allocator a);
 
 typedef enum pi_term_former_t {
     FDefine,
-    FApplication,
     FProcedure,
-    FRecursor,
+    FApplication,
     FVariant,
+    FMatch,
     FStructure,
     FProjector,
     FIf,
     FLet,
 
     // Type formers
-    FStructType,
     FProcType,
+    FStructType,
     FEnumType,
 } pi_term_former_t;
 

@@ -390,7 +390,7 @@ asm_result generate(syntax syn, address_env* env, assembler* ass, sym_sarr_amap*
         break;
     }
 
-    case SRecursor:
+    case SMatch:
 
     case SLet:
         out = (asm_result) {

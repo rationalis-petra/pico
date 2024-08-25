@@ -119,8 +119,37 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
-    case SRecursor: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on recursor", a), a);
+    case SMatch: {
+        // Nodes = (match¹ val² expr expr ... )³, hence len + 3
+        ptr_array nodes = mk_ptr_array(syntax->match.clauses.len + 3, a);
+
+        push_ptr(mk_str_doc(mv_string("("), a), &nodes, a);
+        push_ptr(pretty_syntax(syntax->match.val, a), &nodes, a);
+
+        for (size_t i = 0; i < syntax->match.clauses.len; i++) {
+            syn_clause* clause = syntax->match.clauses.data[i];
+            
+            // the 4 comes from (, pattern, body, )
+            ptr_array clause_nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("("), a), &clause_nodes, a);
+            
+            ptr_array ptn_nodes = mk_ptr_array(4 + clause->vars.len, a);
+            push_ptr(mk_str_doc(mv_string("[:"), a), &ptn_nodes, a);
+            push_ptr(mk_str_doc(*symbol_to_string(clause->tagname), a), &ptn_nodes, a);
+            for (size_t j = 0; j < clause->vars.len; j++) {
+                push_ptr(mk_str_doc(*symbol_to_string(clause->vars.data[j]), a), &ptn_nodes, a);
+            }
+            push_ptr(mk_str_doc(mv_string("]"), a), &ptn_nodes, a);
+
+            push_ptr(mv_sep_doc(ptn_nodes, a), &clause_nodes, a);
+            push_ptr(pretty_syntax(clause->body, a), &clause_nodes, a);
+            push_ptr(mk_str_doc(mv_string(")"), a), &clause_nodes, a);
+
+            push_ptr(mv_cat_doc(clause_nodes, a), &nodes, a);
+        }
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes, a);
+        out = mv_cat_doc(nodes, a);
         break;
     }
     case SStructure: {

@@ -138,7 +138,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     sym = string_to_symbol(mv_string(":"));
     add_def(module, sym, type, &former);
 
-    former = FRecursor;
+    former = FMatch;
     sym = string_to_symbol(mv_string("match"));
     add_def(module, sym, type, &former);
 

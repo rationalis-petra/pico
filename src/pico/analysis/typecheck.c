@@ -326,12 +326,78 @@ result type_infer_i(syntax* untyped, type_env* env, uvar_generator* gen, allocat
         out.type = Ok;
         break;
     }
-    case SRecursor:
-        out = (result) {
-            .type = Err,
-            .error_message = mv_string("Typecheck not implemented for recursor."),
-        };
+    case SMatch: {
+        // Typecheck the input 
+        out = type_infer_i(untyped->match.val, env, gen, a);
+        if (out.type == Err) return out;
+
+        pi_type* enum_type = untyped->match.val->ptype;
+        if (enum_type->sort != TEnum) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Match expects value to have an enum type!"),
+            };
+        }
+
+        // Typecheck each variant, ensure they are the same
+        pi_type* out_ty = mk_uvar(gen, a);
+        untyped->ptype = out_ty;
+        u8_array used_indices = mk_u8_array(untyped->match.clauses.len, a);
+        for (size_t i = 0; i < untyped->match.clauses.len; i++)
+            push_u8(0, &used_indices, a);
+
+        for (size_t i = 0; i < untyped->match.clauses.len; i++) {
+            syn_clause* clause = untyped->match.clauses.data[i];
+            bool found_tag = false;
+            for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
+                if (clause->tagname == enum_type->enumeration.variants.data[j].key) {
+                    found_tag = true;
+                    clause->tag = j;
+                    used_indices.data[j] = 1;
+                }
+            }
+
+            if (!found_tag) {
+                return (result) {
+                    .type = Err,
+                    .error_message = mv_string("Unable to find variant tag in match"),
+                };
+            }
+
+            // Now we've found the tag, typecheck the body
+            ptr_array* types_to_bind = enum_type->enumeration.variants.data[i].val;
+            if (types_to_bind->len != clause->vars.len) {
+                return (result) {
+                    .type = Err,
+                    .error_message = mv_string("Bad number of binds!"),
+                };
+            }
+
+            for (size_t j = 0; j < types_to_bind->len; j++) {
+                pi_symbol arg = clause->vars.data[j];
+                pi_type* aty = types_to_bind->data[j];
+                type_var(arg, aty, env, a);
+            }
+
+            out = type_check_i(clause->body, out_ty, env, gen, a);
+            pop_types(env, types_to_bind->len);
+            if (out.type == Err) return out;
+        }
+
+        // Finally, check that all indices are accounted for;
+        bool all_indices = true;
+        for (size_t i = 0; i < used_indices.len; i++) all_indices &= used_indices.data[i];
+        
+        if (!all_indices) {
+            return (result) {
+                .type = Err,
+                .error_message = mv_string("Not all enumerations used in match expression"),
+            };
+        }
+
+        return out;
         break;
+    }
     case SStructure: {
         pi_type* ty = mem_alloc(sizeof(pi_type), a);
         untyped->ptype = ty; 
@@ -454,10 +520,17 @@ result squash_types(syntax* typed, allocator a) {
         }
         break;
     }
-    case SRecursor:
-        out.type = Err;
-        out.error_message = mk_string("squash_types not implemented for this syntactic form", a);
+    case SMatch: {
+        out = squash_types(typed->match.val, a);
+        if (out.type == Err) return out;
+
+        for (size_t i = 0; i < typed->match.clauses.len; i++) {
+            syn_clause* clause = (syn_clause*)typed->match.clauses.data[i];
+            out = squash_types(clause->body, a);
+            if (out.type == Err) return out;
+        }
         break;
+    }
     case SStructure: {
         // Loop for each element in the 
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
@@ -473,7 +546,7 @@ result squash_types(syntax* typed, allocator a) {
         
     case SLet:
         out.type = Err;
-        out.error_message = mk_string("squash_types not implemented for this syntactic form", a);
+        out.error_message = mk_string("squash_types not implemented for let", a);
         break;
     case SIf: {
         out = squash_types(typed->if_expr.condition, a);

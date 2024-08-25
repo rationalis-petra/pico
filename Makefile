@@ -6,6 +6,7 @@ BUILD_DIR := ./build
 SRC_DIRS := ./src
 
 C_VERSION := c99
+CC := gcc
 
 # Find all the C files we want to compile
 SRCS := $(shell find $(SRC_DIRS) -name '*.c')
