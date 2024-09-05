@@ -123,7 +123,7 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         // Nodes = (match¹ val² expr expr ... )³, hence len + 3
         ptr_array nodes = mk_ptr_array(syntax->match.clauses.len + 3, a);
 
-        push_ptr(mk_str_doc(mv_string("("), a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string("(match"), a), &nodes, a);
         push_ptr(pretty_syntax(syntax->match.val, a), &nodes, a);
 
         for (size_t i = 0; i < syntax->match.clauses.len; i++) {
@@ -149,7 +149,7 @@ document* pretty_syntax(syntax* syntax, allocator a) {
         }
 
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes, a);
-        out = mv_cat_doc(nodes, a);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case SStructure: {

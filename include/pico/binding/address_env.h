@@ -5,31 +5,55 @@
 #include "pico/data/sym_size_assoc.h"
 #include "pico/binding/environment.h"
 
-typedef struct address_env address_env;
+typedef struct AddressEnv AddressEnv;
 
-typedef enum address_entry_t {
+typedef enum {
     ALocal,
     AGlobal,
     ANotFound,
     ATooManyLocals,
-} address_entry_t;
+} AddressEntry_t;
 
-typedef struct address_entry {
-    address_entry_t type;
+typedef struct {
+    AddressEntry_t type;
     union {
         void* value;
         uint8_t stack_offset;
     };
-} address_entry;
+} AddressEntry;
 
-address_env* mk_address_env(environment* env, pi_symbol* sym, allocator a);
-void delete_address_env(address_env* env, allocator a);
+AddressEnv* mk_address_env(environment* env, pi_symbol* sym, allocator a);
+void delete_address_env(AddressEnv* env, allocator a);
 
-address_entry address_env_lookup(pi_symbol s, address_env* env);
+/* Address environment interface
+ * Lookups return either:
+ * • An error
+ * • A local variable (returned as an offset from RBP)
+ * • A global variable (returned as a pointer)
+ *
+ *
+ * To calculate this, the environment needs:
+ * • To know when a value is pushed to the stack (and of what size).
+ * • To know when a value is popped from the stack (and of what size).
+ * • To know when a new value of RBP is saved (currently only upon entering a function) .
+ * • To know when any local variables are bound.
+ */
 
-// Add a set of variables to the address environment.
-// offsets are adjusted to compensate for the return address
-void address_fn_vars (sym_size_assoc vars, address_env* env, allocator a);
-void pop_fn_vars(address_env* env);
+AddressEntry address_env_lookup(pi_symbol s, AddressEnv* env);
+
+// Push and pop a new local environment to deal with procedure
+void address_start_proc(sym_size_assoc vars, AddressEnv* env, allocator a);
+void address_end_proc(AddressEnv* env, allocator a);
+
+// Bind and unbind enum vars: 
+// Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
+//   it establishes bindings for the members of the enum, but does not 
+// Unbind removes these bindings. Like bind, it does not adjust the stack head
+void address_bind_enum_vars(sym_size_assoc vars, size_t enum_size, AddressEnv* env, allocator a);
+void address_unbind_enum_vars(AddressEnv* env);
+
+// Inform the environment that values have been pushed/popped from the stack.
+void address_stack_grow(AddressEnv* env, size_t amount);
+void address_stack_shrink(AddressEnv* env, size_t amount);
 
 #endif

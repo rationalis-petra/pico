@@ -13,6 +13,6 @@ ARRAY_HEADER(uint32_t, u32)
 
 ARRAY_HEADER(uint64_t, u64)
 
-//#undef ARRAY_HEADER
+ARRAY_HEADER(size_t, size)
 
 #endif

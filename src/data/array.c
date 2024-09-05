@@ -11,3 +11,4 @@ ARRAY_IMPL(uint32_t, u32)
 
 ARRAY_IMPL(uint64_t, u64)
 
+ARRAY_IMPL(size_t, size)

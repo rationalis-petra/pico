@@ -87,8 +87,10 @@ void* pico_run_expr(assembler* ass, size_t rsize, allocator a) {
     int64_t out;
     __asm__ __volatile__(
         "push %%rbp       \n\t"
-        "call %1       \n\t"
-        "pop %%rbp       \n\t"
+        "mov %%rsp, %%rbp \n\t"
+        "sub $0x8, %%rbp     \n\t"
+        "call %1          \n\t"
+        "pop %%rbp        \n\t"
         : "=r" (out)
         : "r"(instructions.data));
 

@@ -406,9 +406,9 @@ uint8_t sib_base(uint8_t base_bits) { return (base_bits & 0b111 ); }
 uint8_t sib_index(uint8_t index_bits) { return (index_bits & 0b111) << 3; }
 uint8_t sib_ss(uint8_t ss_bits) { return (ss_bits & 0b11) << 6; }
 
-uint8_t rex_reg_ext(uint8_t bit) { return (bit & 0b1) << 2; }
-uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1); }
-uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1); }
+uint8_t rex_reg_ext(uint8_t bit) { return (bit & 0b1); }
+uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1) << 1; }
+uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 
 
 asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
