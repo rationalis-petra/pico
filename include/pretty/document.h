@@ -7,30 +7,30 @@
 
 /* The Document Interaface. */
 
-typedef struct document document;
-typedef struct document_visitor {
-    void (*on_str_doc)(string str, void* ctx);
-    void (*on_cat_doc)(ptr_array docs, void* ctx);
-    void (*on_sep_doc)(ptr_array docs, void* ctx);
-    void (*on_vsep_doc)(ptr_array docs, void* ctx);
+typedef struct Document Document;
+typedef struct Document_visitor {
+    void (*on_str_doc)(String str, void* ctx);
+    void (*on_cat_doc)(PtrArray docs, void* ctx);
+    void (*on_sep_doc)(PtrArray docs, void* ctx);
+    void (*on_vsep_doc)(PtrArray docs, void* ctx);
     void* ctx;
-} document_visitor;
-void visit_document(const document* doc, const document_visitor* visitor);
+} Document_visitor;
+void visit_document(const Document* doc, const Document_visitor* visitor);
 
 /* The Document Constructors */
-document* mv_str_doc(const string string, allocator a);
-document* mk_str_doc(const string string, allocator a);
+Document* mv_str_doc(const String string, Allocator* a);
+Document* mk_str_doc(const String string, Allocator* a);
 
-document* mv_cat_doc(const ptr_array docs, allocator a);
-document* mk_cat_doc(const ptr_array docs, allocator a);
+Document* mv_cat_doc(const PtrArray docs, Allocator* a);
+Document* mk_cat_doc(const PtrArray docs, Allocator* a);
 
-document* mv_sep_doc(const ptr_array docs, allocator a);
-document* mk_sep_doc(const ptr_array docs, allocator a);
+Document* mv_sep_doc(const PtrArray docs, Allocator* a);
+Document* mk_sep_doc(const PtrArray docs, Allocator* a);
 
-document* mv_vsep_doc(const ptr_array docs, allocator a);
-document* mk_vsep_doc(const ptr_array docs, allocator a);
+Document* mv_vsep_doc(const PtrArray docs, Allocator* a);
+Document* mk_vsep_doc(const PtrArray docs, Allocator* a);
 
 /* The Document Destructor */
-void delete_doc(document* document, allocator a);
+void delete_doc(Document* Document, Allocator* a);
 
 #endif

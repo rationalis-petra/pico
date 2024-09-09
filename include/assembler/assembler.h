@@ -8,18 +8,18 @@
 
 /* The assembler writes encoded instructions directly to a byte-array. */
 
-typedef struct assembler assembler; 
-assembler* mk_assembler(allocator a);
-void delete_assembler(assembler* assembler);
-void clear_assembler(assembler* assembler);
+typedef struct Assembler Assembler; 
+struct Assembler* mk_assembler(Allocator* a);
+void delete_assembler(Assembler* assembler);
+void clear_assembler(Assembler* assembler);
 
-u8_array get_instructions(assembler* assembler);
-size_t get_pos(assembler* assembler);
+U8Array get_instructions(Assembler* assembler);
+size_t get_pos(Assembler* assembler);
 
-document* pretty_assembler(assembler* assembler, allocator a);
+Document* pretty_assembler(Assembler* assembler, Allocator a);
 
 // Integral operations
-typedef enum binary_op {
+typedef enum BinaryOp {
     // ------------------
     //  Arithmetic
     // ------------------
@@ -44,9 +44,9 @@ typedef enum binary_op {
     // ------------------
     Mov,   // p 769.
     Binary_Op_Count,
-} binary_op;
+} BinaryOp;
 
-typedef enum unary_op {
+typedef enum UnaryOp {
     // ------------------
     //  Functions
     // ------------------
@@ -69,13 +69,13 @@ typedef enum unary_op {
     SetE,
     SetL,
     SetG,
-} unary_op;
+} UnaryOp;
 
-typedef enum nullary_op {
+typedef enum NullaryOp {
     Ret,
-} nullary_op;
+} NullaryOp;
 
-typedef enum regname {
+typedef enum Regname {
     RAX = 0b0000,
     RBX = 0b0011,
     RCX = 0b0001,
@@ -92,29 +92,29 @@ typedef enum regname {
     R13 = 0b1101,
     R14 = 0b1110,
     R15 = 0b1111
-} regname;
+} Regname;
 
-typedef enum dest_t {
+typedef enum Dest_t {
     Register,
     Deref,
     Immediate,
-} dest_t;
+} Dest_t;
 
-typedef enum location_size {
+typedef enum LocationSize {
     sz_8,
     sz_16,
     sz_32,
     sz_64
-} location_size;
+} LocationSize;
 
 // Location: Can be one of
 // + Register
 // + [Register + Offset]
 // + Immediate
-typedef struct location {
-    dest_t type;
-    location_size sz;
-    regname reg;
+typedef struct Location {
+    Dest_t type;
+    LocationSize sz;
+    Regname reg;
     union {
         int8_t immediate_8;
         int16_t immediate_16;
@@ -130,28 +130,28 @@ typedef struct location {
         int8_t disp_bytes[4];
     };
 
-} location;
+} Location;
 
 // Location Constructors 
-location reg(regname name);
-location rref(regname name, int8_t offset);
-location imm8(int8_t immediate);
-location imm16(int16_t immediate);
-location imm32(int32_t immediate);
-location imm64(int64_t immediate);
+Location reg(Regname name);
+Location rref(Regname name, int8_t offset);
+Location imm8(int8_t immediate);
+Location imm16(int16_t immediate);
+Location imm32(int32_t immediate);
+Location imm64(int64_t immediate);
 
 // Result 
 typedef struct asm_result {
     Result_t type;
     union {
         size_t backlink; // backlink to immediate (if it exists)
-        string error_message;
+        String error_message;
     }; 
 } asm_result;
 
-asm_result build_binary_op(assembler* ass, binary_op op, location dest, location src, allocator err_allocator);
-asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator);
-asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator);
+asm_result build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator);
+asm_result build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator);
+asm_result build_nullary_op(Assembler* assembler, NullaryOp op, Allocator err_allocator);
 
 void asm_init();
 

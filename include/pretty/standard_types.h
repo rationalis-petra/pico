@@ -4,9 +4,9 @@
 #include "memory/allocator.h"
 #include "pretty/document.h"
 
-document* pretty_i64(int64_t val, allocator a);
-document* pretty_u64(uint64_t val, allocator a);
+Document* pretty_i64(int64_t val, Allocator* a);
+Document* pretty_u64(uint64_t val, Allocator* a);
 
-document* pretty_hex_u8(uint8_t val, allocator a);
+Document* pretty_hex_u8(uint8_t val, Allocator* a);
 
 #endif

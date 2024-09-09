@@ -5,6 +5,6 @@
 #include "pico/binding/environment.h"
 #include "pico/syntax/syntax.h"
 
-result type_check(toplevel* untyped, environment* env, allocator a);
+Result type_check(TopLevel* untyped, Environment* env, Allocator* a);
 
 #endif

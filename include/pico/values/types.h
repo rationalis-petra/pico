@@ -7,17 +7,18 @@
 
 /* Basic types in pico typesystem */
 
-typedef struct pi_type pi_type;
-typedef struct uvar_generator uvar_generator;
+// Forward declarations
+typedef struct PiType PiType;
+typedef struct UvarGenerator UvarGenerator;
 
-typedef enum prim_type {
+typedef enum PrimType {
     Int_64,
     Bool,
     TFormer,
     TType,
-} prim_type;
+} PrimType;
 
-typedef enum pi_type_t {
+typedef enum PiType_t {
     TPrim,
     TProc,
     TStruct,
@@ -25,52 +26,52 @@ typedef enum pi_type_t {
 
     // Special sort: unification variable
     TUVar
-} pi_type_t;
+} PiType_t;
 
-typedef struct proc_type {
-    ptr_array args;
-    pi_type* ret;
-} proc_type;
+typedef struct ProcType {
+    PtrArray args;
+    struct PiType* ret;
+} ProcType;
 
-typedef struct struct_type {
-    sym_ptr_amap fields;
-} struct_type;
+typedef struct StructType {
+    SymPtrAMap fields;
+} StructType;
 
-typedef struct enum_type {
-    sym_ptr_amap variants;
-} enum_type;
+typedef struct EnumType {
+    SymPtrAMap variants;
+} EnumType;
 
-typedef struct uvar_type {
+typedef struct UvarType {
     uint64_t id;
-    pi_type* subst;
-} uvar_type;
+    struct PiType* subst;
+} UvarType;
 
-typedef struct pi_type {
-    pi_type_t sort; 
+struct PiType {
+    PiType_t sort; 
     union {
-        prim_type prim;
-        proc_type proc;
-        struct_type structure;
-        enum_type enumeration;
-        uvar_type* uvar;
+        PrimType prim;
+        ProcType proc;
+        StructType structure;
+        EnumType enumeration;
+        UvarType* uvar;
     };
-} pi_type;
+};
 
-document* pretty_pi_value(void* val, pi_type* types, allocator a);
+Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 
-document* pretty_type(pi_type* type, allocator a);
-void delete_pi_type(pi_type t, allocator a);
-void delete_pi_type_p(pi_type* t, allocator a);
+Document* pretty_type(PiType* type, Allocator* a);
+void delete_pi_type(PiType t, Allocator* a);
+void delete_pi_type_p(PiType* t, Allocator* a);
 
-pi_type copy_pi_type(pi_type t, allocator a);
-pi_type* copy_pi_type_p(pi_type* t, allocator a);
-size_t pi_size_of(pi_type t);
+PiType copy_pi_type(PiType t, Allocator* a);
+PiType* copy_pi_type_p(PiType* t, Allocator* a);
+size_t pi_size_of(PiType t);
 
 // Utilities for generating types
-pi_type mk_prim_type(prim_type t);
+PiType mk_prim_type(PrimType t);
 
-pi_type* mk_uvar(uvar_generator* gen, allocator a);
-uvar_generator* mk_gen(allocator a);
-void delete_gen(uvar_generator* gen, allocator a);
+PiType* mk_uvar(UvarGenerator* gen, Allocator* a);
+UvarGenerator* mk_gen(Allocator* a);
+void delete_gen(UvarGenerator* gen, Allocator* a);
 
 #endif

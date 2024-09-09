@@ -4,6 +4,6 @@
 #include "data/meta/assoc_header.h"
 #include "pico/values/values.h"
 
-ASSOC_HEADER(pi_symbol, void*, sym_ptr)
+ASSOC_HEADER(Symbol, void*, SymPtr)
 
 #endif

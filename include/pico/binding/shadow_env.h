@@ -4,25 +4,26 @@
 #include "memory/allocator.h"
 #include "pico/binding/environment.h"
 
-typedef struct shadow_env shadow_env;
+typedef struct ShadowEnv ShadowEnv;
 
-typedef enum shadow_entry_t {
+typedef enum ShadowEntry_t {
     SShadowed,
     SGlobal,
     SErr,
-} shadow_entry_t;
-typedef struct shadow_entry {
-    shadow_entry_t type;
-    pi_type* vtype;
+} ShadowEntry_t;
+
+typedef struct ShadowEntry {
+    ShadowEntry_t type;
+    PiType* vtype;
     void* value;
 } shadow_entry;
 
-shadow_env* mk_shadow_env(allocator a, environment* env);
-void delete_shadow_env(shadow_env* env, allocator a);
+ShadowEnv* mk_shadow_env(Allocator a, Environment* env);
+void delete_shadow_env(ShadowEnv* env);
 
-shadow_entry shadow_env_lookup(pi_symbol s, shadow_env* env);
-void shadow_var (pi_symbol var, shadow_env* env, allocator a);
-void shadow_vars (symbol_array vars, shadow_env* env, allocator a);
-void pop_shadow(shadow_env* env, size_t n);
+shadow_entry shadow_env_lookup(Symbol s, ShadowEnv* env);
+void shadow_var (Symbol var, ShadowEnv* env, Allocator* a);
+void shadow_vars (SymbolArray vars, ShadowEnv* env, Allocator* a);
+void pop_shadow(ShadowEnv* env, size_t n);
 
 #endif

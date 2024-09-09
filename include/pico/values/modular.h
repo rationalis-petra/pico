@@ -16,26 +16,26 @@
  * redefined. 
  */
 
-typedef struct pi_package pi_package;
-typedef struct pi_module pi_module;
-typedef struct module_entry {
+typedef struct Package Package;
+typedef struct Module  Module;
+typedef struct ModuleEntry {
     void* value;
-    pi_type type;
-    sym_sarr_amap* backlinks;
-} module_entry;
+    PiType type;
+    SymSArrAMap* backlinks;
+} ModuleEntry;
 
 // Package Interface
-pi_package* mk_package(string name, allocator a);
-void delete_package(pi_package* package);
-result add_module(string name, pi_module* module, pi_package* package, allocator a);
+Package* mk_package(String name, Allocator* a);
+void delete_package(Package* package);
+Result add_module(String name, Module* module, Package* package, Allocator* a);
 
 // Module Interface
-pi_module* mk_module(allocator a);
-void delete_module(pi_module* module);
-result add_def(pi_module* module, pi_symbol name, pi_type type, void* data); 
-result add_fn_def(pi_module* module, pi_symbol name, pi_type type, assembler* fn, sym_sarr_amap* backlinks); 
-module_entry* get_def(pi_symbol sym, pi_module* module);
+Module* mk_module(Allocator* a);
+void delete_module(Module* module);
+Result add_def(Module* module, Symbol name, PiType type, void* data); 
+Result add_fn_def(Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks); 
+ModuleEntry* get_def(Symbol sym, Module* module);
 
-symbol_array get_symbols(pi_module* module, allocator a);
+SymbolArray get_symbols(Module* module, Allocator* a);
 
 #endif

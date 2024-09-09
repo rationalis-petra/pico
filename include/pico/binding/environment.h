@@ -15,19 +15,19 @@
 #include "pico/values/types.h"
 #include "pico/values/modular.h"
 
-typedef struct environment environment;
-typedef struct env_capture env_capture;
+typedef struct Environment Environment;
+typedef struct EnvCapture EnvCapture;
 
-typedef struct env_entry {
+typedef struct EnvEntry {
     Result_t success;
-    pi_type* type;
+    PiType* type;
     void* value;
 } env_entry;
 
-environment* env_from_module(pi_module* module, allocator a);
-void delete_env(environment* env, allocator a);
+Environment* env_from_module(Module* module, Allocator* a);
+void delete_env(Environment* env, Allocator* a);
 
-env_entry env_lookup(pi_symbol sym, environment* env);
+env_entry env_lookup(Symbol sym, Environment* env);
 
 
 #endif

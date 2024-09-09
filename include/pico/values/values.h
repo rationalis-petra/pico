@@ -7,22 +7,22 @@
 #include "data/string.h"
 #include "pretty/document.h"
 
-typedef uint64_t pi_symbol;
-typedef u64_array symbol_array;
+typedef uint64_t Symbol;
+typedef U64Array SymbolArray;
 
 // Forward declarations of environment.h (to avoid circular includes!)
 typedef struct env_capture env_capture;
 
 // Symbol table
-string* symbol_to_string(pi_symbol symbol);
-pi_symbol string_to_symbol(string string);
+String* symbol_to_string(Symbol symbol);
+Symbol string_to_symbol(String string);
 void clear_symbols();
 
 // useful for container methods
-void delete_symbol(pi_symbol s, allocator a);
-pi_symbol copy_symbol(pi_symbol s, allocator a);
+void delete_symbol(Symbol s, Allocator* a);
+Symbol copy_symbol(Symbol s, Allocator* a);
 
-typedef enum pi_term_former_t {
+typedef enum TermFormer {
     FDefine,
     FProcedure,
     FApplication,
@@ -37,16 +37,8 @@ typedef enum pi_term_former_t {
     FProcType,
     FStructType,
     FEnumType,
-} pi_term_former_t;
+} TermFormer;
 
-typedef enum pi_primop_t {
-    AddI64,
-    SubI64,
-    MulI64,
-    QuotI64,
-} pi_primop_t;
-
-document* pretty_former(pi_term_former_t op, allocator a);
-document* pretty_primop(pi_primop_t op, allocator a);
+Document* pretty_former(TermFormer op, Allocator* a);
 
 #endif

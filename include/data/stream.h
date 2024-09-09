@@ -8,38 +8,38 @@
 
 // The stream type is a generic interface allowing character input or output.
 
-typedef enum stream_result {
+typedef enum StreamResult {
     StreamSuccess,
     StreamEnd,
     StreamLostSource,
     StreamEncodingFailue,
     StreamImplError,
-} stream_result;
+} StreamResult;
 
-typedef struct istream istream;
-typedef struct ostream ostream;
-typedef struct iostream {
-    istream* istream;
-    ostream* ostream;
-} iostream;
+typedef struct IStream IStream;
+typedef struct OStream OStream;
+typedef struct IOStream {
+    IStream* istream;
+    OStream* ostream;
+} IOStream;
 
     
 // Constructors
-istream* get_stdin_stream();
-ostream* get_stdout_stream();
+IStream* get_stdin_stream();
+OStream* get_stdout_stream();
 
 // Destructors
-void delete_istream(istream* stream, allocator a);
-void delete_ostream(ostream* stream, allocator a);
+void delete_istream(IStream* stream, Allocator* a);
+void delete_ostream(OStream* stream, Allocator* a);
 
 
 // istream methods
-stream_result peek(istream* stream, uint32_t* out);
-stream_result next(istream* stream, uint32_t* out);
+StreamResult peek(IStream* stream, uint32_t* out);
+StreamResult next(IStream* stream, uint32_t* out);
 
 // ostream methods
-void write_impl(int char_literal, ostream* stream);
-void write_codepoint(uint32_t codepoint, ostream* stream);
-void write_string(string str, ostream* stream);
+void write_impl(int char_literal, OStream* stream);
+void write_codepoint(uint32_t codepoint, OStream* stream);
+void write_string(String str, OStream* stream);
 
 #endif

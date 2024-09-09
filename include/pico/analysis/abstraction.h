@@ -7,23 +7,23 @@
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 
-typedef struct abs_result {
+typedef struct AbsResult {
     Result_t type;
     union {
-        string error_message;
-        toplevel out;
+        String error_message;
+        TopLevel out;
     };
-} abs_result;
+} AbsResult;
 
-typedef struct abs_expr_result {
+typedef struct AbsExprResult {
     Result_t type;
     union {
-        string error_message;
-        syntax out;
+        String error_message;
+        Syntax out;
     };
-} abs_expr_result;
+} AbsExprResult;
 
-abs_result abstract(pi_rawtree raw, environment* env, allocator a);
-abs_expr_result abstract_expr(pi_rawtree raw, environment* env, allocator a);
+AbsResult abstract(RawTree raw, Environment* env, Allocator* a);
+AbsExprResult abstract_expr(RawTree raw, Environment* env, Allocator* a);
 
 #endif

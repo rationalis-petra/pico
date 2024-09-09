@@ -8,9 +8,9 @@ typedef enum Result_t {
     Err
 } Result_t;
 
-typedef struct result {
+typedef struct Result {
     Result_t type;
-    string error_message;
-} result;
+    String error_message;
+} Result;
 
 #endif

@@ -4,26 +4,25 @@
 #include "memory/allocator.h"
 #include "pico/binding/environment.h"
 
-typedef struct type_env type_env;
+typedef struct TypeEnv TypeEnv;
 
-typedef enum type_entry_t {
+typedef enum TypeEntry_t {
     TELocal,
     TEGlobal,
     TENotFound,
-} type_entry_t;
+} TypeEntry_t;
 
-typedef struct type_entry {
-    type_entry_t type;
-    pi_type* ptype;
-} type_entry;
+typedef struct TypeEntry {
+    TypeEntry_t type;
+    PiType* ptype;
+} TypeEntry;
 
-type_env* mk_type_env(environment* env, allocator a);
+TypeEnv* mk_type_env(Environment* env, Allocator* a);
 // No delete, as we expect allocation via an arena allocator
 
-type_entry type_env_lookup(pi_symbol s, type_env* env);
-void type_var (pi_symbol var, pi_type* type, type_env* env, allocator a);
-//void type_vars (sym_ptr_amap vars, type_env* env, allocator a);
-void pop_type(type_env* env);
-void pop_types(type_env* env, size_t n);
+TypeEntry type_env_lookup(Symbol s, TypeEnv* env);
+void type_var (Symbol var, PiType* type, TypeEnv* env, Allocator* a);
+void pop_type(TypeEnv* env);
+void pop_types(TypeEnv* env, size_t n);
 
 #endif

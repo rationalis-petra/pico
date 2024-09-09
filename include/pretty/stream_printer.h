@@ -1,9 +1,9 @@
 #ifndef __PRETTY_STREAM_PRINTER_H
 #define __PRETTY_STREAM_PRINTER_H
 
-typedef struct document document;
-typedef struct ostream ostream;
+#include "pretty/document.h"
+#include "data/stream.h"
 
-void write_doc(document* doc, ostream* os);
+void write_doc(Document* doc, OStream* os);
 
 #endif 

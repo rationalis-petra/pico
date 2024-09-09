@@ -22,7 +22,7 @@
  *    | Ann <symbol> <value>
  */
 
-typedef enum syntax_t {
+typedef enum Syntax_t {
     SLitI64,
     SLitBool,
 
@@ -39,131 +39,131 @@ typedef enum syntax_t {
 
     SLet,
     SIf,
-} syntax_t;
+} Syntax_t;
 
 
-typedef struct syntax syntax;
-typedef ptr_array syn_array;
-typedef ptr_array clause_array;
-typedef sym_ptr_amap sym_syn_amap;
+typedef struct Syntax Syntax;
+typedef PtrArray SynArray;
+typedef PtrArray ClauseArray;
+typedef SymPtrAMap SymSynAMap;
 
-typedef struct syn_procedure {
-    symbol_array args;
-    syntax* body;
-} syn_procedure;
+typedef struct SynProcedure {
+    SymbolArray args;
+    Syntax* body;
+} SynProcedure;
 
-typedef struct syn_app {
-    syntax* function;
-    syn_array args;
-} syn_app;
+typedef struct SynApp {
+    Syntax* function;
+    SynArray args;
+} SynApp;
 
-typedef struct syn_constructor {
-    syntax* enum_type;
-    pi_symbol tagname;
+typedef struct SynConstructor {
+    Syntax* enum_type;
+    Symbol tagname;
     size_t tag;
-} syn_constructor;
+} SynConstructor;
 
-typedef struct syn_variant {
-    syntax* enum_type;
-    pi_symbol tagname;
+typedef struct SynVariant {
+    Syntax* enum_type;
+    Symbol tagname;
     size_t tag;
-    syn_array args;
-} syn_variant;
+    SynArray args;
+} SynVariant;
 
-typedef struct syn_clause {
-    pi_symbol tagname;
+typedef struct SynClause {
+    Symbol tagname;
     size_t tag;
-    symbol_array vars;
-    syntax* body;
-} syn_clause;
+    SymbolArray vars;
+    Syntax* body;
+} SynClause;
 
-typedef struct syn_match {
-    pi_symbol recfn;
-    syntax* val;
-    clause_array clauses;
-} syn_match;
+typedef struct SynMatch {
+    Symbol recfn;
+    Syntax* val;
+    ClauseArray clauses;
+} SynMatch;
 
-typedef struct syn_structure {
-    syntax* ptype;
-    sym_syn_amap fields;
-} syn_structure;
+typedef struct SynStructure {
+    Syntax* ptype;
+    SymSynAMap fields;
+} SynStructure;
 
-typedef struct syn_projector {
-    pi_symbol field;
-    syntax* val;
-} syn_projector;
+typedef struct SynProjector {
+    Symbol field;
+    Syntax* val;
+} SynProjector;
 
 // Sugaring Syntax
-typedef struct syn_let {
-    sym_syn_amap bindings;
-    syntax* body;
-} syn_let;
+typedef struct SynLet {
+    SymSynAMap bindings;
+    Syntax* body;
+} SynLet;
 
-typedef struct syn_if {
-    syntax* condition;
-    syntax* true_branch;
-    syntax* false_branch;
-} syn_if;
+typedef struct SynIf {
+    Syntax* condition;
+    Syntax* true_branch;
+    Syntax* false_branch;
+} SynIf;
 
 
-typedef struct syntax {
-    syntax_t type;
+struct Syntax {
+    Syntax_t type;
     union {
         int64_t lit_i64;
-        pi_symbol variable;
-        pi_type* type_val;
+        Symbol variable;
+        PiType* type_val;
 
-        syn_procedure procedure;
-        syn_app application;
-        syn_constructor constructor;
-        syn_variant variant;
-        syn_match match;
-        syn_structure structure;
-        syn_projector projector;
+        SynProcedure procedure;
+        SynApp application;
+        SynConstructor constructor;
+        SynVariant variant;
+        SynMatch match;
+        SynStructure structure;
+        SynProjector projector;
 
-        syn_let let_expr;
-        syn_if if_expr;
+        SynLet let_expr;
+        SynIf if_expr;
     };
-    pi_type* ptype;
-} syntax;
+    PiType* ptype;
+};
 
 
 /* The Syntax Destructor */
-void delete_syntax(syntax syntax, allocator a);
-void delete_syntax_pointer(syntax* syntax, allocator a);
+void delete_syntax(Syntax syntax, Allocator* a);
+void delete_syntax_pointer(Syntax* syntax, Allocator* a);
 
 
 /* Other instances */
-document* pretty_syntax(syntax* syntax, allocator a);
+Document* pretty_syntax(Syntax* syntax, Allocator a);
 
 // -----------------------------------------------------------------------------
 //   Toplevel
 // -----------------------------------------------------------------------------
 
-typedef enum toplevel_t {
+typedef enum TopLevel_t {
     TLDef,
     TLExpr,
-} toplevel_t;
+} TopLevel_t;
 
 typedef struct definition {
-    pi_symbol bind;
-    syntax* value;
+    Symbol bind;
+    Syntax* value;
 } definition;
 
-typedef struct toplevel {
-    toplevel_t type;
+typedef struct TopLevel {
+    TopLevel_t type;
     union {
         definition def;
-        syntax expr;
+        Syntax expr;
     };
-} toplevel;
+} TopLevel;
 
-void delete_def(definition def, allocator a);
-void delete_toplevel(toplevel top, allocator a);
+void delete_def(definition def, Allocator* a);
+void delete_toplevel(TopLevel top, Allocator* a);
 
-document* pretty_def(definition* def, allocator a);
-document* pretty_toplevel(toplevel* toplevel, allocator a);
+Document* pretty_def(definition* def, Allocator* a);
+Document* pretty_toplevel(TopLevel* TopLevel, Allocator* a);
 
-pi_type* toplevel_type(toplevel top);
+PiType* toplevel_type(TopLevel top);
 
 #endif

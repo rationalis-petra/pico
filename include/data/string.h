@@ -5,20 +5,21 @@
 #include "data/array.h"
 
 // A UFT-8 Encoded String
-typedef struct string {
+typedef struct String {
     size_t memsize;
     uint8_t* bytes;
-} string;
+    Allocator* gpa;
+} String;
 
-string mk_string(const char* str, allocator a);
-string mv_string(const char* str);
+String mk_string(const char* str, Allocator* a);
+String mv_string(const char* str);
 
-void delete_string(string str, allocator a);
-string copy_string(const string str, allocator a);
+void delete_string(String str);
+String copy_string(const String str, Allocator* a);
 
-string string_from_UTF_32(u32_array arr, allocator a);
+String string_from_UTF_32(U32Array arr, Allocator* a);
 
-int string_cmp(const string lhs, const string rhs);
-string string_cat(const string lhs, const string rhs, allocator a);
+int string_cmp(const String lhs, const String rhs);
+String string_cat(const String lhs, const String rhs, Allocator* a);
 
 #endif

@@ -6,11 +6,11 @@
 #include "data/meta/amap_header.h"
 #include "data/string.h"
 
-AMAP_HEADER(uint64_t, void*, u64_ptr)
+AMAP_HEADER(uint64_t, void*, U64Ptr)
 
-AMAP_HEADER(string, void*, str_ptr)
+AMAP_HEADER(String, void*, StrPtr)
 
-AMAP_HEADER(string, uint64_t, str_u64)
+AMAP_HEADER(String, uint64_t, StrU64)
 
 //#undef AMAP_HEADER
 

@@ -3,6 +3,6 @@
 
 #include "memory/allocator.h"
 
-allocator get_std_allocator();
+Allocator* get_std_allocator();
 
 #endif

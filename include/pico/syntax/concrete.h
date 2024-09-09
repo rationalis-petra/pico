@@ -11,39 +11,39 @@
  * 
  */
 
-typedef enum pi_atom_t {
+typedef enum Atom_t {
     ABool,
     AI64,
     ASymbol,
-} pi_atom_t;
+} Atom_t;
 
 // Total value
-typedef struct pi_atom {
-    pi_atom_t type;
+typedef struct Atom {
+    Atom_t type;
     union {
         int64_t int_64;
-        pi_symbol symbol;
+        Symbol symbol;
     };
-} pi_atom;
+} Atom;
 
-AMAP_HEADER(pi_symbol, pi_atom, sym_atom)
+AMAP_HEADER(Symbol, Atom, SymAtom)
 
-typedef enum pi_rawtype {
+typedef enum RawTree_t {
     RawList,
     RawAtom
-} pi_rawtype;
+} RawTree_t;
 
-typedef struct pi_rawtree {
-    pi_rawtype type;
+typedef struct RawTree {
+    RawTree_t type;
     union {
-        pi_atom atom;
-        ptr_array nodes;
+        Atom atom;
+        PtrArray nodes;
     } data;
-} pi_rawtree;
+} RawTree;
 
-document* pretty_rawtree(pi_rawtree tree, allocator a);
-void delete_rawtree(pi_rawtree tree, allocator a);
-void delete_rawtree_ptr(pi_rawtree* tree_ptr, allocator a);
+Document* pretty_rawtree(RawTree tree, Allocator* a);
+void delete_rawtree(RawTree tree, Allocator* a);
+void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a);
 
-document* pretty_atom(pi_atom val, allocator a);
+Document* pretty_atom(Atom val, Allocator* a);
 #endif

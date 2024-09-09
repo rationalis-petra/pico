@@ -6,7 +6,7 @@
 // currently, memory is fixed size
 // A custom allocator is planned.
 
-allocator mk_executable_allocator(allocator a);
-void release_executable_allocator(allocator a);
+Allocator mk_executable_allocator(Allocator a);
+void release_executable_allocator(Allocator a);
 
 #endif

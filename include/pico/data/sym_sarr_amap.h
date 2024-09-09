@@ -6,6 +6,6 @@
 
 #include "pico/values/values.h"
 
-AMAP_HEADER(pi_symbol, size_array, sym_sarr)
+AMAP_HEADER(Symbol, SizeArray, SymSArr)
 
 #endif

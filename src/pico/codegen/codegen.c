@@ -13,7 +13,7 @@
  *   is top of stack)
  */
 
-// implementation details
+// Implementation details
 result generate_expr_i(syntax syn, AddressEnv* env, assembler* ass, sym_sarr_amap* links, allocator a);
 asm_result generate(syntax syn, AddressEnv* env, assembler* ass, sym_sarr_amap* links, allocator a);
 void backlink_global(pi_symbol sym, size_t offset, sym_sarr_amap* links, allocator a);

@@ -6,11 +6,11 @@
 
 // Instiatiate uvars in the LHS and RHS so that they become equal
 // perform occurence checking.
-result unify(pi_type* lhs, pi_type* rhs, allocator a);
-bool has_unification_vars_p(pi_type type);
+Result unify(PiType* lhs, PiType* rhs, Allocator* a);
+bool has_unification_vars_p(PiType type);
 
 // Return a deep copy of the original type, with all unification vars replaced
 // by their subsitutions.
-void squash_type(pi_type* type);
+void squash_type(PiType* type);
 
 #endif
