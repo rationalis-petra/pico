@@ -16,7 +16,7 @@ void clear_assembler(Assembler* assembler);
 U8Array get_instructions(Assembler* assembler);
 size_t get_pos(Assembler* assembler);
 
-Document* pretty_assembler(Assembler* assembler, Allocator a);
+Document* pretty_assembler(Assembler* assembler, Allocator* a);
 
 // Integral operations
 typedef enum BinaryOp {
@@ -141,17 +141,17 @@ Location imm32(int32_t immediate);
 Location imm64(int64_t immediate);
 
 // Result 
-typedef struct asm_result {
+typedef struct AsmResult {
     Result_t type;
     union {
         size_t backlink; // backlink to immediate (if it exists)
         String error_message;
     }; 
-} asm_result;
+} AsmResult;
 
-asm_result build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator);
-asm_result build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator);
-asm_result build_nullary_op(Assembler* assembler, NullaryOp op, Allocator err_allocator);
+AsmResult build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator);
+AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator);
+AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator);
 
 void asm_init();
 

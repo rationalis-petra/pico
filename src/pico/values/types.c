@@ -2,31 +2,43 @@
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 
+struct UVarGenerator {
+    uint64_t counter;
+};
 
-void symbol_nod(pi_symbol s, allocator a) { }
+void symbol_nod(Symbol s, Allocator a) { }
 
-void delete_pi_type_p(pi_type* t, allocator a) {
+void delete_pi_type_p(PiType* t, Allocator* a) {
     delete_pi_type(*t, a);
     mem_free(t, a);
 }
 
-void delete_enum_variant_p(ptr_array* t, allocator a) {
-    typedef void(*deleter)(void*, allocator a);
-    delete_ptr_array(*t, (deleter)&delete_pi_type_p, a);
+void delete_enum_variant_p(PtrArray* t, Allocator* a) {
+    for (size_t i = 0; i < t->len; i++)
+        delete_pi_type_p(t->data[i], a);
+    sdelete_ptr_array(*t);
 }
 
-void delete_pi_type(pi_type t, allocator a) {
-    typedef void(*deleter)(void*, allocator a);
+void delete_pi_type(PiType t, Allocator* a) {
+    typedef void(*deleter)(void*, Allocator* a);
     switch(t.sort) {
-    case TProc:
+    case TProc: {
         delete_pi_type_p(t.proc.ret, a);
-        delete_ptr_array(t.proc.args, (deleter)&delete_pi_type_p, a);
+        for (size_t i = 0; i < t.proc.args.len; i++)
+            delete_pi_type_p(t.proc.args.data[i], a);
+        sdelete_ptr_array(t.proc.args);
         break;
-    case TStruct:
-        delete_sym_ptr_amap(t.structure.fields, &symbol_nod, (deleter)&delete_pi_type_p, a);
+    }
+    case TStruct: {
+        for (size_t i = 0; i < t.structure.fields.len; i++)
+            delete_pi_type_p(t.structure.fields.data[i].val, a);
+        sdelete_sym_ptr_amap(t.structure.fields);
         break;
+    }
     case TEnum:
-        delete_sym_ptr_amap(t.enumeration.variants, &symbol_nod, (deleter)&delete_enum_variant_p, a);
+        for (size_t i = 0; i < t.enumeration.variants.len; i++)
+            delete_enum_variant_p(t.enumeration.variants.data[i].val, a);
+        sdelete_sym_ptr_amap(t.enumeration.variants);
         break;
 
     case TUVar:
@@ -42,39 +54,41 @@ void delete_pi_type(pi_type t, allocator a) {
     }
 }
 
-pi_type* copy_pi_type_p(pi_type* t, allocator a)  {
-    pi_type* out = mem_alloc(sizeof(pi_type), a);
+PiType* copy_pi_type_p(PiType* t, Allocator* a)  {
+    PiType* out = mem_alloc(sizeof(PiType), a);
     *out = copy_pi_type(*t, a);
     return out;
 }
 
-pi_symbol symbol_id(pi_symbol s, allocator a) {
+Symbol symbol_id(Symbol s, Allocator* a) {
     return s;
 }
 
-void* copy_enum_variant(void* v, allocator a) {
-    ptr_array* out = mem_alloc(sizeof(ptr_array), a);
-    *out = copy_ptr_array(*(ptr_array*)v, (void*(*)(void*, allocator))&copy_pi_type_p, a);
+void* copy_enum_variant(void* v, Allocator* a) {
+    PtrArray* out = mem_alloc(sizeof(PtrArray), a);
+    *out = copy_ptr_array(*(PtrArray*)v, (void*(*)(void*, Allocator*))&copy_pi_type_p, a);
     return out;
 }
 
-pi_type copy_pi_type(pi_type t, allocator a) {
-    pi_type out;
+PiType copy_pi_type(PiType t, Allocator* a) {
+    typedef void* (*TyCopier)(void*, Allocator*);
+
+    PiType out;
     out.sort = t.sort;
     switch(t.sort) {
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
-        out.proc.args = copy_ptr_array(t.proc.args, (void*(*)(void*, allocator)) copy_pi_type_p, a);
+        out.proc.args = copy_ptr_array(t.proc.args,  (TyCopier)copy_pi_type_p, a);
         break;
     case TStruct:
-        out.structure.fields = copy_sym_ptr_amap(t.structure.fields, symbol_id, (void*(*)(void*, allocator)) copy_pi_type_p, a);
+        out.structure.fields = copy_sym_ptr_amap(t.structure.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
         break;
     case TEnum:
-        out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (void*(*)(void*, allocator)) copy_enum_variant, a);
+        out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, a);
         break;
 
     case TUVar:
-        out.uvar = mem_alloc(sizeof(uvar_type), a);
+        out.uvar = mem_alloc(sizeof(UVarType), a);
         out.uvar->id = t.uvar->id; 
         if (t.uvar->subst) {
             out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
@@ -91,8 +105,8 @@ pi_type copy_pi_type(pi_type t, allocator a) {
     return out;
 }
 
-document* pretty_pi_value(void* val, pi_type* type, allocator a) {
-    document* out = NULL;
+Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
+    Document* out = NULL;
     switch (type->sort) {
     case TProc: {
         out = mk_str_doc(mv_string("#<proc>"), a);
@@ -118,12 +132,12 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
             break;
         }
         case TFormer:  {
-            pi_term_former_t* pformer = (pi_term_former_t*) val;
+            TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
             break;
         }
         case TType:  {
-            pi_type** ptype = (pi_type**) val;
+            PiType** ptype = (PiType**) val;
             out = pretty_type(*ptype, a);
             break;
         }
@@ -132,48 +146,48 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
     case TStruct: {
         size_t current_offset = 0;
 
-        ptr_array nodes = mk_ptr_array(2 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("(struct ", a)), a), &nodes, a);
+        PtrArray nodes = mk_ptr_array(2 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("(struct ", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            ptr_array fd_nodes = mk_ptr_array(4, a);
-            document* pre = mk_str_doc(mv_string("[."), a);
-            document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            pi_type* ftype = type->structure.fields.data[i].val;
+            PtrArray fd_nodes = mk_ptr_array(4, a);
+            Document* pre = mk_str_doc(mv_string("[."), a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
+            PiType* ftype = type->structure.fields.data[i].val;
 
-            document* arg = pretty_pi_value(val + current_offset, ftype, a);
-            document* post = mk_str_doc(mv_string("]"), a);
+            Document* arg = pretty_pi_value(val + current_offset, ftype, a);
+            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &fd_nodes, a);
-            push_ptr(fname, &fd_nodes, a);
-            push_ptr(arg,   &fd_nodes, a);
-            push_ptr(post,  &fd_nodes, a);
-            document* fd_doc = mv_sep_doc(fd_nodes, a);
+            push_ptr(pre,   &fd_nodes);
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            push_ptr(post,  &fd_nodes);
+            Document* fd_doc = mv_sep_doc(fd_nodes, a);
 
-            push_ptr(fd_doc, &nodes, a);
+            push_ptr(fd_doc, &nodes);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
     case TEnum: {
         uint64_t tagidx = *(uint64_t*)val;
 
-        ptr_array variant_types = *(ptr_array*)type->enumeration.variants.data[tagidx].val;
-        ptr_array nodes = mk_ptr_array(2 + variant_types.len, a);
+        PtrArray variant_types = *(PtrArray*)type->enumeration.variants.data[tagidx].val;
+        PtrArray nodes = mk_ptr_array(2 + variant_types.len, a);
 
         // Symbol 
-        pi_symbol tagname = type->enumeration.variants.data[tagidx].key;
-        push_ptr(mk_str_doc(string_cat(mv_string("[:"), *symbol_to_string(tagname), a), a), &nodes, a);
+        Symbol tagname = type->enumeration.variants.data[tagidx].key;
+        push_ptr(mk_str_doc(string_cat(mv_string("[:"), *symbol_to_string(tagname), a), a), &nodes);
 
         size_t current_offset = sizeof(uint64_t); // Start after current tag
         for (size_t i = 0; i < variant_types.len; i++) {
-            pi_type* ftype = variant_types.data[i];
-            document* arg = pretty_pi_value(val + current_offset, ftype, a);
-            push_ptr(arg, &nodes, a);
+            PiType* ftype = variant_types.data[i];
+            Document* arg = pretty_pi_value(val + current_offset, ftype, a);
+            push_ptr(arg, &nodes);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mk_str_doc(mv_string("]"), a), &nodes, a);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -184,19 +198,19 @@ document* pretty_pi_value(void* val, pi_type* type, allocator a) {
     return out;
 }
 
-document* pretty_type(pi_type* type, allocator a) {
-    document* out = NULL;
+Document* pretty_type(PiType* type, Allocator* a) {
+    Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        ptr_array nodes = mk_ptr_array(4 + type->proc.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(Proc (", a)), a), &nodes, a);
+        PtrArray nodes = mk_ptr_array(4 + type->proc.args.len, a);
+        push_ptr(mv_str_doc((mk_string("(Proc (", a)), a), &nodes);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            document* arg = pretty_type(type->proc.args.data[i], a);
-            push_ptr(arg, &nodes, a);
+            Document* arg = pretty_type(type->proc.args.data[i], a);
+            push_ptr(arg, &nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
-        push_ptr(pretty_type(type->proc.ret, a), &nodes, a);
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        push_ptr(pretty_type(type->proc.ret, a), &nodes);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -220,53 +234,53 @@ document* pretty_type(pi_type* type, allocator a) {
         }
         break;
     case TStruct: {
-        ptr_array nodes = mk_ptr_array(2 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("(Struct ", a)), a), &nodes, a);
+        PtrArray nodes = mk_ptr_array(2 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("(Struct ", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            ptr_array fd_nodes = mk_ptr_array(4, a);
-            document* pre = mk_str_doc(mv_string("[."), a);
-            document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            document* arg = pretty_type(type->structure.fields.data[i].val, a);
-            document* post = mk_str_doc(mv_string("]"), a);
+            PtrArray fd_nodes = mk_ptr_array(4, a);
+            Document* pre = mk_str_doc(mv_string("[."), a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
+            Document* arg = pretty_type(type->structure.fields.data[i].val, a);
+            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &fd_nodes, a);
-            push_ptr(fname, &fd_nodes, a);
-            push_ptr(arg,   &fd_nodes, a);
-            push_ptr(post,  &fd_nodes, a);
-            document* fd_doc = mv_sep_doc(fd_nodes, a);
+            push_ptr(pre,   &fd_nodes);
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            push_ptr(post,  &fd_nodes);
+            Document* fd_doc = mv_sep_doc(fd_nodes, a);
 
-            push_ptr(fd_doc, &nodes, a);
+            push_ptr(fd_doc, &nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
     case TEnum: {
-        ptr_array nodes = mk_ptr_array(2 + type->enumeration.variants.len, a);
-        push_ptr(mv_str_doc((mk_string("(Enum ", a)), a), &nodes, a);
+        PtrArray nodes = mk_ptr_array(2 + type->enumeration.variants.len, a);
+        push_ptr(mv_str_doc((mk_string("(Enum ", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            ptr_array var_nodes = mk_ptr_array(4, a);
-            document* pre = mk_str_doc(mv_string("[:"), a);
-            document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
+            PtrArray var_nodes = mk_ptr_array(4, a);
+            Document* pre = mk_str_doc(mv_string("[:"), a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
 
-            ptr_array* types = type->structure.fields.data[i].val;
-            ptr_array ty_nodes = mk_ptr_array(types->len, a);
+            PtrArray* types = type->structure.fields.data[i].val;
+            PtrArray ty_nodes = mk_ptr_array(types->len, a);
             for (size_t j = 0; j < types->len; j++) {
-                document* arg = pretty_type((pi_type*)types->data[j], a);
-                push_ptr(arg, &ty_nodes, a);
+                Document* arg = pretty_type((PiType*)types->data[j], a);
+                push_ptr(arg, &ty_nodes);
             }
-            document* ptypes = mv_sep_doc(ty_nodes, a);
-            document* post = mk_str_doc(mv_string("]"), a);
+            Document* ptypes = mv_sep_doc(ty_nodes, a);
+            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &var_nodes, a);
-            push_ptr(fname, &var_nodes, a);
-            push_ptr(ptypes,   &var_nodes, a);
-            push_ptr(post,  &var_nodes, a);
-            document* var_doc = mv_sep_doc(var_nodes, a);
+            push_ptr(pre,   &var_nodes);
+            push_ptr(fname, &var_nodes);
+            push_ptr(ptypes,   &var_nodes);
+            push_ptr(post,  &var_nodes);
+            Document* var_doc = mv_sep_doc(var_nodes, a);
 
-            push_ptr(var_doc, &nodes, a);
+            push_ptr(var_doc, &nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes, a);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -277,7 +291,7 @@ document* pretty_type(pi_type* type, allocator a) {
     return out;
 }
 
-size_t pi_size_of(pi_type type) {
+size_t pi_size_of(PiType type) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
@@ -297,16 +311,16 @@ size_t pi_size_of(pi_type type) {
     case TStruct: {
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++)
-            total += pi_size_of(*(pi_type*)type.structure.fields.data[i].val);
+            total += pi_size_of(*(PiType*)type.structure.fields.data[i].val);
         return total;
     }
     case TEnum: {
         size_t max = 0; 
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             size_t total = 0;
-            ptr_array types = *(ptr_array*)type.enumeration.variants.data[i].val;
+            PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++)
-                total += pi_size_of(*(pi_type*)types.data[i]);
+                total += pi_size_of(*(PiType*)types.data[i]);
 
             if (total > max) {
                 max = total;
@@ -322,34 +336,30 @@ size_t pi_size_of(pi_type type) {
     }
 }
 
-pi_type mk_prim_type(prim_type t) {
-    pi_type type;
-    type.sort = TPrim;
-    type.prim = t;
-    return type;
+PiType mk_prim_type(PrimType t) {
+    return (PiType) {
+      .sort = TPrim,
+      .prim = t,
+    };
 }
 
-struct uvar_generator {
-    uint64_t counter;
-};
-
-pi_type* mk_uvar(uvar_generator* gen, allocator a) {
-    pi_type* uvar = mem_alloc(sizeof(pi_type), a);
+PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar;
-    uvar->uvar = mem_alloc(sizeof(uvar_type), a) ;
+    uvar->uvar = mem_alloc(sizeof(UVarType), a) ;
     uvar->uvar->subst = NULL;
     uvar->uvar->id = gen->counter++;
     
     return uvar;
 }
 
-uvar_generator* mk_gen(allocator a) {
-    uvar_generator* gen = mem_alloc(sizeof(uvar_generator), a);
+UVarGenerator* mk_gen(Allocator* a) {
+    UVarGenerator* gen = mem_alloc(sizeof(UVarGenerator), a);
     gen->counter = 0;
     return gen;
 }
 
-void delete_gen(uvar_generator* gen, allocator a) {
+void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
 }
 

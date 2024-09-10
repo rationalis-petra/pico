@@ -1,30 +1,28 @@
 #include "pico/binding/environment.h"
 #include "pico/data/sym_ptr_amap.h"
 
-struct environment {
-    sym_ptr_amap modules;
+struct Environment {
+    SymPtrAMap modules;
 };
 
-
-environment* env_from_module(pi_module* module, allocator a) {
-    environment* env = mem_alloc(sizeof(environment), a);
+Environment* env_from_module(Module* module, Allocator* a) {
+    Environment* env = mem_alloc(sizeof(Environment), a);
     env->modules = mk_sym_ptr_amap(32, a);
     // loop for entry in module:
-    symbol_array arr = get_symbols(module, a);
+    SymbolArray arr = get_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
-        sym_ptr_insert(arr.data[i], (void*)module, &(env->modules), a);
+        sym_ptr_insert(arr.data[i], (void*)module, &(env->modules));
     }
-    sdelete_u64_array(arr, a);
+    sdelete_u64_array(arr);
 
     return env;
 }
 
-
-env_entry env_lookup(pi_symbol sym, environment* env) {
-    env_entry result;
-    pi_module** module = (pi_module**)sym_ptr_lookup(sym, env->modules);
+EnvEntry env_lookup(Symbol sym, Environment* env) {
+    EnvEntry result;
+    Module** module = (Module**)sym_ptr_lookup(sym, env->modules);
     if (module) {
-        module_entry* mentry = get_def(sym, *module); 
+        ModuleEntry* mentry = get_def(sym, *module); 
         if (mentry != NULL) {
             result.success = Ok;
             result.type = &mentry->type;
@@ -38,8 +36,8 @@ env_entry env_lookup(pi_symbol sym, environment* env) {
     return result;
 }
 
-void delete_env(environment* env, allocator a) {
+void delete_env(Environment* env, Allocator* a) {
     // TODO: garbage collect/unroot bound variables
-    sdelete_sym_ptr_amap(env->modules, a);
+    sdelete_sym_ptr_amap(env->modules);
     mem_free(env, a);
 }

@@ -21,7 +21,7 @@ TypeEnv* mk_type_env(Environment* env, Allocator* a);
 // No delete, as we expect allocation via an arena allocator
 
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env);
-void type_var (Symbol var, PiType* type, TypeEnv* env, Allocator* a);
+void type_var (Symbol var, PiType* type, TypeEnv* env);
 void pop_type(TypeEnv* env);
 void pop_types(TypeEnv* env, size_t n);
 

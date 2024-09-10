@@ -27,7 +27,7 @@ typedef struct ModuleEntry {
 // Package Interface
 Package* mk_package(String name, Allocator* a);
 void delete_package(Package* package);
-Result add_module(String name, Module* module, Package* package, Allocator* a);
+Result add_module(String name, Module* module, Package* package);
 
 // Module Interface
 Module* mk_module(Allocator* a);

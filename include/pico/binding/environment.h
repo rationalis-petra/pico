@@ -22,12 +22,12 @@ typedef struct EnvEntry {
     Result_t success;
     PiType* type;
     void* value;
-} env_entry;
+} EnvEntry;
 
 Environment* env_from_module(Module* module, Allocator* a);
 void delete_env(Environment* env, Allocator* a);
 
-env_entry env_lookup(Symbol sym, Environment* env);
+EnvEntry env_lookup(Symbol sym, Environment* env);
 
 
 #endif

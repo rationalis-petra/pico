@@ -4,28 +4,28 @@
 #include <stddef.h>
 #include "memory/allocator.h"
 
-#define ARRAY_HEADER(type, prefix)                                      \
-    typedef struct prefix ## Array {                                    \
+#define ARRAY_HEADER(type, fprefix, tprefix)                            \
+    typedef struct tprefix##Array {                                     \
         size_t size;                                                    \
         size_t len;                                                     \
         type* data;                                                     \
         Allocator* gpa;                                                 \
-    } prefix##Array;                                                    \
+    } tprefix##Array;                                                   \
                                                                         \
-    prefix##Array mk_ ## prefix ## _array (const size_t size, Allocator* a); \
-    prefix##Array scopy_ ## prefix ## _array(const prefix##Array source, Allocator* a); \
-    prefix##Array copy_ ## prefix ## _array(const prefix##Array source, type (*copy_elt)(type val, Allocator* a), Allocator* a); \
+    tprefix##Array mk_ ## fprefix ## _array (const size_t size, Allocator* a); \
+    tprefix##Array scopy_ ## fprefix ## _array(const tprefix##Array source, Allocator* a); \
+    tprefix##Array copy_ ## fprefix ## _array(const tprefix##Array source, type (*copy_elt)(type val, Allocator* a), Allocator* a); \
                                                                         \
-    void delete_ ## prefix ## _array(prefix##Array arr, void (*delete_elem)(type elem)); \
-    void sdelete_ ## prefix ## _array(prefix##Array arr);               \
+    void delete_ ## fprefix ## _array(tprefix##Array arr, void (*delete_elem)(type elem)); \
+    void sdelete_ ## fprefix ## _array(tprefix##Array arr);             \
                                                                         \
-    void push_ ## prefix(type val, prefix##Array* arr);              \
-    type pop_ ## prefix(prefix##Array* arr);                         \
+    void push_ ## fprefix(type val, tprefix##Array* arr);               \
+    type pop_ ## fprefix(tprefix##Array* arr);                          \
                                                                         \
-    static inline void aset_ ## prefix(const size_t index, type val, const prefix##Array arr) { \
+    static inline void aset_ ## fprefix(const size_t index, type val, const tprefix##Array arr) { \
         arr.data[index] = val;                                          \
     }                                                                   \
-    static inline type aref_ ## prefix(const size_t index, const prefix##Array arr) { \
+    static inline type aref_ ## fprefix(const size_t index, const tprefix##Array arr) { \
         return arr.data[index];                                         \
     }                                                                   \
 

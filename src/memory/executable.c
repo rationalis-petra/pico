@@ -63,7 +63,7 @@ void free_ex_mem(ex_mem mem) {
 typedef struct small_block {
     ex_mem block_memory;
     size_t num_chunks;
-    u8_array free_slots;
+    U8Array free_slots;
 } small_block;
 static const size_t small_chunk_size = 8;
 
@@ -79,7 +79,7 @@ typedef struct large_block {
 
 typedef struct exec_context {
     // Blocks
-    ptr_array small_blocks;
+    PtrArray small_blocks;
 
     // TODO: improve the medium block strategy...
     medium_block* medium_blocks;
@@ -93,7 +93,7 @@ typedef struct exec_context {
     // To simplify the allocator, all auxiliary datastructures (such as the free
     // list and block metadata) are stored in memory allocated by a separate
     // allocator.
-    allocator metadata_allocator;
+    Allocator* metadata_allocator;
 } exec_context;
 
 void* alloc_small(exec_context* ctx) {
@@ -112,10 +112,10 @@ void* alloc_small(exec_context* ctx) {
     sb->block_memory.size = ctx->blocksize / 8;
     sb->free_slots = mk_u8_array(sb->num_chunks, ctx->metadata_allocator);
     for (size_t i = 0; i < sb->num_chunks; i++) {
-        push_u8(0, &sb->free_slots, ctx->metadata_allocator);
+        push_u8(0, &sb->free_slots);
     }
     sb->free_slots.data[0] = true;
-    push_ptr(sb, &ctx->small_blocks, ctx->metadata_allocator);
+    push_ptr(sb, &ctx->small_blocks);
     return sb->block_memory.data;
 }
 
@@ -232,7 +232,7 @@ void exec_free(void* ptr, void* ctx) {
     // possibly log error & crash??
 }
 
-allocator mk_executable_allocator(allocator a) {
+Allocator mk_executable_allocator(Allocator* a) {
     exec_context* ctx = mem_alloc(sizeof(exec_context), a); 
     ctx->blocksize = platform_pagesize();
     ctx->small_blocks = mk_ptr_array(10, a);
@@ -242,7 +242,7 @@ allocator mk_executable_allocator(allocator a) {
     ctx->large_blocks_end = NULL;
     ctx->metadata_allocator = a;
 
-    allocator out =
+    Allocator out =
         { .ctx = ctx
         , .malloc = &exec_alloc
         , .free = &exec_free
@@ -251,16 +251,16 @@ allocator mk_executable_allocator(allocator a) {
     return out;
 }
 
-void release_executable_allocator(allocator a) {
+void release_executable_allocator(Allocator a) {
     exec_context* ctx = (exec_context*) a.ctx;
-    allocator mda = ctx->metadata_allocator;
+    Allocator* mda = ctx->metadata_allocator;
 
     for (size_t i = 0; i < ctx->small_blocks.len; i++) {
         small_block* b = (small_block*) ctx->small_blocks.data[i];
         free_ex_mem(b->block_memory);
         mem_free(b, mda);
     }
-    sdelete_ptr_array(ctx->small_blocks, mda);
+    sdelete_ptr_array(ctx->small_blocks);
 
     medium_block* mb = ctx->medium_blocks;
     while (mb) {

@@ -4,6 +4,6 @@
 #include "data/meta/amap_header.h"
 #include "pico/values/values.h"
 
-AMAP_HEADER(Symbol, void*, SymPtr)
+AMAP_HEADER(Symbol, void*, sym_ptr, SymPtr)
 
 #endif

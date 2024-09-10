@@ -3,10 +3,9 @@
 
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
-#include "pretty/standard_types.h"
 
-eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backlinks, pi_module* module, allocator a) {
-    eval_result res;
+EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a) {
+    EvalResult res;
     switch (top.type) {
     case TLExpr: {
         size_t sz = pi_size_of(*top.expr.ptype);
@@ -60,8 +59,8 @@ eval_result pico_run_toplevel(toplevel top, assembler* ass, sym_sarr_amap* backl
     return res;
 }
 
-// Note: destructively modifies assembler! probaly want a better solution in the future
-void* pico_run_expr(assembler* ass, size_t rsize, allocator a) {
+// Note: destructively modifies Assembler! probaly want a better solution in the future
+void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
     /* result generated; */
     /* generated.type = Ok; */
     void* value = mem_alloc(rsize, a);
@@ -82,7 +81,7 @@ void* pico_run_expr(assembler* ass, size_t rsize, allocator a) {
     // pop value from stack
     build_binary_op(ass, Add, reg(RSP), imm32(rsize), a);
     build_nullary_op(ass, Ret, a);
-    u8_array instructions = get_instructions(ass);
+    U8Array instructions = get_instructions(ass);
 
     int64_t out;
     __asm__ __volatile__(
@@ -97,8 +96,8 @@ void* pico_run_expr(assembler* ass, size_t rsize, allocator a) {
     return value;
 }
 
-document* pretty_res(eval_result res, allocator a) {
-    document* out = NULL;
+Document* pretty_res(EvalResult res, Allocator* a) {
+    Document* out = NULL;
     switch (res.type) {
     case ERFail:
         out = mk_str_doc(res.error_message, a);

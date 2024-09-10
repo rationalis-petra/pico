@@ -2,10 +2,10 @@
 
 
 // The 'actual' parser funciton
-parse_result parse_main(istream* is, sourcepos* parse_state, allocator a);
+ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a);
 
-parse_result parse_rawtree(istream* is, allocator a) {
-    sourcepos start_state;
+ParseResult parse_rawtree(IStream* is, Allocator* a) {
+    SourcePos start_state;
     start_state.col = 0;
     start_state.row = 0;
     return parse_main(is, &start_state, a);
@@ -16,19 +16,19 @@ parse_result parse_rawtree(istream* is, allocator a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allocator a);
-parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a);
-parse_result parse_number(istream* is, sourcepos* parse_state, allocator a);
-parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allocator a);
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Allocator* a);
+ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
 
 // Helper functions
-stream_result consume_whitespace(istream* is, sourcepos* parse_state);
+StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
 bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
-parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
-    parse_result res;
+ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
+    ParseResult res;
     uint32_t point;
 
     consume_whitespace(is, parse_state);
@@ -63,18 +63,18 @@ parse_result parse_main(istream* is, sourcepos* parse_state, allocator a) {
     return res;
 }
 
-parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allocator a) {
-    parse_result res;
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Allocator* a) {
+    ParseResult res;
     res.type = ParseFail;
     res.data.range.start = *parse_state;
-    parse_result out;
-    ptr_array nodes = mk_ptr_array(5, a);
+    ParseResult out;
+    PtrArray nodes = mk_ptr_array(5, a);
     uint32_t codepoint;
 
     // Assume '(' is next character
     next(is, &codepoint);
     consume_whitespace(is, parse_state);
-    stream_result sres;
+    StreamResult sres;
     while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == term)) {
         res = parse_main(is, parse_state, a);
 
@@ -83,10 +83,10 @@ parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allo
             break;
         }
         else {
-            pi_rawtree* node = (pi_rawtree*)mem_alloc(sizeof(pi_rawtree), a);
+            RawTree* node = (RawTree*)mem_alloc(sizeof(RawTree), a);
             node->type = res.data.result.type;
             node->data = res.data.result.data;
-            push_ptr(node, &nodes, a);
+            push_ptr(node, &nodes);
         }
         consume_whitespace(is, parse_state);
     }
@@ -94,11 +94,13 @@ parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allo
         out.type = ParseFail;
         out.data.range.start = *parse_state;
         out.data.range.end = *parse_state;
-        delete_ptr_array(nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
+        for (size_t i = 0; i < nodes.len; i++) delete_rawtree_ptr(nodes.data[i], a);
+        sdelete_ptr_array(nodes);
     }
     else if (res.type == ParseFail) {
         out = res;
-        delete_ptr_array(nodes, (void(*)(void*, allocator))delete_rawtree_ptr, a);
+        for (size_t i = 0; i < nodes.len; i++) delete_rawtree_ptr(nodes.data[i], a);
+        sdelete_ptr_array(nodes);
     }
     else {
         out.type = ParseSuccess;
@@ -110,33 +112,33 @@ parse_result parse_list(istream* is, sourcepos* parse_state, uint32_t term, allo
     return out;
 }
 
-parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a) {
+ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t codepoint;
-    stream_result result;
-    parse_result out;
-    u32_array arr = mk_u32_array(10, a);
+    StreamResult result;
+    ParseResult out;
+    U32Array arr = mk_u32_array(10, a);
 
-    ptr_array terms = mk_ptr_array(2, a);
-    pi_rawtree* rhs;
+    PtrArray terms = mk_ptr_array(2, a);
+    RawTree* rhs;
 
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
-            push_u32(codepoint, &arr, a);
+            push_u32(codepoint, &arr);
         } else if (codepoint == '.') {
             next(is, &codepoint);
             out = parse_atom(is, parse_state, a);
             if (out.type != ParseSuccess)
                 return out;
-            pi_rawtree* op = mem_alloc(sizeof(pi_rawtree), a);
-            *op = (pi_rawtree) {
+            RawTree* op = mem_alloc(sizeof(RawTree), a);
+            *op = (RawTree) {
                 .type = RawAtom,
                 .data.atom.type = ASymbol,
                 .data.atom.symbol = string_to_symbol(mv_string(".")),
             };
-            push_ptr(op, &terms, a);
+            push_ptr(op, &terms);
 
-            rhs = mem_alloc(sizeof(pi_rawtree), a);
+            rhs = mem_alloc(sizeof(RawTree), a);
             *rhs = out.data.result;
             break;
         } else if (codepoint == ':') {
@@ -144,15 +146,15 @@ parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a) {
             out = parse_atom(is, parse_state, a);
             if (out.type != ParseSuccess)
                 return out;
-            pi_rawtree* op = mem_alloc(sizeof(pi_rawtree), a);
-            *op = (pi_rawtree) {
+            RawTree* op = mem_alloc(sizeof(RawTree), a);
+            *op = (RawTree) {
                 .type = RawAtom,
                 .data.atom.type = ASymbol,
                 .data.atom.symbol = string_to_symbol(mv_string(":")),
             };
-            push_ptr(op, &terms, a);
+            push_ptr(op, &terms);
 
-            rhs = mem_alloc(sizeof(pi_rawtree), a);
+            rhs = mem_alloc(sizeof(RawTree), a);
             *rhs = out.data.result;
             break;
         } else {
@@ -165,9 +167,9 @@ parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a) {
         out.data.range.end = *parse_state;
     }
     else {
-        string str = string_from_UTF_32(arr, a);
-        pi_symbol sym_result = string_to_symbol(str);
-        sdelete_u32_array(arr, a);
+        String str = string_from_UTF_32(arr, a);
+        Symbol sym_result = string_to_symbol(str);
+        sdelete_u32_array(arr);
         delete_string(str, a);
 
         if (terms.len == 0) {
@@ -175,16 +177,16 @@ parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a) {
             out.data.result.type = RawAtom;
             out.data.result.data.atom.type = ASymbol;
             out.data.result.data.atom.symbol = sym_result;
-            sdelete_ptr_array(terms, a);
+            sdelete_ptr_array(terms);
         } else {
-            pi_rawtree* lhs = mem_alloc(sizeof(pi_rawtree), a);
-            *lhs = (pi_rawtree) {
+            RawTree* lhs = mem_alloc(sizeof(RawTree), a);
+            *lhs = (RawTree) {
                 .type = RawAtom,
                 .data.atom.type = ASymbol,
                 .data.atom.symbol = sym_result,
             };
-            push_ptr(rhs, &terms, a);
-            push_ptr(lhs, &terms, a);
+            push_ptr(rhs, &terms);
+            push_ptr(lhs, &terms);
 
             out.type = ParseSuccess;
             out.data.result.type = RawList;
@@ -194,16 +196,16 @@ parse_result parse_atom(istream* is, sourcepos* parse_state, allocator a) {
     return out;
 }
 
-parse_result parse_number(istream* is, sourcepos* parse_state, allocator a) {
+ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t codepoint;
-    stream_result result;
-    parse_result out;
-    u8_array arr = mk_u8_array(10, a);
+    StreamResult result;
+    ParseResult out;
+    U8Array arr = mk_u8_array(10, a);
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
         next(is, &codepoint);
         // the cast is safe as is-numchar ensures codepoint < 256
         uint8_t val = (uint8_t) codepoint - 48;
-        push_u8(val, &arr, a);
+        push_u8(val, &arr);
     }
     if (result != StreamSuccess) {
         out.type = ParseFail;
@@ -222,21 +224,21 @@ parse_result parse_number(istream* is, sourcepos* parse_state, allocator a) {
         out.data.result.data.atom.type = AI64;
         out.data.result.data.atom.int_64 = int_result;
     }
-    sdelete_u8_array(arr, a);
+    sdelete_u8_array(arr);
     return out;
 }
 
-parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allocator a) {
+ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t codepoint;
-    stream_result result;
-    parse_result out;
-    u32_array arr = mk_u32_array(10, a);
+    StreamResult result;
+    ParseResult out;
+    U32Array arr = mk_u32_array(10, a);
 
     next(is, &codepoint); // consume token
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
         next(is, &codepoint);
-        push_u32(codepoint, &arr, a);
+        push_u32(codepoint, &arr);
     }
 
     if (result != StreamSuccess) {
@@ -245,8 +247,8 @@ parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allo
         out.data.range.end = *parse_state;
     } else if (arr.len == 0) {
         char cstr[2] = {prefix, '\0'};
-        string str = mv_string(cstr);
-        pi_symbol sym_result = string_to_symbol(str);
+        String str = mv_string(cstr);
+        Symbol sym_result = string_to_symbol(str);
 
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
@@ -255,9 +257,9 @@ parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allo
 
     } else {
         char cstr[2] = {prefix, '\0'};
-        string str = mv_string(cstr);
-        pi_symbol sym_result = string_to_symbol(str);
-        pi_rawtree* proj = mem_alloc(sizeof(pi_rawtree), a);
+        String str = mv_string(cstr);
+        Symbol sym_result = string_to_symbol(str);
+        RawTree* proj = mem_alloc(sizeof(RawTree), a);
         proj->type = RawAtom;
         proj->data.atom.type = ASymbol;
         proj->data.atom.symbol = sym_result;
@@ -265,14 +267,14 @@ parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allo
         str = string_from_UTF_32(arr, a);
         sym_result = string_to_symbol(str);
         delete_string(str, a);
-        pi_rawtree* field = mem_alloc(sizeof(pi_rawtree), a);
+        RawTree* field = mem_alloc(sizeof(RawTree), a);
         field->type = RawAtom;
         field->data.atom.type = ASymbol;
         field->data.atom.symbol = sym_result;
 
-        ptr_array nodes = mk_ptr_array(2, a);
-        push_ptr(proj, &nodes, a);
-        push_ptr(field, &nodes, a);
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(proj, &nodes);
+        push_ptr(field, &nodes);
 
         out.type = ParseSuccess;
         out.data.result.type = RawList;
@@ -280,14 +282,14 @@ parse_result parse_prefix(char prefix, istream* is, sourcepos* parse_state, allo
     }
 
     // cleanup
-    sdelete_u32_array(arr, a);
+    sdelete_u32_array(arr);
     
     return out;
 }
 
-stream_result consume_whitespace(istream* is, sourcepos* parse_state) {
+StreamResult consume_whitespace(IStream* is, SourcePos* parse_state) {
     uint32_t codepoint;
-    stream_result result;
+    StreamResult result;
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (is_whitespace(codepoint)) {
             // TODO: Check if newline!

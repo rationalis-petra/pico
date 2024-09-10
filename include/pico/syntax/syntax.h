@@ -134,34 +134,34 @@ void delete_syntax_pointer(Syntax* syntax, Allocator* a);
 
 
 /* Other instances */
-Document* pretty_syntax(Syntax* syntax, Allocator a);
+Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 // -----------------------------------------------------------------------------
 //   Toplevel
 // -----------------------------------------------------------------------------
 
-typedef enum TopLevel_t {
+typedef enum {
     TLDef,
     TLExpr,
 } TopLevel_t;
 
-typedef struct definition {
+typedef struct {
     Symbol bind;
     Syntax* value;
-} definition;
+} Definition;
 
-typedef struct TopLevel {
+typedef struct {
     TopLevel_t type;
     union {
-        definition def;
+        Definition def;
         Syntax expr;
     };
 } TopLevel;
 
-void delete_def(definition def, Allocator* a);
+void delete_def(Definition def, Allocator* a);
 void delete_toplevel(TopLevel top, Allocator* a);
 
-Document* pretty_def(definition* def, Allocator* a);
+Document* pretty_def(Definition* def, Allocator* a);
 Document* pretty_toplevel(TopLevel* TopLevel, Allocator* a);
 
 PiType* toplevel_type(TopLevel top);

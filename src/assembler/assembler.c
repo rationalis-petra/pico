@@ -27,118 +27,117 @@
  * 
  */ 
 
-struct assembler {
-    u8_array instructions;
-    allocator allocator;
+struct Assembler {
+    U8Array instructions;
+    Allocator* gpa;
 };
 
-void clear_assembler(assembler* assembler) {
+void clear_assembler(Assembler* assembler) {
     assembler->instructions.len = 0;
 }
                                             
-assembler* mk_assembler(allocator a) {
-    assembler* out = (assembler*)mem_alloc(sizeof(assembler), a);
+Assembler* mk_assembler(Allocator* a) {
+    Assembler* out = (Assembler*)mem_alloc(sizeof(Assembler), a);
     out->instructions = mk_u8_array(1024, a);
-    out->allocator = a;
+    out->gpa = a;
     return out;
 }
 
-u8_array get_instructions(assembler* ass) {
+U8Array get_instructions(Assembler* ass) {
     return ass->instructions;
 }
 
-size_t get_pos(assembler* ass) {
+size_t get_pos(Assembler* ass) {
     return ass->instructions.len;
 }
 
-void delete_assembler (assembler* ass) {
-    sdelete_u8_array(ass->instructions, ass->allocator);
-    mem_free(ass, ass->allocator);
+void delete_assembler (Assembler* ass) {
+    sdelete_u8_array(ass->instructions);
+    mem_free(ass, ass->gpa);
 }
 
-document* pretty_assembler(assembler* assembler, allocator a) {
-    ptr_array nodes = mk_ptr_array(4 + assembler->instructions.len, a);
+Document* pretty_assembler(Assembler* assembler, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(4 + assembler->instructions.len, a);
 
     for (size_t i = 0; i < assembler->instructions.len; i++) {
         int len = snprintf(NULL, 0, "%02x", assembler->instructions.data[i]) + 1;
         char* str = (char*)mem_alloc(sizeof(char) * len, a);
         snprintf(str, len, "%02" PRIx8, assembler->instructions.data[i]);
-        document* arg = mv_str_doc(mv_string(str), a);
+        Document* arg = mv_str_doc(mv_string(str), a);
 
-        push_ptr(arg, &nodes, a);
+        push_ptr(arg, &nodes);
     }
 
     return mv_sep_doc(nodes, a);
 }
 
-location reg(regname reg) {
-    location out;
-    out.type = Register;
-    out.sz = sz_64;
-    out.reg = reg;
-    return out;
+Location reg(Regname reg) {
+    return (Location) {
+      .type = Register,
+      .sz = sz_64,
+      .reg = reg,
+    };
 }
 
-location ref(regname name) {
-    location out;
-    out.type = Deref;
-    out.reg = name;
-    out.disp_sz = 0;
-    return out;
+Location ref(Regname name) {
+    return (Location) {
+      .type = Deref,
+      .reg = name,
+      .disp_sz = 0,
+    };
 }
 
-location rref(regname name, int8_t offset) {
-    location out;
-    out.type = Deref;
-    out.sz = sz_64;
-    out.reg = name;
-
-    out.disp_sz = 1;
-    out.disp_8 = offset;
-    return out;
+Location rref(Regname name, int8_t offset) {
+    return (Location) {
+      .type = Deref,
+      .sz = sz_64,
+      .reg = name,
+      .disp_sz = 1,
+      .disp_8 = offset,
+    };
 }
 
-location imm8(int8_t immediate) {
-    location out;
-    out.type = Immediate;
-    out.sz = sz_8;
-    out.immediate_8 = immediate;
-    return out;
+Location imm8(int8_t immediate) {
+    return (Location) {
+      .type = Immediate,
+      .sz = sz_8,
+      .immediate_8 = immediate,
+    };
 }
-location imm16(int16_t immediate) {
-    location out;
-    out.type = Immediate;
-    out.sz = sz_16;
-    out.immediate_16 = immediate;
-    return out;
-}
-
-location imm32(int32_t immediate) {
-    location out;
-    out.type = Immediate;
-    out.sz = sz_32;
-    out.immediate_32 = immediate;
-    return out;
+Location imm16(int16_t immediate) {
+    return (Location) {
+      .type = Immediate,
+      .sz = sz_16,
+      .immediate_16 = immediate,
+    };
 }
 
-location imm64(int64_t immediate) {
-    location out;
-    out.type = Immediate;
-    out.sz = sz_64;
-    out.immediate_64 = immediate;
-    return out;
+Location imm32(int32_t immediate) {
+    return (Location) {
+       .type = Immediate,
+       .sz = sz_32,
+       .immediate_32 = immediate,
+    };
+}
+
+Location imm64(int64_t immediate) {
+    return (Location) {
+      .type = Immediate,
+      .sz = sz_64,
+      .immediate_64 = immediate,
+    };
 }
 
 /* Encoding relevant to binary operations:
  * • ModRm byte:  
  */
 
-typedef enum enc_order {
+typedef enum EncOrder {
     RM,
     MR,
     MI,
     OI,
-} enc_order;
+} EncOrder;
 
 typedef struct {
     bool valid;
@@ -146,16 +145,16 @@ typedef struct {
     uint8_t init_rex_byte;
     bool use_modrm_byte;
     uint8_t num_immediate_bytes;
-    enc_order order;
+    EncOrder order;
 
     bool has_opcode_ext;
-} binary_table_entry;
+} BinaryTableEntry;
 
-static binary_table_entry binary_table[256];
+static BinaryTableEntry binary_table[256];
 
 static uint8_t binary_opcode_table[Binary_Op_Count][256][2];
 
-uint8_t bindex(dest_t dest_ty, location_size dest_sz, dest_t src_ty, location_size src_sz) {
+uint8_t bindex(Dest_t dest_ty, LocationSize dest_sz, Dest_t src_ty, LocationSize src_sz) {
     return dest_ty | (dest_sz << 2) | (src_ty << 4) | (src_sz << 6) ;
 };
 
@@ -166,7 +165,7 @@ void build_binary_table() {
     }
 
     // r/m64, imm8-64
-    binary_table[bindex(Register, sz_64, Immediate, sz_8)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -175,7 +174,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Register, sz_64, Immediate, sz_32)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -184,7 +183,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Deref, sz_64, Immediate, sz_8)] = (binary_table_entry){
+    binary_table[bindex(Deref, sz_64, Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -193,7 +192,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Deref, sz_64, Immediate, sz_32)] = (binary_table_entry){
+    binary_table[bindex(Deref, sz_64, Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -204,7 +203,7 @@ void build_binary_table() {
     };
 
     // r/m64, r64
-    binary_table[bindex(Register, sz_64, Register, sz_64)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -213,7 +212,7 @@ void build_binary_table() {
         .order = MR,
         .has_opcode_ext = false,
     };
-    binary_table[bindex(Deref, sz_64, Register, sz_64)] = (binary_table_entry){
+    binary_table[bindex(Deref, sz_64, Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -225,7 +224,7 @@ void build_binary_table() {
 
 
     // r64, r/m64
-    binary_table[bindex(Register, sz_64, Register, sz_64)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -234,7 +233,7 @@ void build_binary_table() {
         .order = RM,
         .has_opcode_ext = false,
     };
-    binary_table[bindex(Register, sz_64, Deref, sz_64)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Deref, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -245,7 +244,7 @@ void build_binary_table() {
     };
 
     // r64, imm64
-    binary_table[bindex(Register, sz_64, Immediate, sz_64)] = (binary_table_entry){
+    binary_table[bindex(Register, sz_64, Immediate, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -411,10 +410,10 @@ uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1) << 1; }
 uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 
 
-asm_result build_binary_op(assembler* assembler, binary_op op, location dest, location src, allocator err_allocator) {
-    binary_table_entry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
+AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator) {
+    BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
-        return (asm_result) {
+        return (AsmResult) {
             .type = Err,
             .error_message = mv_string("Invalid binary table entry."),
         };
@@ -436,7 +435,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
     // Step1: Opcode
     opcode_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][0];
     if (opcode_byte == 0x90) {
-        return (asm_result) {
+        return (AsmResult) {
             .type = Err,
             .error_message = mv_string("Invalid binary opcode"),
         };
@@ -445,7 +444,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
         uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]; 
         modrm_byte |= modrm_reg(ext_byte);
         if (ext_byte == 0x09) {
-            return (asm_result) {
+            return (AsmResult) {
                 .type = Err,
                 .error_message = mv_string("Invalid binary opcode extension"),
             };
@@ -455,8 +454,8 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
     // Step 2: Determine Operand Encoding type
     // Store the r/m op
     if (be.use_modrm_byte) {
-        location rm_loc; 
-        location reg_loc;
+        Location rm_loc; 
+        Location reg_loc;
 
         if (be.order == MR || be.order == MI) {
             rm_loc = dest;
@@ -466,7 +465,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
             rm_loc = src;
             reg_loc = dest;
         } else {
-            return (asm_result) {
+            return (AsmResult) {
                 .type = Err,
                 .error_message = mv_string("Unrecognized binary op operand order encoding"),
             };
@@ -497,7 +496,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
                     disp_bytes[i]  = rm_loc.disp_bytes[i];
                 }
             } else {
-                return (asm_result) {
+                return (AsmResult) {
                     .type = Err,
                     .error_message = mv_string("Bad displacement size: not 0, 1 or 4"),
                 };
@@ -545,7 +544,7 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
             opcode_byte |= (dest.reg & 0b111);
             rex_byte |= rex_reg_ext((dest.reg & 0b1000) >> 3);
         } else {
-            return (asm_result) {
+            return (AsmResult) {
                 .type = Err,
                 .error_message = mv_string("Unrecognized binary op operand order encoding"),
             };
@@ -553,35 +552,33 @@ asm_result build_binary_op(assembler* assembler, binary_op op, location dest, lo
     }
 
     // Step 5: write bytes
-    asm_result out;
-    out.type = Ok;
+    AsmResult out = {.type = Ok};
 
-    allocator a = assembler->allocator;
-    u8_array* instructions = &assembler->instructions;
+    U8Array* instructions = &assembler->instructions;
     if (be.use_rex_byte)
-        push_u8(rex_byte, instructions, a);
+        push_u8(rex_byte, instructions);
 
     // opcode
-    push_u8(opcode_byte, instructions, a);
+    push_u8(opcode_byte, instructions);
 
     if (be.use_modrm_byte)
-        push_u8(modrm_byte, instructions, a);
+        push_u8(modrm_byte, instructions);
 
     if (use_sib_byte)
-        push_u8(sib_byte, instructions, a);
+        push_u8(sib_byte, instructions);
     
     for (uint8_t i = 0; i < num_disp_bytes; i++)
-        push_u8(disp_bytes[i], &assembler->instructions, a);
+        push_u8(disp_bytes[i], &assembler->instructions);
 
     if (be.num_immediate_bytes != 0)
         out.backlink = instructions->len;
     for (uint8_t i = 0; i < be.num_immediate_bytes; i++)
-        push_u8(src.immediate_bytes[i], &assembler->instructions, a);
+        push_u8(src.immediate_bytes[i], &assembler->instructions);
 
     return out;
 }
 
-void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte,regname reg) {
+void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte, Regname reg) {
     if (reg & 010) set_bit(rex_byte, 2);
     *modrm_byte |= reg & 0b111;
 }
@@ -591,18 +588,16 @@ void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte,regname reg) {
 // 
 
 // Return: the ModR/M byte for a single register src/dest
-uint8_t modrm_reg_old(regname r2) {
+uint8_t modrm_reg_old(Regname r2) {
     return 0b11010000 | (r2 & 0b111); 
 }
 
-uint8_t modrm_mem(location mem) {
+uint8_t modrm_mem(Location mem) {
     return 0b01110000 + (mem.reg & 0b111); 
 }
 
-asm_result build_unary_op(assembler* assembler, unary_op op, location loc, allocator err_allocator) {
-    allocator a = assembler->allocator;
-    asm_result out;
-    out.type = Ok;
+AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator) {
+    AsmResult out = {.type = Ok};
     bool use_rex_byte = false;
     uint8_t rex_byte = 0b01000000;
 
@@ -776,29 +771,27 @@ asm_result build_unary_op(assembler* assembler, unary_op op, location loc, alloc
     }
     if (out.type == Err) return out;
 
-    u8_array* instructions = &assembler->instructions;
+    U8Array* instructions = &assembler->instructions;
     if (use_rex_byte) {
-        push_u8(rex_byte, instructions, a);
+        push_u8(rex_byte, instructions);
     }
     if (use_prefix_byte) {
-        push_u8(prefix_byte, instructions, a);
+        push_u8(prefix_byte, instructions);
     }
-    push_u8(opcode, instructions, a);
+    push_u8(opcode, instructions);
     if (use_mod_rm_byte) {
-        push_u8(mod_rm_byte,instructions, a);
+        push_u8(mod_rm_byte,instructions);
     }
     if (num_immediate_bytes != 0)
         out.backlink = instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
-        push_u8(immediate_bytes[i], instructions, a);
+        push_u8(immediate_bytes[i], instructions);
     }
     return out;
 }
 
-asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_allocator) {
-    allocator a = assembler->allocator;
-    asm_result out;
-    out.type = Ok;
+AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator) {
+    AsmResult out = {.type = Ok};
 
     uint8_t opcode;
     switch (op) {
@@ -806,8 +799,8 @@ asm_result build_nullary_op(assembler* assembler, nullary_op op, allocator err_a
         opcode = 0xC3;
         break;
     }
-    u8_array* instructions = &assembler->instructions;
-    push_u8(opcode, instructions, a);
+    U8Array* instructions = &assembler->instructions;
+    push_u8(opcode, instructions);
     return out;
 }
 

@@ -22,10 +22,10 @@ typedef struct repl_opts {
     bool debug_print;
 } repl_opts;
 
-pi_type mk_binop_type(allocator a, prim_type a1, prim_type a2, prim_type r) {
-    pi_type* i1 = mem_alloc(sizeof(pi_type), a);
-    pi_type* i2 = mem_alloc(sizeof(pi_type), a);
-    pi_type* i3 = mem_alloc(sizeof(pi_type), a);
+PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
+    PiType* i1 = mem_alloc(sizeof(PiType), a);
+    PiType* i2 = mem_alloc(sizeof(PiType), a);
+    PiType* i3 = mem_alloc(sizeof(PiType), a);
 
     i1->sort = TPrim;
     i1->prim = a1;
@@ -34,11 +34,11 @@ pi_type mk_binop_type(allocator a, prim_type a1, prim_type a2, prim_type r) {
     i3->sort = TPrim;
     i3->prim = r;
 
-    pi_type type;
+    PiType type;
     type.sort = TProc;
-    ptr_array args = mk_ptr_array(2, a);
-    push_ptr(i1, &args, a);
-    push_ptr(i2, &args, a);
+    PtrArray args = mk_ptr_array(2, a);
+    push_ptr(i1, &args);
+    push_ptr(i2, &args);
 
     type.proc.args = args;
     type.proc.ret = i3;
@@ -46,7 +46,7 @@ pi_type mk_binop_type(allocator a, prim_type a1, prim_type a2, prim_type r) {
     return type;
 }
 
-void build_binary_fun(assembler* ass, binary_op op, allocator a) {
+void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a) {
 
     build_unary_op (ass, Pop, reg(RCX),a );
     build_unary_op (ass, Pop, reg(RBX), a);
@@ -57,8 +57,8 @@ void build_binary_fun(assembler* ass, binary_op op, allocator a) {
     build_nullary_op (ass, Ret, a);
 }
 
-void build_comp_fun(assembler* ass, unary_op op, allocator a) {
-    build_unary_op (ass, Pop, reg(RCX),a );
+void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a) {
+    build_unary_op (ass, Pop, reg(RCX), a);
     build_unary_op (ass, Pop, reg(RBX), a);
     build_unary_op (ass, Pop, reg(RAX), a);
     build_binary_op (ass, Cmp, reg(RAX), reg(RBX), a);
@@ -68,15 +68,15 @@ void build_comp_fun(assembler* ass, unary_op op, allocator a) {
     build_nullary_op (ass, Ret, a);
 }
 
-pi_module* base_module(assembler* ass, allocator a) {
-    pi_module* module = mk_module(a);
-    pi_symbol sym;
+Module* base_module(Assembler* ass, Allocator* a) {
+    Module* module = mk_module(a);
+    Symbol sym;
 
-    pi_type type;
-    pi_type type_val;
+    PiType type;
+    PiType type_val;
     type = mk_prim_type(TType);
     type_val = mk_prim_type(Int_64);
-    pi_type* type_data = &type_val;
+    PiType* type_data = &type_val;
 
     sym = string_to_symbol(mv_string("I64"));
     add_def(module, sym, type, &type_data);
@@ -114,7 +114,7 @@ pi_module* base_module(assembler* ass, allocator a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    pi_term_former_t former;
+    TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
 
@@ -170,14 +170,14 @@ pi_module* base_module(assembler* ass, allocator a) {
     return module;
 }
 
-bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_module* module, repl_opts opts) {
+bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, repl_opts opts) {
     // Create an arena allocator to use in this iteration.
-    allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(4096, a);
 
     clear_assembler(ass);
-    environment* env = env_from_module(module, arena);
+    Environment* env = env_from_module(module, &arena);
 
-    parse_result res = parse_rawtree(cin, arena);
+    ParseResult res = parse_rawtree(cin, &arena);
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);
         release_arena_allocator(arena);
@@ -189,9 +189,9 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
         return false;
     }
 
-    document* doc;
+    Document* doc;
     if (opts.debug_print) {
-        doc = pretty_rawtree(res.data.result, arena);
+        doc = pretty_rawtree(res.data.result, &arena);
         write_string(mv_string("Pretty Printing Raw Syntax\n"), cout);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
@@ -201,7 +201,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Resolution
     // -------------------------------------------------------------------------
 
-    abs_result abs = abstract(res.data.result, env, arena);
+    AbsResult abs = abstract(res.data.result, env, &arena);
     if (abs.type == Err) {
         write_string(mv_string("Abstract Faled :(\n"), cout);
         write_string(abs.error_message, cout);
@@ -217,7 +217,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
-        doc = pretty_toplevel(&abs.out, arena);
+        doc = pretty_toplevel(&abs.out, &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -228,7 +228,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    result tc_res = type_check(&abs.out, env, arena);
+    Result tc_res = type_check(&abs.out, env, &arena);
     if (tc_res.type == Err) {
         write_string(mv_string("Typechecking Failed\n"), cout);
         write_string(tc_res.error_message, cout);
@@ -244,7 +244,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-        doc = pretty_type(toplevel_type(abs.out), arena);
+        doc = pretty_type(toplevel_type(abs.out), &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -253,7 +253,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Code Generation
     // -------------------------------------------------------------------------
 
-    gen_result gen_res = generate_toplevel(abs.out, env, ass, arena);
+    GenResult gen_res = generate_toplevel(abs.out, env, ass, &arena);
 
     if (gen_res.type == Err) {
         write_string(mv_string("Codegen Failed\n"), cout);
@@ -270,7 +270,7 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Binary\n"), cout);
-        doc = pretty_assembler(ass, arena);
+        doc = pretty_assembler(ass, &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -279,12 +279,12 @@ bool repl_iter(istream* cin, ostream* cout, allocator a, assembler* ass, pi_modu
     // Evaluation
     // -------------------------------------------------------------------------
 
-    eval_result call_res = pico_run_toplevel(abs.out, ass, &(gen_res.backlinks), module, arena);
+    EvalResult call_res = pico_run_toplevel(abs.out, ass, &(gen_res.backlinks), module, &arena);
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     }
 
-    doc = pretty_res(call_res, arena);
+    doc = pretty_res(call_res, &arena);
 
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
@@ -322,13 +322,13 @@ int main(int argc, char** argv) {
     // Setup
     asm_init();
 
-    allocator stdalloc = get_std_allocator();
-    istream* cin = get_stdin_stream();
-    ostream* cout = get_stdout_stream();
-    allocator exalloc = mk_executable_allocator(stdalloc);
-    assembler* ass = mk_assembler(exalloc);
-    assembler* ass_base = mk_assembler(exalloc);
-    pi_module* module = base_module(ass_base, stdalloc);
+    Allocator* stdalloc = get_std_allocator();
+    IStream* cin = get_stdin_stream();
+    OStream* cout = get_stdout_stream();
+    Allocator exalloc = mk_executable_allocator(stdalloc);
+    Assembler* ass = mk_assembler(&exalloc);
+    Assembler* ass_base = mk_assembler(&exalloc);
+    Module* module = base_module(ass_base, stdalloc);
 
     // Main Loop
     while (repl_iter(cin, cout, stdalloc, ass, module, opts));

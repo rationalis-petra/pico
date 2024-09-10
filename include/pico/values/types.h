@@ -9,7 +9,7 @@
 
 // Forward declarations
 typedef struct PiType PiType;
-typedef struct UvarGenerator UvarGenerator;
+typedef struct UVarGenerator UVarGenerator;
 
 typedef enum PrimType {
     Int_64,
@@ -41,10 +41,10 @@ typedef struct EnumType {
     SymPtrAMap variants;
 } EnumType;
 
-typedef struct UvarType {
+typedef struct UVarType {
     uint64_t id;
     struct PiType* subst;
-} UvarType;
+} UVarType;
 
 struct PiType {
     PiType_t sort; 
@@ -53,7 +53,7 @@ struct PiType {
         ProcType proc;
         StructType structure;
         EnumType enumeration;
-        UvarType* uvar;
+        UVarType* uvar;
     };
 };
 
@@ -70,8 +70,8 @@ size_t pi_size_of(PiType t);
 // Utilities for generating types
 PiType mk_prim_type(PrimType t);
 
-PiType* mk_uvar(UvarGenerator* gen, Allocator* a);
-UvarGenerator* mk_gen(Allocator* a);
-void delete_gen(UvarGenerator* gen, Allocator* a);
+PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
+UVarGenerator* mk_gen(Allocator* a);
+void delete_gen(UVarGenerator* gen, Allocator* a);
 
 #endif

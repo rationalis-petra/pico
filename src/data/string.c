@@ -1,47 +1,46 @@
 #include <string.h>
-#include <stdio.h>
 
 #include "memory/allocator.h"
 #include "data/string.h"
 #include "encodings/utf8.h"
 
-string mk_string(const char* str, allocator a) {
+String mk_string(const char* str, Allocator* a) {
     size_t slen = strlen(str);
-    string out;
+    String out;
     out.memsize = (slen + 1) * sizeof(uint8_t);
     out.bytes = (uint8_t*)mem_alloc(out.memsize, a);
     memcpy(out.bytes, str, out.memsize);
     return out;
 }
 
-string mv_string(const char* str) {
+String mv_string(const char* str) {
     size_t slen = strlen(str);
-    string out;
+    String out;
     out.memsize = (slen + 1) * sizeof(uint8_t);
     out.bytes = (uint8_t*)str;
     return out;
 }
 
-void delete_string(string str, allocator a) {
+void delete_string(String str, Allocator* a) {
     mem_free(str.bytes, a);
 }
 
-string copy_string(const string str, allocator a) {
-    string out;
+String copy_string(const String str, Allocator* a) {
+    String out;
     out.memsize = str.memsize;
     out.bytes = (uint8_t*)mem_alloc(out.memsize, a);
     memcpy(out.bytes, str.bytes, str.memsize);
     return out;
 }
 
-string string_from_UTF_32(u32_array arr, allocator a) {
+String string_from_UTF_32(U32Array arr, Allocator* a) {
     // Step1: calcluate byte length (initialize to 1 for NULL-terminator)
     size_t numbytes = 1;
     for (size_t i = 0; i < arr.len; i++) {
         uint32_t codepoint = aref_u32(i, arr);
         numbytes += point_size_utf8(codepoint);
     }
-    string out;
+    String out;
     out.memsize = numbytes * sizeof(uint8_t);
     out.bytes = mem_alloc(out.memsize, a);
     for (size_t i = 0; i < arr.len; ) {
@@ -54,14 +53,14 @@ string string_from_UTF_32(u32_array arr, allocator a) {
     return out;
 }
 
-int string_cmp(const string lhs, const string rhs) {
+int string_cmp(const String lhs, const String rhs) {
     // TODO: this assumed char == uint8_t. Implement thine own
     //       method, instead of relying on strcmp!
     return strcmp((char*)lhs.bytes, (char*)rhs.bytes);
 }
 
-string string_cat(const string lhs, const string rhs, allocator a) {
-    string out;
+String string_cat(const String lhs, const String rhs, Allocator* a) {
+    String out;
     out.memsize = lhs.memsize + (rhs.memsize - 1);
     out.bytes = (uint8_t*)mem_alloc(out.memsize, a);
     memcpy(out.bytes, lhs.bytes, lhs.memsize);

@@ -15,10 +15,10 @@ typedef struct FileIStream {
     bool owns;
     bool peeked;
     uint32_t peek_codepoint;
-    encoding encoding;
+    Encoding encoding;
 } FileIStream;
 
-struct istream {
+struct IStream {
     IStreamType type;
     union {
         FileIStream file_istream;
@@ -26,9 +26,9 @@ struct istream {
 };
 
 // Constructors
-istream* get_stdin_stream(void) {
+IStream* get_stdin_stream(void) {
     static bool initialized = false;
-    static istream cin;
+    static IStream cin;
 
     if (!initialized) {
         cin.type = IStreamFile;
@@ -42,7 +42,7 @@ istream* get_stdin_stream(void) {
     return &cin;
 }
 
-void delete_istream(istream* stream, allocator a) {
+void delete_istream(IStream* stream, Allocator* a) {
     switch (stream->type) {
     case IStreamFile: {
         if (stream->impl.file_istream.owns) {
@@ -54,7 +54,7 @@ void delete_istream(istream* stream, allocator a) {
 }
 
 // istream methods
-stream_result peek(istream* stream, uint32_t* out) {
+StreamResult peek(IStream* stream, uint32_t* out) {
     switch (stream->type) {
     case IStreamFile: {
         // save current position
@@ -63,7 +63,7 @@ stream_result peek(istream* stream, uint32_t* out) {
             return StreamSuccess;
         }
         else {
-            stream_result result = next(stream, &(stream->impl.file_istream.peek_codepoint));
+            StreamResult result = next(stream, &(stream->impl.file_istream.peek_codepoint));
             stream->impl.file_istream.peeked = true;
             *out = stream->impl.file_istream.peek_codepoint;
             return result;
@@ -74,7 +74,7 @@ stream_result peek(istream* stream, uint32_t* out) {
     }
 }
 
-stream_result next(istream* stream, uint32_t* out) {
+StreamResult next(IStream* stream, uint32_t* out) {
     switch (stream->type) {
     case IStreamFile: {
         if (stream->impl.file_istream.peeked == false) {
@@ -130,19 +130,19 @@ typedef enum OStreamType {
 typedef struct FileOStream {
     FILE* file_ptr;
     bool owns;
-    encoding etype;
+    Encoding etype;
 } FileOStream;
 
-struct ostream {
+struct OStream {
     OStreamType type;
     union {
         FileOStream file_ostream;
     } impl;
 };
 
-ostream* get_stdout_stream() {
+OStream* get_stdout_stream() {
     static bool initialized = false;
-    static ostream cout;
+    static OStream cout;
 
     if (!initialized) {
         initialized = true;
@@ -154,7 +154,7 @@ ostream* get_stdout_stream() {
     return &cout;
 }
 
-void delete_ostream(ostream* stream, allocator a) {
+void delete_ostream(OStream* stream, Allocator* a) {
     switch (stream->type) {
     case OStreamFile: {
         if (stream->impl.file_ostream.owns) {
@@ -165,7 +165,7 @@ void delete_ostream(ostream* stream, allocator a) {
     }
 }
 
-void write_impl(int char_literal, ostream* stream) {
+void write_impl(int char_literal, OStream* stream) {
     switch (stream->type) {
     case OStreamFile: {
         fputc(char_literal, stream->impl.file_ostream.file_ptr);
@@ -174,7 +174,7 @@ void write_impl(int char_literal, ostream* stream) {
     }
 }
 
-void write_codepoint(uint32_t codepoint, ostream* stream) {
+void write_codepoint(uint32_t codepoint, OStream* stream) {
     switch (stream->type) {
     case OStreamFile: {
         // for now, we just use UTF-8 encoding
@@ -191,7 +191,7 @@ void write_codepoint(uint32_t codepoint, ostream* stream) {
     }
 }
 
-void write_string(string str, ostream* stream) {
+void write_string(String str, OStream* stream) {
     switch (stream->type) {
     case OStreamFile:
         // TODO: this is only right for now (while strings are utf-8 internally...)

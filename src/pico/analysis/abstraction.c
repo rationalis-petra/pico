@@ -11,13 +11,13 @@
 // ---
 // "Internal" implementation of resolve_dynamic 
 
-abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a);
+AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a);
 
-bool is_symbol(pi_rawtree* raw) {
+bool is_symbol(RawTree* raw) {
     return (raw->type == RawAtom && raw->data.atom.type == ASymbol);
 }
 
-bool get_fieldname(pi_rawtree* raw, pi_symbol* fieldname) {
+bool get_fieldname(RawTree* raw, Symbol* fieldname) {
     if (raw->type == RawList && raw->data.nodes.len == 2) {
         raw = raw->data.nodes.data[1];
         if (is_symbol(raw)) {
@@ -32,20 +32,20 @@ bool get_fieldname(pi_rawtree* raw, pi_symbol* fieldname) {
     }
 }
 
-bool get_symbol_list(symbol_array* arr, pi_rawtree nodes, allocator a) {
+bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     if (nodes.type == RawAtom) { return false; }
 
     for (size_t i = 0; i < nodes.data.nodes.len; i++) {
-        pi_rawtree* node = aref_ptr(i, nodes.data.nodes);
+        RawTree* node = aref_ptr(i, nodes.data.nodes);
         if (node->type != RawAtom) { return false; }
         if (node->data.atom.type != ASymbol) { return false;  }
-        push_u64(node->data.atom.symbol, arr, a);
+        push_u64(node->data.atom.symbol, arr);
     }
     return true;
 }
 
-pi_type* get_raw_type(pi_rawtree raw, shadow_env* env) {
-    pi_type* out = NULL;
+PiType* get_raw_type(RawTree raw, ShadowEnv* env) {
+    PiType* out = NULL;
     if (raw.type != RawAtom || raw.data.atom.type != ASymbol) {
         return out;
     }
@@ -59,8 +59,8 @@ pi_type* get_raw_type(pi_rawtree raw, shadow_env* env) {
     return out;
 }
 
-abs_result to_toplevel(abs_expr_result res) {
-    abs_result out;
+AbsResult to_toplevel(AbsExprResult res) {
+    AbsResult out;
     switch (res.type) {
     case Ok: {
         out.type = Ok;
@@ -75,15 +75,15 @@ abs_result to_toplevel(abs_expr_result res) {
     return out;
 }
 
-abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_expr_result fn_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(0, raw.data.nodes)), env, a);
+AbsExprResult mk_application(RawTree raw, ShadowEnv* env, Allocator* a) {
+    AbsExprResult fn_res = abstract_expr_i(*(RawTree*)(aref_ptr(0, raw.data.nodes)), env, a);
     if (fn_res.type == Err) {
         return fn_res;
     }
 
-    abs_expr_result res;
+    AbsExprResult res;
     if (fn_res.out.type == SConstructor) {
-        res = (abs_expr_result) {
+        res = (AbsExprResult) {
             .type = Ok,
             .out.type = SVariant,
             .out.variant.enum_type = fn_res.out.constructor.enum_type,
@@ -92,11 +92,11 @@ abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
         };
 
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+            AbsExprResult arg_res = abstract_expr_i(*(RawTree*)(aref_ptr(i, raw.data.nodes)), env, a);
             if (arg_res.type == Ok) {
-                syntax* arg = mem_alloc(sizeof(syntax), a);
+                Syntax* arg = mem_alloc(sizeof(Syntax), a);
                 *arg = arg_res.out;
-                push_ptr(arg, &res.out.variant.args, a);
+                push_ptr(arg, &res.out.variant.args);
             }
             else {
                 delete_syntax(res.out, a);
@@ -105,20 +105,20 @@ abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
             }
         }
     } else {
-        res = (abs_expr_result) {
+        res = (AbsExprResult) {
             .type = Ok,
             .out.type = SApplication,
-            .out.application.function = mem_alloc(sizeof(syntax), a),
+            .out.application.function = mem_alloc(sizeof(Syntax), a),
             .out.application.args = mk_ptr_array(raw.data.nodes.len - 1, a),
         };
         *res.out.application.function = fn_res.out;
 
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            abs_expr_result arg_res = abstract_expr_i(*(pi_rawtree*)(aref_ptr(i, raw.data.nodes)), env, a);
+            AbsExprResult arg_res = abstract_expr_i(*(RawTree*)(aref_ptr(i, raw.data.nodes)), env, a);
             if (arg_res.type == Ok) {
-                syntax* arg = mem_alloc(sizeof(syntax), a);
+                Syntax* arg = mem_alloc(sizeof(Syntax), a);
                 *arg = arg_res.out;
-                push_ptr(arg, &res.out.application.args, a);
+                push_ptr(arg, &res.out.application.args);
             }
             else {
                 delete_syntax(res.out, a);
@@ -131,8 +131,8 @@ abs_expr_result mk_application(pi_rawtree raw, shadow_env* env, allocator a) {
     return res;
 }
 
-abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_expr_result res;
+AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a) {
+    AbsExprResult res;
     switch (former) {
     case FProcedure: {
         if (raw.data.nodes.len < 3) {
@@ -141,27 +141,27 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             return res;
         }
 
-        symbol_array arguments = mk_u64_array(2, a);
-        if (!get_symbol_list(&arguments, *(pi_rawtree*)aref_ptr(1, raw.data.nodes), a)) {
+        SymbolArray arguments = mk_u64_array(2, a);
+        if (!get_symbol_list(&arguments, *(RawTree*)aref_ptr(1, raw.data.nodes))) {
             res.type = Err;
             res.error_message = mk_string("Procedure term former requires first arguments to be a symbol-list!", a);
             return res;
         }
 
-        shadow_vars(arguments, env, a);
+        shadow_vars(arguments, env);
 
-        pi_rawtree* raw_term;
+        RawTree* raw_term;
         if (raw.data.nodes.len == 3) {
-            raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+            raw_term = (RawTree*)aref_ptr(2, raw.data.nodes);
         } else {
-            raw_term = mem_alloc (sizeof(pi_rawtree), a);
+            raw_term = mem_alloc (sizeof(RawTree), a);
 
             raw_term->data.nodes.len = raw.data.nodes.len - 2;
             raw_term->data.nodes.size = raw.data.nodes.size - 2;
             raw_term->data.nodes.data = raw.data.nodes.data + 2;
             raw_term->type = RawList;
         }
-        abs_expr_result rbody = abstract_expr_i(*raw_term, env, a);
+        AbsExprResult rbody = abstract_expr_i(*raw_term, env, a);
 
 
         if (rbody.type == Err) {
@@ -171,7 +171,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             res.type = Ok;
         res.out.type = SProcedure;
         res.out.procedure.args = arguments;
-        res.out.procedure.body = mem_alloc(sizeof(syntax), a);
+        res.out.procedure.body = mem_alloc(sizeof(Syntax), a);
         *res.out.procedure.body = rbody.out;
         break;
     }
@@ -183,32 +183,32 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         if (raw.data.nodes.len == 2) {
             // Check that we are indeed getting a result
             // Get the tag name of the variant
-            pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+            RawTree* msym = (RawTree*)raw.data.nodes.data[1];
             if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
-                res = (abs_expr_result) {
+                res = (AbsExprResult) {
                     .type = Err,
                     .error_message = mv_string("Argument to variant term former should be symbol"),
                 };
                 return res;
             }
-            pi_symbol lit = msym->data.atom.symbol;
+            Symbol lit = msym->data.atom.symbol;
 
             if (lit == string_to_symbol(mv_string("true"))) {
-                return (abs_expr_result) {
+                return (AbsExprResult) {
                     .type = Ok,
                     .out.type = SLitBool,
                     .out.lit_i64 = true,
                 };
             }
             else if (lit == string_to_symbol(mv_string("false"))) {
-                return (abs_expr_result) {
+                return (AbsExprResult) {
                     .type = Ok,
                     .out.type = SLitBool,
                     .out.lit_i64 = false,
                 };
             }
 
-            return (abs_expr_result) {
+            return (AbsExprResult) {
                 .type = Err,
                 .error_message = mv_string("Variant term former needs two arguments!"),
             };
@@ -216,24 +216,24 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         // : sym Type
 
         else if (raw.data.nodes.len != 3) {
-            return (abs_expr_result) {
+            return (AbsExprResult) {
                 .type = Err,
                 .error_message = mv_string("Variant term former needs two arguments!"),
             };
         }
 
         // Get the Type portion of the projector 
-        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+        res = abstract_expr_i(*(RawTree*)raw.data.nodes.data[2], env, a);
         if (res.type == Err) return res;
 
-        syntax* var_type = mem_alloc(sizeof(syntax), a);
+        Syntax* var_type = mem_alloc(sizeof(Syntax), a);
         *var_type = res.out;
         
         // Check that we are indeed getting a result
         // Get the tag gname of the variant
-        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+        RawTree* msym = (RawTree*)raw.data.nodes.data[1];
         if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
-            res = (abs_expr_result) {
+            res = (AbsExprResult) {
                 .type = Err,
                 .error_message = mv_string("Second argument to projection term former should be symbol"),
             };
@@ -241,7 +241,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         }
 
         res.type = Ok;
-        res.out = (syntax) {
+        res.out = (Syntax) {
             .type = SConstructor,
             .constructor.enum_type = var_type,
             .constructor.tagname = msym->data.atom.symbol,
@@ -249,12 +249,12 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         break;
     }
     case FMatch: {
-        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[1], env, a);
+        res = abstract_expr_i(*(RawTree*)raw.data.nodes.data[1], env, a);
         if (res.type == Err) return res;
-        syntax* sval = mem_alloc(sizeof(syntax), a);
+        Syntax* sval = mem_alloc(sizeof(Syntax), a);
         *sval = res.out;
 
-        clause_array clauses = mk_ptr_array(raw.data.nodes.len - 2, a);
+        ClauseArray clauses = mk_ptr_array(raw.data.nodes.len - 2, a);
         
         for (size_t i = 2; i < raw.data.nodes.len; i++) {
             // For each clause, we need three things:
@@ -262,18 +262,18 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             // 2. The variable(s) destructuring the enum
             // 3. The body
             // Get the clause
-            pi_rawtree* raw_clause = (pi_rawtree*)raw.data.nodes.data[i];
+            RawTree* raw_clause = (RawTree*)raw.data.nodes.data[i];
             if (raw_clause->type != RawList || raw_clause->data.nodes.len < 2) {
-                return (abs_expr_result) {
+                return (AbsExprResult) {
                     .type = Err,
                     .error_message = mv_string("Match Clause has incorrect number of elements!"),
                 };
             }
 
             // Get the pattern
-            pi_rawtree* raw_pattern = (pi_rawtree*)raw_clause->data.nodes.data[0];
+            RawTree* raw_pattern = (RawTree*)raw_clause->data.nodes.data[0];
             if (raw_pattern->type != RawList) {
-                return (abs_expr_result) {
+                return (AbsExprResult) {
                     .type = Err,
                     .error_message = mv_string("Match Pattern should be a list!"),
                 };
@@ -281,32 +281,32 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
 
             // The pattern has two parts: the variables & the tag
             // The tag should be in a constructor (i.e. list)
-            pi_symbol clause_tagname; 
+            Symbol clause_tagname; 
             if (!get_fieldname(raw_pattern->data.nodes.data[0], &clause_tagname)) {
-                return (abs_expr_result) {
+                return (AbsExprResult) {
                     .type = Err,
                     .error_message = mv_string("Unable to get tagname in pattern."),
                 };
             }
 
-            symbol_array clause_binds = mk_u64_array(raw_pattern->data.nodes.len - 1, a);
+            SymbolArray clause_binds = mk_u64_array(raw_pattern->data.nodes.len - 1, a);
             for (size_t s = 1; s < raw_pattern->data.nodes.len; s++) {
-                pi_rawtree* raw_name = raw_pattern->data.nodes.data[s];
+                RawTree* raw_name = raw_pattern->data.nodes.data[s];
                 if (!is_symbol(raw_name)) {
-                    return (abs_expr_result) {
+                    return (AbsExprResult) {
                         .type = Err,
                         .error_message = mv_string("Pattern binding was not a symbol!"),
                     };
                 }
-                push_u64(raw_name->data.atom.symbol, &clause_binds, a); 
+                push_u64(raw_name->data.atom.symbol, &clause_binds); 
             }
 
             // Get the term
-            pi_rawtree* raw_term;
+            RawTree* raw_term;
             if (raw_clause->data.nodes.len == 2) {
-                raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+                raw_term = (RawTree*)aref_ptr(2, raw.data.nodes);
             } else {
-                raw_term = mem_alloc (sizeof(pi_rawtree), a);
+                raw_term = mem_alloc (sizeof(RawTree), a);
 
                 raw_term->data.nodes.len = raw.data.nodes.len - 2;
                 raw_term->data.nodes.size = raw.data.nodes.size - 2;
@@ -314,22 +314,22 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 raw_term->type = RawList;
             }
 
-            abs_expr_result clause_body_res = abstract_expr_i(*(pi_rawtree*)raw_clause->data.nodes.data[1], env, a);
+            AbsExprResult clause_body_res = abstract_expr_i(*(RawTree*)raw_clause->data.nodes.data[1], env, a);
             if (clause_body_res.type == Err) return clause_body_res;
-            syntax* clause_body = mem_alloc(sizeof(syntax), a);
+            Syntax* clause_body = mem_alloc(sizeof(Syntax), a);
             *clause_body = clause_body_res.out;
 
-            syn_clause* clause = mem_alloc(sizeof(syn_clause), a);
-            *clause = (syn_clause) {
+            SynClause* clause = mem_alloc(sizeof(SynClause), a);
+            *clause = (SynClause) {
                 .tagname = clause_tagname,
                 .vars = clause_binds,
                 .body = clause_body,
             };
-            push_ptr(clause, &clauses, a);
+            push_ptr(clause, &clauses);
         }
 
         res.type = Ok;
-        res.out = (syntax) {
+        res.out = (Syntax) {
             .type = SMatch,
             .match.val = sval,
             .match.clauses = clauses,
@@ -344,16 +344,16 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         }
 
         // Get the type of the structure
-        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[1], env, a);
+        res = abstract_expr_i(*(RawTree*)raw.data.nodes.data[1], env, a);
         if (res.type == Err) return res;
 
-        syntax* stype = mem_alloc(sizeof(syntax), a);
+        Syntax* stype = mem_alloc(sizeof(Syntax), a);
         *stype = res.out;
 
         // Construct a structure
-        sym_ptr_amap fields = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.data.nodes.len, a);
         for (size_t i = 2; i < raw.data.nodes.len; i++) {
-            pi_rawtree* fdesc = raw.data.nodes.data[i];
+            RawTree* fdesc = raw.data.nodes.data[i];
             if (fdesc->type != RawList) {
                 res.type = Err;
                 res.error_message = mv_string("Structure expects all field descriptors to be lists.");
@@ -366,19 +366,19 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 return res;
             }
 
-            pi_symbol field;
+            Symbol field;
             if (!get_fieldname(fdesc->data.nodes.data[0], &field)) {
                 res.type = Err;
                 res.error_message = mv_string("Structure has malformed field name.");
                 return res;
             }
 
-            res = abstract_expr_i(*(pi_rawtree*) fdesc->data.nodes.data[1], env, a);
+            res = abstract_expr_i(*(RawTree*) fdesc->data.nodes.data[1], env, a);
             if (res.type == Err) return res;
-            syntax* syn = mem_alloc(sizeof(syntax), a);
+            Syntax* syn = mem_alloc(sizeof(Syntax), a);
             *syn = res.out;
 
-            sym_ptr_insert(field, syn, &fields, a);
+            sym_ptr_insert(field, syn, &fields);
         }
 
         res.type = Ok;
@@ -394,16 +394,16 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             return res;
         }
         // Get the structure portion of the proector 
-        res = abstract_expr_i(*(pi_rawtree*)raw.data.nodes.data[2], env, a);
+        res = abstract_expr_i(*(RawTree*)raw.data.nodes.data[2], env, a);
         if (res.type == Err) return res;
 
-        syntax* structure = mem_alloc(sizeof(syntax), a);
+        Syntax* structure = mem_alloc(sizeof(Syntax), a);
         *structure = res.out;
         
         // Get the symbol portion of the projector
-        pi_rawtree* msym = (pi_rawtree*)raw.data.nodes.data[1];
+        RawTree* msym = (RawTree*)raw.data.nodes.data[1];
         if (msym->type != RawAtom && msym->data.atom.type != ASymbol) {
-            res = (abs_expr_result) {
+            res = (AbsExprResult) {
                 .type = Err,
                 .error_message = mv_string("Second argument to projection term former should be symbol"),
             };
@@ -411,7 +411,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         }
 
         res.type = Ok;
-        res.out = (syntax) {
+        res.out = (Syntax) {
             .type = SProjector,
             .projector.field = msym->data.atom.symbol,
             .projector.val = structure,
@@ -424,18 +424,20 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             res.error_message = mk_string("If term former expects precisely 3 arguments!", a);
             return res;
         }
-        syn_array terms = mk_ptr_array(3, a);
+        SynArray terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            pi_rawtree* rptr = aref_ptr(i, raw.data.nodes);
-            abs_expr_result rterm = abstract_expr_i(*rptr, env, a);
+            RawTree* rptr = aref_ptr(i, raw.data.nodes);
+            AbsExprResult rterm = abstract_expr_i(*rptr, env, a);
             if (rterm.type == Err) {
-                delete_ptr_array(terms, (void(*)(void*, allocator))delete_syntax_pointer, a);
+                for (size_t i =0; i < terms.len; i++)
+                    delete_syntax_pointer(terms.data[i], a);
+                sdelete_ptr_array(terms);
                 return rterm;
             }
             else {
-                syntax* term = mem_alloc(sizeof(syntax), a);
+                Syntax* term = mem_alloc(sizeof(Syntax), a);
                 *term = rterm.out;
-                push_ptr(term, &terms, a);
+                push_ptr(term, &terms);
             }
         }
 
@@ -444,7 +446,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
         res.out.if_expr.condition = aref_ptr(0, terms);
         res.out.if_expr.true_branch = aref_ptr(1, terms);
         res.out.if_expr.false_branch = aref_ptr(2, terms);
-        sdelete_ptr_array(terms, a);
+        sdelete_ptr_array(terms);
         break;
     }
     case FLet: {
@@ -460,11 +462,11 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
     case FStructType: {
         // Construct a structure type
 
-        pi_type* out_ty = mem_alloc(sizeof(pi_type), a);
-        sym_ptr_amap field_types = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        PiType* out_ty = mem_alloc(sizeof(PiType), a);
+        SymPtrAMap field_types = mk_sym_ptr_amap(raw.data.nodes.len, a);
 
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            pi_rawtree* fdesc = raw.data.nodes.data[i];
+            RawTree* fdesc = raw.data.nodes.data[i];
             if (fdesc->type != RawList) {
                 res.type = Err;
                 res.error_message = mv_string("Structure type expects all field descriptors to be lists.");
@@ -477,14 +479,14 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 return res;
             };
 
-            pi_symbol field;
+            Symbol field;
             if (!get_fieldname(fdesc->data.nodes.data[0], &field)) {
                 res.type = Err;
                 res.error_message = mv_string("Structure type has malformed field name.");
                 return res;
             };
 
-            res = abstract_expr_i(*(pi_rawtree*) fdesc->data.nodes.data[1], env, a);
+            res = abstract_expr_i(*(RawTree*) fdesc->data.nodes.data[1], env, a);
             if (res.type == Err) {
                 return res;
             }
@@ -494,9 +496,9 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 return res;
             }
 
-            pi_type* field_ty = res.out.type_val;
+            PiType* field_ty = res.out.type_val;
 
-            sym_ptr_insert(field, field_ty, &field_types, a);
+            sym_ptr_insert(field, field_ty, &field_types);
         }
 
         out_ty->sort = TStruct;
@@ -510,11 +512,11 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
     case FEnumType: {
         // Construct an enum type
 
-        pi_type* out_ty = mem_alloc(sizeof(pi_type), a);
-        sym_ptr_amap enum_variants = mk_sym_ptr_amap(raw.data.nodes.len, a);
+        PiType* out_ty = mem_alloc(sizeof(PiType), a);
+        SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.data.nodes.len, a);
 
         for (size_t i = 1; i < raw.data.nodes.len; i++) {
-            pi_rawtree* edesc = raw.data.nodes.data[i];
+            RawTree* edesc = raw.data.nodes.data[i];
 
             if (edesc->type != RawList) {
                 res.type = Err;
@@ -528,8 +530,8 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                 return res;
             };
 
-            pi_symbol tagname;
-            ptr_array* types = mem_alloc(sizeof(ptr_array), a);
+            Symbol tagname;
+            PtrArray* types = mem_alloc(sizeof(PtrArray), a);
             *types = mk_ptr_array(edesc->data.nodes.len - 1, a);
 
             if (!get_fieldname(edesc->data.nodes.data[0], &tagname)) {
@@ -539,7 +541,7 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
             };
 
             for (size_t i = 1; i < edesc->data.nodes.len; i++) {
-                res = abstract_expr_i(*(pi_rawtree*) edesc->data.nodes.data[i], env, a);
+                res = abstract_expr_i(*(RawTree*) edesc->data.nodes.data[i], env, a);
                 if (res.type == Err) {
                     return res;
                 }
@@ -548,11 +550,11 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
                     res.error_message = mv_string("Structure type fields must have their own types.");
                     return res;
                 }
-                pi_type* field_ty = res.out.type_val;
-                push_ptr(field_ty, types, a);
+                PiType* field_ty = res.out.type_val;
+                push_ptr(field_ty, types);
             }
 
-            sym_ptr_insert(tagname, types, &enum_variants, a);
+            sym_ptr_insert(tagname, types, &enum_variants);
         }
 
         out_ty->sort = TEnum;
@@ -571,15 +573,15 @@ abs_expr_result mk_term(pi_term_former_t former, pi_rawtree raw, shadow_env* env
 }
 
 // Convert to AST at runtime
-abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_expr_result res;
+AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a) {
+    AbsExprResult res;
     // Resolution does not perform type analysis, so we set the type pointer to NULL
     // This is then resolved in the typechecking stage;
     res.out.ptype = NULL;
     switch (raw.type) {
     case RawAtom: {
         if (raw.data.atom.type == ASymbol) {
-            pi_type* ty = get_raw_type(raw, env);
+            PiType* ty = get_raw_type(raw, env);
             if (ty) {
                 res.type = Ok;
                 res.out.type = SType;
@@ -614,13 +616,13 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
             return res;
         }
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
-            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
+            Symbol sym = ((RawTree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
             shadow_entry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:
                 res.type = Err;
-                string str1 = mk_string("Can't find symbol! ", a);
-                string* str2 = symbol_to_string(sym);
+                String str1 = mk_string("Can't find symbol! ", a);
+                String* str2 = symbol_to_string(sym);
                 res.error_message = string_cat(str1, *str2, a);
                 delete_string(str1, a);
                 break;
@@ -629,7 +631,7 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
                 break;
             case SGlobal:
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
-                    return mk_term(*((pi_term_former_t*)entry.value), raw, env, a);
+                    return mk_term(*((TermFormer*)entry.value), raw, env, a);
                 } else {
                     return mk_application(raw, env, a);
                 }
@@ -648,8 +650,8 @@ abs_expr_result abstract_expr_i(pi_rawtree raw, shadow_env* env, allocator a) {
     return res;
 }
 
-abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env, allocator a) {
-    abs_result res;
+AbsResult mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a) {
+    AbsResult res;
     switch (former) {
     case FDefine: {
         if (raw.data.nodes.len < 3) {
@@ -664,13 +666,13 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
             return res;
         }
 
-        pi_symbol sym = ((pi_rawtree*)aref_ptr(1, raw.data.nodes))->data.atom.symbol;
+        Symbol sym = ((RawTree*)aref_ptr(1, raw.data.nodes))->data.atom.symbol;
         
-        pi_rawtree* raw_term;
+        RawTree* raw_term;
         if (raw.data.nodes.len == 3) {
-            raw_term = (pi_rawtree*)aref_ptr(2, raw.data.nodes);
+            raw_term = (RawTree*)aref_ptr(2, raw.data.nodes);
         } else {
-            raw_term = mem_alloc (sizeof(pi_rawtree), a);
+            raw_term = mem_alloc (sizeof(RawTree), a);
 
             raw_term->data.nodes.len = raw.data.nodes.len - 2;
             raw_term->data.nodes.size = raw.data.nodes.size - 2;
@@ -678,8 +680,8 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
             raw_term->type = RawList;
         }
 
-        shadow_var(sym, env, a);
-        abs_expr_result inter = abstract_expr_i(*raw_term, env, a);
+        shadow_var(sym, env);
+        AbsExprResult inter = abstract_expr_i(*raw_term, env, a);
         pop_shadow(env, 1);
 
         if (inter.type == Err) {
@@ -688,7 +690,7 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
             return res;
         }
 
-        syntax* term = (syntax*) mem_alloc(sizeof(syntax), a);
+        Syntax* term = (Syntax*) mem_alloc(sizeof(Syntax), a);
         *term = inter.out;
         // res.out;
 
@@ -707,19 +709,19 @@ abs_result mk_toplevel(pi_term_former_t former, pi_rawtree raw, shadow_env* env,
     return res;
 }
 
-abs_result abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
+AbsResult abstract_i(RawTree raw, ShadowEnv* env, Allocator* a) {
     // first: try a unique toplevel-form
     bool unique_toplevel = false;
 
     if (raw.type == RawList && raw.data.nodes.len > 1) {
         if (is_symbol(aref_ptr(0, raw.data.nodes))) {
-            pi_symbol sym = ((pi_rawtree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
+            Symbol sym = ((RawTree*)aref_ptr(0, raw.data.nodes))->data.atom.symbol;
             shadow_entry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SGlobal:
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     unique_toplevel = true;
-                    return mk_toplevel(*((pi_term_former_t*)entry.value), raw, env, a);
+                    return mk_toplevel(*((TermFormer*)entry.value), raw, env, a);
                 }
             default:
                 break;
@@ -731,22 +733,22 @@ abs_result abstract_i(pi_rawtree raw, shadow_env* env, allocator a) {
         return to_toplevel(abstract_expr_i(raw, env, a));
     }
 
-    abs_result out; 
-    out.type = Err;
-    out.error_message = mk_string("Logic error in abstract_i: reached unreachable area.", a);
-    return out;
+    return (AbsResult) { 
+        .type = Err,
+        .error_message = mk_string("Logic error in abstract_i: reached unreachable area.", a),
+    };
 }
 
-abs_expr_result abstract_expr(pi_rawtree raw, environment* env, allocator a) {
-    shadow_env* s_env = mk_shadow_env(a, env);
-    abs_expr_result out = abstract_expr_i(raw, s_env, a);
+AbsExprResult abstract_expr(RawTree raw, Environment* env, Allocator* a) {
+    ShadowEnv* s_env = mk_shadow_env(a, env);
+    AbsExprResult out = abstract_expr_i(raw, s_env, a);
     delete_shadow_env(s_env, a);
     return out; 
 }
 
-abs_result abstract(pi_rawtree raw, environment* env, allocator a) {
-    shadow_env* s_env = mk_shadow_env(a, env);
-    abs_result out = abstract_i(raw, s_env, a);
+AbsResult abstract(RawTree raw, Environment* env, Allocator* a) {
+    ShadowEnv* s_env = mk_shadow_env(a, env);
+    AbsResult out = abstract_i(raw, s_env, a);
     delete_shadow_env(s_env, a);
     return out;
 }

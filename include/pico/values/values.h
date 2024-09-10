@@ -19,7 +19,7 @@ Symbol string_to_symbol(String string);
 void clear_symbols();
 
 // useful for container methods
-void delete_symbol(Symbol s, Allocator* a);
+void delete_symbol(Symbol s);
 Symbol copy_symbol(Symbol s, Allocator* a);
 
 typedef enum TermFormer {

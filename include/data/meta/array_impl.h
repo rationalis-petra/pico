@@ -3,18 +3,18 @@
 
 #include <string.h>
 
-#define ARRAY_IMPL(type, prefix)                                        \
-    prefix##Array mk_ ## prefix ## _array(const size_t size, Allocator* a) { \
-        return (prefix##Array){                                         \
+#define ARRAY_IMPL(type, fprefix, tprefix)                              \
+    tprefix##Array mk_ ## fprefix ## _array(const size_t size, Allocator* a) { \
+        return (tprefix##Array){                                        \
             .data = (type*)mem_alloc(sizeof(type) * size, a),           \
             .size = size,                                               \
             .len = 0,                                                   \
             .gpa = a,                                                   \
         };                                                              \
     }                                                                   \
-    prefix##Array copy_##prefix##_array(const prefix##Array source, type (*copy_elt)(type, Allocator*), Allocator* a) { \
+    tprefix##Array copy_##fprefix##_array(const tprefix##Array source, type (*copy_elt)(type, Allocator*), Allocator* a) { \
         size_t memsize = sizeof(type) * source.size;                    \
-        prefix ## _array out;                                           \
+        tprefix ## Array out;                                           \
         out.data = mem_alloc(memsize, a);                               \
         out.len = source.len;                                           \
         out.size = source.size;                                         \
@@ -25,9 +25,9 @@
         return out;                                                     \
     }                                                                   \
                                                                         \
-    prefix##Array scopy_ ## prefix ## _array(const prefix##Array source, Allocator* a) { \
+    tprefix##Array scopy_ ## fprefix ## _array(const tprefix##Array source, Allocator* a) { \
         size_t memsize = sizeof(type) * source.size;                    \
-        prefix ## _array out;                                           \
+        tprefix ## Array out;                                           \
         out.data = mem_alloc(memsize, a);                               \
         out.len = source.len;                                           \
         out.size = source.size;                                         \
@@ -36,18 +36,18 @@
         return out;                                                     \
     }                                                                   \
                                                                         \
-    void delete_ ## prefix ## _array(prefix ## _array arr, void (*delete_elem)(type elem)) { \
+    void delete_ ## fprefix ## _array(tprefix##Array arr, void (*delete_elem)(type elem)) { \
         for (size_t i = 0; i < arr.len; i++) {                          \
-            delete_elem(arr.data[i], a);                                \
+            delete_elem(arr.data[i]);                                   \
         }                                                               \
         mem_free(arr.data, arr.gpa);                                    \
     }                                                                   \
                                                                         \
-    void sdelete_ ## prefix ## _array(prefix ## _array arr) {           \
+    void sdelete_ ## fprefix ## _array(tprefix ## Array arr) {          \
         mem_free(arr.data, arr.gpa);                                    \
     }                                                                   \
                                                                         \
-    void push_ ## prefix (type val, prefix ## _array* arr) {            \
+    void push_ ## fprefix (type val, tprefix ## Array* arr) {           \
         if (arr->len < arr->size) {                                     \
             arr->data[arr->len] = val;                                  \
             arr->len++;                                                 \
@@ -59,7 +59,7 @@
             arr->len++;                                                 \
         }                                                               \
     }                                                                   \
-    type pop_ ## prefix(prefix ## _array* arr) {                        \
+    type pop_ ## fprefix(tprefix ## Array* arr) {                       \
         arr->len--;                                                     \
         return arr->data[arr->len];                                     \
     } 

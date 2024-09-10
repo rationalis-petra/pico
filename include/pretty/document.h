@@ -8,14 +8,14 @@
 /* The Document Interaface. */
 
 typedef struct Document Document;
-typedef struct Document_visitor {
+typedef struct {
     void (*on_str_doc)(String str, void* ctx);
     void (*on_cat_doc)(PtrArray docs, void* ctx);
     void (*on_sep_doc)(PtrArray docs, void* ctx);
     void (*on_vsep_doc)(PtrArray docs, void* ctx);
     void* ctx;
-} Document_visitor;
-void visit_document(const Document* doc, const Document_visitor* visitor);
+} DocumentVisitor;
+void visit_document(const Document* doc, const DocumentVisitor* visitor);
 
 /* The Document Constructors */
 Document* mv_str_doc(const String string, Allocator* a);

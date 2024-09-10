@@ -8,67 +8,68 @@
 
 // The global symbol table
      static bool initialized = false;
-static str_u64_amap symbol_table;
-static ptr_array symbol_names;
+static StrU64AMap symbol_table;
+static PtrArray symbol_names;
 
 
-void init_symtable(allocator a) {
-    str_u64_amap map = mk_str_u64_amap(100, a);
+void init_symtable(Allocator* a) {
+    StrU64AMap map = mk_str_u64_amap(100, a);
     symbol_table.capacity = map.capacity;
     symbol_table.len = map.len;
     symbol_table.data = map.data;
 
-    ptr_array arr = mk_ptr_array(100, a);
+    PtrArray arr = mk_ptr_array(100, a);
     symbol_names.size = arr.size;
     symbol_names.len = arr.len;
     symbol_names.data = arr.data;
     initialized = true;
 }
 
-void delete_string_pointer(string* ptr, allocator a) {
+void delete_string_pointer(String* ptr, Allocator* a) {
     delete_string(*ptr, a);
     mem_free(ptr, a);
 }
 
 void clear_symbols() {
-    allocator a = get_std_allocator();
-    delete_ptr_array(symbol_names, (void(*)(void*, allocator))delete_string_pointer, a);
+    Allocator* a = get_std_allocator();
+    for (size_t i = 0; i < symbol_names.len; i++) {
+        delete_string_pointer(symbol_names.data[i], a);
+    }
     // The strings have already been deleted from the above array, so we use a shallow 
     // delete to avoid double-free
-    // TODO: it's possible we are missing some deletes here (memory leak!)
-    sdelete_str_u64_amap(symbol_table, a);
+    sdelete_str_u64_amap(symbol_table);
 }
 
-void delete_symbol(pi_symbol s, allocator a) { }
-pi_symbol copy_symbol(pi_symbol s, allocator a) { return s; };
+void delete_symbol(Symbol s) {};
+Symbol copy_symbol(Symbol s, Allocator* a) { return s; };
 
-string* symbol_to_string(pi_symbol symbol) {
-    allocator a = get_std_allocator();
+String* symbol_to_string(Symbol symbol) {
+    Allocator* a = get_std_allocator();
     if (!initialized) init_symtable(a);
-    return (string*)aref_ptr(symbol, symbol_names);
+    return (String*)aref_ptr(symbol, symbol_names);
 }
 
-pi_symbol string_to_symbol(string str) {
-    allocator a = get_std_allocator();
+Symbol string_to_symbol(String str) {
+    Allocator* a = get_std_allocator();
     if (!initialized) init_symtable(a);
 
     uint64_t new_symbol_id = symbol_names.len;
-    pi_symbol* sym = str_u64_lookup(str, symbol_table);
+    Symbol* sym = str_u64_lookup(str, symbol_table);
     if (!sym) {
 
-        string* map_str = (string*)mem_alloc(sizeof(string), a);
-        string tmp_str = copy_string(str, a);
+        String* map_str = (String*)mem_alloc(sizeof(String), a);
+        String tmp_str = copy_string(str, a);
         map_str->memsize = tmp_str.memsize;
         map_str->bytes = tmp_str.bytes;
-        push_ptr(map_str, &symbol_names, a);
-        str_u64_insert(tmp_str, new_symbol_id, &symbol_table, a);
+        push_ptr(map_str, &symbol_names);
+        str_u64_insert(tmp_str, new_symbol_id, &symbol_table);
         sym = &new_symbol_id;
     }
     return *sym;
 }
 
-document* pretty_former(pi_term_former_t op, allocator a) {
-    document* out = NULL;
+Document* pretty_former(TermFormer op, Allocator* a) {
+    Document* out = NULL;
     switch(op) {
     case FDefine:
         out = mk_str_doc(mv_string("::Define"), a);
@@ -111,27 +112,3 @@ document* pretty_former(pi_term_former_t op, allocator a) {
     }
     return out;
 }
-
-document* pretty_primop(pi_primop_t op, allocator a) {
-    document* out = NULL;
-    switch(op) {
-    case AddI64: {
-        out = mv_str_doc(mk_string("+", a), a);
-        break;
-    }
-    case SubI64: {
-        out = mv_str_doc(mk_string("-", a), a);
-        break;
-    }
-    case MulI64: {
-        out = mv_str_doc(mk_string("*", a), a);
-        break;
-    }
-    case QuotI64: {
-        out = mv_str_doc(mk_string("quot", a), a);
-        break;
-    }
-    }
-    return out;
-}
-

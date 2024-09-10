@@ -5,28 +5,28 @@
 #include <stdbool.h>
 #include "memory/allocator.h"
 
-#define AMAP_IMPL(key_t, val_t, prefix)                                 \
-    prefix##AMap mk_ ## prefix ## _amap(size_t capacity, Allocator* a) { \
-        return (prefix##AMap) {                                         \
-            out.capacity = capacity;                                    \
-            out.len = 0;                                                \
-            out.data = mem_alloc(capacity * sizeof(prefix##Cell), a);   \
-            out.gpa= a;                                                 \
+#define AMAP_IMPL(key_t, val_t, fprefix, tprefix)                       \
+    tprefix##AMap mk_ ## fprefix ## _amap(size_t capacity, Allocator* a) { \
+        return (tprefix##AMap) {                                        \
+            .capacity = capacity,                                       \
+            .len = 0,                                                   \
+            .data = mem_alloc(capacity * sizeof(tprefix##Cell), a),     \
+            .gpa= a,                                                    \
         };                                                              \
     }                                                                   \
                                                                         \
-    prefix##AMap copy_##prefix##_amap(prefix##AMap map, key_t (*copy_key)(key_t key), val_t (*copy_val)(val_t val), Allocator* a) { \
-        prefix##AMap out;                                               \
+    tprefix##AMap copy_##fprefix##_amap(tprefix##AMap map, key_t (*copy_key)(key_t key, Allocator* a), val_t (*copy_val)(val_t val, Allocator* a), Allocator* a) { \
+        tprefix##AMap out;                                              \
         out.capacity = map.capacity;                                    \
         out.len = map.len;                                              \
-        out.data = mem_alloc(map.capacity * sizeof(prefix##Cell), a);   \
+        out.data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a);  \
         for (size_t i = 0; i < map.len; i++) {                          \
-            out.data[i].key = copy_key(map.data[i].key);                \
-            out.data[i].val = copy_val(map.data[i].val);                \
+            out.data[i].key = copy_key(map.data[i].key, a);             \
+            out.data[i].val = copy_val(map.data[i].val, a);             \
         }                                                               \
         return out;                                                     \
     }                                                                   \
-    void delete_##prefix##_amap(prefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)) { \
+    void delete_##fprefix##_amap(tprefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)) { \
         for (size_t i = 0; i < map.len; i++) {                          \
             delete_key(map.data[i].key);                                \
             delete_val(map.data[i].val);                                \
@@ -34,11 +34,11 @@
         mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    void sdelete_##prefix##_amap(prefix##AMap map) {                    \
+    void sdelete_##fprefix##_amap(tprefix##AMap map) {                  \
         mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    val_t* prefix##_lookup(key_t key, prefix##AMap map) {               \
+    val_t* fprefix##_lookup(key_t key, tprefix##AMap map) {             \
         for (size_t i = 0; i < map.len; i++) {                          \
             if (key == map.data[i].key) {                               \
                 return &(map.data[i].val);                              \
@@ -46,7 +46,7 @@
         }                                                               \
         return NULL;                                                    \
     }                                                                   \
-    bool prefix##_find(size_t* idx, key_t key, prefix##AMap map) {      \
+    bool fprefix##_find(size_t* idx, key_t key, tprefix##AMap map) {    \
         for (size_t i = 0; i < map.len; i++) {                          \
             if (key == map.data[i].key) {                               \
                 *idx = i;                                               \
@@ -56,7 +56,7 @@
         return false;                                                   \
     }                                                                   \
                                                                         \
-    void prefix##_insert(key_t key, val_t val, prefix ## AMap* map) {   \
+    void fprefix##_insert(key_t key, val_t val, tprefix ## AMap* map) { \
         bool append = true;                                             \
         size_t i = 0;                                                   \
         while (i < map->len && append) {                                \
@@ -69,7 +69,7 @@
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
                 map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(prefix ## Cell) * map->capacity, map->gpa); \
+                map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, map->gpa); \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \
@@ -77,28 +77,29 @@
         }                                                               \
     }
 
-#define AMAP_CMP_IMPL(key_t, val_t, cmpfun, prefix)                     \
-    prefix##AMap mk_ ## prefix ## _amap(size_t capacity, Allocator* a) { \
-        return (prefix##AMap) out {                                     \
-            out.capacity = capacity,                                    \
-            out.len = 0,                                                \
-            out.data = mem_alloc(capacity * sizeof(prefix##Cell), a),   \
-            out.gpa = a,                                                \
+#define AMAP_CMP_IMPL(key_t, val_t, cmpfun, fprefix, tprefix)           \
+    tprefix##AMap mk_ ## fprefix ## _amap(size_t capacity, Allocator* a) { \
+        return (tprefix##AMap) {                                    \
+            .capacity = capacity,                                       \
+            .len = 0,                                                   \
+            .data = mem_alloc(capacity * sizeof(tprefix##Cell), a),     \
+            .gpa = a,                                                   \
         };                                                              \
     }                                                                   \
                                                                         \
-    void delete_##prefix##_amap(prefix##AMap map, void (*delete_key)(key_t key, allocator a), void (*delete_val)(val_t val, allocator a), allocator a) { \
+    void delete_##fprefix##_amap(tprefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)) { \
         for (size_t i = 0; i < map.len; i++) {                          \
-            delete_key(map.data[i].key, a);                             \
-            delete_val(map.data[i].val, a);                             \
+            delete_key(map.data[i].key);                                \
+            delete_val(map.data[i].val);                                \
         }                                                               \
+        mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    void sdelete_##prefix##_amap(prefix##AMap map, allocator a) {       \
-        mem_free(map.data, a);                                          \
+    void sdelete_##fprefix##_amap(tprefix##AMap map) {                  \
+        mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    val_t* prefix##_lookup(key_t key, prefix##AMap map) {               \
+    val_t* fprefix##_lookup(key_t key, tprefix##AMap map) {             \
         for (size_t i = 0; i < map.len; i++) {                          \
             if (cmpfun(key, map.data[i].key) == 0) {                    \
                 return &(map.data[i].val);                              \
@@ -106,7 +107,7 @@
         }                                                               \
         return NULL;                                                    \
     }                                                                   \
-    bool prefix##_find(size_t* idx, key_t key, prefix##AMap map) {      \
+    bool fprefix##_find(size_t* idx, key_t key, tprefix##AMap map) {    \
         for (size_t i = 0; i < map.len; i++) {                          \
             if (cmpfun(key, map.data[i].key) == 0) {                    \
                 *idx = i;                                               \
@@ -116,7 +117,7 @@
         return false;                                                   \
     }                                                                   \
                                                                         \
-    void prefix##_insert(key_t key, val_t val, prefix##AMap* map) {     \
+    void fprefix##_insert(key_t key, val_t val, tprefix##AMap* map) {   \
         bool append = true;                                             \
         size_t i = 0;                                                   \
         while (i < map->len && append) {                                \
@@ -129,7 +130,7 @@
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
                 map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(prefix##Cell) * map->capacity, map->gpa); \
+                map->data = mem_realloc(map->data, sizeof(tprefix##Cell) * map->capacity, map->gpa); \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \

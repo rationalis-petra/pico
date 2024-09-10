@@ -4,27 +4,28 @@
 #include <stddef.h>
 #include "memory/allocator.h"
 
-#define ASSOC_HEADER(key_t, val_t, prefix)                              \
-    typedef struct prefix##ACell {                                      \
+#define ASSOC_HEADER(key_t, val_t, fprefix, tprefix)                    \
+    typedef struct tprefix##ACell {                                     \
         key_t key;                                                      \
         val_t val;                                                      \
-    } prefix##ACell;                                                    \
+    } tprefix##ACell;                                                   \
                                                                         \
-    typedef struct prefix##Assoc {                                      \
+    typedef struct tprefix##Assoc {                                     \
         size_t capacity;                                                \
         size_t len;                                                     \
         void (*delete_key)(key_t key, Allocator* a);                    \
         void (*delete_val)(val_t val, Allocator* a);                    \
-        prefix ## ACell* data;                                          \
-    } prefix ## Assoc;                                                  \
+        tprefix ## ACell* data;                                         \
+        Allocator* gpa;                                                 \
+    } tprefix##Assoc;                                                   \
                                                                         \
-    prefix##Assoc mk_##prefix##_assoc(size_t capacity, Allocator* a);   \
-    void delete_##prefix##_assoc(prefix##Assoc map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)); \
-    void sdelete_##prefix##_assoc(prefix##Assoc map, Allocator* a);     \
+    tprefix##Assoc mk_##fprefix##_assoc(size_t capacity, Allocator* a); \
+    void delete_##fprefix##_assoc(tprefix##Assoc map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)); \
+    void sdelete_##fprefix##_assoc(tprefix##Assoc map);   \
                                                                         \
-    val_t* prefix##_alookup(key_t key, prefix##Assoc map);              \
-    void prefix##_bind(key_t key, val_t val, prefix##Assoc* map);       \
-    void prefix##_unbind(prefix##Assoc* map);                           \
-    void prefix##_unbindn(size_t n, prefix##Assoc* map);                \
+    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map);            \
+    void fprefix##_bind(key_t key, val_t val, tprefix##Assoc* map);     \
+    void fprefix##_unbind(tprefix##Assoc* map);                         \
+    void fprefix##_unbindn(size_t n, tprefix##Assoc* map);              \
 
 #endif

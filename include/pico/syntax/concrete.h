@@ -26,7 +26,7 @@ typedef struct Atom {
     };
 } Atom;
 
-AMAP_HEADER(Symbol, Atom, SymAtom)
+AMAP_HEADER(Symbol, Atom, sym_atom, SymAtom)
 
 typedef enum RawTree_t {
     RawList,

@@ -5,22 +5,22 @@
 #include "pretty/document.h"
 
 
-typedef enum DocumentType {
+typedef enum {
     StringDocument,
     CatDocument,
     SepDocument,
     VSepDocument
 } DocumentType;
 
-struct document {
+struct Document {
     DocumentType doc_type;
     union {
-        string string;
-        ptr_array docs;
+        String string;
+        PtrArray docs;
     } data;
 };
 
-void visit_document(const document* doc, const document_visitor* visitor) {
+void visit_document(const Document* doc, const DocumentVisitor* visitor) {
     switch (doc->doc_type) {
     case StringDocument:
         visitor->on_str_doc(doc->data.string, visitor->ctx);
@@ -38,67 +38,67 @@ void visit_document(const document* doc, const document_visitor* visitor) {
 }
 
 /* The Document Constructors */
-document* mv_str_doc(const string source, allocator a) {
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mv_str_doc(const String source, Allocator* a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = StringDocument;
     doc->data.string = source;
     return doc;
 }
 
-document* mk_str_doc(const string source, allocator a) {
-    string copy = copy_string(source, a);
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mk_str_doc(const String source, Allocator* a) {
+    String copy = copy_string(source, a);
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = StringDocument;
     doc->data.string = copy;
     return doc;
 }
 
-document* mv_cat_doc(const ptr_array source, allocator a) {
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mv_cat_doc(const PtrArray source, Allocator* a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = CatDocument;
     doc->data.docs = source;
     return doc;
 }
 
-document* mk_cat_doc(const ptr_array source, allocator a) {
-    ptr_array copy = scopy_ptr_array(source, a);
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mk_cat_doc(const PtrArray source, Allocator* a) {
+    PtrArray copy = scopy_ptr_array(source, a);
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = CatDocument;
     doc->data.docs = copy;
     return doc;
 }
 
-document* mv_sep_doc(const ptr_array source, allocator a) {
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mv_sep_doc(const PtrArray source, Allocator* a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = SepDocument;
     doc->data.docs = source;
     return doc;
 }
 
-document* mk_sep_doc(const ptr_array source, allocator a) {
-    ptr_array copy = scopy_ptr_array(source, a);
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mk_sep_doc(const PtrArray source, Allocator* a) {
+    PtrArray copy = scopy_ptr_array(source, a);
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = SepDocument;
     doc->data.docs = copy;
     return doc;
 }
 
-document* mv_vsep_doc(const ptr_array source, allocator a) {
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mv_vsep_doc(const PtrArray source, Allocator* a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = VSepDocument;
     doc->data.docs = source;
     return doc;
 }
 
-document* mk_vsep_doc(const ptr_array source, allocator a) {
-    ptr_array copy = scopy_ptr_array(source, a);
-    document* doc = mem_alloc(sizeof(document), a);
+Document* mk_vsep_doc(const PtrArray source, Allocator* a) {
+    PtrArray copy = scopy_ptr_array(source, a);
+    Document* doc = mem_alloc(sizeof(Document), a);
     doc->doc_type = VSepDocument;
     doc->data.docs = copy;
     return doc;
 }
 
-void delete_doc(document* doc, allocator a) {
+void delete_doc(Document* doc, Allocator* a) {
     switch (doc->doc_type) {
     case StringDocument:
         delete_string(doc->data.string, a);
@@ -107,7 +107,8 @@ void delete_doc(document* doc, allocator a) {
     case CatDocument:
     case SepDocument:
     case VSepDocument:
-        delete_ptr_array(doc->data.docs, (void(*)(void*, allocator))delete_doc, a);
+        for (size_t i = 0; i < doc->data.docs.len; i++)
+            delete_doc(doc->data.docs.data[i], a);
         mem_free(doc, a);
         break;
     }

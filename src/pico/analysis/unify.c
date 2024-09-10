@@ -1,11 +1,9 @@
 #include "pico/analysis/unify.h"
 
+PiType* trace_uvar(PiType* uvar);
+Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a);
 
-
-pi_type* trace_uvar(pi_type* uvar);
-result unify_eq(pi_type* lhs, pi_type* rhs, allocator a);
-
-result unify(pi_type* lhs, pi_type* rhs, allocator a) {
+Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // Unification Implementation:
     // The LHS and RHS may contain unification variables
     // These are represented as a pair *(uid, type*) 
@@ -13,7 +11,7 @@ result unify(pi_type* lhs, pi_type* rhs, allocator a) {
     lhs = trace_uvar(lhs);
     rhs = trace_uvar(rhs);
 
-    result out;
+    Result out;
 
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
@@ -34,8 +32,8 @@ result unify(pi_type* lhs, pi_type* rhs, allocator a) {
     return out;
 }
 
-result unify_eq(pi_type* lhs, pi_type* rhs, allocator a) {
-    result out;
+Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
+    Result out;
     if (lhs->sort == TPrim && rhs->sort == TPrim) {
         if (lhs->prim == rhs->prim) {
             out.type = Ok;
@@ -68,14 +66,14 @@ result unify_eq(pi_type* lhs, pi_type* rhs, allocator a) {
     }
 }
 
-bool has_unification_vars_p(pi_type type) {
+bool has_unification_vars_p(PiType type) {
     // only return t if uvars don't go anywhere
     switch (type.sort) {
     case TPrim:
         return false;
     case TProc: {
         for (size_t i = 0; i < type.proc.args.len; i++) {
-            if (has_unification_vars_p(*(pi_type*)type.proc.args.data[i]))
+            if (has_unification_vars_p(*(PiType*)type.proc.args.data[i]))
                 return true;
         }
         return has_unification_vars_p(*type.proc.ret);
@@ -83,7 +81,7 @@ bool has_unification_vars_p(pi_type type) {
     }
     case TStruct: {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            if (has_unification_vars_p(*(pi_type*)type.structure.fields.data[i].val))
+            if (has_unification_vars_p(*(PiType*)type.structure.fields.data[i].val))
                 return true;
         }
         return false;
@@ -91,9 +89,9 @@ bool has_unification_vars_p(pi_type type) {
     }
     case TEnum: {
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
-            ptr_array types = *(ptr_array*)type.enumeration.variants.data[i].val;
+            PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t j = 0; j < types.len; j++) {
-                if (has_unification_vars_p(*(pi_type*)types.data[j]))
+                if (has_unification_vars_p(*(PiType*)types.data[j]))
                     return true;
             }
         }
@@ -113,7 +111,7 @@ bool has_unification_vars_p(pi_type type) {
     }
 }
 
-pi_type* trace_uvar(pi_type* uvar) {
+PiType* trace_uvar(PiType* uvar) {
     while (uvar->sort == TUVar && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
@@ -121,28 +119,28 @@ pi_type* trace_uvar(pi_type* uvar) {
 }
 
 
-void squash_type(pi_type* type) {
+void squash_type(PiType* type) {
     switch (type->sort) {
     case TPrim:
         break;
     case TProc: {
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            squash_type((pi_type*)(type->proc.args.data + i));
+            squash_type((PiType*)(type->proc.args.data + i));
         }
         squash_type(type->proc.ret);
         break;
     }
     case TStruct: {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            squash_type((pi_type*)((type->structure.fields.data + i)->val));
+            squash_type((PiType*)((type->structure.fields.data + i)->val));
         }
         break;
     }
     case TEnum: {
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
-            ptr_array types = *(ptr_array*)type->enumeration.variants.data[i].val;
+            PtrArray types = *(PtrArray*)type->enumeration.variants.data[i].val;
             for (size_t j = 0; j < types.len; j++) {
-                squash_type((pi_type*)types.data[j]);
+                squash_type((PiType*)types.data[j]);
             }
         }
         break;
@@ -150,7 +148,7 @@ void squash_type(pi_type* type) {
 
     // Special sort: unification variable
     case TUVar: {
-        pi_type* subst = type->uvar->subst;
+        PiType* subst = type->uvar->subst;
         if (subst) {
             squash_type(subst);
             *type = *subst;

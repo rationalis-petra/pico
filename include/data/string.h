@@ -14,7 +14,7 @@ typedef struct String {
 String mk_string(const char* str, Allocator* a);
 String mv_string(const char* str);
 
-void delete_string(String str);
+void delete_string(String str, Allocator* a);
 String copy_string(const String str, Allocator* a);
 
 String string_from_UTF_32(U32Array arr, Allocator* a);
