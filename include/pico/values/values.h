@@ -23,6 +23,7 @@ void delete_symbol(Symbol s);
 Symbol copy_symbol(Symbol s, Allocator* a);
 
 typedef enum TermFormer {
+    // Term Formers
     FDefine,
     FProcedure,
     FApplication,

@@ -20,7 +20,6 @@ void delete_enum_variant_p(PtrArray* t, Allocator* a) {
 }
 
 void delete_pi_type(PiType t, Allocator* a) {
-    typedef void(*deleter)(void*, Allocator* a);
     switch(t.sort) {
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
@@ -35,11 +34,24 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_sym_ptr_amap(t.structure.fields);
         break;
     }
-    case TEnum:
+    case TEnum: {
         for (size_t i = 0; i < t.enumeration.variants.len; i++)
             delete_enum_variant_p(t.enumeration.variants.data[i].val, a);
         sdelete_sym_ptr_amap(t.enumeration.variants);
         break;
+    }
+    case TApp: {
+        delete_pi_type_p(t.app.fam, a);
+        for (size_t i = 0; i < t.app.args.len; i++) {
+            delete_pi_type_p(t.app.args.data[i], a);
+        }
+        sdelete_ptr_array(t.app.args);
+        break;
+    }
+    case TQVar: {
+        // Do nothing; 
+        break;
+    }
 
     case TUVar:
         if (t.uvar->subst != NULL) {
@@ -86,6 +98,11 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TEnum:
         out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, a);
         break;
+    case TQVar:
+        out.qvar = t.qvar;
+        break;
+    case TApp:
+        break;
 
     case TUVar:
         out.uvar = mem_alloc(sizeof(UVarType), a);
@@ -117,6 +134,9 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         break;
     case TPrim:
         switch (type->prim) {
+        case Unit:  {
+            out = mk_str_doc(mv_string(":unit"), a);
+        }
         case Bool:  {
             uint64_t* uival = (uint64_t*) val;
             if (*uival == 0) {
@@ -124,6 +144,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             } else {
                 out = mk_str_doc(mv_string(":true"), a);
             }
+            break;
+        }
+        case Address: {
+            void** addr = (void**) val;
+            out = pretty_ptr(*addr, a);
             break;
         }
         case Int_64: {
@@ -191,6 +216,22 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TQVar: {
+        out = mk_str_doc(mv_string("Not expecting to print value with QVar type"), a);
+        break;
+    }
+    case TApp: {
+        PtrArray nodes = mk_ptr_array(3 + type->app.args.len, a);
+        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
+        push_ptr(pretty_type(type->app.fam, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        for (size_t i = 0; i < type->app.args.len; i++) {
+            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+        }
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+
     default:
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
         break;
@@ -219,8 +260,14 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     case TPrim:
         switch (type->prim) {
+        case Unit: 
+            out = mv_str_doc(mk_string("Unit", a), a);
+            break;
         case Bool: 
             out = mv_str_doc(mk_string("Bool", a), a);
+            break;
+        case Address: 
+            out = mv_str_doc(mk_string("Address", a), a);
             break;
         case Int_64: 
             out = mv_str_doc(mk_string("I64", a), a);
@@ -295,12 +342,12 @@ size_t pi_size_of(PiType type) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
+        case Unit:
         case Bool:
-            return sizeof(uint64_t);
+        case Address:
         case Int_64:
-            return sizeof(uint64_t);
         case TFormer:
-            return sizeof(uint64_t); //sizeof(pi_term_former_t);
+            return sizeof(uint64_t); // sizeof(pi_term_former_t);
         case TType:
             //return sizeof(pi_type);
             return sizeof(void*);

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h> // for memcpy
 
+#include "platform/calling_convention.h"
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 
@@ -68,12 +69,11 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
     // Generate Code which will: 
     //  1. Copy the final value (on stack) into value
     //  2. Return to C
-    // 
+#ifdef ABI_SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a);
     build_binary_op(ass, Mov, reg(RSI), reg(RSP), a);
-    //build_binary_op(ass, Sub, reg(RSI), imm32(rsize), a);
     build_binary_op(ass, Mov, reg(RDX), imm64((int64_t)rsize), a);
 
     build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)&memcpy), a);
@@ -81,6 +81,23 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
     // pop value from stack
     build_binary_op(ass, Add, reg(RSP), imm32(rsize), a);
     build_nullary_op(ass, Ret, a);
+
+#elif ABI_WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    // retval = rax
+    build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a);
+    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a);
+    build_binary_op(ass, Mov, reg(R8), imm64((int64_t)rsize), a);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a);
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((int64_t)&memcpy), a);
+    build_unary_op(ass, Call, reg(RAX),a);
+    // pop value from stack
+    build_binary_op(ass, Add, reg(RSP), imm32(rsize + 32), a);
+    build_nullary_op(ass, Ret, a);
+#else
+#error "Unknown calling convention"
+#endif
     U8Array instructions = get_instructions(ass);
 
     int64_t out;

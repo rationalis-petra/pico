@@ -47,7 +47,6 @@ PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
 }
 
 void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a) {
-
     build_unary_op (ass, Pop, reg(RCX),a );
     build_unary_op (ass, Pop, reg(RBX), a);
     build_unary_op (ass, Pop, reg(RAX), a);
@@ -74,15 +73,23 @@ Module* base_module(Assembler* ass, Allocator* a) {
 
     PiType type;
     PiType type_val;
-    type = mk_prim_type(TType);
-    type_val = mk_prim_type(Int_64);
     PiType* type_data = &type_val;
+    type = mk_prim_type(TType);
 
-    sym = string_to_symbol(mv_string("I64"));
+    type_val = mk_prim_type(Unit);
+    sym = string_to_symbol(mv_string("Unit"));
     add_def(module, sym, type, &type_data);
 
     type_val = mk_prim_type(Bool);
     sym = string_to_symbol(mv_string("Bool"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(Address);
+    sym = string_to_symbol(mv_string("Address"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(Int_64);
+    sym = string_to_symbol(mv_string("I64"));
     add_def(module, sym, type, &type_data);
 
     build_binary_fun(ass, Add, a);
@@ -177,6 +184,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     clear_assembler(ass);
     Environment* env = env_from_module(module, &arena);
 
+    write_string(mv_string("> "), cout);
     ParseResult res = parse_rawtree(cin, &arena);
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);

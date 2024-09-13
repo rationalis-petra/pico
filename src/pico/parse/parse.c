@@ -16,7 +16,7 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Allocator* a);
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, SyntaxHint hint, Allocator* a);
 ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
@@ -35,10 +35,10 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
     switch (peek(is, &point)) {
     case StreamSuccess:
         if (point == '(') {
-            res = parse_list(is, parse_state, ')', a);
+            res = parse_list(is, parse_state, ')', HExpression, a);
         }
         else if (point == '[') {
-            res = parse_list(is, parse_state, ']', a);
+            res = parse_list(is, parse_state, ']', HArgList, a);
         }
         else if (is_numchar(point)) {
             res = parse_number(is, parse_state, a);
@@ -63,7 +63,7 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
     return res;
 }
 
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Allocator* a) {
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, SyntaxHint hint, Allocator* a) {
     ParseResult res;
     res.type = ParseFail;
     res.data.range.start = *parse_state;
@@ -84,8 +84,7 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Alloc
         }
         else {
             RawTree* node = (RawTree*)mem_alloc(sizeof(RawTree), a);
-            node->type = res.data.result.type;
-            node->data = res.data.result.data;
+            *node = res.data.result;
             push_ptr(node, &nodes);
         }
         consume_whitespace(is, parse_state);
@@ -104,8 +103,11 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, Alloc
     }
     else {
         out.type = ParseSuccess;
-        out.data.result.type = RawList;
-        out.data.result.data.nodes = nodes;
+        out.data.result = (RawTree) {
+            .type = RawList,
+            .hint = hint,
+            .nodes = nodes,
+        };
         // consume closing ')'
         next(is, &codepoint);
     }
@@ -133,8 +135,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             RawTree* op = mem_alloc(sizeof(RawTree), a);
             *op = (RawTree) {
                 .type = RawAtom,
-                .data.atom.type = ASymbol,
-                .data.atom.symbol = string_to_symbol(mv_string(".")),
+                .hint = HNone,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(mv_string(".")),
             };
             push_ptr(op, &terms);
 
@@ -149,8 +152,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             RawTree* op = mem_alloc(sizeof(RawTree), a);
             *op = (RawTree) {
                 .type = RawAtom,
-                .data.atom.type = ASymbol,
-                .data.atom.symbol = string_to_symbol(mv_string(":")),
+                .hint = HNone,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(mv_string(":")),
             };
             push_ptr(op, &terms);
 
@@ -175,22 +179,23 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
         if (terms.len == 0) {
             out.type = ParseSuccess;
             out.data.result.type = RawAtom;
-            out.data.result.data.atom.type = ASymbol;
-            out.data.result.data.atom.symbol = sym_result;
+            out.data.result.atom.type = ASymbol;
+            out.data.result.atom.symbol = sym_result;
             sdelete_ptr_array(terms);
         } else {
             RawTree* lhs = mem_alloc(sizeof(RawTree), a);
             *lhs = (RawTree) {
                 .type = RawAtom,
-                .data.atom.type = ASymbol,
-                .data.atom.symbol = sym_result,
+                .hint = HNone,
+                .atom.type = ASymbol,
+                .atom.symbol = sym_result,
             };
             push_ptr(rhs, &terms);
             push_ptr(lhs, &terms);
 
             out.type = ParseSuccess;
             out.data.result.type = RawList;
-            out.data.result.data.nodes = terms;
+            out.data.result.nodes = terms;
         }
     }
     return out;
@@ -221,8 +226,8 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         }
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
-        out.data.result.data.atom.type = AI64;
-        out.data.result.data.atom.int_64 = int_result;
+        out.data.result.atom.type = AI64;
+        out.data.result.atom.int_64 = int_result;
     }
     sdelete_u8_array(arr);
     return out;
@@ -252,8 +257,8 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
 
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
-        out.data.result.data.atom.type = ASymbol;
-        out.data.result.data.atom.symbol = sym_result;
+        out.data.result.atom.type = ASymbol;
+        out.data.result.atom.symbol = sym_result;
 
     } else {
         char cstr[2] = {prefix, '\0'};
@@ -261,24 +266,27 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
         Symbol sym_result = string_to_symbol(str);
         RawTree* proj = mem_alloc(sizeof(RawTree), a);
         proj->type = RawAtom;
-        proj->data.atom.type = ASymbol;
-        proj->data.atom.symbol = sym_result;
+        proj->atom.type = ASymbol;
+        proj->atom.symbol = sym_result;
 
         str = string_from_UTF_32(arr, a);
         sym_result = string_to_symbol(str);
         delete_string(str, a);
         RawTree* field = mem_alloc(sizeof(RawTree), a);
         field->type = RawAtom;
-        field->data.atom.type = ASymbol;
-        field->data.atom.symbol = sym_result;
+        field->atom.type = ASymbol;
+        field->atom.symbol = sym_result;
 
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(proj, &nodes);
         push_ptr(field, &nodes);
 
         out.type = ParseSuccess;
-        out.data.result.type = RawList;
-        out.data.result.data.nodes = nodes;
+        out.data.result = (RawTree) {
+            .type = RawList,
+            .hint = HNone,
+            .nodes = nodes,
+        };
     }
 
     // cleanup

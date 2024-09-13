@@ -6,14 +6,14 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
     Document* out = NULL;
     switch (tree.type) {
     case RawAtom: {
-        out = pretty_atom(tree.data.atom, a);
+        out = pretty_atom(tree.atom, a);
         break;
     }
     case RawList: {
-        PtrArray doc_arr = mk_ptr_array(tree.data.nodes.len + 2, a);
+        PtrArray doc_arr = mk_ptr_array(tree.nodes.len + 2, a);
         push_ptr(mv_str_doc(mk_string("(", a), a), &doc_arr);
-        for (size_t i = 0; i < tree.data.nodes.len; i++) {
-            RawTree node = *((RawTree*)aref_ptr(i, tree.data.nodes));
+        for (size_t i = 0; i < tree.nodes.len; i++) {
+            RawTree node = *((RawTree*)aref_ptr(i, tree.nodes));
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }
@@ -36,9 +36,9 @@ void delete_rawtree(RawTree tree, Allocator* a) {
         // TODO: correct this when pi values get garbage collection!
         break;
     case RawList:
-        for (size_t i = 0; i < tree.data.nodes.len; i++)
-            delete_rawtree_ptr(tree.data.nodes.data[i], a);
-        sdelete_ptr_array(tree.data.nodes);
+        for (size_t i = 0; i < tree.nodes.len; i++)
+            delete_rawtree_ptr(tree.nodes.data[i], a);
+        sdelete_ptr_array(tree.nodes);
         break;
     }
 }

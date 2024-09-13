@@ -186,7 +186,6 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-
     case SLet: {
         out = mv_str_doc(mk_string("pretty_syntax not implemented on let", a), a);
         break;

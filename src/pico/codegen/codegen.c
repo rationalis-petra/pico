@@ -1,4 +1,8 @@
 #include <stdarg.h>
+#include <string.h>
+
+#include "platform/calling_convention.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/binding/address_env.h"
 
@@ -63,9 +67,6 @@ GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allo
     return out;
 }
 
-/* Relevant assembly:
- * 
- */
 Result generate_expr_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap *links, Allocator* a) {
     AsmResult generated = generate(syn, env, ass, links, a);
 

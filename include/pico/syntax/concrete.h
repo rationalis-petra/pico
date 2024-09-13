@@ -11,14 +11,14 @@
  * 
  */
 
-typedef enum Atom_t {
+typedef enum {
     ABool,
     AI64,
     ASymbol,
 } Atom_t;
 
 // Total value
-typedef struct Atom {
+typedef struct {
     Atom_t type;
     union {
         int64_t int_64;
@@ -28,17 +28,24 @@ typedef struct Atom {
 
 AMAP_HEADER(Symbol, Atom, sym_atom, SymAtom)
 
-typedef enum RawTree_t {
+typedef enum {
     RawList,
-    RawAtom
+    RawAtom,
 } RawTree_t;
 
-typedef struct RawTree {
+typedef enum {
+    HNone,
+    HExpression,
+    HArgList,
+} SyntaxHint;
+
+typedef struct {
     RawTree_t type;
+    SyntaxHint hint;
     union {
         Atom atom;
         PtrArray nodes;
-    } data;
+    };
 } RawTree;
 
 Document* pretty_rawtree(RawTree tree, Allocator* a);

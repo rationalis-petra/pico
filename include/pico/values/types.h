@@ -12,8 +12,10 @@ typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
 typedef enum PrimType {
-    Int_64,
+    Unit,
     Bool,
+    Address,
+    Int_64,
     TFormer,
     TType,
 } PrimType;
@@ -23,27 +25,41 @@ typedef enum PiType_t {
     TProc,
     TStruct,
     TEnum,
+    TQVar,
+    TApp,
 
     // Special sort: unification variable
     TUVar
 } PiType_t;
 
 typedef struct ProcType {
+    PtrArray quants;
     PtrArray args;
-    struct PiType* ret;
+    PiType* ret;
 } ProcType;
 
 typedef struct StructType {
+    PtrArray quants;
     SymPtrAMap fields;
 } StructType;
 
 typedef struct EnumType {
+    PtrArray quants;
     SymPtrAMap variants;
 } EnumType;
 
+typedef struct QVarType {
+    uint64_t id;
+} QVarType;
+
+typedef struct TAppType {
+    PtrArray args;
+    PiType* fam;
+} TAppType;
+
 typedef struct UVarType {
     uint64_t id;
-    struct PiType* subst;
+    PiType* subst;
 } UVarType;
 
 struct PiType {
@@ -53,6 +69,8 @@ struct PiType {
         ProcType proc;
         StructType structure;
         EnumType enumeration;
+        TAppType app;
+        QVarType* qvar;
         UVarType* uvar;
     };
 };
