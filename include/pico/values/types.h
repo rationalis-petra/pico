@@ -33,18 +33,18 @@ typedef enum PiType_t {
 } PiType_t;
 
 typedef struct ProcType {
-    PtrArray quants;
+    SymbolArray quants;
     PtrArray args;
     PiType* ret;
 } ProcType;
 
 typedef struct StructType {
-    PtrArray quants;
+    SymbolArray quants;
     SymPtrAMap fields;
 } StructType;
 
 typedef struct EnumType {
-    PtrArray quants;
+    SymbolArray quants;
     SymPtrAMap variants;
 } EnumType;
 

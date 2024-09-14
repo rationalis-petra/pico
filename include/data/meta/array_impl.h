@@ -14,11 +14,12 @@
     }                                                                   \
     tprefix##Array copy_##fprefix##_array(const tprefix##Array source, type (*copy_elt)(type, Allocator*), Allocator* a) { \
         size_t memsize = sizeof(type) * source.size;                    \
-        tprefix ## Array out;                                           \
-        out.data = mem_alloc(memsize, a);                               \
-        out.len = source.len;                                           \
-        out.size = source.size;                                         \
-        out.gpa = a;                                                    \
+        tprefix##Array out = (tprefix##Array) {                         \
+            .data = mem_alloc(memsize, a),                              \
+            .len = source.len,                                          \
+            .size = source.size,                                        \
+            .gpa = a,                                                   \
+        };                                                              \
         for (size_t i = 0; i < out.size; i++) {                         \
             out.data[i] = copy_elt(source.data[i], a);                  \
         }                                                               \

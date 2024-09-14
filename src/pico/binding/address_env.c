@@ -130,9 +130,10 @@ void address_start_proc (SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
 
 
 void address_end_proc (AddressEnv* env, Allocator* a) {
-    SAddrArray* old_locals = env->local_envs.data[env->local_envs.len - 1];
+    LocalAddrs* old_locals = env->local_envs.data[env->local_envs.len - 1];
     pop_ptr(&env->local_envs);
-    sdelete_saddr_array(*old_locals);
+    sdelete_saddr_array(old_locals->vars);
+    mem_free(old_locals, a);
 }
 
 void address_bind_enum_vars (SymSizeAssoc vars, size_t enum_size, AddressEnv* env, Allocator* a) {
