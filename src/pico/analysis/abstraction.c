@@ -7,10 +7,7 @@
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
 
-// Declarations for mutual recursion
-// ---
-// "Internal" implementation of resolve_dynamic 
-
+// Internal functions 
 AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a);
 
 bool is_symbol(RawTree* raw) {
@@ -36,7 +33,7 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     if (nodes.type == RawAtom) { return false; }
 
     for (size_t i = 0; i < nodes.nodes.len; i++) {
-        RawTree* node = aref_ptr(i, nodes.nodes);
+        RawTree* node = nodes.nodes.data[i];
         if (node->type != RawAtom) { return false; }
         if (node->atom.type != ASymbol) { return false;  }
         push_u64(node->atom.symbol, arr);
@@ -50,12 +47,15 @@ PiType* get_raw_type(RawTree raw, ShadowEnv* env) {
         return out;
     }
 
-    shadow_entry entry = shadow_env_lookup(raw.atom.symbol, env);
+    ShadowEntry entry = shadow_env_lookup(raw.atom.symbol, env);
     if (entry.type == SGlobal
         && entry.vtype->sort == TPrim
         && entry.vtype->prim == TType) {
             out = entry.value;
+    } else if (entry.type == SLocal) {
+        out = entry.value;
     }
+
     return out;
 }
 
@@ -142,7 +142,7 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         }
 
         SymbolArray arguments = mk_u64_array(2, a);
-        if (!get_symbol_list(&arguments, *(RawTree*)aref_ptr(1, raw.nodes))) {
+        if (!get_symbol_list(&arguments, *(RawTree*)raw.nodes.data[1])) {
             res.type = Err;
             res.error_message = mk_string("Procedure term former requires first arguments to be a symbol-list!", a);
             return res;
@@ -491,6 +491,15 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         }
         
         PtrArray arg_types = mk_ptr_array(raw_args->nodes.len, a);
+
+        for (size_t i = 0; i < quants.len; i++) {
+            PiType* var_ty = mem_alloc(sizeof(PiType), a);
+            *var_ty = (PiType) {
+                .sort = TQVar,
+                .qvar.id = quants.data[i],
+            };
+            shadow_bind(quants.data[i], var_ty, env);
+        }
         for (size_t i = 0; i < raw_args->nodes.len; i++) {
             RawTree* raw_arg = raw_args->nodes.data[i];
             res = abstract_expr_i(*raw_arg, env, a);
@@ -498,7 +507,7 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
 
             if (res.out.type != SType) {
                 res.type = Err;
-                res.error_message = mv_string("Structure type fields must have their own types.");
+                res.error_message = mv_string("Procedure type fields must have their own types.");
                 return res;
             }
 
@@ -510,9 +519,11 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         res = abstract_expr_i(*raw_return, env, a);
         if (res.type == Err) return res;
 
+        shadow_pop(env, quants.len);
+
         if (res.out.type != SType) {
             res.type = Err;
-            res.error_message = mv_string("Structure type fields must have their own types.");
+            res.error_message = mv_string("Procedure type fields must have their own types.");
             return res;
         }
 
@@ -551,6 +562,14 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
             }
         }
 
+        for (size_t i = 0; i < quants.len; i++) {
+            PiType* var_ty = mem_alloc(sizeof(PiType), a);
+            *var_ty = (PiType) {
+                .sort = TQVar,
+                .qvar.id = quants.data[i],
+            };
+            shadow_bind(quants.data[i], var_ty, env);
+        }
         for (size_t i = start_idx; i < raw.nodes.len; i++) {
             RawTree* fdesc = raw.nodes.data[i];
             if (fdesc->type != RawList) {
@@ -577,15 +596,17 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
                 return res;
             }
             if (res.out.type != SType) {
-                res.type = Err;
-                res.error_message = mv_string("Structure type fields must have their own types.");
-                return res;
+                res = (AbsExprResult) {
+                    .type = Err,
+                    .error_message = mv_string("Structure type fields must have their own types."),
+                };
             }
 
             PiType* field_ty = res.out.type_val;
 
             sym_ptr_insert(field, field_ty, &field_types);
         }
+        shadow_pop(env, quants.len);
 
         *out_ty = (PiType) {
             .sort = TStruct,
@@ -611,7 +632,7 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         if (raw.nodes.len > 1 && ((RawTree*)raw.nodes.data[1])->hint == HArgList) {
             start_idx += 1;
             RawTree* raw_quants = raw.nodes.data[1];
-            if (!get_symbol_list(&quants, *(RawTree*)raw_quants)) {
+            if (!get_symbol_list(&quants, *raw_quants)) {
                 return (AbsExprResult) {
                     .type = Err,
                     .error_message = mv_string("Enumeration quantifier list expected to be all symbols."),
@@ -619,6 +640,14 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
             }
         }
 
+        for (size_t i = 0; i < quants.len; i++) {
+            PiType* var_ty = mem_alloc(sizeof(PiType), a);
+            *var_ty = (PiType) {
+                .sort = TQVar,
+                .qvar.id = quants.data[i],
+            };
+            shadow_bind(quants.data[i], var_ty, env);
+        }
         for (size_t i = start_idx; i < raw.nodes.len; i++) {
             RawTree* edesc = raw.nodes.data[i];
 
@@ -660,6 +689,7 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
 
             sym_ptr_insert(tagname, types, &enum_variants);
         }
+        shadow_pop(env, quants.len);
 
         *out_ty = (PiType) {
             .sort = TEnum,
@@ -719,13 +749,14 @@ AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a) {
     case RawList: {
         // Currently, can only have function calls, so all Rawaists compile down to an application
         if (raw.nodes.len < 1) {
-            res.type = Err;
-            res.error_message = mk_string("Raw Syntax must have at least one element!", a);
-            return res;
+            return (AbsExprResult) {
+                .type = Err,
+                .error_message = mk_string("Raw Syntax must have at least one element!", a),
+            };
         }
         if (is_symbol(aref_ptr(0, raw.nodes))) {
             Symbol sym = ((RawTree*)aref_ptr(0, raw.nodes))->atom.symbol;
-            shadow_entry entry = shadow_env_lookup(sym, env);
+            ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:
                 res.type = Err;
@@ -736,6 +767,12 @@ AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a) {
                 break;
             case SShadowed: 
                 return mk_application(raw, env, a);
+                break;
+            case SLocal: 
+                return (AbsExprResult) {
+                    .type = Err,
+                    .error_message = mk_string("Higher kinded types not currently supported!", a),
+                };
                 break;
             case SGlobal:
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
@@ -790,7 +827,7 @@ AbsResult mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
 
         shadow_var(sym, env);
         AbsExprResult inter = abstract_expr_i(*raw_term, env, a);
-        pop_shadow(env, 1);
+        shadow_pop(env, 1);
 
         if (inter.type == Err) {
             res.type = Err;
@@ -824,13 +861,15 @@ AbsResult abstract_i(RawTree raw, ShadowEnv* env, Allocator* a) {
     if (raw.type == RawList && raw.nodes.len > 1) {
         if (is_symbol(aref_ptr(0, raw.nodes))) {
             Symbol sym = ((RawTree*)aref_ptr(0, raw.nodes))->atom.symbol;
-            shadow_entry entry = shadow_env_lookup(sym, env);
+            ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
-            case SGlobal:
+            case SGlobal: {
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     unique_toplevel = true;
                     return mk_toplevel(*((TermFormer*)entry.value), raw, env, a);
                 }
+                break;
+            }
             default:
                 break;
             }

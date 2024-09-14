@@ -54,7 +54,7 @@
             arr->len++;                                                 \
         }                                                               \
         else {                                                          \
-            arr->size = arr->size * 2;                                  \
+            arr->size = arr->size == 0 ? 8 : arr->size * 2;             \
             arr->data = mem_realloc(arr->data, arr->size * sizeof(type), arr->gpa); \
             arr->data[arr->len] = val;                                  \
             arr->len++;                                                 \

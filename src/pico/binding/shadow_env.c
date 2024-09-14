@@ -1,44 +1,54 @@
 
+#include "pico/data/sym_ptr_assoc.h"
 #include "pico/binding/environment.h"
 #include "pico/binding/shadow_env.h"
 
 
 struct ShadowEnv {
     Environment* env;
-    SymbolArray shadowed;
+    SymPtrAssoc locals;
 };
 
 ShadowEnv* mk_shadow_env(Allocator* a, Environment* env) {
     ShadowEnv* s_env = mem_alloc(sizeof(ShadowEnv), a);
     s_env->env = env;
-    s_env->shadowed = mk_u64_array(32, a);
+    s_env->locals = mk_sym_ptr_assoc(32, a);
     return s_env;
 }
 
 void delete_shadow_env(ShadowEnv* env, Allocator* a) {
-    sdelete_u64_array(env->shadowed);
+    sdelete_sym_ptr_assoc(env->locals);
     mem_free(env, a);
 }
 
 void shadow_var (Symbol var, ShadowEnv* env) {
-    push_u64(var, &(env->shadowed));
+    sym_ptr_bind(var, NULL, &env->locals);
 }
 
 void shadow_vars (SymbolArray vars, ShadowEnv* env) {
     for (size_t i = 0; i < vars.len; i++) {
-        push_u64(aref_u64(i, vars), &(env->shadowed));
+        sym_ptr_bind(vars.data[i], NULL, &env->locals);
     }
 }
 
-void pop_shadow(ShadowEnv* env, size_t n) {
-    env->shadowed.len -= n;
+void shadow_pop(ShadowEnv* env, size_t n) {
+    env->locals.len -= n;
 }
 
-shadow_entry shadow_env_lookup(Symbol s, ShadowEnv* env) {
-    shadow_entry entry;
-    for (size_t i = 0; i < env->shadowed.len; i++) {
-        if (s == aref_u64(i, env->shadowed)) {
-            entry.type = SShadowed;
+void shadow_bind(Symbol var, PiType* type, ShadowEnv* env) {
+    sym_ptr_bind(var, type, &env->locals);
+}
+
+ShadowEntry shadow_env_lookup(Symbol s, ShadowEnv* env) {
+    ShadowEntry entry;
+    for (size_t i = env->locals.len; i > 0; i--) {
+        if (s == env->locals.data[i-1].key) {
+            PiType* type = env->locals.data[i-1].val;
+            if (type) {
+                entry = (ShadowEntry) {.type = SLocal, .value = type,};
+            } else {
+                entry = (ShadowEntry) {.type = SShadowed,};
+            }
             return entry;
         }
     }

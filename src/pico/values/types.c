@@ -136,6 +136,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         switch (type->prim) {
         case Unit:  {
             out = mk_str_doc(mv_string(":unit"), a);
+            break;
         }
         case Bool:  {
             uint64_t* uival = (uint64_t*) val;
@@ -329,6 +330,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TQVar: {
+        out = mk_str_doc(*symbol_to_string(type->qvar.id), a);
         break;
     }
     default:
