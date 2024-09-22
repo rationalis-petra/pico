@@ -22,13 +22,13 @@
  *    | Ann <symbol> <value>
  */
 
-typedef enum Syntax_t {
+typedef enum {
+    // Atoms
     SLitI64,
     SLitBool,
-
-    SType,
-
     SVariable,
+
+    // Terms & term formers
     SProcedure,
     SApplication,
     SConstructor,
@@ -37,8 +37,19 @@ typedef enum Syntax_t {
     SStructure,
     SProjector,
 
+    // Helpers/convenience
     SLet,
     SIf,
+
+    // Types & Type formers
+    SProcType,
+    SStructType,
+    SEnumType,
+    SForallType,
+    SExistsType,
+    STypeFamily,
+
+    SCheckedType,
 } Syntax_t;
 
 
@@ -47,63 +58,82 @@ typedef PtrArray SynArray;
 typedef PtrArray ClauseArray;
 typedef SymPtrAMap SymSynAMap;
 
-typedef struct SynProcedure {
+typedef struct {
     SymbolArray args;
     Syntax* body;
 } SynProcedure;
 
-typedef struct SynApp {
+typedef struct {
     Syntax* function;
     SynArray args;
 } SynApp;
 
-typedef struct SynConstructor {
+typedef struct {
     Syntax* enum_type;
     Symbol tagname;
     size_t tag;
 } SynConstructor;
 
-typedef struct SynVariant {
+typedef struct {
     Syntax* enum_type;
     Symbol tagname;
     size_t tag;
     SynArray args;
 } SynVariant;
 
-typedef struct SynClause {
+typedef struct {
     Symbol tagname;
     size_t tag;
     SymbolArray vars;
     Syntax* body;
 } SynClause;
 
-typedef struct SynMatch {
+typedef struct {
     Symbol recfn;
     Syntax* val;
     ClauseArray clauses;
 } SynMatch;
 
-typedef struct SynStructure {
+typedef struct {
     Syntax* ptype;
     SymSynAMap fields;
 } SynStructure;
 
-typedef struct SynProjector {
+typedef struct {
     Symbol field;
     Syntax* val;
 } SynProjector;
 
 // Sugaring Syntax
-typedef struct SynLet {
+typedef struct {
     SymSynAMap bindings;
     Syntax* body;
 } SynLet;
 
-typedef struct SynIf {
+typedef struct {
     Syntax* condition;
     Syntax* true_branch;
     Syntax* false_branch;
 } SynIf;
+
+// Types
+typedef struct {
+    SymSynAMap bindings;
+    Syntax* body;
+} SynBind;
+
+typedef struct {
+    PtrArray args;
+    Syntax* return_type;
+} SynProcType;
+
+typedef struct {
+    SymSynAMap fields;
+} SynStructType;
+
+typedef struct {
+    SymPtrAMap variants;
+} SynEnumType;
 
 
 struct Syntax {
@@ -111,7 +141,6 @@ struct Syntax {
     union {
         int64_t lit_i64;
         Symbol variable;
-        PiType* type_val;
 
         SynProcedure procedure;
         SynApp application;
@@ -123,6 +152,12 @@ struct Syntax {
 
         SynLet let_expr;
         SynIf if_expr;
+
+        SynProcType proc_type;
+        SynStructType struct_type;
+        SynEnumType enum_type;
+        SynBind bind_type;
+        PiType* type_val;
     };
     PiType* ptype;
 };

@@ -7,7 +7,7 @@
 
 
 // The global symbol table
-     static bool initialized = false;
+static bool initialized = false;
 static StrU64AMap symbol_table;
 static PtrArray symbol_names;
 

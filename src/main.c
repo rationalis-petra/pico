@@ -74,7 +74,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     PiType type;
     PiType type_val;
     PiType* type_data = &type_val;
-    type = mk_prim_type(TType);
+    type = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
 
     type_val = mk_prim_type(Unit);
     sym = string_to_symbol(mv_string("Unit"));

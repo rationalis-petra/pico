@@ -102,13 +102,6 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
-    case SType: {
-        out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Push, reg(RBX), a);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
-        break;
-    }
     case SVariable: {
         // Lookup the variable in the assembly envionrment
         AddressEntry e = address_env_lookup(syn.variable, env);
@@ -129,13 +122,14 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
                 backlink_global(syn.variable, out.backlink, links, a);
-                if (syn.ptype->prim == TType) {
-                    out = build_unary_op(ass, Push, reg(RCX), a);
-                } else {
-                    out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
-                    if (out.type == Err) return out;
-                    out = build_unary_op(ass, Push, reg(RBX), a);
-                }
+                out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
+                if (out.type == Err) return out;
+                out = build_unary_op(ass, Push, reg(RBX), a);
+            } else if (syn.ptype->sort == TKind) {
+                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
+                if (out.type == Err) return out;
+                backlink_global(syn.variable, out.backlink, links, a);
+                out = build_unary_op(ass, Push, reg(RCX), a);
             } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
@@ -567,6 +561,13 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             return out;
         } 
         *jmp_loc = (uint8_t)(end_pos - start_pos);
+        break;
+    }
+    case SCheckedType: {
+        out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a);
+        if (out.type == Err) return out;
+        out = build_unary_op(ass, Push, reg(RBX), a);
+        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     default: {

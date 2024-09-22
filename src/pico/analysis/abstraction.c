@@ -41,24 +41,6 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     return true;
 }
 
-PiType* get_raw_type(RawTree raw, ShadowEnv* env) {
-    PiType* out = NULL;
-    if (raw.type != RawAtom || raw.atom.type != ASymbol) {
-        return out;
-    }
-
-    ShadowEntry entry = shadow_env_lookup(raw.atom.symbol, env);
-    if (entry.type == SGlobal
-        && entry.vtype->sort == TPrim
-        && entry.vtype->prim == TType) {
-            out = entry.value;
-    } else if (entry.type == SLocal) {
-        out = entry.value;
-    }
-
-    return out;
-}
-
 AbsResult to_toplevel(AbsExprResult res) {
     AbsResult out;
     switch (res.type) {
@@ -459,30 +441,14 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         break;
     }
     case FProcType: {
-        // Construct a structure type
-        PiType* out_ty = mem_alloc(sizeof(PiType), a);
-        SymbolArray quants = mk_u64_array(0, a);
-
-        if (raw.nodes.len < 3 || raw.nodes.len > 4) {
+        if (raw.nodes.len != 3) {
             return (AbsExprResult) {
                 .type = Err,
                 .error_message = mv_string("Wrong number of terms to proc type former."),
             };
         }
 
-        bool has_quants = false;
-        if (raw.nodes.len == 4) {
-            has_quants = true;
-            RawTree* raw_quants = raw.nodes.data[1];
-            if (!get_symbol_list(&quants, *(RawTree*)raw_quants)) {
-                return (AbsExprResult) {
-                    .type = Err,
-                    .error_message = mv_string("Procedure quantifier list expected to be all symbols."),
-                };
-            }
-        }
-
-        RawTree* raw_args = raw.nodes.data[has_quants ? 2 : 1];
+        RawTree* raw_args = raw.nodes.data[1];
         if (raw_args->type != RawList) {
                 return (AbsExprResult) {
                     .type = Err,
@@ -492,85 +458,35 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         
         PtrArray arg_types = mk_ptr_array(raw_args->nodes.len, a);
 
-        for (size_t i = 0; i < quants.len; i++) {
-            PiType* var_ty = mem_alloc(sizeof(PiType), a);
-            *var_ty = (PiType) {
-                .sort = TQVar,
-                .qvar.id = quants.data[i],
-            };
-            shadow_bind(quants.data[i], var_ty, env);
-        }
         for (size_t i = 0; i < raw_args->nodes.len; i++) {
             RawTree* raw_arg = raw_args->nodes.data[i];
             res = abstract_expr_i(*raw_arg, env, a);
             if (res.type == Err) return res;
 
-            if (res.out.type != SType) {
-                res.type = Err;
-                res.error_message = mv_string("Procedure type fields must have their own types.");
-                return res;
-            }
-
-            PiType* arg_ty = res.out.type_val;
+            Syntax* arg_ty = mem_alloc(sizeof(Syntax), a);
+            *arg_ty = res.out;
             push_ptr(arg_ty, &arg_types);
         }
 
-        RawTree* raw_return = raw.nodes.data[has_quants ? 3 : 2]; 
+        RawTree* raw_return = raw.nodes.data[2]; 
         res = abstract_expr_i(*raw_return, env, a);
         if (res.type == Err) return res;
 
-        shadow_pop(env, quants.len);
-
-        if (res.out.type != SType) {
-            res.type = Err;
-            res.error_message = mv_string("Procedure type fields must have their own types.");
-            return res;
-        }
-
-        PiType* return_type = res.out.type_val;
-
-        *out_ty = (PiType) {
-            .sort = TProc,
-            .proc.quants = quants,
-            .proc.args = arg_types,
-            .proc.ret = return_type,
-        };
+        Syntax* return_type = mem_alloc(sizeof(RawTree), a);
+        *return_type = res.out;
 
         res.type = Ok;
         res.out = (Syntax) {
-            .type = SType,
-            .type_val = out_ty,
+            .type = SProcType,
+            .proc_type.args = arg_types,
+            .proc_type.return_type = return_type,
         };
         break;
     }
     case FStructType: {
-        // Construct a structure type
+        SymSynAMap field_types = mk_sym_ptr_amap(raw.nodes.len, a);
 
-        PiType* out_ty = mem_alloc(sizeof(PiType), a);
-        SymPtrAMap field_types = mk_sym_ptr_amap(raw.nodes.len, a);
-        SymbolArray quants = mk_u64_array(0, a);
-
-        size_t start_idx  = 1;
-        if (raw.nodes.len > 1 && ((RawTree*)raw.nodes.data[1])->hint == HArgList) {
-            start_idx += 1;
-            RawTree* raw_quants = raw.nodes.data[1];
-            if (!get_symbol_list(&quants, *(RawTree*)raw_quants)) {
-                return (AbsExprResult) {
-                    .type = Err,
-                    .error_message = mv_string("Structure quantifier list expected to be all symbols."),
-                };
-            }
-        }
-
-        for (size_t i = 0; i < quants.len; i++) {
-            PiType* var_ty = mem_alloc(sizeof(PiType), a);
-            *var_ty = (PiType) {
-                .sort = TQVar,
-                .qvar.id = quants.data[i],
-            };
-            shadow_bind(quants.data[i], var_ty, env);
-        }
-        for (size_t i = start_idx; i < raw.nodes.len; i++) {
+        for (size_t i = 1; i < raw.nodes.len; i++) {
             RawTree* fdesc = raw.nodes.data[i];
             if (fdesc->type != RawList) {
                 res.type = Err;
@@ -595,60 +511,24 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
             if (res.type == Err) {
                 return res;
             }
-            if (res.out.type != SType) {
-                res = (AbsExprResult) {
-                    .type = Err,
-                    .error_message = mv_string("Structure type fields must have their own types."),
-                };
-            }
 
-            PiType* field_ty = res.out.type_val;
+            Syntax* field_ty = mem_alloc(sizeof(Syntax), a);
+            *field_ty = res.out;
 
             sym_ptr_insert(field, field_ty, &field_types);
         }
-        shadow_pop(env, quants.len);
-
-        *out_ty = (PiType) {
-            .sort = TStruct,
-            .structure.quants = quants,
-            .structure.fields = field_types,
-        };
 
         res.type = Ok;
         res.out = (Syntax) {
-            .type = SType,
-            .type_val = out_ty,
+            .type = SStructType,
+            .struct_type.fields = field_types,
         };
         break;
     }
     case FEnumType: {
-        // Construct an enum type
-
-        PiType* out_ty = mem_alloc(sizeof(PiType), a);
         SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.nodes.len, a);
-        SymbolArray quants = mk_u64_array(0, a);
 
-        size_t start_idx  = 1;
-        if (raw.nodes.len > 1 && ((RawTree*)raw.nodes.data[1])->hint == HArgList) {
-            start_idx += 1;
-            RawTree* raw_quants = raw.nodes.data[1];
-            if (!get_symbol_list(&quants, *raw_quants)) {
-                return (AbsExprResult) {
-                    .type = Err,
-                    .error_message = mv_string("Enumeration quantifier list expected to be all symbols."),
-                };
-            }
-        }
-
-        for (size_t i = 0; i < quants.len; i++) {
-            PiType* var_ty = mem_alloc(sizeof(PiType), a);
-            *var_ty = (PiType) {
-                .sort = TQVar,
-                .qvar.id = quants.data[i],
-            };
-            shadow_bind(quants.data[i], var_ty, env);
-        }
-        for (size_t i = start_idx; i < raw.nodes.len; i++) {
+        for (size_t i = 1; i < raw.nodes.len; i++) {
             RawTree* edesc = raw.nodes.data[i];
 
             if (edesc->type != RawList) {
@@ -678,29 +558,18 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
                 if (res.type == Err) {
                     return res;
                 }
-                if (res.out.type != SType) {
-                    res.type = Err;
-                    res.error_message = mv_string("Enumeration type fields must have their own types.");
-                    return res;
-                }
-                PiType* field_ty = res.out.type_val;
+                Syntax* field_ty = mem_alloc(sizeof(Syntax), a);
+                *field_ty = res.out;
                 push_ptr(field_ty, types);
             }
 
             sym_ptr_insert(tagname, types, &enum_variants);
         }
-        shadow_pop(env, quants.len);
-
-        *out_ty = (PiType) {
-            .sort = TEnum,
-            .enumeration.quants = quants,
-            .enumeration.variants = enum_variants,
-        };
 
         res.type = Ok;
         res.out = (Syntax) {
-            .type = SType,
-            .type_val = out_ty,
+            .type = SEnumType,
+            .enum_type.variants = enum_variants,
         };
         break;
     }
@@ -719,35 +588,35 @@ AbsExprResult abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a) {
     switch (raw.type) {
     case RawAtom: {
         if (raw.atom.type == ASymbol) {
-            PiType* ty = get_raw_type(raw, env);
-            if (ty) {
-                res.type = Ok;
-                res.out.type = SType;
-                res.out.type_val = ty;
-            } else {
-                res.type = Ok;
-                res.out.type = SVariable;
-                res.out.variable = raw.atom.symbol;
-            }
-
+            res = (AbsExprResult) {
+                .type = Ok,
+                .out.type = SVariable,
+                .out.variable = raw.atom.symbol,
+            };
         }
         else if (raw.atom.type == AI64) {
-            res.type = Ok;
-            res.out.type = SLitI64;
-            res.out.lit_i64 = raw.atom.int_64;
+            res = (AbsExprResult) {
+                .type = Ok,
+                .out.type = SLitI64,
+                .out.lit_i64 = raw.atom.int_64,
+            };
         }
         else if (raw.atom.type == ABool) {
-            res.type = Ok;
-            res.out.type = SLitBool;
-            res.out.lit_i64 = raw.atom.int_64;
+            res = (AbsExprResult) {
+                .type = Ok,
+                .out.type = SLitBool,
+                .out.lit_i64 = raw.atom.int_64,
+            };
         } else  {
-            res.type = Err;
-            res.error_message = mk_string("Currently, can only make literal values out of type i64." , a);
+            res = (AbsExprResult) {
+                .type = Err,
+                .error_message = mk_string("Currently, can only make literal values out of type i64." , a),
+            };
         }
         break;
     }
     case RawList: {
-        // Currently, can only have function calls, so all Rawaists compile down to an application
+        // Currently, can only have function calls, so all Raw lists compile down to an application
         if (raw.nodes.len < 1) {
             return (AbsExprResult) {
                 .type = Err,

@@ -40,7 +40,14 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_sym_ptr_amap(t.enumeration.variants);
         break;
     }
-    case TApp: {
+    case TAll:
+    case TExists:
+    case TCLam: {
+        delete_pi_type_p(t.binder.body, a);
+        break;
+    }
+
+    case TCApp: {
         delete_pi_type_p(t.app.fam, a);
         for (size_t i = 0; i < t.app.args.len; i++) {
             delete_pi_type_p(t.app.args.data[i], a);
@@ -48,7 +55,7 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_ptr_array(t.app.args);
         break;
     }
-    case TQVar: {
+    case TVar: {
         // Do nothing; 
         break;
     }
@@ -59,10 +66,9 @@ void delete_pi_type(PiType t, Allocator* a) {
         }
         mem_free(t.uvar, a);
         break;
-    case TPrim:
-        // Do nothing!
-        break;
-            
+    case TPrim: break;
+
+    case TKind: break;
     }
 }
 
@@ -98,11 +104,17 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TEnum:
         out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, a);
         break;
-    case TQVar:
-        out.qvar = t.qvar;
+    case TVar:
+        out.var = t.var;
         break;
-    case TApp:
+    case TExists:
+    case TAll:
+    case TCLam: {
         break;
+    }
+    case TCApp:
+        break;
+
 
     case TUVar:
         out.uvar = mem_alloc(sizeof(UVarType), a);
@@ -116,7 +128,9 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TPrim:
         out.prim = t.prim;
         break;
-            
+    case TKind:
+        out.kind = t.kind;
+        break;
     }
 
     return out;
@@ -160,11 +174,6 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
-            break;
-        }
-        case TType:  {
-            PiType** ptype = (PiType**) val;
-            out = pretty_type(*ptype, a);
             break;
         }
         }
@@ -217,22 +226,47 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case TQVar: {
-        out = mk_str_doc(mv_string("Not expecting to print value with QVar type"), a);
+    case TVar: {
+        out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
     }
-    case TApp: {
-        PtrArray nodes = mk_ptr_array(3 + type->app.args.len, a);
-        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
-        push_ptr(pretty_type(type->app.fam, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+    case TAll:
+    case TExists:
+    case TCLam: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        if (type->sort == TAll) push_ptr(mk_str_doc(mv_string("(All "), a), &nodes);
+        else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
+        else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
+
+        PtrArray args = mk_ptr_array(type->binder.vars.len + 2, a);
+        push_ptr(mk_str_doc(mv_string("["), a), &args);
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &args);
         }
+        push_ptr(mk_str_doc(mv_string("]"), a), &args);
+
+        push_ptr(mv_sep_doc(args, a), &nodes);
+        push_ptr(pretty_type(type->binder.body, a), &nodes);
+
         out = mv_sep_doc(nodes, a);
         break;
     }
-
+    case TCApp: {
+        PtrArray nodes = mk_ptr_array(3 + type->app.args.len, a);
+        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
+        push_ptr(pretty_type(type->app.fam, a), &nodes);
+        for (size_t i = 0; i < type->app.args.len; i++) {
+            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TKind:  {
+        PiType** ptype = (PiType**) val;
+        out = pretty_type(*ptype, a);
+        break;
+    }
     default:
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
         break;
@@ -276,9 +310,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
         case TFormer: 
             out = mv_str_doc(mk_string("Former", a), a);
             break;
-        case TType: 
-            out = mv_str_doc(mk_string("Type", a), a);
-            break;
         }
         break;
     case TStruct: {
@@ -306,12 +337,12 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TEnum: {
         PtrArray nodes = mk_ptr_array(2 + type->enumeration.variants.len, a);
         push_ptr(mv_str_doc((mk_string("(Enum ", a)), a), &nodes);
-        for (size_t i = 0; i < type->structure.fields.len; i++) {
+        for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(4, a);
             Document* pre = mk_str_doc(mv_string("[:"), a);
             Document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
 
-            PtrArray* types = type->structure.fields.data[i].val;
+            PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
             for (size_t j = 0; j < types->len; j++) {
                 Document* arg = pretty_type((PiType*)types->data[j], a);
@@ -332,8 +363,24 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case TQVar: {
-        out = mk_str_doc(*symbol_to_string(type->qvar.id), a);
+
+    case TVar: {
+        out = mk_str_doc(*symbol_to_string(type->var), a);
+        break;
+    }
+    case TKind: {
+        size_t nargs = type->kind.nargs;
+        if (nargs == 0) {
+            out = mk_str_doc(mv_string("Type"), a);
+        } else {
+            PtrArray nodes = mk_ptr_array(nargs + 2, a);
+            push_ptr(mk_str_doc(mv_string("Fam ("), a), &nodes);
+            for (size_t i = 0; i < nargs; i++) {
+                push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
+            }
+            push_ptr(mk_str_doc(mv_string(") Type"), a), &nodes);
+            out = mv_sep_doc(nodes, a);
+        }
         break;
     }
     default:
@@ -353,9 +400,6 @@ size_t pi_size_of(PiType type) {
         case Int_64:
         case TFormer:
             return sizeof(uint64_t); // sizeof(pi_term_former_t);
-        case TType:
-            //return sizeof(pi_type);
-            return sizeof(void*);
         }
         return sizeof(uint64_t);
     case TProc:
@@ -381,6 +425,8 @@ size_t pi_size_of(PiType type) {
         // Add 1 for tag!
         return max + sizeof(uint64_t);
     }
+    case TKind: 
+        return sizeof(void*);
     case TUVar:
         return 0;
     default:
@@ -414,4 +460,5 @@ UVarGenerator* mk_gen(Allocator* a) {
 void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
 }
+
 
