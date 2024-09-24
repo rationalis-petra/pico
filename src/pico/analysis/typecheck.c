@@ -190,15 +190,47 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         untyped->ptype = proc_ty;
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
-            Symbol arg = untyped->procedure.args.data[i];
-            PiType* aty = mk_uvar(gen, a);
-            type_var(arg, aty, env);
+            SymPtrACell arg = untyped->procedure.args.data[i];
+            PiType* aty;
+            if (arg.val) {
+                out = eval_type(arg.val, env, a);
+                if (out.type == Err) return out;
+                aty = ((Syntax*)arg.val)->type_val;
+            } else  {
+                aty= mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
             push_ptr(aty, &proc_ty->proc.args);
         }
 
         out = type_infer_i(untyped->procedure.body, env, gen, a); 
         pop_types(env, untyped->procedure.args.len);
         proc_ty->proc.ret = untyped->procedure.body->ptype;
+        break;
+    }
+    case SAll: {
+        // give each arg a unification variable type. 
+        PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+        *arg_ty = (PiType) {.sort = TKind, .kind.nargs = 0,};
+
+        PiType* all_ty = mem_alloc(sizeof(PiType), a);
+        untyped->ptype = all_ty;
+        all_ty->sort = TAll;
+        all_ty->binder.vars = mk_u64_array(untyped->all.args.len, a);
+
+        for (size_t i = 0; i < untyped->all.args.len; i++) {
+            Symbol arg = untyped->all.args.data[i];
+            type_var(arg, arg_ty, env);
+            push_u64(arg, &all_ty->binder.vars);
+        }
+
+        out = type_infer_i(untyped->all.body, env, gen, a); 
+        pop_types(env, untyped->all.args.len);
+        all_ty->binder.body = untyped->all.body->ptype;
+        out = (Result) {
+            .type = Err,
+            .error_message = mv_string("All type must have inner proc."),
+        };
         break;
     }
     case SApplication: {
@@ -512,6 +544,11 @@ Result squash_types(Syntax* typed, Allocator* a) {
     case SProcedure: {
         // squash body
         out = squash_types(typed->procedure.body, a);
+        break;
+    }
+    case SAll: {
+        // TODO: need to squash args when HKTs are allowed 
+        out = squash_types(typed->all.body, a);
         break;
     }
     case SApplication: {

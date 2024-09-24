@@ -13,15 +13,8 @@ static PtrArray symbol_names;
 
 
 void init_symtable(Allocator* a) {
-    StrU64AMap map = mk_str_u64_amap(100, a);
-    symbol_table.capacity = map.capacity;
-    symbol_table.len = map.len;
-    symbol_table.data = map.data;
-
-    PtrArray arr = mk_ptr_array(100, a);
-    symbol_names.size = arr.size;
-    symbol_names.len = arr.len;
-    symbol_names.data = arr.data;
+    symbol_table = mk_str_u64_amap(100, a);
+    symbol_names = mk_ptr_array(100, a);
     initialized = true;
 }
 
@@ -40,8 +33,11 @@ void clear_symbols() {
     sdelete_str_u64_amap(symbol_table);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void delete_symbol(Symbol s) {};
 Symbol copy_symbol(Symbol s, Allocator* a) { return s; };
+#pragma GCC diagnostic pop
 
 String* symbol_to_string(Symbol symbol) {
     Allocator* a = get_std_allocator();
@@ -72,31 +68,34 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     Document* out = NULL;
     switch(op) {
     case FDefine:
-        out = mk_str_doc(mv_string("::Define"), a);
+        out = mk_str_doc(mv_string("::define"), a);
         break;
     case FApplication:
-        out = mk_str_doc(mv_string("::Application"), a);
+        out = mk_str_doc(mv_string("::application"), a);
         break;
     case FProcedure:
-        out = mk_str_doc(mv_string("::Procedure"), a);
+        out = mk_str_doc(mv_string("::procedure"), a);
+        break;
+    case FAll:
+        out = mk_str_doc(mv_string("::all"), a);
         break;
     case FVariant:
-        out = mk_str_doc(mv_string("::Variant"), a);
+        out = mk_str_doc(mv_string("::variant"), a);
         break;
     case FMatch:
-        out = mk_str_doc(mv_string("::Match"), a);
+        out = mk_str_doc(mv_string("::match"), a);
         break;
     case FStructure:
-        out = mk_str_doc(mv_string("::Structure"), a);
+        out = mk_str_doc(mv_string("::structure"), a);
         break;
     case FProjector:
-        out = mk_str_doc(mv_string("::Projector"), a);
+        out = mk_str_doc(mv_string("::projector"), a);
         break;
     case FIf:
-        out = mk_str_doc(mv_string("::If"), a);
+        out = mk_str_doc(mv_string("::if"), a);
         break;
     case FLet:
-        out = mk_str_doc(mv_string("::Let"), a);
+        out = mk_str_doc(mv_string("::let"), a);
         break;
 
         // Type formers
@@ -108,6 +107,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::ProcedureType"), a);
+        break;
+    case FAllType:
+        out = mk_str_doc(mv_string("::AllType"), a);
         break;
     }
     return out;

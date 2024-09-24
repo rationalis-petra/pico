@@ -3,6 +3,7 @@
 
 #include "memory/allocator.h"
 
+#include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
@@ -30,6 +31,7 @@ typedef enum {
 
     // Terms & term formers
     SProcedure,
+    SAll,
     SApplication,
     SConstructor,
     SVariant,
@@ -50,6 +52,8 @@ typedef enum {
     STypeFamily,
 
     SCheckedType,
+
+    SAnnotation,
 } Syntax_t;
 
 
@@ -59,9 +63,14 @@ typedef PtrArray ClauseArray;
 typedef SymPtrAMap SymSynAMap;
 
 typedef struct {
-    SymbolArray args;
+    SymPtrAssoc args;
     Syntax* body;
 } SynProcedure;
+
+typedef struct {
+    SymbolArray args;
+    Syntax* body;
+} SynAll;
 
 typedef struct {
     Syntax* function;
@@ -135,6 +144,11 @@ typedef struct {
     SymPtrAMap variants;
 } SynEnumType;
 
+typedef struct {
+    Syntax* val;
+    Syntax* type;
+} SynAnnotation;
+
 
 struct Syntax {
     Syntax_t type;
@@ -143,6 +157,7 @@ struct Syntax {
         Symbol variable;
 
         SynProcedure procedure;
+        SynAll all;
         SynApp application;
         SynConstructor constructor;
         SynVariant variant;
@@ -158,6 +173,8 @@ struct Syntax {
         SynEnumType enum_type;
         SynBind bind_type;
         PiType* type_val;
+
+        SynAnnotation annotation;
     };
     PiType* ptype;
 };

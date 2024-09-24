@@ -34,11 +34,34 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
 
     for (size_t i = 0; i < nodes.nodes.len; i++) {
         RawTree* node = nodes.nodes.data[i];
-        if (node->type != RawAtom) { return false; }
-        if (node->atom.type != ASymbol) { return false;  }
+        if (node->type != RawAtom || node->atom.type != ASymbol) { return false; }
         push_u64(node->atom.symbol, arr);
     }
     return true;
+}
+
+Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env, Allocator* a) {
+    Result error_result = {.type = Err, .error_message = mv_string("Malformed argument list.")};
+    AbsExprResult out;
+    if (list.type != RawList) { return error_result; }
+
+    for (size_t i = 0; i < list.nodes.len; i++) {
+        RawTree* annotation = list.nodes.data[i];
+        if (annotation->type != RawList || annotation->nodes.len != 2) { return error_result; }
+        RawTree* arg = annotation->nodes.data[0];
+        RawTree* raw_type = annotation->nodes.data[1];
+        if (arg->type != RawAtom || arg->atom.type != ASymbol) { return error_result; }
+        out = abstract_expr_i(*raw_type, env, a); 
+        if (out.type == Err) {
+            error_result.error_message = out.error_message;
+            return error_result;
+        }
+        Syntax* type = mem_alloc(sizeof(Syntax), a);
+        *type = out.out;
+
+        sym_ptr_bind(arg->atom.symbol, type, args);
+    }
+    return (Result) {.type = Ok};
 }
 
 AbsResult to_toplevel(AbsExprResult res) {
@@ -123,10 +146,54 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
             return res;
         }
 
+        SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
+        SymbolArray to_shadow = mk_u64_array(8, a);
+        Result args_out = get_annotated_symbol_list(&arguments, *(RawTree*)raw.nodes.data[1], env, a);
+        if (args_out.type == Err) {
+            res.type = Err;
+            res.error_message = args_out.error_message;
+            return res;
+        }
+
+        shadow_vars(to_shadow, env);
+
+        RawTree* raw_term;
+        if (raw.nodes.len == 3) {
+            raw_term = (RawTree*)aref_ptr(2, raw.nodes);
+        } else {
+            raw_term = mem_alloc (sizeof(RawTree), a);
+
+            raw_term->nodes.len = raw.nodes.len - 2;
+            raw_term->nodes.size = raw.nodes.size - 2;
+            raw_term->nodes.data = raw.nodes.data + 2;
+            raw_term->type = RawList;
+        }
+        AbsExprResult rbody = abstract_expr_i(*raw_term, env, a);
+        shadow_pop(arguments.len, env);
+
+
+        if (rbody.type == Err) {
+            return rbody;
+        }
+        else 
+            res.type = Ok;
+        res.out.type = SProcedure;
+        res.out.procedure.args = arguments;
+        res.out.procedure.body = mem_alloc(sizeof(Syntax), a);
+        *res.out.procedure.body = rbody.out;
+        break;
+    }
+    case FAll: {
+        if (raw.nodes.len < 3) {
+            res.type = Err;
+            res.error_message = mk_string("all term former requires at least 2 arguments!", a);
+            return res;
+        }
+
         SymbolArray arguments = mk_u64_array(2, a);
         if (!get_symbol_list(&arguments, *(RawTree*)raw.nodes.data[1])) {
             res.type = Err;
-            res.error_message = mk_string("Procedure term former requires first arguments to be a symbol-list!", a);
+            res.error_message = mk_string("all term former requires first arguments to be a symbol-list!", a);
             return res;
         }
 
@@ -145,16 +212,18 @@ AbsExprResult mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
         }
         AbsExprResult rbody = abstract_expr_i(*raw_term, env, a);
 
-
         if (rbody.type == Err) {
             return rbody;
         }
-        else 
-            res.type = Ok;
-        res.out.type = SProcedure;
-        res.out.procedure.args = arguments;
-        res.out.procedure.body = mem_alloc(sizeof(Syntax), a);
-        *res.out.procedure.body = rbody.out;
+        else  {
+            res = (AbsExprResult) {
+                .type = Ok,
+                .out.type = SAll,
+                .out.all.args = arguments,
+                .out.all.body = mem_alloc(sizeof(Syntax), a),
+            };
+            *res.out.all.body = rbody.out;
+        }
         break;
     }
     case FApplication: {
@@ -696,7 +765,7 @@ AbsResult mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator*
 
         shadow_var(sym, env);
         AbsExprResult inter = abstract_expr_i(*raw_term, env, a);
-        shadow_pop(env, 1);
+        shadow_pop(1, env);
 
         if (inter.type == Err) {
             res.type = Err;

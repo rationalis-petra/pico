@@ -26,6 +26,7 @@ typedef enum TermFormer {
     // Term Formers
     FDefine,
     FProcedure,
+    FAll,
     FApplication,
     FVariant,
     FMatch,
@@ -38,6 +39,7 @@ typedef enum TermFormer {
     FProcType,
     FStructType,
     FEnumType,
+    FAllType,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

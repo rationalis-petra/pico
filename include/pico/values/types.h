@@ -27,9 +27,9 @@ typedef enum {
     TEnum,
 
     // Quantified Types
+    TVar,
     TAll,
     TExists,
-    TVar,
 
     // Used by Sytem-Fω (type constructors)
     TCApp,

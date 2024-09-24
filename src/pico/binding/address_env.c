@@ -49,7 +49,6 @@ void delete_local_env(LocalAddrs* local, Allocator* a) {
 }
 
 void delete_address_env(AddressEnv* env, Allocator* a) {
-    typedef void(*deleter)(void* data, Allocator* a);
     for (size_t i = 0; i < env->local_envs.len; i++)
         delete_local_env(env->local_envs.data[i], a);
     sdelete_ptr_array(env->local_envs);
@@ -136,7 +135,7 @@ void address_end_proc (AddressEnv* env, Allocator* a) {
     mem_free(old_locals, a);
 }
 
-void address_bind_enum_vars (SymSizeAssoc vars, size_t enum_size, AddressEnv* env, Allocator* a) {
+void address_bind_enum_vars (SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     // Note: We don't adjust the stack head
     // 
 

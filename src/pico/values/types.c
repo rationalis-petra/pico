@@ -6,7 +6,10 @@ struct UVarGenerator {
     uint64_t counter;
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 void symbol_nod(Symbol s, Allocator a) { }
+#pragma GCC diagnostic pop
 
 void delete_pi_type_p(PiType* t, Allocator* a) {
     delete_pi_type(*t, a);
@@ -78,9 +81,13 @@ PiType* copy_pi_type_p(PiType* t, Allocator* a)  {
     return out;
 }
 
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 Symbol symbol_id(Symbol s, Allocator* a) {
     return s;
 }
+#pragma GCC diagnostic pop
 
 void* copy_enum_variant(void* v, Allocator* a) {
     PtrArray* out = mem_alloc(sizeof(PtrArray), a);
@@ -368,6 +375,18 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
     }
+    case TAll: {
+        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
+        push_ptr(mk_str_doc(mv_string("All [" ), a), &nodes);
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
+        push_ptr(pretty_type(type->binder.body, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     case TKind: {
         size_t nargs = type->kind.nargs;
         if (nargs == 0) {
@@ -398,8 +417,9 @@ size_t pi_size_of(PiType type) {
         case Bool:
         case Address:
         case Int_64:
+            return sizeof(uint64_t);
         case TFormer:
-            return sizeof(uint64_t); // sizeof(pi_term_former_t);
+            return sizeof(TermFormer); // sizeof(pi_term_former_t);
         }
         return sizeof(uint64_t);
     case TProc:

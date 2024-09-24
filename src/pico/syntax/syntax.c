@@ -68,11 +68,24 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(4 + syntax->procedure.args.len, a);
         push_ptr(mv_str_doc((mk_string("(proc (", a)), a), &nodes);
         for (size_t i = 0; i < syntax->procedure.args.len; i++) {
-            Document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->procedure.args)), a);
+            Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
             push_ptr(arg, &nodes);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SAll: {
+        PtrArray nodes = mk_ptr_array(4 + syntax->all.args.len, a);
+        push_ptr(mv_str_doc((mk_string("(all [", a)), a), &nodes);
+        for (size_t i = 0; i < syntax->all.args.len; i++) {
+            Document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->all.args)), a);
+            push_ptr(arg, &nodes);
+        }
+        push_ptr(mv_str_doc((mk_string("]", a)), a), &nodes);
+        push_ptr(pretty_syntax(syntax->all.body, a), &nodes);
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;

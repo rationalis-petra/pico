@@ -6,6 +6,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+
 void* std_malloc(size_t memsize, void* ctx) {
     return malloc(memsize);
 }
@@ -17,10 +18,11 @@ void* std_realloc(void* location, size_t memsize, void* ctx) {
 void std_free(void* location, void* ctx) {
     free(location);
 }
+
 #pragma GCC diagnostic pop
 
-static bool std_init = false; 
 Allocator* get_std_allocator() {
+    static bool std_init = false; 
     static Allocator out;
     if (!std_init) {
         out.malloc = std_malloc;

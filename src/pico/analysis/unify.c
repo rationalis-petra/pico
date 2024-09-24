@@ -99,6 +99,13 @@ bool has_unification_vars_p(PiType type) {
         break;
     }
 
+    case TAll: {
+        return has_unification_vars_p(*type.binder.body);
+    }
+
+    case TKind:
+        return false;
+
     // Special sort: unification variable
     case TUVar:
         if (type.uvar->subst == NULL) {
@@ -145,7 +152,12 @@ void squash_type(PiType* type) {
         }
         break;
     }
+    case TAll: {
+        squash_type(type->binder.body);
+    }
 
+    case TKind:
+        break;
     // Special sort: unification variable
     case TUVar: {
         PiType* subst = type->uvar->subst;
