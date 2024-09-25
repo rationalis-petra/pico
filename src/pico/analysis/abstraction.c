@@ -41,25 +41,28 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
 }
 
 Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env, Allocator* a) {
-    Result error_result = {.type = Err, .error_message = mv_string("Malformed argument list.")};
+    Result error_result = {.type = Err, .error_message = mv_string("Malformed proc argument list.")};
     AbsExprResult out;
     if (list.type != RawList) { return error_result; }
 
     for (size_t i = 0; i < list.nodes.len; i++) {
         RawTree* annotation = list.nodes.data[i];
-        if (annotation->type != RawList || annotation->nodes.len != 2) { return error_result; }
-        RawTree* arg = annotation->nodes.data[0];
-        RawTree* raw_type = annotation->nodes.data[1];
-        if (arg->type != RawAtom || arg->atom.type != ASymbol) { return error_result; }
-        out = abstract_expr_i(*raw_type, env, a); 
-        if (out.type == Err) {
-            error_result.error_message = out.error_message;
-            return error_result;
-        }
-        Syntax* type = mem_alloc(sizeof(Syntax), a);
-        *type = out.out;
+        if (annotation->type == RawAtom) {
+            sym_ptr_bind(annotation->atom.symbol, NULL, args);
+        } else if (annotation->type == RawList || annotation->nodes.len == 2) {
+            RawTree* arg = annotation->nodes.data[0];
+            RawTree* raw_type = annotation->nodes.data[1];
+            if (arg->type != RawAtom || arg->atom.type != ASymbol) { return error_result; }
+            out = abstract_expr_i(*raw_type, env, a); 
+            if (out.type == Err) {
+                error_result.error_message = out.error_message;
+                return error_result;
+            }
+            Syntax* type = mem_alloc(sizeof(Syntax), a);
+            *type = out.out;
 
-        sym_ptr_bind(arg->atom.symbol, type, args);
+            sym_ptr_bind(arg->atom.symbol, type, args);
+        } else { return error_result; }
     }
     return (Result) {.type = Ok};
 }
