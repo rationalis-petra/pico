@@ -1,23 +1,29 @@
 # Based on the makefile by Job Vranish (https://spin.atomicobject.com/2016/08/26/makefile-c-projects/)
 
 TARGET_EXEC := pico
+TARGET_SRC := ./src/main.c
 
 BUILD_DIR := ./build
 SRC_DIRS := ./src
+
+TARGET_TEST := pico_test
+TEST_BUILD_DIR := ./build/test
+TEST_SRC_DIRS := ./test/src
 
 C_VERSION := c99
 CC := gcc
 
 # Find all the C files we want to compile
-SRCS := $(shell find $(SRC_DIRS) -name '*.c')
+SRCS := $(shell find $(SRC_DIRS) -name '*.c' | grep -v $(TARGET_SRC))
 
 # Prepends BUILD_DIR and appends .o to every src file
 # As an example, ./your_dir/hello.c turns into ./build/./your_dir/hello.c.o
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
+TARGET_OBJ := $(TARGET_SRC:%=$(BUILD_DIR)/%.o)
 
 # String substitution (suffix version without %).
 # As an example, ./build/hello.c.o turns into ./build/hello.c.d
-#DEPS := $(OBJS:.o=.d)
+MAKE_DEPS := $(OBJS:.o=.d) $(TARGET_OBJ:.o=.d)
 
 # Every folder in ./src will need to be passed to GCC so that it can find header files
 #INC_DIRS := $(shell find $(SRC_DIRS) -type d)
@@ -31,8 +37,8 @@ CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -g -std=$(C_VERSION) -D_
 LDFLAGS := -fsanitize=address,leak
 
 # The final build step.
-$(BUILD_DIR)/$(TARGET_EXEC): $(OBJS)
-	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
+$(BUILD_DIR)/$(TARGET_EXEC): $(OBJS) $(TARGET_OBJ)
+	$(CC) $(OBJS) $(TARGET_OBJ) -o $@ $(LDFLAGS)
 
 # Build step for C source
 $(BUILD_DIR)/%.c.o: %.c
@@ -40,19 +46,39 @@ $(BUILD_DIR)/%.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
+# Test stuff
+# ---------------------------------------------
+## Same process as above but for tests
+
+TEST_SRCS := $(shell find $(TEST_SRC_DIRS) -name '*.c')
+TEST_OBJS := $(TEST_SRCS:%=$(BUILD_DIR)/%.o)
+
+# Final build step for tests 
+$(BUILD_DIR)/$(TARGET_TEST): $(TEST_OBJS)
+	$(CC) $(TEST_OBJS) -o $@ $(LDFLAGS)
+
+# Build step for C tests
+# $(BUILD_DIR)/test/%.c.o: %.c
+# 	mkdir -p $(dir $@)
+# 	$(CC) $(CFLAGS) -c $< -o $@
+
 .PHONY: clean
 clean:
 	rm -r $(BUILD_DIR)
 
 .PHONY: run
-run:
+run: $(BUILD_DIR)/$(TARGET_EXEC)
 	$(BUILD_DIR)/$(TARGET_EXEC) -d
 
+.PHONY: test
+test: $(BUILD_DIR)/$(TARGET_TEST)
+	$(BUILD_DIR)/$(TARGET_TEST)
+
 .PHONY: install
-install:
+install: $(BUILD_DIR)/$(TARGET_EXEC)
 	cp $(BUILD_DIR)/$(TARGET_EXEC) ~/.local/bin
 
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.
--include $(DEPS)
+-include $(MAKE_DEPS)
