@@ -31,7 +31,7 @@ void shadow_vars (SymbolArray vars, ShadowEnv* env) {
     }
 }
 
-void shadow_pop(ShadowEnv* env, size_t n) {
+void shadow_pop(size_t n, ShadowEnv* env) {
     env->locals.len -= n;
 }
 

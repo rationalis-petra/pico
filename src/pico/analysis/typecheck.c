@@ -12,7 +12,6 @@ Result type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator
 Result type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a);
 
 // Check a toplevel expression
-
 Result type_check(TopLevel* top, Environment* env, Allocator* a) {
     // If this is a definition, lookup the type to check against 
     Result out;
@@ -47,11 +46,13 @@ Result type_check(TopLevel* top, Environment* env, Allocator* a) {
     return out;
 }
 
-// Forward declarations for implementation
+// Forward declarations for implementation (internal declarations)
 Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a);
 Result type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a);
+Result eval_type(Syntax* untyped, TypeEnv* env, Allocator* a);
 Result squash_types(Syntax* untyped, Allocator* a);
-Result get_type(Syntax* type, PiType* out);
+PiType* get_head(PiType* type, PiType_t expected_sort);
+PiType* reduce_type(PiType* type, Allocator* a);
 
 // -----------------------------------------------------------------------------
 // Interface
@@ -97,7 +98,7 @@ Result type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator
         out.error_message = copy_string(impl.error_message, a);
     }
 
-    // now, squash all types
+    // Now, squash all types
     if (out.type == Ok) {
         Result sqres = squash_types(untyped, a);
         if (sqres.type == Err) {
@@ -112,7 +113,32 @@ Result type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator
 }
 
 // -----------------------------------------------------------------------------
-// Implementation
+// Implementation & Notes
+// 
+// Type Evaluation 
+// ---------------
+// Types are evaluated at typechecking time
+// Some basic evaluation & checking needs to be done to determine types:
+// • Type-families instantiated with types need to be reduced.
+// • Variables need to be looked up.
+// • Any compound types (struct, enum, etc.) need to make sure any computations
+//   are propagated 
+// This primitive computation occurs at compile-time. 
+// 
+// 
+// Typechecking strategy for Polymorphic Types
+// -------------------------------------------
+// It is important to consider that after typechecking, all type variables
+// datatypes (enum, struct, proc) will be fully applied, with all variables
+// either being
+// 1. Local (runtime) type arguments to functions
+// 2. Concrete types
+// 
+// Hence, upon completion of the typechecking phase, no types should have
+// 'variables' introduced by type families. Further as (for now) types are
+// structural and reduce, typechecking is relatively easy.
+// 
+//
 // -----------------------------------------------------------------------------
 
 Result type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a) {
@@ -139,19 +165,15 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         untyped->ptype->sort = TPrim; 
         untyped->ptype->prim = Bool;
         break;
-    case SType: {
-        PiType* ty = mem_alloc(sizeof(PiType), a);
-        ty->sort = TPrim;
-        ty->prim = TType; 
-        untyped->ptype = ty;
-        out.type = Ok;
-        break;
-    }
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
         if (te.type == TELocal || te.type == TEGlobal) {
-            untyped->ptype = te.ptype;
             out.type = Ok;
+            untyped->ptype = te.ptype;
+            if (te.value) {
+                untyped->type = SCheckedType;
+                untyped->type_val = te.value;
+            }
         } else {
             out.type = Err;
             String* sym = symbol_to_string(untyped->variable);
@@ -168,15 +190,47 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         untyped->ptype = proc_ty;
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
-            Symbol arg = untyped->procedure.args.data[i];
-            PiType* aty = mk_uvar(gen, a);
-            type_var(arg, aty, env);
+            SymPtrACell arg = untyped->procedure.args.data[i];
+            PiType* aty;
+            if (arg.val) {
+                out = eval_type(arg.val, env, a);
+                if (out.type == Err) return out;
+                aty = ((Syntax*)arg.val)->type_val;
+            } else  {
+                aty= mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
             push_ptr(aty, &proc_ty->proc.args);
         }
 
         out = type_infer_i(untyped->procedure.body, env, gen, a); 
         pop_types(env, untyped->procedure.args.len);
         proc_ty->proc.ret = untyped->procedure.body->ptype;
+        break;
+    }
+    case SAll: {
+        // give each arg a unification variable type. 
+        PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+        *arg_ty = (PiType) {.sort = TKind, .kind.nargs = 0,};
+
+        PiType* all_ty = mem_alloc(sizeof(PiType), a);
+        untyped->ptype = all_ty;
+        all_ty->sort = TAll;
+        all_ty->binder.vars = mk_u64_array(untyped->all.args.len, a);
+
+        for (size_t i = 0; i < untyped->all.args.len; i++) {
+            Symbol arg = untyped->all.args.data[i];
+            type_var(arg, arg_ty, env);
+            push_u64(arg, &all_ty->binder.vars);
+        }
+
+        out = type_infer_i(untyped->all.body, env, gen, a); 
+        pop_types(env, untyped->all.args.len);
+        all_ty->binder.body = untyped->all.body->ptype;
+        out = (Result) {
+            .type = Err,
+            .error_message = mv_string("All type must have inner proc."),
+        };
         break;
     }
     case SApplication: {
@@ -220,17 +274,8 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
     }
     case SConstructor: {
         // Typecheck variant
-        out = type_infer_i (untyped->variant.enum_type, env, gen, a);
+        out = eval_type (untyped->variant.enum_type, env, a);
         if (out.type == Err) return out;
-
-        // Typecheck is pretty simple: ensure that the tag is present in the
-        // variant type
-        if (untyped->variant.enum_type->type != SType) {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Variant must be from a type."),
-            };
-        }
 
         PiType* enum_type = untyped->variant.enum_type->type_val;
         if (enum_type->sort != TEnum) {
@@ -271,17 +316,10 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
     }
     case SVariant: {
         // Typecheck variant
-        out = type_infer_i (untyped->variant.enum_type, env, gen, a);
+        out = eval_type(untyped->variant.enum_type, env, a);
         if (out.type == Err) return out;
 
         // Typecheck is pretty simple: ensure that the tag is present in the
-        // variant type
-        if (untyped->variant.enum_type->type != SType) {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Variant must be from a type."),
-            };
-        }
 
         PiType* enum_type = untyped->variant.enum_type->type_val;
         if (enum_type->sort != TEnum) {
@@ -401,8 +439,16 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
     case SStructure: {
         PiType* ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = ty; 
-        out = get_type(untyped->structure.ptype, ty);
+        out = eval_type(untyped->structure.ptype, env, a);
         if (out.type == Err) return out;
+        *ty = *untyped->structure.ptype->type_val;
+
+        if (ty->sort != TStruct) {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("Structure type invalid"),
+            };
+        }
 
         if (untyped->structure.fields.len != ty->structure.fields.len) {
             out.type = Err;
@@ -474,9 +520,14 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
+    case SProcType:
+    case SStructType:
+    case SEnumType:
+        out = eval_type(untyped, env, a);
+        break;
     default:
         out.type = Err;
-        out.error_message = mk_string("Internal Error: unrecognized syntactic form", a);
+        out.error_message = mk_string("Internal Error: unrecognized syntactic form (type_infer_i)", a);
         break;
     }
     return out;
@@ -487,13 +538,17 @@ Result squash_types(Syntax* typed, Allocator* a) {
     switch (typed->type) {
     case SLitI64:
     case SLitBool:
-    case SType:
     case SVariable:
         out.type = Ok;
         break;
     case SProcedure: {
         // squash body
         out = squash_types(typed->procedure.body, a);
+        break;
+    }
+    case SAll: {
+        // TODO: need to squash args when HKTs are allowed 
+        out = squash_types(typed->all.body, a);
         break;
     }
     case SApplication: {
@@ -556,9 +611,12 @@ Result squash_types(Syntax* typed, Allocator* a) {
         out = squash_types(typed->if_expr.false_branch, a);
         break;
     }
+    case SCheckedType:
+        squash_type(typed->type_val);
+        break;
     default:
         out.type = Err;
-        out.error_message = mk_string("Internal Error: unrecognized syntactic form", a);
+        out.error_message = mk_string("Internal Error: unrecognized syntactic form (squash_types)", a);
         break;
     }
 
@@ -585,14 +643,115 @@ Result squash_types(Syntax* typed, Allocator* a) {
     return out;
 }
 
-Result get_type(Syntax* type, PiType* out) {
-    Result ret;
-    if (type->type == SType) {
-        ret.type = Ok;
-        *out = *type->type_val;
-    } else {
-        ret.type = Err;
-        ret.error_message = mv_string("Typechecking error: expecting node to be a type.");
+Result eval_type(Syntax* untyped, TypeEnv* env, Allocator* a) {
+    Result out;
+
+    switch (untyped->type) {
+    case SVariable: {
+        TypeEntry e = type_env_lookup(untyped->variable, env);
+        if (e.value) {
+            untyped->type = SCheckedType;
+            untyped->type_val = e.value;
+            out.type = Ok;
+        } else {
+            out = (Result) {
+                .type = Err,
+                .error_message = mv_string("Variable expected to be type, was not!"),
+            };
+        }
+        break;
     }
-    return ret;
+
+    // Types & Type formers
+    case SProcType: {
+        PtrArray args = mk_ptr_array(untyped->proc_type.args.len, a);
+        for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
+            Syntax* syn = untyped->proc_type.args.data[i];
+            out = eval_type(syn, env, a);
+            if (out.type == Err) return out;
+            push_ptr(syn->type_val, &args);
+        }
+        Syntax* ret = untyped->proc_type.return_type;
+        out = eval_type(untyped->proc_type.return_type, env, a);
+        if (out.type == Err) return out;
+        PiType* ret_ty = ret->type_val;
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TProc,
+            .proc.ret = ret_ty,
+            .proc.args = args,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SStructType: {
+        SymPtrAMap fields = mk_sym_ptr_amap(untyped->struct_type.fields.len, a);
+        for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
+            Syntax* syn = untyped->struct_type.fields.data[i].val;
+            out = eval_type(syn, env, a);
+            if (out.type == Err) return out;
+            sym_ptr_insert(untyped->struct_type.fields.data[i].key, syn->type_val, &fields);
+        }
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TStruct,
+            .structure.fields = fields,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SEnumType: {
+        SymPtrAMap variants = mk_sym_ptr_amap(untyped->enum_type.variants.len, a);
+        for (size_t i = 0; i < untyped->enum_type.variants.len; i++) {
+            PtrArray* args = untyped->enum_type.variants.data[i].val;
+
+            PtrArray* ty_args = mem_alloc(sizeof(PtrArray), a);
+            *ty_args = mk_ptr_array(args->len, a);
+
+            for (size_t j = 0; j < args->len; j++) {
+                Syntax* syn = args->data[j];
+                out = eval_type(syn, env, a);
+                if (out.type == Err) return out;
+                push_ptr(syn->type_val, ty_args);
+            }
+            
+            sym_ptr_insert(untyped->enum_type.variants.data[i].key, ty_args, &variants);
+        }
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TEnum,
+            .enumeration.variants = variants,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SForallType: {
+        break;
+    }
+    case SExistsType: {
+        break;
+    }
+    case STypeFamily: {
+        break;
+    }
+    case SCheckedType: break; // Can leave blank
+    default:
+        out = (Result) {
+            .type = Err,
+            .error_message = mv_string("Expected a type former - got a term former"),
+        };
+    };
+
+    untyped->type = SCheckedType;
+    PiType* kind = mem_alloc(sizeof(PiType), a);
+    *kind = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
+    untyped->ptype = kind;
+
+    return out;
 }

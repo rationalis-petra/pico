@@ -20,6 +20,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     if (lresult != NULL) {
         out.type = TELocal;
         out.ptype = *lresult;
+        out.value = NULL;
         return out;
     }
 
@@ -30,6 +31,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     } else {
         out.type = TEGlobal;
         out.ptype = e.type;
+        out.value = e.type->sort == TKind ? e.value : NULL;
     }
 
     return out;

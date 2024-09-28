@@ -85,7 +85,7 @@ void delete_module(Module* module) {
         ModuleEntryInternal entry = module->entries.data[i].val;
         if (entry.type.sort == TProc) {
             mem_free(entry.value, &module->executable_allocator);
-        } else if (entry.type.sort == TPrim && entry.type.prim == TType) {
+        } else if (entry.type.sort == TKind) {
             delete_pi_type_p(entry.value, module->allocator);
         } else {
             mem_free(entry.value, module->allocator);
@@ -108,7 +108,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     ModuleEntryInternal entry;
     size_t size = pi_size_of(type);
 
-    if (type.sort == TPrim && type.prim == TType) {
+    if (type.sort == TKind) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
     } else {

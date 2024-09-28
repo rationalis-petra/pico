@@ -15,6 +15,7 @@ typedef enum TypeEntry_t {
 typedef struct TypeEntry {
     TypeEntry_t type;
     PiType* ptype;
+    PiType* value;
 } TypeEntry;
 
 TypeEnv* mk_type_env(Environment* env, Allocator* a);

@@ -60,10 +60,6 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         break;
     }
-    case SType: {
-        out = pretty_type(syntax->type_val, a);
-        break;
-    }
     case SVariable: {
         out = mk_str_doc(*symbol_to_string(syntax->variable), a);
         break;
@@ -72,11 +68,24 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(4 + syntax->procedure.args.len, a);
         push_ptr(mv_str_doc((mk_string("(proc (", a)), a), &nodes);
         for (size_t i = 0; i < syntax->procedure.args.len; i++) {
-            Document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->procedure.args)), a);
+            Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
             push_ptr(arg, &nodes);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes);
+        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SAll: {
+        PtrArray nodes = mk_ptr_array(4 + syntax->all.args.len, a);
+        push_ptr(mv_str_doc((mk_string("(all [", a)), a), &nodes);
+        for (size_t i = 0; i < syntax->all.args.len; i++) {
+            Document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->all.args)), a);
+            push_ptr(arg, &nodes);
+        }
+        push_ptr(mv_str_doc((mk_string("]", a)), a), &nodes);
+        push_ptr(pretty_syntax(syntax->all.body, a), &nodes);
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -155,6 +164,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax->structure.fields.len, a);
         push_ptr(mv_str_doc(mk_string("(struct", a), a), &nodes);
+
+
         for (size_t i = 0; i < syntax->structure.fields.len; i++) {
             PtrArray field_nodes = mk_ptr_array(4, a);
             Document* temp;
@@ -198,6 +209,67 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SProcType: {
+        PtrArray nodes = mk_ptr_array(syntax->proc_type.args.len + 4, a) ;
+        push_ptr(mv_str_doc(mk_string("(Proc (", a), a), &nodes);
+        
+        for (size_t i = 0; i < syntax->proc_type.args.len ; i++)  {
+            push_ptr(pretty_syntax(syntax->proc_type.args.data[i], a), &nodes);
+        }
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->proc_type.return_type, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SStructType: {
+        PtrArray nodes = mk_ptr_array(syntax->struct_type.fields.len + 2, a) ;
+        push_ptr(mv_str_doc(mk_string("(Struct", a), a), &nodes);
+        
+        for (size_t i = 0; i < syntax->struct_type.fields.len ; i++)  {
+            PtrArray fnodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("[."), a), &fnodes);
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->struct_type.fields.data[i].key), a), &fnodes);
+            push_ptr(pretty_syntax(syntax->struct_type.fields.data[i].val, a), &fnodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &fnodes);
+
+            push_ptr(mv_sep_doc(fnodes, a), &nodes);
+        }
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SEnumType: {
+        PtrArray nodes = mk_ptr_array(syntax->enum_type.variants.len + 2, a) ;
+        push_ptr(mv_str_doc(mk_string("(Enum", a), a), &nodes);
+        
+        for (size_t i = 0; i < syntax->enum_type.variants.len ; i++)  {
+            PtrArray fnodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("[:"), a), &fnodes);
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->struct_type.fields.data[i].key), a), &fnodes);
+
+            PtrArray* args = syntax->enum_type.variants.data[i].val;
+            PtrArray anodes = mk_ptr_array(args->len, a);
+            for (size_t j = 0; j < args->len; j++) {
+                push_ptr(pretty_syntax(args->data[j], a), &anodes);
+            }
+
+            push_ptr(mv_sep_doc(anodes, a), &fnodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &fnodes);
+
+            push_ptr(mv_sep_doc(fnodes, a), &nodes);
+        }
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SCheckedType: {
+        out = pretty_type(syntax->type_val, a);
         break;
     }
     default: {

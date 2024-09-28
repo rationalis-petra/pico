@@ -74,7 +74,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     PiType type;
     PiType type_val;
     PiType* type_data = &type_val;
-    type = mk_prim_type(TType);
+    type = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
 
     type_val = mk_prim_type(Unit);
     sym = string_to_symbol(mv_string("Unit"));
@@ -129,6 +132,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("proc"));
     add_def(module, sym, type, &former);
 
+    former = FAll;
+    sym = string_to_symbol(mv_string("all"));
+    add_def(module, sym, type, &former);
+
     former = FApplication;
     sym = string_to_symbol(mv_string("$"));
     add_def(module, sym, type, &former);
@@ -172,6 +179,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
 
     former = FEnumType;
     sym = string_to_symbol(mv_string("Enum"));
+    add_def(module, sym, type, &former);
+
+    former = FAllType;
+    sym = string_to_symbol(mv_string("All"));
     add_def(module, sym, type, &former);
 
     return module;

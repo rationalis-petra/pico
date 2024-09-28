@@ -33,7 +33,8 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -g -std=$(C_VERSION) -D_GNU_SOURCE
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -g -std=$(C_VERSION) -D_GNU_SOURCE -fsanitize=address,leak
+LDFLAGS := -fsanitize=address,leak
 
 # The final build step.
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS) $(TARGET_OBJ)

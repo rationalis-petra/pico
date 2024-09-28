@@ -12,56 +12,68 @@
 typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
-typedef enum PrimType {
+typedef enum {
     Unit,
     Bool,
     Address,
     Int_64,
     TFormer,
-    TType,
 } PrimType;
 
-typedef enum PiType_t {
+typedef enum {
     TPrim,
     TProc,
     TStruct,
     TEnum,
-    TQVar,
-    TApp,
 
-    // Special sort: unification variable
+    // Quantified Types
+    TVar,
+    TAll,
+    TExists,
+
+    // Used by Sytem-Fω (type constructors)
+    TCApp,
+    TCLam,
+
+    // Kinds (higher kinds not supported)
+    TKind,
+
+    // Used only during unification
     TUVar
 } PiType_t;
 
-typedef struct ProcType {
-    SymbolArray quants;
+typedef struct {
     PtrArray args;
     PiType* ret;
 } ProcType;
 
-typedef struct StructType {
-    SymbolArray quants;
+typedef struct {
     SymPtrAMap fields;
 } StructType;
 
-typedef struct EnumType {
-    SymbolArray quants;
+typedef struct {
     SymPtrAMap variants;
 } EnumType;
 
-typedef struct QVarType {
-    uint64_t id;
-} QVarType;
-
-typedef struct TAppType {
+typedef struct {
     PtrArray args;
     PiType* fam;
 } TAppType;
 
-typedef struct UVarType {
+typedef struct {
     uint64_t id;
     PiType* subst;
 } UVarType;
+
+typedef struct {
+    SymbolArray vars;
+    PiType* body;
+} TypeBinder;
+
+typedef struct {
+    size_t nargs;
+} PiKind;
+
 
 struct PiType {
     PiType_t sort; 
@@ -70,8 +82,15 @@ struct PiType {
         ProcType proc;
         StructType structure;
         EnumType enumeration;
+
+        // From System Fω: variables, application, abstraction (exists, forall, lambda)
+        uint64_t var;
         TAppType app;
-        QVarType qvar;
+        TypeBinder binder;
+
+        PiKind kind;
+
+        // For typechecking/inference
         UVarType* uvar;
     };
 };

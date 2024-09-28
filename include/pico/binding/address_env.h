@@ -49,7 +49,7 @@ void address_end_proc(AddressEnv* env, Allocator* a);
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
 //   it establishes bindings for the members of the enum, but does not 
 // Unbind removes these bindings. Like bind, it does not adjust the stack head
-void address_bind_enum_vars(SymSizeAssoc vars, size_t enum_size, AddressEnv* env, Allocator* a);
+void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_unbind_enum_vars(AddressEnv* env);
 
 // Inform the environment that values have been pushed/popped from the stack.

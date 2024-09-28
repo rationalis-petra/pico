@@ -26,6 +26,11 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             res.val.type = top.expr.ptype;
             res.val.val = pico_run_expr(ass, sz, a);
         }
+        else if (top.expr.ptype->sort == TKind) {
+            res.type = ERValue;
+            res.val.type = top.expr.ptype;
+            res.val.val = pico_run_expr(ass, sz, a);
+        }
         else  {
             res.type = ERFail;
             res.error_message = mv_string("Cannot evaluate values of this type.");
@@ -42,6 +47,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             break;
         case TEnum:
         case TStruct:
+        case TKind:
         case TPrim: {
             res.type = ERValue;
             // assume int64 for now!
