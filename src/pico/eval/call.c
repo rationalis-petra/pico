@@ -75,7 +75,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
     // Generate Code which will: 
     //  1. Copy the final value (on stack) into value
     //  2. Return to C
-#ifdef ABI_SYSTEM_V_64
+#if defined(ABI_SYSTEM_V_64)
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a);
@@ -88,7 +88,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
     build_binary_op(ass, Add, reg(RSP), imm32(rsize), a);
     build_nullary_op(ass, Ret, a);
 
-#elif ABI_WIN_64
+#elif defined(ABI_WIN_64)
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
     build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a);
