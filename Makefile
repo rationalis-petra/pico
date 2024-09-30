@@ -10,8 +10,26 @@ TARGET_TEST := pico_test
 TEST_BUILD_DIR := ./build/test
 TEST_SRC_DIRS := ./test/src
 
-C_VERSION := c99
+C_VERSION := c11
 CC := gcc
+
+## Platform specifics and configuration
+##-------------------------------------
+BUILD_TYPE := Debug
+
+ifeq ($(BUILD_TYPE), Release)
+	OPT_FLAGS := -Ofast
+	SANITIZE_FLAGS := 
+else
+	OPT_FLAGS := -Og
+
+# Sanitisers currently aren't supported by gcc on windows
+	ifeq ($(OS), Windows_NT)
+		SANITIZE_FLAGS :=
+	else
+		SANITIZE_FLAGS := -fsanitize=address,leak
+	endif
+endif
 
 # Find all the C files we want to compile
 SRCS := $(shell find $(SRC_DIRS) -name '*.c' | grep -v $(TARGET_SRC))
@@ -33,8 +51,8 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -g -std=$(C_VERSION) -D_GNU_SOURCE -fsanitize=address,leak
-LDFLAGS := -fsanitize=address,leak
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -g -std=$(C_VERSION) -D_GNU_SOURCE $(SANITIZE_FLAGS) $(OPT_FLAGS)
+LDFLAGS := $(SANITIZE_FLAGS) $(OPT_FLAGS)
 
 # The final build step.
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS) $(TARGET_OBJ)
