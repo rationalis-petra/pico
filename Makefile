@@ -56,7 +56,7 @@ LDFLAGS := $(SANITIZE_FLAGS) $(OPT_FLAGS)
 
 # The final build step.
 $(BUILD_DIR)/$(TARGET_EXEC): $(OBJS) $(TARGET_OBJ)
-	$(CC) $(OBJS) $(TARGET_OBJ) -o $@ $(LDFLAGS)
+	$(CC) $(OBJS) $(TARGET_OBJ) -o $@ $(LDFLAGS) $(OPT_FLAGS)
 
 # Build step for C source
 $(BUILD_DIR)/%.c.o: %.c
