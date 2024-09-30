@@ -18,7 +18,7 @@ CC := gcc
 BUILD_TYPE := Debug
 
 ifeq ($(BUILD_TYPE), Release)
-	OPT_FLAGS := -Ofast
+	OPT_FLAGS := -Ofast -flto
 	SANITIZE_FLAGS := 
 else
 	OPT_FLAGS := -Og
