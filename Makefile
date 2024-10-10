@@ -98,8 +98,8 @@ debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 test: $(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: install
-install: $(BUILD_DIR)/$(TARGET_EXEC)
-	cp $(BUILD_DIR)/$(TARGET_EXEC) ~/.local/bin
+install: $(RELEASE_DIR)/$(TARGET_EXEC)
+	cp $(RELEASE_DIR)/$(TARGET_EXEC) ~/.local/bin
 
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
