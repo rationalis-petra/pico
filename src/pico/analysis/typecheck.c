@@ -209,7 +209,7 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         break;
     }
     case SAll: {
-        // give each arg a unification variable type. 
+        // give each arg type kind.
         PiType* arg_ty = mem_alloc(sizeof(PiType), a);
         *arg_ty = (PiType) {.sort = TKind, .kind.nargs = 0,};
 
@@ -220,7 +220,7 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
 
         for (size_t i = 0; i < untyped->all.args.len; i++) {
             Symbol arg = untyped->all.args.data[i];
-            type_var(arg, arg_ty, env);
+            type_qvar(arg, arg_ty, env);
             push_u64(arg, &all_ty->binder.vars);
         }
 
@@ -648,7 +648,7 @@ Result eval_type(Syntax* untyped, TypeEnv* env, Allocator* a) {
         if (e.type == TENotFound) {
             out = (Result) {
                 .type = Err,
-                .error_message = mv_string("Variable expected to be type, was not!"),
+                .error_message = mv_string("Variable not found!"),
             };
         }
         if (e.value) {
@@ -657,8 +657,10 @@ Result eval_type(Syntax* untyped, TypeEnv* env, Allocator* a) {
             untyped->type_val = e.value;
             out.type = Ok;
         } else {
-            untyped->ptype = e.ptype;
-            out.type = Ok;
+            out = (Result) {
+                .type = Err,
+                .error_message = mv_string("Variable expected to be type, was not!"),
+            };
         }
         break;
     }

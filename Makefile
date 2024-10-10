@@ -16,7 +16,7 @@ CC := gcc
 BUILD_TYPE := Debug
 
 RELEASE_FLAGS := -Ofast -flto
-DEBUG_FLAGS := -Og
+DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
