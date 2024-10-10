@@ -7,8 +7,23 @@
 
 typedef struct AddressEnv AddressEnv;
 
+
+/* Address Entry 
+ * -------------
+ * This is the type returned by address environment lookups. It is an ADT with
+ * the following outcomes:
+ * • Local Direct: The address entry contains a int which denotes the offset
+ *   (from RBP) of the local stack variable. Hence, the variable is located at
+ *   [RBP + offset]
+ * • Local Indirect: The address entry contains an int which denotes the offset
+ *   (from RBP) of another offset. This is used in polymorphic functions.
+ *   [RBP + [RBP + offset]]
+ * • Global: The address entry contains a pointer to a fixed location, which
+ *   holds the value of the variable.
+ */
 typedef enum {
-    ALocal,
+    ALocalDirect,
+    ALocalIndirect,
     AGlobal,
     ANotFound,
     ATooManyLocals,
@@ -18,7 +33,7 @@ typedef struct {
     AddressEntry_t type;
     union {
         void* value;
-        uint8_t stack_offset;
+        int8_t stack_offset;
     };
 } AddressEntry;
 
@@ -42,13 +57,13 @@ void delete_address_env(AddressEnv* env, Allocator* a);
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env);
 
 // Push and pop a new local environment to deal with procedure
-void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
+void address_start_proc(SymbolArray types, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
 
 // Bind and unbind enum vars: 
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
 //   it establishes bindings for the members of the enum, but does not 
-// Unbind removes these bindings. Like bind, it does not adjust the stack head
+// Unbind removes these bindings. Like bind, it does not adjust the stack head.
 void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_unbind_enum_vars(AddressEnv* env);
 

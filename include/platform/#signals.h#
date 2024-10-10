@@ -1,0 +1,8 @@
+#ifndef __PLATFORM_SIGNALS_H
+#define __PLATFORM_SIGNALS_H
+
+#include "data/string.h"
+
+void panic(String message);
+
+#endif

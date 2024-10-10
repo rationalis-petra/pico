@@ -227,10 +227,6 @@ Result type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator
         out = type_infer_i(untyped->all.body, env, gen, a); 
         pop_types(env, untyped->all.args.len);
         all_ty->binder.body = untyped->all.body->ptype;
-        out = (Result) {
-            .type = Err,
-            .error_message = mv_string("All type must have inner proc."),
-        };
         break;
     }
     case SApplication: {
@@ -649,15 +645,20 @@ Result eval_type(Syntax* untyped, TypeEnv* env, Allocator* a) {
     switch (untyped->type) {
     case SVariable: {
         TypeEntry e = type_env_lookup(untyped->variable, env);
-        if (e.value) {
-            untyped->type = SCheckedType;
-            untyped->type_val = e.value;
-            out.type = Ok;
-        } else {
+        if (e.type == TENotFound) {
             out = (Result) {
                 .type = Err,
                 .error_message = mv_string("Variable expected to be type, was not!"),
             };
+        }
+        if (e.value) {
+            untyped->type = SCheckedType;
+            untyped->ptype = e.ptype;
+            untyped->type_val = e.value;
+            out.type = Ok;
+        } else {
+            untyped->ptype = e.ptype;
+            out.type = Ok;
         }
         break;
     }

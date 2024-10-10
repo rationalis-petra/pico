@@ -23,7 +23,6 @@ typedef struct IOStream {
     OStream* ostream;
 } IOStream;
 
-    
 // Constructors
 IStream* get_stdin_stream();
 OStream* get_stdout_stream();

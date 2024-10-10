@@ -95,11 +95,6 @@ struct PiType {
     };
 };
 
-typedef struct {
-    Option_t type;
-    size_t size;
-} PiSize;
-
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 
 Document* pretty_type(PiType* type, Allocator* a);
@@ -110,8 +105,8 @@ PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
 size_t pi_size_of(PiType t);
+size_t pi_mono_size_of(PiType t);
 size_t runtime_size_of(PiType* t, void* data);
-size_t comptime_size_of(PiType t);
 
 // Utilities for generating types
 PiType mk_prim_type(PrimType t);

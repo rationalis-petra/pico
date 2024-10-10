@@ -21,7 +21,7 @@ ifeq ($(BUILD_TYPE), Release)
 	OPT_FLAGS := -Ofast -flto
 	SANITIZE_FLAGS := 
 else
-	OPT_FLAGS := -Og
+	OPT_FLAGS := 
 
 # Sanitisers currently aren't supported by gcc on windows
 	ifeq ($(OS), Windows_NT)

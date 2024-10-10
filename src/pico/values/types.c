@@ -409,6 +409,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
     return out;
 }
 
+size_t pi_mono_size_of(PiType type) {
+    return pi_size_of(type);
+}
+
 size_t pi_size_of(PiType type) {
     switch (type.sort) {
     case TPrim:

@@ -1,104 +1,38 @@
 #include "platform/signals.h"
-#include "platform/calling_convention.h"
 
-#include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 #include "pico/codegen/polymorphic.h"
 #include "pico/binding/address_env.h"
 
-/* Code Generation Assumptions:
- * • All expressions evaluate to integers or functions 
- * • All functions are just an address to call to (or jmp to for tail calls) 
- * • All terms are well-typed
- * 
- * On the calling convention used:
- * Calling a function:
- * • Push all arguments onto the stack in left-right order (i.e. rightmost arg
- *   is top of stack)
- */
-
 // Implementation details
-Result generate_expr_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
-AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
-AsmResult generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a);
-AsmResult get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out);
-AsmResult generate_polymorphic(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
-size_t calc_variant_size(PtrArray* types);
+AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
 
-GenResult generate_expr(Syntax syn, Environment* env, Assembler* ass, Allocator* a) {
-    AddressEnv* a_env = mk_address_env(env, NULL, a);
-    SymSArrAMap backlinks = mk_sym_sarr_amap(16, a);
-    Result m_err = generate_expr_i(syn, a_env, ass, &backlinks, a);
-    delete_address_env(a_env, a);
-
-    GenResult out;
-    out.backlinks = backlinks;
-    if (m_err.type == Err) {
-        out.error_message = m_err.error_message;
-    }
-
-    return out;
+AsmResult generate_polymorphic(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
+    return generate_polymorphic_i(syn, env, ass, links, a);
 }
 
-GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allocator* a) {
-    Result m_err;
-    SymSArrAMap backlinks = mk_sym_sarr_amap(32, a);
-
-    switch(top.type) {
-    case TLDef: {
-        AddressEnv* a_env = mk_address_env(env, &top.def.bind, a);
-        m_err = generate_expr_i(*top.def.value, a_env, ass, &backlinks, a);
-        delete_address_env(a_env, a);
-        break;
-    }
-    case TLExpr: {
-        AddressEnv* a_env = mk_address_env(env, NULL, a);
-        m_err = generate_expr_i(top.expr, a_env, ass, &backlinks, a);
-        delete_address_env(a_env, a);
-        break;
-    }
-    }
-
-    GenResult out;
-    out.type = m_err.type;
-    out.error_message = m_err.error_message;
-    out.backlinks = backlinks;
-    return out;
+AsmResult generate_polymorphic_proc(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
 }
 
-Result generate_expr_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap *links, Allocator* a) {
-    AsmResult generated = generate(syn, env, ass, links, a);
-
-    Result out;
-    out.type = generated.type;
-    if (generated.type == Err)
-        out.error_message = generated.error_message;
-
-    return out;
-}
-
-AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
+AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
     AsmResult out;
 
     switch (syn.type) {
     case SLitI64: {
         // Does it fit into 32 bits?
-        if (syn.lit_i64 < 0x80000000) {
+        if (syn.lit_i64 < 0x80000000 && syn.lit_i64 > -80000001) {
             int32_t immediate = syn.lit_i64;
             out = build_unary_op(ass, Push, imm32(immediate), a);
         } else {
             out.type = Err;
-            out.error_message = mk_string("literals must fit into less than 64 bits", a);
+            out.error_message = mk_string("Limitation: Literals must fit into less than 64 bits.", a);
         }
-        address_stack_grow(env, pi_size_of(*syn.ptype));
-        // push literal onto stack
         break;
     }
     case SLitBool: {
         // TODO: squash to smallest size (8 bits)
         int32_t immediate = syn.lit_i64;
         out = build_unary_op(ass, Push, imm32(immediate), a);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     case SVariable: {
@@ -109,7 +43,7 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             out = build_unary_op(ass, Push, rref(RBP, e.stack_offset), a);
             break;
         case ALocalIndirect:
-            panic(mv_string("cannot generate code for local direct"));
+            panic(mv_string("Internal Error: Tried to generate monomorphic code for local indirect variable access."));
             break;
         case AGlobal:
             // Use RAX as a temp
@@ -131,9 +65,10 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
                 backlink_global(syn.variable, out.backlink, links, a);
-                out = build_unary_op(ass, Push, reg(RCX), a);
             } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
-                size_t value_size = pi_size_of(*syn.ptype);
+                // This is a global variable, and therefore has a known
+                // monomorphic type
+                size_t value_size = pi_mono_size_of(*syn.ptype);
                 out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
                 if (out.type == Err) return out;
                 backlink_global(syn.variable, out.backlink, links, a);
@@ -162,74 +97,21 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             out.error_message = mk_string("Too Many Local variables!", a);
             break;
         }
-        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     case SProcedure: {
-        // Codegen function setup
-        out = build_unary_op(ass, Push, reg(RBP), a);
-        if (out.type == Err) return out;
-        out = build_binary_op(ass, Mov, reg(RBP), reg(RSP), a);
-        if (out.type == Err) return out;
-
-        // Codegen Procedure Body 
-        SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
-        for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            sym_size_bind(syn.procedure.args.data[i].key
-                         , pi_size_of(*(PiType*)syn.ptype->proc.args.data[i])
-                         , &arg_sizes);
-        }
-
-        SymbolArray no_types = mk_u64_array(0, a);
-        address_start_proc(no_types, arg_sizes, env, a);
-        out = generate(*syn.procedure.body, env, ass, links, a);
-        if (out.type == Err) return out;
-        address_end_proc(env, a);
-
-        // Codegen function teardown:
-        // + store output in RAX
-        // + restore rbp to original value
-        // + pop all arguments from stack
-        // + store return address in RCX
-        // + push value (RAX)
-        // + push return address (RCX)
-        // + return ()
-        // TODO: ensure functions work in the context of a composite (large) value  
-
-        // storage of function output 
-        out = build_unary_op(ass, Pop, reg(RAX), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Pop, reg(RBP), a);
-        if (out.type == Err) return out;
-        // storage of return address
-        out = build_unary_op(ass, Pop, reg(RBX), a);
-        if (out.type == Err) return out;
-        
-        // pop args
-        out = build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8), a);
-        if (out.type == Err) return out;
-
-        // push value
-        out = build_unary_op(ass, Push, reg(RAX), a);
-        if (out.type == Err) return out;
-        // push return address 
-        out = build_unary_op(ass, Push, reg(RBX), a);
-        if (out.type == Err) return out;
-        out = build_nullary_op(ass, Ret, a);
-        break;
+        panic(mv_string("Internal error: cannot generate procedure inside polymorphic code"));
     }
     case SApplication: {
         // Generate the arguments
-        size_t args_size = 0;
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
-            args_size += pi_size_of(*arg->ptype);
-            out = generate(*arg, env, ass, links, a);
+            out = generate_polymorphic(*arg, env, ass, links, a);
             if (out.type == Err) return out;
         }
 
         // This will push a function pointer onto the stack
-        out = generate(*syn.application.function, env, ass, links, a);
+        out = generate_polymorphic(*syn.application.function, env, ass, links, a);
         if (out.type == Err) return out; 
         
         // Regular Function Call
@@ -237,26 +119,23 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         out = build_unary_op(ass, Pop, reg(RCX), a);
         if (out.type == Err) return out;
         out = build_unary_op(ass, Call, reg(RCX), a);
-        // Update for popping all values off the stack
-        address_stack_shrink(env, args_size);
-
-        // Update as pushed the final value onto the stac
-        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     case SStructure: {
+        panic(mv_string("Not implemented: structure in forall."));
+        /*
         // For structures, we have to be careful - this is because the order in
         // which arguments are evaluated is not necessarily the order in which
         // arguments are inserted into the structure.
 
         // Step 1: Make room on the stack for our struct
-        size_t struct_size = pi_size_of(*syn.ptype);
+        size_t struct_size = pi_runtime_size_of(*syn.ptype);
         out = build_binary_op(ass, Sub, reg(RSP), imm32(struct_size), a);
         if (out.type == Err) return out;
 
         // Step 2: evaluate each element/variable binding
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            out = generate(*(Syntax*)syn.structure.fields.data[i].val, env, ass, links, a);
+            out = generate_polymorphic(*(Syntax*)syn.structure.fields.data[i].val, env, ass, links, a);
             if (out.type == Err) return out;
         }
         
@@ -280,7 +159,7 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             for (size_t j = 0; j < syn.structure.fields.len; j++) {
                 PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, syn.ptype->structure.fields);
                 if (t) {
-                    src_offset += pi_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
+                    src_offset += pi_runtime_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
                 } else {
                     out.type = Err;
                     out.error_message = mv_string("Error code-generating for structure: field not found.");
@@ -298,24 +177,27 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             // of the stack.
             size_t src_stack_offset = struct_size - src_offset;
             size_t dest_stack_offset = struct_size + dest_offset;
-            size_t field_size = pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            size_t field_size = pi_runtime_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
 
             // Now, move the data.
-            out = generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a);
+            out = generate_runtime_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a);
             if (out.type == Err) return out;
 
             // Compute dest_offset for next loop
-            dest_offset += pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            dest_offset += pi_runtime_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
         }
         // Remove the space occupied by the temporary values 
         out = build_binary_op(ass, Add, reg(RSP), imm32(struct_size), a);
 
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_runtime_size_of(*syn.ptype));
         break;
+        */
     }
     case SProjector: {
+        panic(mv_string("Not implemented: projector in forall."));
+        /*
         // First, allocate space on the stack for the value
-        size_t out_sz = pi_size_of(*syn.ptype);
+        size_t out_sz = pi_runtime_size_of(*syn.ptype);
         out = build_binary_op(ass, Sub, reg(RSP), imm32(out_sz), a);
         if (out.type == Err) return out;
 
@@ -324,12 +206,12 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
 
         // Now, copy the structure to the destination
         // for this, we need the struct size + offset of field in the struct
-        size_t struct_sz = pi_size_of(*syn.projector.val->ptype);
+        size_t struct_sz = pi_runtime_size_of(*syn.projector.val->ptype);
         size_t offset = 0;
         for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
             if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
                 break;
-            offset += pi_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
+            offset += pi_runtime_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
         }
 
         out = generate_stack_move(struct_sz + out_sz - 0x8, offset, out_sz, ass, a);
@@ -340,11 +222,13 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         address_stack_shrink(env, struct_sz);
         address_stack_grow(env, out_sz);
         break;
+        */
     }
-
     case SConstructor: {
+        panic(mv_string("Not implemented: constructor in forall."));
+        /*
         PiType* enum_type = syn.constructor.enum_type->type_val;
-        size_t enum_size = pi_size_of(*enum_type);
+        size_t enum_size = pi_runtime_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         out = build_binary_op(ass, Sub, reg(RSP), imm32(enum_size - variant_size), a);
@@ -354,11 +238,14 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
 
         address_stack_grow(env, enum_size);
         break;
+        */
     }
     case SVariant: {
+        panic(mv_string("Not implemented: variant in forall."));
+        /*
         const size_t tag_size = sizeof(uint64_t);
         PiType* enum_type = syn.variant.enum_type->type_val;
-        size_t enum_size = pi_size_of(*enum_type);
+        size_t enum_size = pi_runtime_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         // Make space to fit the (final) variant
@@ -385,7 +272,7 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
             
-            size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
+            size_t field_size = pi_runtime_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
             src_stack_offset -= field_size;
 
             // Now, move the data.
@@ -402,13 +289,15 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         // Grow the stack to account for the difference in enum & variant sizes
         address_stack_grow(env, enum_size - variant_size);
         break;
+        */
     }
-
     case SMatch: {
+        panic(mv_string("Not implemented: match in forall."));
+        /*
         // Generate code for the value
         Syntax* match_value = syn.match.val;
-        size_t enum_size = pi_size_of(*match_value->ptype);
-        size_t out_size = pi_size_of(*syn.ptype);
+        size_t enum_size = pi_runtime_size_of(*match_value->ptype);
+        size_t out_size = pi_runtime_size_of(*syn.ptype);
 
         out = generate(*match_value, env, ass, links, a);
         if (out.type == Err) return out;
@@ -498,14 +387,18 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         address_stack_shrink(env, enum_size);
         address_stack_grow(env, out_size);
         break;
+        */
     }
     case SLet:
+        panic(mv_string("Not implemented: let in forall."));
         out = (AsmResult) {
             .type = Err,
             .error_message = mk_string("No assembler implemented for Let", a)
         };
         break;
     case SIf: {
+        panic(mv_string("Not implemented: if in forall."));
+        /*
         // generate the condition
         out = generate(*syn.if_expr.condition, env, ass, links, a);
         if (out.type == Err) return out;
@@ -515,7 +408,6 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         if (out.type == Err) return out;
         out = build_binary_op(ass, Cmp, reg(RBX), imm32(0), a);
         if (out.type == Err) return out;
-        address_stack_shrink(env, pi_size_of((PiType) {.sort = TPrim, .prim = Bool}));
 
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
@@ -563,12 +455,12 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         } 
         *jmp_loc = (uint8_t)(end_pos - start_pos);
         break;
+        */
     }
     case SCheckedType: {
         out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a);
         if (out.type == Err) return out;
         out = build_unary_op(ass, Push, reg(RBX), a);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     default: {
@@ -578,114 +470,4 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
     }
 
     return out;
-}
-
-
-
-
-AsmResult generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a) {
-    AsmResult out;
-
-    // first, assert that size_t is divisible by 8 ( we use rax for copies )
-    if (size % 8 != 0)  {
-        out.type = Err;
-        out.error_message = mv_string("Error in generate_stack_copy: expected copy size to be divisible by 8");
-        return out;
-    };
-
-    if ((dest_stack_offset + size) > 255 || (src_stack_offset + size) > 255)  {
-        out.type = Err;
-        out.error_message = mv_string("Error in generate_stack_copy: offsets + size must be smaller than 255!");
-        return out;
-    };
-
-    for (size_t i = 0; i < size / 8; i++) {
-        out = build_binary_op(ass, Mov, reg(RAX), rref(RSP, src_stack_offset + (i * 8) ), a);
-        if (out.type == Err) return out;
-
-        out = build_binary_op(ass, Mov, rref(RSP, dest_stack_offset + (i * 8)), reg(RAX), a);
-        if (out.type == Err) return out;
-    }
-
-    return out;
-}
-
-size_t calc_variant_size(PtrArray* types) {
-    size_t total = sizeof(uint64_t);
-    for (size_t i = 0; i < types->len; i++) {
-        total += pi_size_of(*(PiType*)types->data[i]);
-    }
-    return total;
-}
-
-size_t calc_max_vars(Syntax syn) {
-    switch (syn.type) {
-    case SLitI64:
-    case SLitBool:
-    case SVariable:
-        return 0;
-    case SProcedure:
-        return syn.procedure.args.len + calc_max_vars(*syn.procedure.body);
-    case SAll:
-        return syn.all.args.len + calc_max_vars(*syn.all.body);
-    case SApplication: {
-        size_t max = calc_max_vars(*syn.application.function);
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.application.args.data[i]);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SConstructor:
-        return 0;
-    case SVariant: {
-        size_t max = 0;
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.variant.args.data[i]);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SMatch: {
-        size_t max = calc_max_vars(*syn.match.val); 
-        for (size_t i = 0; i < syn.match.clauses.len; i++) {
-            SynClause* clause = syn.match.clauses.data[i];
-            size_t sz = clause->vars.len + calc_max_vars(*clause->body);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SStructure: {
-        size_t max = 0;
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.structure.fields.data[i].val);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SProjector: 
-        return calc_max_vars(*syn.projector.val);
-    case SLet:
-        return syn.let_expr.bindings.len + calc_max_vars(*syn.let_expr.body);
-    case SIf: {
-        size_t max = calc_max_vars(*syn.if_expr.condition);
-        size_t sz = calc_max_vars(*syn.if_expr.true_branch);
-        max = max < sz ? sz : max;
-        sz = calc_max_vars(*syn.if_expr.false_branch);
-        max = max < sz ? sz : max;
-        return max;
-    }
-
-    // Types are evaluated at typechecking time, therefore no runtime binds.
-    case SProcType:
-    case SStructType:
-    case SEnumType:
-    case SForallType:
-    case SExistsType:
-    case STypeFamily:
-    case SCheckedType:
-        return 0;
-    case SAnnotation:
-        return calc_max_vars(*syn.annotation.val);
-    }
 }

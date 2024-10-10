@@ -1,10 +1,32 @@
-#include "pico/binding/address_env.h"
+#include "data/string.h"
 #include "data/meta/array_impl.h"
-#include "data/option.h"
+#include "platform/signals.h"
 
-// symbol -> addr map
+#include "pico/binding/address_env.h"
+#include "pico/codegen/codegen.h"
+
+// Address Environment: Implementation
+// -----------------------------------
+// There are several important types used in the implementation of the address
+// environment. These are: 
+// • Symbol Address (SAddr). This associates a symbol with a stack offset. This
+//   may be a direct offset (monomorphic functions) or indirect offset
+//   (polymorphic functions). A symbol address may also be a sentinel, which
+//   denotes the beginning of a group of variables  as bound by, e.g. a let
+//   expression, procedure or pattern match.
+//  
+// • Local Address Environment (LocalAddrs). This encapsulates the local namespace of
+//   one function. A local address environment will be either monomorphic or
+//   polymorphic.
+
+typedef enum {
+    SADirect,
+    SAIndirect,
+    SASentinel,
+} SAddr_t;
+
 typedef struct {
-    Option_t type;
+    SAddr_t type;
     Symbol symbol;
     
     int64_t stack_offset;
@@ -13,14 +35,23 @@ typedef struct {
 ARRAY_HEADER(SAddr, saddr, SAddr)
 ARRAY_IMPL(SAddr, saddr, SAddr)
 
+typedef enum {
+    LPolymorphic,
+    LMonomorphic,
+} LocalType;
+
 typedef struct {
+    LocalType type;
+
     int64_t stack_head;
     SAddrArray vars;
 } LocalAddrs;
 
 struct AddressEnv {
+    LocalType type;
     Environment* env;
 
+    // To handle recursive top level definitions.
     bool rec;
     Symbol recname;
     
@@ -64,12 +95,13 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
     // Search for symbol
     LocalAddrs locals = *(LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
-        if (maddr.type == Some && maddr.symbol == s) {
-            // Check if the offset can fit into an immediate
+        if (maddr.type != SASentinel && maddr.symbol == s) {
+            // TOOD: Check if the offset can fit into an immediate
             return (AddressEntry) {
-                .type = ALocal,
+                .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
                 .stack_offset = maddr.stack_offset,
             };
         };
@@ -98,23 +130,37 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
 /* void address_vars (sym_size_assoc vars, address_env* env, allocator a); */
 /* void pop_fn_vars(address_env* env); */
-void address_start_proc (SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
+void address_start_proc (SymbolArray types, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
+    new_local->type = (types.len == 0) ? LMonomorphic : LPolymorphic;
     size_t stack_offset = 0;
 
     SAddr padding;
-    padding.type = None;
+    padding.type = SASentinel;
     padding.symbol = 0;
     stack_offset += 8; // 8 = num bytes in uint64_t
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
+    // Types are in reverse order!
+    // due to how the stack pushes/pops args.
+    for (size_t i = types.len; i > 0; i--) {
+        SAddr local;
+        local.type = SADirect;
+
+        local.symbol = vars.data[i - 1].key;
+        stack_offset += vars.data[i - 1].val;
+        local.stack_offset = stack_offset;
+
+        push_saddr(local, &new_local->vars);
+    }
+
     // Variables are in reverse order!
     // due to how the stack pushes/pops args.
     for (size_t i = vars.len; i > 0; i--) {
         SAddr local;
-        local.type = Some;
+        local.type = new_local->type == LMonomorphic ? SADirect : SAIndirect;
 
         local.symbol = vars.data[i - 1].key;
         stack_offset += vars.data[i - 1].val;
@@ -142,28 +188,35 @@ void address_bind_enum_vars (SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
 
-    SAddr padding;
-    padding.type = None;
-    padding.symbol = 0;
-    stack_offset += 8;
-    padding.stack_offset = stack_offset;
-    push_saddr(padding, &locals->vars);
+    switch (locals->type) {
+    case LMonomorphic: {
+        SAddr padding;
+        padding.type = SASentinel;
+        padding.symbol = 0;
+        stack_offset += 8;
+        padding.stack_offset = stack_offset;
+        push_saddr(padding, &locals->vars);
 
-    // Variables are in reverse order!
-    // due to how the stack pushes/pops args.
-    for (size_t i = 0; i < vars.len; i++) {
-        SAddr local;
-        local.type = Some;
+        // Variables are in reverse order!
+        // due to how the stack pushes/pops args.
+        for (size_t i = 0; i < vars.len; i++) {
+            SAddr local;
+            local.type = SASentinel;
 
-        local.symbol = vars.data[i].key;
-        local.stack_offset = stack_offset;
-        stack_offset += vars.data[i].val;
+            local.symbol = vars.data[i].key;
+            local.stack_offset = stack_offset;
+            stack_offset += vars.data[i].val;
 
-        push_saddr(local, &locals->vars);
+            push_saddr(local, &locals->vars);
+        }
+
+        padding.stack_offset = stack_offset + 8;
+        push_saddr(padding, &locals->vars);
+    } 
+    case LPolymorphic: {
+        panic(mv_string("Polymorphic enum bind not implemented"));
     }
-
-    padding.stack_offset = stack_offset + 8;
-    push_saddr(padding, &locals->vars);
+    }
 }
 
 void address_unbind_enum_vars(AddressEnv* env) {
@@ -180,10 +233,10 @@ void address_unbind_enum_vars(AddressEnv* env) {
 
 void address_stack_grow(AddressEnv* env, size_t amount) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    locals->stack_head -= amount;
+    if (locals->type == LMonomorphic) locals->stack_head -= amount;
 }
 
 void address_stack_shrink(AddressEnv* env, size_t amount) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    locals->stack_head += amount;
+    if (locals->type == LMonomorphic) locals->stack_head += amount;
 }
