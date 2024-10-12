@@ -9,6 +9,6 @@
 #include "pico/syntax/syntax.h"
 #include "pico/data/sym_sarr_amap.h"
 
-AsmResult generate_polymorphic(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
+AsmResult generate_polymorphic(SymbolArray arr, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
 
 #endif

@@ -22,7 +22,6 @@ Result generate_expr_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap*
 AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
 AsmResult generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a);
 AsmResult get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out);
-AsmResult generate_polymorphic(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
 size_t calc_variant_size(PtrArray* types);
 
 GenResult generate_expr(Syntax syn, Environment* env, Assembler* ass, Allocator* a) {
@@ -165,6 +164,9 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
+    case SAll: {
+        out = generate_polymorphic(syn.all.args, *syn.all.body, env, ass, links, a);
+    }
     case SProcedure: {
         // Codegen function setup
         out = build_unary_op(ass, Push, reg(RBP), a);
@@ -180,8 +182,7 @@ AsmResult generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* lin
                          , &arg_sizes);
         }
 
-        SymbolArray no_types = mk_u64_array(0, a);
-        address_start_proc(no_types, arg_sizes, env, a);
+        address_start_proc(arg_sizes, env, a);
         out = generate(*syn.procedure.body, env, ass, links, a);
         if (out.type == Err) return out;
         address_end_proc(env, a);

@@ -57,8 +57,11 @@ void delete_address_env(AddressEnv* env, Allocator* a);
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env);
 
 // Push and pop a new local environment to deal with procedure
-void address_start_proc(SymbolArray types, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
+void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
+
+void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);
+void address_end_poly(AddressEnv* env, Allocator* a);
 
 // Bind and unbind enum vars: 
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 

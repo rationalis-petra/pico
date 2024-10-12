@@ -7,11 +7,19 @@
 // Implementation details
 AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
 
-AsmResult generate_polymorphic(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
-    return generate_polymorphic_i(syn, env, ass, links, a);
-}
-
-AsmResult generate_polymorphic_proc(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
+AsmResult generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
+    if (syn.type == SProcedure) {
+        SymbolArray vars;
+        address_start_poly(types, vars, env, a);
+        generate_polymorphic_i(*syn.all.body, env, ass, links, a);
+        address_end_poly(env, a);
+    } else {
+        SymbolArray no_vars = mk_u64_array(0, a);
+        address_start_poly(types, no_vars, env, a);
+        generate_polymorphic_i(*syn.all.body, env, ass, links, a);
+        address_end_poly(env, a);
+        
+    }
 }
 
 AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
@@ -99,6 +107,9 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         }
         break;
     }
+    case SAll: {
+        panic(mv_string("Internal error: cannot generate procedure all inside polymorphic code"));
+    }
     case SProcedure: {
         panic(mv_string("Internal error: cannot generate procedure inside polymorphic code"));
     }
@@ -106,12 +117,12 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         // Generate the arguments
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
-            out = generate_polymorphic(*arg, env, ass, links, a);
+            out = generate_polymorphic_i(*arg, env, ass, links, a);
             if (out.type == Err) return out;
         }
 
         // This will push a function pointer onto the stack
-        out = generate_polymorphic(*syn.application.function, env, ass, links, a);
+        out = generate_polymorphic_i(*syn.application.function, env, ass, links, a);
         if (out.type == Err) return out; 
         
         // Regular Function Call

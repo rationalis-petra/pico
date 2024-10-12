@@ -1,0 +1,6 @@
+#ifndef __PLATFORM_MACHINE_INFO_H
+#define __PLATFORM_MACHINE_INFO_H
+
+#define REGISTER_SIZE 8
+
+#endif
