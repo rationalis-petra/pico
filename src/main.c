@@ -245,19 +245,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    Result tc_res = type_check(&abs, env, &arena);
-    if (tc_res.type == Err) {
-        write_string(mv_string("Typechecking Failed\n"), cout);
-        write_string(tc_res.error_message, cout);
-        write_string(mv_string("\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
-    if (tc_res.type != Ok) {
-        write_string(mv_string("Typechecking returned an invalid result\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
+    type_check(&abs, env, &arena, &point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
@@ -271,19 +259,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // -------------------------------------------------------------------------
 
     GenResult gen_res = generate_toplevel(abs, env, ass, &arena, &point);
-
-    if (gen_res.type == Err) {
-        write_string(mv_string("Codegen Failed\n"), cout);
-        write_string(gen_res.error_message, cout);
-        write_string(mv_string("\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
-    if (gen_res.type != Ok) {
-        write_string(mv_string("Codegen returned an invalid result\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Binary\n"), cout);
@@ -311,8 +286,9 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
 
  on_error:
     write_string(point.error_message, cout);
+    write_string(mv_string("\n"), cout);
     release_arena_allocator(arena);
-    return true;
+    return false;
 }
 
 int cstrcmp (const char* lhs, const char* rhs) {

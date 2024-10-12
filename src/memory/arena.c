@@ -27,6 +27,7 @@ void* arena_malloc(size_t memsize, void* vctx) {
     if (memsize > ctx->blocksize) {
         // allocate new block
         ArenaBlock new_block;
+        new_block.bmp = 0;
         new_block.data = mem_alloc(alloc_size, ctx->internal_allocator);
         push_block(new_block, &ctx->memory_blocks);
         size_t* sz = new_block.data;

@@ -246,9 +246,11 @@ void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
 
         padding.stack_offset = stack_offset + REGISTER_SIZE;
         push_saddr(padding, &locals->vars);
+        break;
     } 
     case LPolymorphic: {
         panic(mv_string("Polymorphic enum bind not implemented"));
+        break;
     }
     }
 }
@@ -259,7 +261,7 @@ void address_unbind_enum_vars(AddressEnv* env) {
     pop_saddr(&locals->vars);
     for (size_t i = env->local_envs.len; i > 0; i--) {
         SAddr local = pop_saddr(&locals->vars);
-        if (local.type == None) {
+        if (local.type == SASentinel) {
             break;
         }
     }

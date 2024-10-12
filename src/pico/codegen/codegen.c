@@ -593,5 +593,7 @@ size_t calc_max_vars(Syntax syn) {
         return 0;
     case SAnnotation:
         return calc_max_vars(*syn.annotation.val);
+    default: 
+        return -1;
     }
 }
