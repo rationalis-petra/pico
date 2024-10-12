@@ -9,14 +9,12 @@
 #include "pico/syntax/syntax.h"
 #include "pico/data/sym_sarr_amap.h"
 
-typedef struct GenResult {
-    Result_t type;
-    String error_message;
+typedef struct {
     SymSArrAMap backlinks;
 } GenResult;
 
-GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allocator* a);
+GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
-GenResult generate_expr(Syntax syn, Environment* env, Assembler* ass, Allocator* a);
+GenResult generate_expr(Syntax* syn, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 #endif

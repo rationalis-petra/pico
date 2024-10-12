@@ -35,7 +35,7 @@ Result type_check(TopLevel* top, Environment* env, Allocator* a) {
         break;
     }
     case TLExpr: {
-        Syntax* term = &top->expr;
+        Syntax* term = top->expr;
         out = type_infer_expr(term, t_env, gen, a);
         break;
     }

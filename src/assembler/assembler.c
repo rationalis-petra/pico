@@ -410,13 +410,10 @@ uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1) << 1; }
 uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 
 
-AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator) {
+AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
-        return (AsmResult) {
-            .type = Err,
-            .error_message = mv_string("Invalid binary table entry."),
-        };
+        throw_error(point, mv_string("Invalid binary table entry."));
     }
 
     uint8_t rex_byte = be.init_rex_byte;
@@ -435,19 +432,13 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     // Step1: Opcode
     opcode_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][0];
     if (opcode_byte == 0x90) {
-        return (AsmResult) {
-            .type = Err,
-            .error_message = mv_string("Invalid binary opcode"),
-        };
+        throw_error(point, mv_string("Invalid binary opcode"));
     }
     if (be.has_opcode_ext) {
         uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]; 
         modrm_byte |= modrm_reg(ext_byte);
         if (ext_byte == 0x09) {
-            return (AsmResult) {
-                .type = Err,
-                .error_message = mv_string("Invalid binary opcode extension"),
-            };
+            throw_error(point, mv_string("Invalid binary opcode extension"));
         }
     }
 
@@ -465,10 +456,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             rm_loc = src;
             reg_loc = dest;
         } else {
-            return (AsmResult) {
-                .type = Err,
-                .error_message = mv_string("Unrecognized binary op operand order encoding"),
-            };
+            throw_error(point, mv_string("Unrecognized binary op operand order encoding"));
         }
 
         // Step 3: R/M encoding (most complex)
@@ -496,10 +484,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
                     disp_bytes[i]  = rm_loc.disp_bytes[i];
                 }
             } else {
-                return (AsmResult) {
-                    .type = Err,
-                    .error_message = mv_string("Bad displacement size: not 0, 1 or 4"),
-                };
+                throw_error(point, mv_string("Bad displacement size: not 0, 1 or 4"));
             }
             if ((0b111 & rm_loc.reg) == RSP)  {
                 // Using RSP - necessary to use SIB byte
@@ -544,16 +529,11 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             opcode_byte |= (dest.reg & 0b111);
             rex_byte |= rex_reg_ext((dest.reg & 0b1000) >> 3);
         } else {
-            return (AsmResult) {
-                .type = Err,
-                .error_message = mv_string("Unrecognized binary op operand order encoding"),
-            };
+            throw_error(point, mv_string("Unrecognized binary op operand order encoding"));
         }
     }
 
     // Step 5: write bytes
-    AsmResult out = {.type = Ok};
-
     U8Array* instructions = &assembler->instructions;
     if (be.use_rex_byte)
         push_u8(rex_byte, instructions);
@@ -570,6 +550,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     for (uint8_t i = 0; i < num_disp_bytes; i++)
         push_u8(disp_bytes[i], &assembler->instructions);
 
+    AsmResult out = {.backlink = 0};
     if (be.num_immediate_bytes != 0)
         out.backlink = instructions->len;
     for (uint8_t i = 0; i < be.num_immediate_bytes; i++)
@@ -596,8 +577,7 @@ uint8_t modrm_mem(Location mem) {
     return 0b01110000 + (mem.reg & 0b111); 
 }
 
-AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator) {
-    AsmResult out = {.type = Ok};
+AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point) {
     bool use_rex_byte = false;
     uint8_t rex_byte = 0b01000000;
 
@@ -625,8 +605,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             mod_rm_byte = modrm_reg_old(loc.reg);
             break;
         default:
-            out.type = Err;
-            out.error_message = mk_string("Push for non register locations not implemented", err_allocator);
+            throw_error(point, mk_string("Push for non register locations not implemented", err_allocator));
         }
         break;
     case Pop:
@@ -635,8 +614,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             opcode = 0x58 + (loc.reg & 0b111);
             break;
         default:
-            out.type = Err;
-            out.error_message = mk_string("Pop for non register locations not implemented", err_allocator);
+            throw_error(point, mk_string("Pop for non register locations not implemented", err_allocator));
             break;
         }
         break;
@@ -672,16 +650,14 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             break;
         }
         default:
-            out.type = Err;
-            out.error_message = mk_string("Push for register dereference not implemented", err_allocator);
+            throw_error(point, mk_string("Push for register dereference not implemented", err_allocator));
         }
         break;
         // conditional jumps
     case JE:
         opcode = 0x74;
         if (loc.type != Immediate && loc.sz != sz_8) {
-            out.type = Err;
-            out.error_message = mk_string("JE requires 8-bit immediate", err_allocator);
+            throw_error(point, mk_string("JE requires 8-bit immediate", err_allocator));
         }
         num_immediate_bytes = 1;
         immediate_bytes[0] = loc.immediate_8;
@@ -689,8 +665,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     case JNE:
         opcode = 0x75;
         if (loc.type != Immediate && loc.sz != sz_8) {
-            out.type = Err;
-            out.error_message = mk_string("JNE requires 8-bit immediate", err_allocator);
+            throw_error(point, mk_string("JNE requires 8-bit immediate", err_allocator));
         }
         num_immediate_bytes = 1;
         immediate_bytes[0] = loc.immediate_8;
@@ -704,10 +679,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             immediate_bytes[0] = loc.immediate_8;
             break;
         default:
-
-            out.type = Err;
-            out.error_message = mk_string("JMP requires 8-bit immediate", err_allocator);
-            return out;
+            throw_error(point, mk_string("JMP requires 8-bit immediate", err_allocator));
         }
         break;
 
@@ -724,10 +696,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
             break;
         default:
-
-            out.type = Err;
-            out.error_message = mk_string("SetE requires a register argument", err_allocator);
-            return out;
+            throw_error(point, mk_string("SetE requires a register argument", err_allocator));
         }
         break;
     case SetL:
@@ -743,10 +712,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
             break;
         default:
-
-            out.type = Err;
-            out.error_message = mk_string("SetE requires a register argument", err_allocator);
-            return out;
+            throw_error(point, mk_string("SetE requires a register argument", err_allocator));
         }
         break;
     case SetG:
@@ -762,14 +728,10 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
             break;
         default:
-
-            out.type = Err;
-            out.error_message = mk_string("SetE requires a register argument", err_allocator);
-            return out;
+            throw_error(point, mk_string("SetE requires a register argument", err_allocator));
         }
         break;
     }
-    if (out.type == Err) return out;
 
     U8Array* instructions = &assembler->instructions;
     if (use_rex_byte) {
@@ -782,6 +744,8 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     if (use_mod_rm_byte) {
         push_u8(mod_rm_byte,instructions);
     }
+
+    AsmResult out = {.backlink = 0};
     if (num_immediate_bytes != 0)
         out.backlink = instructions->len;
     for (uint8_t i = 0; i < num_immediate_bytes; i++) {
@@ -790,9 +754,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     return out;
 }
 
-AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator) {
-    AsmResult out = {.type = Ok};
-
+AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point) {
     uint8_t opcode;
     switch (op) {
     case Ret:
@@ -801,6 +763,7 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
     }
     U8Array* instructions = &assembler->instructions;
     push_u8(opcode, instructions);
+    AsmResult out = {.backlink = 0};
     return out;
 }
 

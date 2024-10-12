@@ -5,42 +5,43 @@
 #include "pico/binding/address_env.h"
 
 // Implementation details
-AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a);
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
 
-AsmResult generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
+void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
     if (syn.type == SProcedure) {
-        SymbolArray vars;
+        SymbolArray vars = mk_u64_array(syn.procedure.args.len, a);
+        for (size_t i = 0; i < syn.procedure.args.len; i++) {
+            push_u64(syn.procedure.args.data[i].key, &vars);
+        }
+
         address_start_poly(types, vars, env, a);
-        generate_polymorphic_i(*syn.all.body, env, ass, links, a);
+        generate_polymorphic_i(*syn.all.body, env, ass, links, a, point);
         address_end_poly(env, a);
     } else {
         SymbolArray no_vars = mk_u64_array(0, a);
         address_start_poly(types, no_vars, env, a);
-        generate_polymorphic_i(*syn.all.body, env, ass, links, a);
+        generate_polymorphic_i(*syn.all.body, env, ass, links, a, point);
         address_end_poly(env, a);
         
     }
 }
 
-AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a) {
-    AsmResult out;
-
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
     switch (syn.type) {
     case SLitI64: {
         // Does it fit into 32 bits?
         if (syn.lit_i64 < 0x80000000 && syn.lit_i64 > -80000001) {
             int32_t immediate = syn.lit_i64;
-            out = build_unary_op(ass, Push, imm32(immediate), a);
+            build_unary_op(ass, Push, imm32(immediate), a, point);
         } else {
-            out.type = Err;
-            out.error_message = mk_string("Limitation: Literals must fit into less than 64 bits.", a);
+            throw_error(point, mk_string("Limitation: Literals must fit into less than 64 bits.", a));
         }
         break;
     }
     case SLitBool: {
         // TODO: squash to smallest size (8 bits)
         int32_t immediate = syn.lit_i64;
-        out = build_unary_op(ass, Push, imm32(immediate), a);
+        build_unary_op(ass, Push, imm32(immediate), a, point);
         break;
     }
     case SVariable: {
@@ -48,92 +49,80 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         AddressEntry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocalDirect:
-            out = build_unary_op(ass, Push, rref(RBP, e.stack_offset), a);
+            build_unary_op(ass, Push, rref(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
-            panic(mv_string("Internal Error: Tried to generate monomorphic code for local indirect variable access."));
+            throw_error(point, mv_string("Internal Error: Tried to generate monomorphic code for local indirect variable access."));
             break;
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
             if (syn.ptype->sort == TProc) {
-                out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a);
-                if (out.type == Err) return out;
+                AsmResult out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
-                out = build_unary_op(ass, Push, reg(RBX), a);
+                out = build_unary_op(ass, Push, reg(RBX), a, point);
             } else if (syn.ptype->sort == TPrim) {
-                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
-                if (out.type == Err) return out;
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                out = build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a);
-                if (out.type == Err) return out;
-                out = build_unary_op(ass, Push, reg(RBX), a);
+                build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a, point);
+                build_unary_op(ass, Push, reg(RBX), a, point);
             } else if (syn.ptype->sort == TKind) {
-                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
-                if (out.type == Err) return out;
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
             } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
                 // This is a global variable, and therefore has a known
                 // monomorphic type
                 size_t value_size = pi_mono_size_of(*syn.ptype);
-                out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a);
-                if (out.type == Err) return out;
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                out = build_binary_op(ass, Sub, reg(RSP), imm32(value_size), a);
-                if (out.type == Err) return out;
+                out = build_binary_op(ass, Sub, reg(RSP), imm32(value_size), a, point);
 
                 // copy
-                out = generate_monomorphic_copy(RSP, RCX, value_size, ass, a);
-                if (out.type == Err) return out;
+                generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
 
             } else {
-                out.type = Err;
-                out.error_message = mv_string("Codegen: Global has unsupported sort: must be Primitive or Proc");
+                throw_error(point, mv_string("Codegen: Global has unsupported sort: must be Primitive or Proc"));
             }
             break;
-        case ANotFound:
-            out.type = Err;
+        case ANotFound: {
             String* sym = symbol_to_string(syn.variable);
             String msg = mv_string("Couldn't find variable during codegen: ");
-            out.error_message = string_cat(msg, *sym, a);
+            throw_error(point, string_cat(msg, *sym, a));
             break;
+        }
         case ATooManyLocals:
-            out.type = Err;
-            out.error_message = mk_string("Too Many Local variables!", a);
+            throw_error(point, mk_string("Too Many Local variables!", a));
             break;
         }
         break;
     }
     case SAll: {
-        panic(mv_string("Internal error: cannot generate procedure all inside polymorphic code"));
+        throw_error(point, mv_string("Internal error: cannot generate procedure all inside polymorphic code"));
     }
     case SProcedure: {
-        panic(mv_string("Internal error: cannot generate procedure inside polymorphic code"));
+        throw_error(point, mv_string("Internal error: cannot generate procedure inside polymorphic code"));
     }
     case SApplication: {
         // Generate the arguments
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
-            out = generate_polymorphic_i(*arg, env, ass, links, a);
-            if (out.type == Err) return out;
+            generate_polymorphic_i(*arg, env, ass, links, a, point);
         }
 
         // This will push a function pointer onto the stack
-        out = generate_polymorphic_i(*syn.application.function, env, ass, links, a);
-        if (out.type == Err) return out; 
+        generate_polymorphic_i(*syn.application.function, env, ass, links, a, point);
         
         // Regular Function Call
         // Pop the function into RCX; call the function
-        out = build_unary_op(ass, Pop, reg(RCX), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Call, reg(RCX), a);
+        build_unary_op(ass, Pop, reg(RCX), a, point);
+        build_unary_op(ass, Call, reg(RCX), a, point);
         break;
     }
     case SStructure: {
-        panic(mv_string("Not implemented: structure in forall."));
+        throw_error(point, mv_string("Not implemented: structure in forall."));
         /*
         // For structures, we have to be careful - this is because the order in
         // which arguments are evaluated is not necessarily the order in which
@@ -205,7 +194,7 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SProjector: {
-        panic(mv_string("Not implemented: projector in forall."));
+        throw_error(point, mv_string("Not implemented: projector in forall."));
         /*
         // First, allocate space on the stack for the value
         size_t out_sz = pi_runtime_size_of(*syn.ptype);
@@ -236,7 +225,7 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SConstructor: {
-        panic(mv_string("Not implemented: constructor in forall."));
+        throw_error(point, mv_string("Not implemented: constructor in forall."));
         /*
         PiType* enum_type = syn.constructor.enum_type->type_val;
         size_t enum_size = pi_runtime_size_of(*enum_type);
@@ -252,7 +241,7 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SVariant: {
-        panic(mv_string("Not implemented: variant in forall."));
+        throw_error(point, mv_string("Not implemented: variant in forall."));
         /*
         const size_t tag_size = sizeof(uint64_t);
         PiType* enum_type = syn.variant.enum_type->type_val;
@@ -303,7 +292,7 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SMatch: {
-        panic(mv_string("Not implemented: match in forall."));
+        throw_error(point, mv_string("Not implemented: match in forall."));
         /*
         // Generate code for the value
         Syntax* match_value = syn.match.val;
@@ -401,14 +390,10 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SLet:
-        panic(mv_string("Not implemented: let in forall."));
-        out = (AsmResult) {
-            .type = Err,
-            .error_message = mk_string("No assembler implemented for Let", a)
-        };
+        throw_error(point, mv_string("Not implemented: let in forall."));
         break;
     case SIf: {
-        panic(mv_string("Not implemented: if in forall."));
+        throw_error(point, mv_string("Not implemented: if in forall."));
         /*
         // generate the condition
         out = generate(*syn.if_expr.condition, env, ass, links, a);
@@ -469,16 +454,12 @@ AsmResult generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, Sy
         */
     }
     case SCheckedType: {
-        out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a);
-        if (out.type == Err) return out;
-        out = build_unary_op(ass, Push, reg(RBX), a);
+        build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a, point);
+        build_unary_op(ass, Push, reg(RBX), a, point);
         break;
     }
     default: {
-        out.type = Err;
-        out.error_message = mv_string("Unrecognized abstract term in codegen.");
+        throw_error(point, mv_string("Unrecognized abstract term in codegen."));
     }
     }
-
-    return out;
 }

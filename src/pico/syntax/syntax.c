@@ -286,7 +286,7 @@ void delete_def(Definition def, Allocator* a) {
 void delete_toplevel(TopLevel top, Allocator* a) {
     switch(top.type) {
     case TLExpr:
-        delete_syntax(top.expr, a);
+        delete_syntax_pointer(top.expr, a);
         break;
     case TLDef:
         delete_def(top.def, a);
@@ -307,7 +307,7 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     Document* out = NULL;
     switch (toplevel->type) {
     case TLExpr:
-        out = pretty_syntax(&toplevel->expr, a);
+        out = pretty_syntax(toplevel->expr, a);
         break;
     case TLDef:
         out = pretty_def(&toplevel->def, a);
@@ -320,7 +320,7 @@ PiType* toplevel_type(TopLevel top) {
     PiType* out = NULL;
     switch (top.type) {
     case TLExpr:
-        out = top.expr.ptype;
+        out = top.expr->ptype;
         break;
     case TLDef:
         out = top.def.value->ptype;

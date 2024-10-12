@@ -5,31 +5,31 @@
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 
-EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a) {
+EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a, ErrorPoint* point) {
     EvalResult res;
     switch (top.type) {
     case TLExpr: {
-        size_t sz = pi_size_of(*top.expr.ptype);
+        size_t sz = pi_size_of(*top.expr->ptype);
 
-        if (top.expr.ptype->sort == TPrim) {
+        if (top.expr->ptype->sort == TPrim) {
             res.type = ERValue;
-            res.val.type = top.expr.ptype;
-            res.val.val = pico_run_expr(ass, sz, a);
+            res.val.type = top.expr->ptype;
+            res.val.val = pico_run_expr(ass, sz, a, point);
         }
-        else if (top.expr.ptype->sort == TStruct) {
+        else if (top.expr->ptype->sort == TStruct) {
             res.type = ERValue;
-            res.val.type = top.expr.ptype;
-            res.val.val = pico_run_expr(ass, sz, a);
+            res.val.type = top.expr->ptype;
+            res.val.val = pico_run_expr(ass, sz, a, point);
         }
-        else if (top.expr.ptype->sort == TEnum) {
+        else if (top.expr->ptype->sort == TEnum) {
             res.type = ERValue;
-            res.val.type = top.expr.ptype;
-            res.val.val = pico_run_expr(ass, sz, a);
+            res.val.type = top.expr->ptype;
+            res.val.val = pico_run_expr(ass, sz, a, point);
         }
-        else if (top.expr.ptype->sort == TKind) {
+        else if (top.expr->ptype->sort == TKind) {
             res.type = ERValue;
-            res.val.type = top.expr.ptype;
-            res.val.val = pico_run_expr(ass, sz, a);
+            res.val.type = top.expr->ptype;
+            res.val.val = pico_run_expr(ass, sz, a, point);
         }
         else  {
             res.type = ERFail;
@@ -52,7 +52,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             res.type = ERValue;
             // assume int64 for now!
             res.val.type = top.def.value->ptype;
-            res.val.val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a);
+            res.val.val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
             add_def(module, top.def.bind, *top.def.value->ptype, res.val.val);
             break;
         }
@@ -67,7 +67,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
 }
 
 // Note: destructively modifies Assembler! probaly want a better solution in the future
-void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
+void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* point) {
     /* result generated; */
     /* generated.type = Ok; */
     void* value = mem_alloc(rsize, a);
@@ -78,29 +78,29 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a) {
 #if defined(ABI_SYSTEM_V_64)
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
-    build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a);
-    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a);
-    build_binary_op(ass, Mov, reg(RDX), imm64((int64_t)rsize), a);
+    build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a, point);
+    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDX), imm64((int64_t)rsize), a, point);
 
-    build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)&memcpy), a);
-    build_unary_op(ass, Call, reg(RCX),a);
+    build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RCX), a, point);
     // pop value from stack
-    build_binary_op(ass, Add, reg(RSP), imm32(rsize), a);
-    build_nullary_op(ass, Ret, a);
+    build_binary_op(ass, Add, reg(RSP), imm32(rsize), a, point);
+    build_nullary_op(ass, Ret, a, point);
 
 #elif defined(ABI_WIN_64)
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
-    build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a);
-    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a);
-    build_binary_op(ass, Mov, reg(R8), imm64((int64_t)rsize), a);
+    build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(R8), imm64((int64_t)rsize), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a);
 
-    build_binary_op(ass, Mov, reg(RAX), imm64((int64_t)&memcpy), a);
-    build_unary_op(ass, Call, reg(RAX),a);
+    build_binary_op(ass, Mov, reg(RAX), imm64((int64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
     // pop value from stack
-    build_binary_op(ass, Add, reg(RSP), imm32(rsize + 32), a);
-    build_nullary_op(ass, Ret, a);
+    build_binary_op(ass, Add, reg(RSP), imm32(rsize + 32), a, point);
+    build_nullary_op(ass, Ret, a, point);
 #else
 #error "Unknown calling convention"
 #endif

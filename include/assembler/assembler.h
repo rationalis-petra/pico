@@ -1,8 +1,8 @@
 #ifndef __ASSEMBLER_ASSEMBLER_H
 #define __ASSEMBLER_ASSEMBLER_H
 
+#include "platform/error.h"
 
-#include "data/result.h"
 #include "data/array.h"
 #include "pretty/document.h"
 
@@ -19,7 +19,7 @@ size_t get_pos(Assembler* assembler);
 Document* pretty_assembler(Assembler* assembler, Allocator* a);
 
 // Integral operations
-typedef enum BinaryOp {
+typedef enum {
     // ------------------
     //  Arithmetic
     // ------------------
@@ -46,7 +46,7 @@ typedef enum BinaryOp {
     Binary_Op_Count,
 } BinaryOp;
 
-typedef enum UnaryOp {
+typedef enum {
     // ------------------
     //  Functions
     // ------------------
@@ -71,11 +71,11 @@ typedef enum UnaryOp {
     SetG,
 } UnaryOp;
 
-typedef enum NullaryOp {
+typedef enum {
     Ret,
 } NullaryOp;
 
-typedef enum Regname {
+typedef enum {
     RAX = 0b0000,
     RBX = 0b0011,
     RCX = 0b0001,
@@ -94,13 +94,13 @@ typedef enum Regname {
     R15 = 0b1111
 } Regname;
 
-typedef enum Dest_t {
+typedef enum {
     Register,
     Deref,
     Immediate,
 } Dest_t;
 
-typedef enum LocationSize {
+typedef enum {
     sz_8,
     sz_16,
     sz_32,
@@ -111,7 +111,7 @@ typedef enum LocationSize {
 // + Register
 // + [Register + Offset]
 // + Immediate
-typedef struct Location {
+typedef struct {
     Dest_t type;
     LocationSize sz;
     Regname reg;
@@ -142,16 +142,12 @@ Location imm64(int64_t immediate);
 
 // Result 
 typedef struct AsmResult {
-    Result_t type;
-    union {
-        size_t backlink; // backlink to immediate (if it exists)
-        String error_message;
-    }; 
+    size_t backlink; // backlink to immediate (if it exists)
 } AsmResult;
 
-AsmResult build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator);
-AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator);
-AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator);
+AsmResult build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point);
 
 void asm_init();
 

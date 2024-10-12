@@ -1,4 +1,7 @@
-﻿#include "memory/std_allocator.h"
+﻿#include "platform/error.h"
+#include "platform/signals.h"
+
+#include "memory/std_allocator.h"
 #include "memory/executable.h"
 #include "memory/arena.h"
 
@@ -46,25 +49,25 @@ PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     return type;
 }
 
-void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a) {
-    build_unary_op (ass, Pop, reg(RCX),a );
-    build_unary_op (ass, Pop, reg(RBX), a);
-    build_unary_op (ass, Pop, reg(RAX), a);
-    build_binary_op (ass, op, reg(RAX), reg(RBX), a);
-    build_unary_op (ass, Push, reg(RAX), a);
-    build_unary_op (ass, Push, reg(RCX), a);
-    build_nullary_op (ass, Ret, a);
+void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* point) {
+    build_unary_op (ass, Pop, reg(RCX), a, point);
+    build_unary_op (ass, Pop, reg(RBX), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op (ass, op, reg(RAX), reg(RBX), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_unary_op (ass, Push, reg(RCX), a, point);
+    build_nullary_op (ass, Ret, a, point);
 }
 
-void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a) {
-    build_unary_op (ass, Pop, reg(RCX), a);
-    build_unary_op (ass, Pop, reg(RBX), a);
-    build_unary_op (ass, Pop, reg(RAX), a);
-    build_binary_op (ass, Cmp, reg(RAX), reg(RBX), a);
-    build_unary_op (ass, op, reg(RAX), a);
-    build_unary_op (ass, Push, reg(RAX), a);
-    build_unary_op (ass, Push, reg(RCX), a);
-    build_nullary_op (ass, Ret, a);
+void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
+    build_unary_op (ass, Pop, reg(RCX), a, point);
+    build_unary_op (ass, Pop, reg(RBX), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op (ass, Cmp, reg(RAX), reg(RBX), a, point);
+    build_unary_op (ass, op, reg(RAX), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_unary_op (ass, Push, reg(RCX), a, point);
+    build_nullary_op (ass, Ret, a, point);
 }
 
 Module* base_module(Assembler* ass, Allocator* a) {
@@ -78,6 +81,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
         .sort = TKind,
         .kind.nargs = 0,
     };
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
 
     type_val = mk_prim_type(Unit);
     sym = string_to_symbol(mv_string("Unit"));
@@ -95,30 +102,30 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("I64"));
     add_def(module, sym, type, &type_data);
 
-    build_binary_fun(ass, Add, a);
+    build_binary_fun(ass, Add, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Int_64);
     sym = string_to_symbol(mv_string("+"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_binary_fun(ass, Sub, a);
+    build_binary_fun(ass, Sub, a, &point);
     sym = string_to_symbol(mv_string("-"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    build_comp_fun(ass, SetL, a);
+    build_comp_fun(ass, SetL, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Bool);
     sym = string_to_symbol(mv_string("<"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_comp_fun(ass, SetG, a);
+    build_comp_fun(ass, SetG, a, &point);
     sym = string_to_symbol(mv_string(">"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_comp_fun(ass, SetE, a);
+    build_comp_fun(ass, SetE, a, &point);
     sym = string_to_symbol(mv_string("="));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
@@ -195,6 +202,9 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     clear_assembler(ass);
     Environment* env = env_from_module(module, &arena);
 
+    ErrorPoint point;
+    if (catch_error(point)) goto on_error;
+
     write_string(mv_string("> "), cout);
     ParseResult res = parse_rawtree(cin, &arena);
     if (res.type == ParseFail) {
@@ -220,23 +230,11 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // Resolution
     // -------------------------------------------------------------------------
 
-    AbsResult abs = abstract(res.data.result, env, &arena);
-    if (abs.type == Err) {
-        write_string(mv_string("Abstract Faled :(\n"), cout);
-        write_string(abs.error_message, cout);
-        write_string(mv_string("\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
-    if (abs.type != Ok) {
-        write_string(mv_string("Resolve Returned invalid result!\n"), cout);
-        release_arena_allocator(arena);
-        return false;
-    }
+    TopLevel abs = abstract(res.data.result, env, &arena, &point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
-        doc = pretty_toplevel(&abs.out, &arena);
+        doc = pretty_toplevel(&abs, &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -247,7 +245,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    Result tc_res = type_check(&abs.out, env, &arena);
+    Result tc_res = type_check(&abs, env, &arena);
     if (tc_res.type == Err) {
         write_string(mv_string("Typechecking Failed\n"), cout);
         write_string(tc_res.error_message, cout);
@@ -263,7 +261,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-        doc = pretty_type(toplevel_type(abs.out), &arena);
+        doc = pretty_type(toplevel_type(abs), &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -272,7 +270,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // Code Generation
     // -------------------------------------------------------------------------
 
-    GenResult gen_res = generate_toplevel(abs.out, env, ass, &arena);
+    GenResult gen_res = generate_toplevel(abs, env, ass, &arena, &point);
 
     if (gen_res.type == Err) {
         write_string(mv_string("Codegen Failed\n"), cout);
@@ -298,7 +296,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // Evaluation
     // -------------------------------------------------------------------------
 
-    EvalResult call_res = pico_run_toplevel(abs.out, ass, &(gen_res.backlinks), module, &arena);
+    EvalResult call_res = pico_run_toplevel(abs, ass, &(gen_res.backlinks), module, &arena, &point);
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     }
@@ -308,6 +306,11 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     write_doc(doc, cout);
     write_string(mv_string("\n"), cout);
 
+    release_arena_allocator(arena);
+    return true;
+
+ on_error:
+    write_string(point.error_message, cout);
     release_arena_allocator(arena);
     return true;
 }

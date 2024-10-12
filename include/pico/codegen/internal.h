@@ -11,6 +11,6 @@
  */
 
 void backlink_global(Symbol sym, size_t offset, SymSArrAMap* links, Allocator* a);
-AsmResult generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a);
+void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 #endif

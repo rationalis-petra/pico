@@ -206,7 +206,7 @@ typedef struct {
     TopLevel_t type;
     union {
         Definition def;
-        Syntax expr;
+        Syntax* expr;
     };
 } TopLevel;
 
