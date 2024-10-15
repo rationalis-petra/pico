@@ -111,7 +111,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
         "push %%rbp       \n\t"
         "mov %%rsp, %%rbp \n\t"
         "sub $0x8, %%rbp     \n\t"
-        "call %1          \n\t"
+        "call *%1          \n\t"
         "pop %%rbp        \n\t"
         : "=r" (out)
         : "r"(instructions.data));

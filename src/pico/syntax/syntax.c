@@ -24,7 +24,7 @@ void delete_syntax(Syntax syntax, Allocator* a) {
         case SApplication: {
             delete_syntax_pointer(syntax.application.function, a);
             for (size_t i = 0; i < syntax.application.args.len; i++) {
-                delete_syntax_pointer(aref_ptr(i, syntax.application.args), a);
+                delete_syntax_pointer(syntax.application.args.data[i], a);
             }
             sdelete_ptr_array(syntax.application.args);
             break;
@@ -81,7 +81,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(4 + syntax->all.args.len, a);
         push_ptr(mv_str_doc((mk_string("(all [", a)), a), &nodes);
         for (size_t i = 0; i < syntax->all.args.len; i++) {
-            Document* arg = mk_str_doc(*symbol_to_string(aref_u64(i, syntax->all.args)), a);
+            Document* arg = mk_str_doc(*symbol_to_string(syntax->all.args.data[i]), a);
             push_ptr(arg, &nodes);
         }
         push_ptr(mv_str_doc((mk_string("]", a)), a), &nodes);
@@ -95,7 +95,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(1 + syntax->application.args.len, a);
         push_ptr(head, &nodes);
         for (size_t i = 0; i < syntax->application.args.len; i++) {
-            Document* node = pretty_syntax(aref_ptr(i, syntax->application.args), a);
+            Document* node = pretty_syntax(syntax->application.args.data[i], a);
             push_ptr(node, &nodes);
         }
         out = mv_sep_doc(nodes, a);

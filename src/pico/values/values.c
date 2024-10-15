@@ -42,7 +42,7 @@ Symbol copy_symbol(Symbol s, Allocator* a) { return s; };
 String* symbol_to_string(Symbol symbol) {
     Allocator* a = get_std_allocator();
     if (!initialized) init_symtable(a);
-    return (String*)aref_ptr(symbol, symbol_names);
+    return symbol_names.data[symbol];
 }
 
 Symbol string_to_symbol(String str) {
@@ -53,7 +53,7 @@ Symbol string_to_symbol(String str) {
     Symbol* sym = str_u64_lookup(str, symbol_table);
     if (!sym) {
 
-        String* map_str = (String*)mem_alloc(sizeof(String), a);
+        String* map_str = mem_alloc(sizeof(String), a);
         String tmp_str = copy_string(str, a);
         map_str->memsize = tmp_str.memsize;
         map_str->bytes = tmp_str.bytes;

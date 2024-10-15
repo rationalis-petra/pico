@@ -196,6 +196,8 @@ Module* base_module(Assembler* ass, Allocator* a) {
 }
 
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, repl_opts opts) {
+    // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
+    // however, we are not expecting the arena to be mutated, so...
     // Create an arena allocator to use in this iteration.
     Allocator arena = mk_arena_allocator(4096, a);
 

@@ -15,7 +15,7 @@ CC := gcc
 ##-------------------------------------
 BUILD_TYPE := Debug
 
-RELEASE_FLAGS := -Ofast -flto
+RELEASE_FLAGS := -Ofast -flto=auto
 DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows

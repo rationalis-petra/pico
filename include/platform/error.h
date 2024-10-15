@@ -5,7 +5,7 @@
 #include "data/string.h"
 
 typedef struct {
-    String error_message; 
+    volatile String error_message; 
     jmp_buf buf; 
 } ErrorPoint;
 

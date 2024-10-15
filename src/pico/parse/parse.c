@@ -221,7 +221,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         int64_t int_result = 0;
         uint64_t tens = 1;
         for (size_t i = arr.len; i > 0; i--) {
-            int_result += tens * aref_u8(i-1, arr);
+            int_result += tens * arr.data[i-1];
             tens *= 10;
         }
         out.type = ParseSuccess;

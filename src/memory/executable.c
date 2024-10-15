@@ -165,7 +165,7 @@ void* exec_realloc(void* ptr, size_t new_size, void* ctx) {
 
 bool free_small(void* ptr, exec_context* ctx) {
     for (size_t i = 0; i < ctx->small_blocks.len; i++) {
-        small_block block = *(small_block*)(aref_ptr(i, ctx->small_blocks));
+        small_block block = *(small_block*)(ctx->small_blocks.data[i]);
         const void* data = block.block_memory.data;
         size_t offset = 0;
         // check for each element of to_free

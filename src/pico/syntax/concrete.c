@@ -13,7 +13,7 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
         PtrArray doc_arr = mk_ptr_array(tree.nodes.len + 2, a);
         push_ptr(mv_str_doc(mk_string("(", a), a), &doc_arr);
         for (size_t i = 0; i < tree.nodes.len; i++) {
-            RawTree node = *((RawTree*)aref_ptr(i, tree.nodes));
+            RawTree node = *((RawTree*)tree.nodes.data[i]);
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }

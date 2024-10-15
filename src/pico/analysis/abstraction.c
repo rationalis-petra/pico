@@ -61,7 +61,7 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env
 }
 
 Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point) {
-    Syntax* fn_syn = abstract_expr_i(*(RawTree*)(aref_ptr(0, raw.nodes)), env, a, point);
+    Syntax* fn_syn = abstract_expr_i(*(RawTree*)(raw.nodes.data[0]), env, a, point);
 
     Syntax* res = mem_alloc(sizeof(Syntax), a);
     if (fn_syn->type == SConstructor) {
@@ -73,7 +73,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
         };
 
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(*(RawTree*)(aref_ptr(i, raw.nodes)), env, a, point);
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->variant.args);
         }
     } else {
@@ -85,7 +85,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
         res->application.function = fn_syn;
 
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(*(RawTree*)(aref_ptr(i, raw.nodes)), env, a, point);
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->application.args);
         }
     }
@@ -110,7 +110,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
 
         RawTree* raw_term;
         if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)aref_ptr(2, raw.nodes);
+            raw_term = (RawTree*)raw.nodes.data[2];
         } else {
             raw_term = mem_alloc (sizeof(RawTree), a);
 
@@ -143,7 +143,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
 
         RawTree* raw_term;
         if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)aref_ptr(2, raw.nodes);
+            raw_term = raw.nodes.data[2];
         } else {
             raw_term = mem_alloc (sizeof(RawTree), a);
 
@@ -249,7 +249,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             // Get the term
             RawTree* raw_term;
             if (raw_clause->nodes.len == 2) {
-                raw_term = (RawTree*)aref_ptr(2, raw.nodes);
+                raw_term = (RawTree*)raw.nodes.data[2];
             } else {
                 raw_term = mem_alloc (sizeof(RawTree), a);
 
@@ -340,16 +340,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
         SynArray terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            RawTree* rptr = aref_ptr(i, raw.nodes);
+            RawTree* rptr = raw.nodes.data[i];
             Syntax* term = abstract_expr_i(*rptr, env, a, point);
             push_ptr(term, &terms);
         }
 
         *res = (Syntax) {
             .type = SIf,
-            .if_expr.condition = aref_ptr(0, terms),
-            .if_expr.true_branch = aref_ptr(1, terms),
-            .if_expr.false_branch = aref_ptr(2, terms),
+            .if_expr.condition = terms.data[0],
+            .if_expr.true_branch = terms.data[1],
+            .if_expr.false_branch = terms.data[2],
         };
         sdelete_ptr_array(terms);
         break;
@@ -493,8 +493,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         if (raw.nodes.len < 1) {
             throw_error(point, mk_string("Raw Syntax must have at least one element!", a));
         }
-        if (is_symbol(aref_ptr(0, raw.nodes))) {
-            Symbol sym = ((RawTree*)aref_ptr(0, raw.nodes))->atom.symbol;
+        if (is_symbol(raw.nodes.data[0])) {
+            Symbol sym = ((RawTree*)raw.nodes.data[0])->atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:
@@ -538,11 +538,11 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
             throw_error(point, mk_string("First argument to definitions should be a symbol", a));
         }
 
-        Symbol sym = ((RawTree*)aref_ptr(1, raw.nodes))->atom.symbol;
+        Symbol sym = ((RawTree*)raw.nodes.data[1])->atom.symbol;
         
         RawTree* raw_term;
         if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)aref_ptr(2, raw.nodes);
+            raw_term = raw.nodes.data[2];
         } else {
             raw_term = mem_alloc (sizeof(RawTree), a);
 
@@ -579,8 +579,8 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
     bool unique_toplevel = false;
 
     if (raw.type == RawList && raw.nodes.len > 1) {
-        if (is_symbol(aref_ptr(0, raw.nodes))) {
-            Symbol sym = ((RawTree*)aref_ptr(0, raw.nodes))->atom.symbol;
+        if (is_symbol(raw.nodes.data[0])) {
+            Symbol sym = ((RawTree*)raw.nodes.data[0])->atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SGlobal: {

@@ -462,7 +462,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         generate(*syn.if_expr.true_branch, env, ass, links, a, point);
 
         // Generate jump to end of false branch to be backlinked later
-        build_unary_op(ass, JMP, imm8(0), a, point);
+        out = build_unary_op(ass, JMP, imm8(0), a, point);
 
         // calc backlink offset
         size_t end_pos = get_pos(ass);

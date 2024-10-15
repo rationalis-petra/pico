@@ -24,7 +24,7 @@ void encode_point_utf8(uint8_t* dest, uint8_t* size, uint32_t codepoint) {
     }
     // Encode with 4 bytes (21 bits)
     // encoded as 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
-    else if (codepoint < 2097152) {
+    else {
         dest[0] = ((0x1c0000 & codepoint) >> 18) | 0xf0;
         dest[1] = ((0x3f000 & codepoint) >> 12) | 0x80;
         dest[2] = ((0xfc0 & codepoint) >> 6) | 0x80;

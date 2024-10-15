@@ -6,6 +6,7 @@
 
 // Given a unicode codepoint (encoded as a 32-bit unsigned int), encode it as utf-8 into the 'dest' 
 // out parameter. The size out parameter should be updated to indicate how many bytes were used.
+// If a codepoint with > 21 bits is used, the extra bits are discarded. 
 void encode_point_utf8(uint8_t* dest, uint8_t* size, uint32_t codepoint);
 
 // Given an array of bytes (str), read out a single 32-bit unicode codepoint

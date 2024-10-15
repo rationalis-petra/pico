@@ -37,7 +37,7 @@ String string_from_UTF_32(U32Array arr, Allocator* a) {
     // Step1: calcluate byte length (initialize to 1 for NULL-terminator)
     size_t numbytes = 1;
     for (size_t i = 0; i < arr.len; i++) {
-        uint32_t codepoint = aref_u32(i, arr);
+        uint32_t codepoint = arr.data[i];
         numbytes += point_size_utf8(codepoint);
     }
     String out;
@@ -45,7 +45,7 @@ String string_from_UTF_32(U32Array arr, Allocator* a) {
     out.bytes = mem_alloc(out.memsize, a);
     for (size_t i = 0; i < arr.len; ) {
         uint8_t nbytes;
-        uint32_t codepoint = aref_u32(i, arr);
+        uint32_t codepoint = arr.data[i];
         encode_point_utf8(out.bytes + i, &nbytes, codepoint);
         i += nbytes;
     }

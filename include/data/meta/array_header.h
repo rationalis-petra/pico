@@ -21,12 +21,5 @@
                                                                         \
     void push_ ## fprefix(type val, tprefix##Array* arr);               \
     type pop_ ## fprefix(tprefix##Array* arr);                          \
-                                                                        \
-    static inline void aset_ ## fprefix(const size_t index, type val, const tprefix##Array arr) { \
-        arr.data[index] = val;                                          \
-    }                                                                   \
-    static inline type aref_ ## fprefix(const size_t index, const tprefix##Array arr) { \
-        return arr.data[index];                                         \
-    }                                                                   \
 
 #endif
