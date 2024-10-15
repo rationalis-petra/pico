@@ -94,7 +94,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(R8), imm64((int64_t)rsize), a, point);
-    build_binary_op(ass, Sub, reg(RSP), imm32(32), a);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((int64_t)&memcpy), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
