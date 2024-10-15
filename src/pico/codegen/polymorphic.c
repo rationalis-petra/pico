@@ -389,9 +389,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
         break;
         */
     }
-    case SLet:
+    case SLet: {
         throw_error(point, mv_string("Not implemented: let in forall."));
         break;
+    }
     case SIf: {
         throw_error(point, mv_string("Not implemented: if in forall."));
         /*
@@ -459,7 +460,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
         break;
     }
     default: {
-        throw_error(point, mv_string("Unrecognized abstract term in codegen."));
+        throw_error(point, mv_string("Unrecognized abstract term in polymorphic codegen."));
     }
     }
 }

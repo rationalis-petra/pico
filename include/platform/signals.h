@@ -4,6 +4,6 @@
 #include <stdbool.h>
 #include "data/string.h"
 
-void panic(String message);
+_Noreturn void panic(String message);
 
 #endif

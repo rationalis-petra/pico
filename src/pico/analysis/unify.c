@@ -1,3 +1,4 @@
+#include "platform/signals.h"
 #include "pico/analysis/unify.h"
 
 PiType* trace_uvar(PiType* uvar);
@@ -99,6 +100,9 @@ bool has_unification_vars_p(PiType type) {
         break;
     }
 
+    case TVar: {
+        return false;
+    }
     case TAll: {
         return has_unification_vars_p(*type.binder.body);
     }
@@ -114,7 +118,7 @@ bool has_unification_vars_p(PiType type) {
             return has_unification_vars_p(*type.uvar->subst);
         }
     default:
-        return true;
+        panic(mv_string("Invalid type given to has_unification_vars_p"));
     }
 }
 
@@ -132,7 +136,7 @@ void squash_type(PiType* type) {
         break;
     case TProc: {
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            squash_type((PiType*)(type->proc.args.data + i));
+            squash_type((PiType*)(type->proc.args.data[i]));
         }
         squash_type(type->proc.ret);
         break;
@@ -152,12 +156,12 @@ void squash_type(PiType* type) {
         }
         break;
     }
+    case TVar: break;
     case TAll: {
         squash_type(type->binder.body);
     }
 
-    case TKind:
-        break;
+    case TKind: break;
     // Special sort: unification variable
     case TUVar: {
         PiType* subst = type->uvar->subst;
@@ -167,5 +171,7 @@ void squash_type(PiType* type) {
         } 
         break;
     }
+    default: 
+        panic(mv_string("squash_type received invalid type!"));
     }
 }

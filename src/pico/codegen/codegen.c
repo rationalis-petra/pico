@@ -495,7 +495,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         break;
     }
     default: {
-        throw_error(point, mv_string("Unrecognized abstract term in codegen."));
+        throw_error(point, mv_string("Unrecognized abstract term in monomorphic codegen."));
     }
     }
 }

@@ -114,7 +114,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
-        if (te.type == TELocal || te.type == TEGlobal) {
+        if (te.type != TENotFound) {
             untyped->ptype = te.ptype;
             if (te.value) {
                 untyped->type = SCheckedType;
@@ -154,8 +154,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SAll: {
         // give each arg type kind.
-        PiType* arg_ty = mem_alloc(sizeof(PiType), a);
-        *arg_ty = (PiType) {.sort = TKind, .kind.nargs = 0,};
 
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
@@ -164,6 +162,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         for (size_t i = 0; i < untyped->all.args.len; i++) {
             Symbol arg = untyped->all.args.data[i];
+
+            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+
             type_qvar(arg, arg_ty, env);
             push_u64(arg, &all_ty->binder.vars);
         }
@@ -475,6 +477,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         throw_error(point, mk_string("Internal Error: unrecognized syntactic form (squash_types)", a));
         break;
     }
+
     if (!has_unification_vars_p(*typed->ptype)) {
         squash_type(typed->ptype);
     }

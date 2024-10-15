@@ -65,5 +65,6 @@ String string_cat(const String lhs, const String rhs, Allocator* a) {
     out.bytes = (uint8_t*)mem_alloc(out.memsize, a);
     memcpy(out.bytes, lhs.bytes, lhs.memsize);
     memcpy(out.bytes + (lhs.memsize - 1), rhs.bytes, rhs.memsize);
+    out.bytes[out.memsize - 1] = '\0';
     return out;
 }
