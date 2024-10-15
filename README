@@ -1,0 +1,5 @@
+# Pico - A Small Relic Implementation  
+
+Pico is a small compiler for bootstrapping a self-hosted Relic implementation. 
+
+Pico is currently still in development, and as such is not ready for general use.
