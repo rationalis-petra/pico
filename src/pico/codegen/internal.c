@@ -2,11 +2,10 @@
 
 void backlink_global(Symbol sym, size_t offset, SymSArrAMap* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
-    SizeArray* sarr = NULL;
-    sarr = sym_sarr_lookup(sym, *links);
+    SizeArray* sarr = sym_sarr_lookup(sym, *links);
 
     if (!sarr) {
-        // create & insert
+        // Create & Insert
         sym_sarr_insert(sym, mk_size_array(4, a), links);
         sarr = sym_sarr_lookup(sym, *links);
     }
@@ -26,7 +25,7 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
     };
 
     if (src == RAX || dest == RAX)  {
-        throw_error(point, mv_string("Error in generate_copy: offsets must be smaller than 255!"));
+        throw_error(point, mv_string("Error in generate_copy: cannoy copy from/to RAX"));
     };
 
     for (size_t i = 0; i < size / 8; i++) {

@@ -410,6 +410,8 @@ uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1) << 1; }
 uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
@@ -558,6 +560,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
 
     return out;
 }
+#pragma GCC diagnostic pop
 
 void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte, Regname reg) {
     if (reg & 010) set_bit(rex_byte, 2);
@@ -754,6 +757,8 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     return out;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point) {
     uint8_t opcode;
     switch (op) {
@@ -766,6 +771,7 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
     AsmResult out = {.backlink = 0};
     return out;
 }
+#pragma GCC diagnostic pop
 
 
 void asm_init() {
