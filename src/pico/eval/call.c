@@ -41,6 +41,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
     case TLDef:
         // copy into module
         switch (top.def.value->ptype->sort) {
+        case TAll:
         case TProc:
             res.type = ERSucc;
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);

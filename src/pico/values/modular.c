@@ -83,7 +83,7 @@ Module* mk_module(Allocator* a) {
 void delete_module(Module* module) {
     for (size_t i = 0; i < module->entries.len; i++) {
         ModuleEntryInternal entry = module->entries.data[i].val;
-        if (entry.type.sort == TProc) {
+        if (entry.type.sort == TProc || entry.type.sort == TAll) {
             mem_free(entry.value, &module->executable_allocator);
         } else if (entry.type.sort == TKind) {
             delete_pi_type_p(entry.value, module->allocator);

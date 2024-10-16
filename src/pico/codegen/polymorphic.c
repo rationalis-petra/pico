@@ -1,11 +1,15 @@
-#include "platform/signals.h"
+#include <string.h>
 
-#include "pico/codegen/internal.h"
+#include "platform/signals.h"
+#include "platform/calling_convention.h"
+
 #include "pico/codegen/polymorphic.h"
+#include "pico/codegen/internal.h"
 #include "pico/binding/address_env.h"
 
 // Implementation details
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
+void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
     if (syn.type == SProcedure) {
@@ -13,16 +17,14 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
             push_u64(syn.procedure.args.data[i].key, &vars);
         }
-
         address_start_poly(types, vars, env, a);
-        generate_polymorphic_i(*syn.all.body, env, ass, links, a, point);
+        generate_polymorphic_i(*syn.procedure.body, env, ass, links, a, point);
         address_end_poly(env, a);
     } else {
         SymbolArray no_vars = mk_u64_array(0, a);
         address_start_poly(types, no_vars, env, a);
-        generate_polymorphic_i(*syn.all.body, env, ass, links, a, point);
+        generate_polymorphic_i(syn, env, ass, links, a, point);
         address_end_poly(env, a);
-        
     }
 }
 
@@ -52,7 +54,44 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
             build_unary_op(ass, Push, rref(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
-            throw_error(point, mv_string("Internal Error: Tried to generate monomorphic code for local indirect variable access."));
+            // First, we need the size of the variable & allocate space for it
+            // on the stack
+            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_binary_op(ass, Sub, reg(RBP), reg(RAX), a, point);
+
+#if defined(ABI_SYSTEM_V_64)
+            // memcpy (dest = rdi, src = rsi, size = rdx)
+            // copy size into RDX
+            build_binary_op(ass, Mov, reg(RDX), reg(RAX), a, point);
+
+            // copy src address into RSI
+            build_binary_op(ass, Mov, reg(RBX), rref(RBP, e.stack_offset), a, point);
+            build_binary_op(ass, Mov, reg(RBX), reg(RBP), a, point);
+            build_binary_op(ass, Mov, reg(RSI), rref(RBX, 0), a, point);
+
+            // copy dest address into RDI
+            build_binary_op(ass, Mov, reg(RDI), reg(RBP), a, point);
+
+#elif defined(ABI_WIN_64)
+            // memcpy (dest = rcx, src = rdx, size = r8)
+            // copy size into R8
+            build_binary_op(ass, Mov, reg(R8), reg(RAX), a, point);
+
+            // copy src address into RDX
+            build_binary_op(ass, Mov, reg(RBX), rref(RBP, e.stack_offset), a, point);
+            build_binary_op(ass, Mov, reg(RBX), reg(RBP), a, point);
+            build_binary_op(ass, Mov, reg(RDX), rref(RBX, 0), a, point);
+
+            // copy dest address into RCX
+            build_binary_op(ass, Mov, reg(RCX), reg(RBP), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+            // copy memcpy into RCX & call
+            build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)&memcpy), a, point);
+            build_unary_op(ass, Call, reg(RCX), a, point);
+
             break;
         case AGlobal:
             // Use RAX as a temp
@@ -388,6 +427,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
         address_stack_grow(env, out_size);
         break;
         */
+        
     }
     case SLet: {
         throw_error(point, mv_string("Not implemented: let in forall."));
@@ -460,7 +500,38 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
         break;
     }
     default: {
-        throw_error(point, mv_string("Unrecognized abstract term in polymorphic codegen."));
+        panic(mv_string("Invalid abstract term in polymorphic codegen."));
     }
+    }
+}
+
+void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    switch (type->sort) {
+    case TVar: {
+        AddressEntry e = address_env_lookup(type->var, env);
+        switch (e.type) {
+        case ALocalDirect:
+            build_binary_op(ass, Mov, reg(dest), rref(RBP, e.stack_offset), a, point);
+            break;
+        case ALocalIndirect:
+            panic(mv_string("cannot generate code for local direct."));
+            break;
+        break;
+        case AGlobal:
+            panic(mv_string("Unexpected type variable sort: Global."));
+            break;
+        case ANotFound: {
+            panic(mv_string("Type Variable not found during codegen."));
+            break;
+        }
+        case ATooManyLocals: {
+            throw_error(point, mk_string("Too Many Local variables!", a));
+            break;
+        }
+        }
+        break;
+    }
+    default:
+        panic(mv_string("Unrecognized type to generate_size_of."));
     }
 }
