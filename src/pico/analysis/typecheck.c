@@ -102,15 +102,17 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* ge
 // "internal" type inference. Destructively mutates types
 void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
     switch (untyped->type) {
-    case SLitI64:
-        untyped->ptype = mem_alloc(sizeof(PiType),a);
-        untyped->ptype->sort = TPrim; 
-        untyped->ptype->prim = Int_64;
+    case SLitUntypedIntegral:
+        panic(mv_string("Cannot currently handle untyped integral in type inference!"));
+        break;
+    case SLitTypedIntegral:
+        
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = (PiType) {.sort = TPrim, .prim = untyped->integral.type,};
         break;
     case SLitBool:
-        untyped->ptype = mem_alloc(sizeof(PiType),a);
-        untyped->ptype->sort = TPrim; 
-        untyped->ptype->prim = Bool;
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
@@ -406,7 +408,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
 void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     switch (typed->type) {
-    case SLitI64:
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
     case SLitBool:
     case SVariable:
         break;

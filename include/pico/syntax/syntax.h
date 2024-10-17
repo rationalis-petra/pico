@@ -25,7 +25,9 @@
 
 typedef enum {
     // Atoms
-    SLitI64,
+    SLitUntypedIntegral,
+    SLitTypedIntegral,
+    SLitString,
     SLitBool,
     SVariable,
 
@@ -61,6 +63,11 @@ typedef struct Syntax Syntax;
 typedef PtrArray SynArray;
 typedef PtrArray ClauseArray;
 typedef SymPtrAMap SymSynAMap;
+
+typedef struct {
+    int64_t value;
+    PrimType type;
+} SynIntegralLiteral;
 
 typedef struct {
     SymPtrAssoc args;
@@ -153,7 +160,8 @@ typedef struct {
 struct Syntax {
     Syntax_t type;
     union {
-        int64_t lit_i64;
+        SynIntegralLiteral integral;
+        bool boolean;
         Symbol variable;
 
         SynProcedure procedure;

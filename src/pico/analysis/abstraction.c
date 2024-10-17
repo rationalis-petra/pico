@@ -176,10 +176,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             Symbol lit = msym->atom.symbol;
 
             if (lit == string_to_symbol(mv_string("true"))) {
-                *res = (Syntax) {.type = SLitBool, .lit_i64 = true,};
+                *res = (Syntax) {.type = SLitBool, .boolean = true,};
             }
             else if (lit == string_to_symbol(mv_string("false"))) {
-                *res = (Syntax) {.type = SLitBool, .lit_i64 = false,};
+                *res = (Syntax) {.type = SLitBool, .boolean = false,};
             }
 
             throw_error(point, mv_string("Variant term former needs two arguments!"));
@@ -472,16 +472,16 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                 .variable = raw.atom.symbol,
             };
         }
-        else if (raw.atom.type == AI64) {
+        else if (raw.atom.type == AIntegral) {
             *res = (Syntax) {
-                .type = SLitI64,
-                .lit_i64 = raw.atom.int_64,
+                .type = SLitUntypedIntegral,
+                .integral.value = raw.atom.int_64,
             };
         }
         else if (raw.atom.type == ABool) {
             *res = (Syntax) {
                 .type = SLitBool,
-                .lit_i64 = raw.atom.int_64,
+                .boolean = (bool) raw.atom.int_64,
             };
         } else  {
             throw_error(point, mk_string("Currently, can only make literal values out of type i64." , a));

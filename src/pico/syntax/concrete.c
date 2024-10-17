@@ -46,7 +46,7 @@ void delete_rawtree(RawTree tree, Allocator* a) {
 Document* pretty_atom(Atom atom, Allocator* a) {
     Document* out = NULL;
     switch (atom.type) {
-    case AI64: {
+    case AIntegral: {
         out = pretty_i64(atom.int_64, a);
         break;
     }

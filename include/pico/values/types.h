@@ -16,8 +16,16 @@ typedef enum {
     Unit,
     Bool,
     Address,
-    Int_64,
     TFormer,
+
+    Int_64,
+    Int_32,
+    Int_16,
+    Int_8,
+    /* UInt_64, */
+    /* UInt_32, */
+    /* UInt_16, */
+    /* UInt_8, */
 } PrimType;
 
 typedef enum {
