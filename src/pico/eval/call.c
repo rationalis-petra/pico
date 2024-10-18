@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h> // for memcpy
 
-#include "platform/calling_convention.h"
+#include "platform/machine_info.h"
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 
@@ -76,7 +76,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     // Generate Code which will: 
     //  1. Copy the final value (on stack) into value
     //  2. Return to C
-#if defined(ABI_SYSTEM_V_64)
+#if ABI==SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a, point);
@@ -89,7 +89,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     build_binary_op(ass, Add, reg(RSP), imm32(rsize), a, point);
     build_nullary_op(ass, Ret, a, point);
 
-#elif defined(ABI_WIN_64)
+#elif ABI==WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
     build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a, point);

@@ -140,7 +140,8 @@ void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     SAddr padding;
     padding.type = SASentinel;
     padding.symbol = 0;
-    stack_offset += REGISTER_SIZE;
+    stack_offset += ADDRESS_SIZE; // We add the register size to account for the
+                                  // return address.
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
@@ -174,11 +175,11 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
     new_local->vars = mk_saddr_array(32, a);
     new_local->type = LMonomorphic;
     size_t stack_offset = 0;
-
+    stack_offset += ADDRESS_SIZE; // We add the register size to account for the
+                                  // old RBP.
     SAddr padding;
     padding.type = SASentinel;
     padding.symbol = 0;
-    stack_offset += REGISTER_SIZE;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
