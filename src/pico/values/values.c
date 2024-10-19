@@ -70,6 +70,10 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDefine:
         out = mk_str_doc(mv_string("::define"), a);
         break;
+    case FDeclare:
+        out = mk_str_doc(mv_string("::declare"), a);
+        break;
+
     case FApplication:
         out = mk_str_doc(mv_string("::application"), a);
         break;
@@ -96,6 +100,10 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
+        break;
+
+    case FIs:
+        out = mk_str_doc(mv_string("::is"), a);
         break;
 
         // Type formers

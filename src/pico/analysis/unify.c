@@ -17,10 +17,12 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
     if (lhs->sort == TUVarDefaulted) {
+        // TODO: ensure value being unified with is integral!
         lhs->uvar->subst = rhs;
         out.type = Ok;
     }
     else if (rhs->sort == TUVarDefaulted) {
+        // TODO: ensure value being unified with is integral!
         rhs->uvar->subst = lhs;
         out.type = Ok;
     }
@@ -35,8 +37,10 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     else if (rhs->sort == lhs->sort)
         out = unify_eq(lhs, rhs, a);
     else {
-        out.type = Err;
-        out.error_message = mk_string("Unification failed: given two types of differen sort", a);
+        out = (Result) {
+            .type = Err,
+            .error_message = mv_string("Unification failed: given two types of differen sort"),
+        };
     }
     return out;
 }

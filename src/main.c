@@ -102,6 +102,18 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("I64"));
     add_def(module, sym, type, &type_data);
 
+    type_val = mk_prim_type(Int_32);
+    sym = string_to_symbol(mv_string("I32"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(Int_16);
+    sym = string_to_symbol(mv_string("I16"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(Int_8);
+    sym = string_to_symbol(mv_string("I8"));
+    add_def(module, sym, type, &type_data);
+
     build_binary_fun(ass, Add, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Int_64);
     sym = string_to_symbol(mv_string("+"));
@@ -134,6 +146,14 @@ Module* base_module(Assembler* ass, Allocator* a) {
     TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
+
+    former = FDefine;
+    sym = string_to_symbol(mv_string("def"));
+    add_def(module, sym, type, &former);
+
+    former = FDefine;
+    sym = string_to_symbol(mv_string("declare"));
+    add_def(module, sym, type, &former);
 
     former = FProcedure;
     sym = string_to_symbol(mv_string("proc"));
@@ -171,8 +191,8 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("let"));
     add_def(module, sym, type, &former);
 
-    former = FDefine;
-    sym = string_to_symbol(mv_string("def"));
+    former = FIs;
+    sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
     // Types 

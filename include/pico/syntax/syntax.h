@@ -45,6 +45,9 @@ typedef enum {
     SLet,
     SIf,
 
+    // Special
+    SIs,
+
     // Types & Type formers
     SProcType,
     SStructType,
@@ -132,6 +135,12 @@ typedef struct {
     Syntax* false_branch;
 } SynIf;
 
+// Special
+typedef struct {
+    Syntax* val;
+    Syntax* type;
+} SynIs;
+
 // Types
 typedef struct {
     SymSynAMap bindings;
@@ -150,11 +159,6 @@ typedef struct {
 typedef struct {
     SymPtrAMap variants;
 } SynEnumType;
-
-typedef struct {
-    Syntax* val;
-    Syntax* type;
-} SynAnnotation;
 
 
 struct Syntax {
@@ -176,13 +180,14 @@ struct Syntax {
         SynLet let_expr;
         SynIf if_expr;
 
+        SynIs is;
+
         SynProcType proc_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynBind bind_type;
         PiType* type_val;
 
-        SynAnnotation annotation;
     };
     PiType* ptype;
 };

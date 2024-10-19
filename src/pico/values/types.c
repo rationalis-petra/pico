@@ -178,9 +178,28 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             out =  pretty_i64(*uival, a);
             break;
         }
+        case Int_32: {
+            int32_t* uival = (int32_t*) val;
+            out =  pretty_i32(*uival, a);
+            break;
+        }
+        case Int_16: {
+            int16_t* uival = (int16_t*) val;
+            out =  pretty_i16(*uival, a);
+            break;
+        }
+        case Int_8: {
+            int8_t* uival = (int8_t*) val;
+            out =  pretty_i8(*uival, a);
+            break;
+        }
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
+            break;
+        }
+        default: {
+            out = mk_str_doc(mv_string("Error printing Pico Value: unrecognized primitive"), a);
             break;
         }
         }

@@ -101,6 +101,21 @@ test: $(TEST_DIR)/$(TARGET_TEST)
 install: $(RELEASE_DIR)/$(TARGET_EXEC)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) ~/.local/bin
 
+.PHONY: run
+run: run-debug
+
+.PHONY: run-release
+run-release: $(RELEASE_DIR)/$(TARGET_EXEC)
+	$(RELEASE_DIR)/$(TARGET_EXEC)
+
+.PHONY: run-debug
+run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
+	$(DEBUG_DIR)/$(TARGET_EXEC)
+
+.PHONY: run-test
+test: $(TEST_DIR)/$(TARGET_TEST)
+	$(TEST_DIR)/$(TARGET_TEST)
+
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.

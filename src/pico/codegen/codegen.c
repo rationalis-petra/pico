@@ -441,6 +441,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
     case SLet:
         throw_error(point, mk_string("No assembler implemented for Let", a));
         break;
+    case SIs:
+        generate(*syn.is.val, env, ass, links, a, point);
+        break;
     case SIf: {
         // generate the condition
         generate(*syn.if_expr.condition, env, ass, links, a, point);
@@ -583,6 +586,8 @@ size_t calc_max_vars(Syntax syn) {
         max = max < sz ? sz : max;
         return max;
     }
+    case SIs:
+        return calc_max_vars(*syn.is.val);
 
     // Types are evaluated at typechecking time, therefore no runtime binds.
     case SProcType:
@@ -593,8 +598,6 @@ size_t calc_max_vars(Syntax syn) {
     case STypeFamily:
     case SCheckedType:
         return 0;
-    case SAnnotation:
-        return calc_max_vars(*syn.annotation.val);
     default: 
         return -1;
     }

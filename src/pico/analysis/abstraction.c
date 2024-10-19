@@ -336,7 +336,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
     }
     case FIf: {
         if (raw.nodes.len != 4) {
-            throw_error(point, mk_string("If term former expects precisely 3 arguments!", a));
+            throw_error(point, mv_string("Term former 'if' expects precisely 3 arguments!"));
         }
         SynArray terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
@@ -351,7 +351,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
         };
-        sdelete_ptr_array(terms);
+        break;
+    }
+    case FIs: {
+        if (raw.nodes.len != 3) {
+            throw_error(point, mv_string("Term former 'is' expects precisely 2 arguments!"));
+        }
+
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SIs,
+            .is = {.val = term, .type = type},
+        };
         break;
     }
     case FLet: {
@@ -609,13 +622,11 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
 Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
     ShadowEnv* s_env = mk_shadow_env(a, env);
     Syntax* out = abstract_expr_i(raw, s_env, a, point);
-    delete_shadow_env(s_env, a);
     return out; 
 }
 
 TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
     ShadowEnv* s_env = mk_shadow_env(a, env);
     TopLevel out = abstract_i(raw, s_env, a, point);
-    delete_shadow_env(s_env, a);
     return out;
 }

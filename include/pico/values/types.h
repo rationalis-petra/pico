@@ -22,6 +22,7 @@ typedef enum {
     Int_32,
     Int_16,
     Int_8,
+
     /* UInt_64, */
     /* UInt_32, */
     /* UInt_16, */
