@@ -99,14 +99,14 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* ge
         throw_error(point, out.error_message);
 }
 
-// "internal" type inference. Destructively mutates types
+// "internal" type inference. Destructively mutates types.
 void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
     switch (untyped->type) {
     case SLitUntypedIntegral:
-        panic(mv_string("Cannot currently handle untyped integral in type inference!"));
+        untyped->type = SLitTypedIntegral;
+        untyped->ptype = mk_uvar_with_default(gen, a);
         break;
     case SLitTypedIntegral:
-        
         untyped->ptype = mem_alloc(sizeof(PiType), a);
         *untyped->ptype = (PiType) {.sort = TPrim, .prim = untyped->integral.type,};
         break;
@@ -143,7 +143,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 eval_type(arg.val, env, a, point);
                 aty = ((Syntax*)arg.val)->type_val;
             } else  {
-                aty= mk_uvar(gen, a);
+                aty = mk_uvar(gen, a);
             }
             type_var(arg.key, aty, env);
             push_ptr(aty, &proc_ty->proc.args);

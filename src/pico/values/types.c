@@ -467,10 +467,20 @@ PiType mk_prim_type(PrimType t) {
 
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVar;
-    uvar->uvar = mem_alloc(sizeof(UVarType), a) ;
-    uvar->uvar->subst = NULL;
-    uvar->uvar->id = gen->counter++;
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
+    
+    return uvar;
+}
+
+PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVarDefaulted; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
     
     return uvar;
 }

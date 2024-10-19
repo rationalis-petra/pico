@@ -16,7 +16,15 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
 
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
-    if (lhs->sort == TUVar) {
+    if (lhs->sort == TUVarDefaulted) {
+        lhs->uvar->subst = rhs;
+        out.type = Ok;
+    }
+    else if (rhs->sort == TUVarDefaulted) {
+        rhs->uvar->subst = lhs;
+        out.type = Ok;
+    }
+    else if (lhs->sort == TUVar) {
         lhs->uvar->subst = rhs;
         out.type = Ok;
     }
@@ -68,7 +76,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
 }
 
 bool has_unification_vars_p(PiType type) {
-    // only return t if uvars don't go anywhere
+    // Only return t if uvars don't go anywhere
     switch (type.sort) {
     case TPrim:
         return false;
@@ -100,15 +108,13 @@ bool has_unification_vars_p(PiType type) {
         break;
     }
 
-    case TVar: {
-        return false;
-    }
+    case TVar: return false;
+    
     case TAll: {
         return has_unification_vars_p(*type.binder.body);
     }
 
-    case TKind:
-        return false;
+    case TKind: return false;
 
     // Special sort: unification variable
     case TUVar:
@@ -117,13 +123,16 @@ bool has_unification_vars_p(PiType type) {
         } else {
             return has_unification_vars_p(*type.uvar->subst);
         }
+
+    case TUVarDefaulted: return false;
+
     default:
         panic(mv_string("Invalid type given to has_unification_vars_p"));
     }
 }
 
 PiType* trace_uvar(PiType* uvar) {
-    while (uvar->sort == TUVar && uvar->uvar->subst != NULL) {
+    while ((uvar->sort == TUVar || uvar->sort == TUVarDefaulted) && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
     return uvar;
@@ -169,6 +178,16 @@ void squash_type(PiType* type) {
             squash_type(subst);
             *type = *subst;
         } 
+        break;
+    }
+    case TUVarDefaulted: {
+        PiType* subst = type->uvar->subst;
+        if (subst) {
+            squash_type(subst);
+            *type = *subst;
+        } else {
+            *type = (PiType) {.sort = TPrim, .prim = Int_64,};
+        }
         break;
     }
     default: 
