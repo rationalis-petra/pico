@@ -1,7 +1,8 @@
 #include <string.h>
 
 #include "platform/signals.h"
-#include "platform/calling_convention.h"
+#include "platform/machine_info.h"
+#include "platform/machine_info.h"
 
 #include "pico/codegen/polymorphic.h"
 #include "pico/codegen/internal.h"
@@ -10,22 +11,68 @@
 // Implementation details
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
+    SymbolArray vars;
+    Syntax body;
     if (syn.type == SProcedure) {
-        SymbolArray vars = mk_u64_array(syn.procedure.args.len, a);
+        vars = mk_u64_array(syn.procedure.args.len, a);
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
             push_u64(syn.procedure.args.data[i].key, &vars);
         }
-        address_start_poly(types, vars, env, a);
-        generate_polymorphic_i(*syn.procedure.body, env, ass, links, a, point);
-        address_end_poly(env, a);
+        body = *syn.procedure.body;
     } else {
-        SymbolArray no_vars = mk_u64_array(0, a);
-        address_start_poly(types, no_vars, env, a);
-        generate_polymorphic_i(syn, env, ass, links, a, point);
-        address_end_poly(env, a);
+        vars = mk_u64_array(0, a);
+        body = syn;
     }
+
+    // Polymorphic ABI
+    // RBP+ -> types
+    // RBP+ -> arg-ptrs
+    // RBP  -> old RBP
+    // RBP- -> args
+    // RSP → Return address
+
+    // Prelude: 
+    build_unary_op(ass, Push, reg(RBP), a, point);
+    build_binary_op(ass, Mov, reg(RBP), reg(RSP), a, point);
+
+    address_start_poly(types, vars, env, a);
+
+    generate_polymorphic_i(body, env, ass, links, a, point);
+
+    // Codegen function postlude:
+    // Stack now looks like:
+    // 
+    // types + argument offfsets (to discard)
+    // RBP
+    // arguments (to discard)
+    // Return address
+    // output value 
+    // RSP
+    // Actions:
+    // 1. Push Old RBP 
+    // 2. move output value to start of types
+    // 3. Pop Old RBP
+    // 4. move return address to end of value
+    // 5. move RSP to point at return address
+    // 6. return
+
+    // 1.
+    build_unary_op(ass, Push, rref(RBP, 0), a, point); 
+
+    // 2.
+    build_binary_op(ass, Sub, reg(RSP), imm8(ADDRESS_SIZE), a, point);
+    generate_size_of(RAX, body.ptype, env, ass, a, point);
+    generate_poly_stack_move(reg(RSP), reg(RBX), reg(RAX), ass, a, point);
+
+    // 3. 
+    size_t offset = ADDRESS_SIZE + 8*types.len + 8*vars.len;
+
+    build_unary_op(ass, Push, rref(RBP, 0), a, point); 
+
+    address_end_poly(env, a);
 }
 
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
@@ -56,44 +103,18 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
             build_unary_op(ass, Push, rref(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
-            // First, we need the size of the variable & allocate space for it
-            // on the stack
+            // First, we need the size of the variable & allocate space for it on the stack
             generate_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_binary_op(ass, Sub, reg(RBP), reg(RAX), a, point);
+            build_binary_op(ass, Sub, reg(RSP), reg(RAX), a, point);
 
-#if defined(ABI_SYSTEM_V_64)
-            // memcpy (dest = rdi, src = rsi, size = rdx)
-            // copy size into RDX
-            build_binary_op(ass, Mov, reg(RDX), reg(RAX), a, point);
-
-            // copy src address into RSI
+            // Then, find the location of the variable on the stack 
+            // RBP + stack offset = addr1
+            // *(addr1 + RBP) = dest (stored here in RBX)
             build_binary_op(ass, Mov, reg(RBX), rref(RBP, e.stack_offset), a, point);
-            build_binary_op(ass, Mov, reg(RBX), reg(RBP), a, point);
-            build_binary_op(ass, Mov, reg(RSI), rref(RBX, 0), a, point);
+            build_binary_op(ass, Add, reg(RBX), reg(RBP), a, point);
+            build_binary_op(ass, Mov, reg(RBX), rref(RBX, 0), a, point);
 
-            // copy dest address into RDI
-            build_binary_op(ass, Mov, reg(RDI), reg(RBP), a, point);
-
-#elif defined(ABI_WIN_64)
-            // memcpy (dest = rcx, src = rdx, size = r8)
-            // copy size into R8
-            build_binary_op(ass, Mov, reg(R8), reg(RAX), a, point);
-
-            // copy src address into RDX
-            build_binary_op(ass, Mov, reg(RBX), rref(RBP, e.stack_offset), a, point);
-            build_binary_op(ass, Mov, reg(RBX), reg(RBP), a, point);
-            build_binary_op(ass, Mov, reg(RDX), rref(RBX, 0), a, point);
-
-            // copy dest address into RCX
-            build_binary_op(ass, Mov, reg(RCX), reg(RBP), a, point);
-#else
-#error "Unknown calling convention"
-#endif
-
-            // copy memcpy into RCX & call
-            build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)&memcpy), a, point);
-            build_unary_op(ass, Call, reg(RCX), a, point);
-
+            generate_poly_stack_move(reg(RSP), reg(RBX), reg(RAX), ass, a, point);
             break;
         case AGlobal:
             // Use RAX as a temp
@@ -536,4 +557,27 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
     default:
         panic(mv_string("Unrecognized type to generate_size_of."));
     }
+}
+
+void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+
+#if ABI==SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_binary_op(ass, Mov, reg(RDI), dest, a, point);
+    build_binary_op(ass, Mov, reg(RSI), src, a, point);
+    build_binary_op(ass, Mov, reg(RDX), size, a, point);
+
+#elif ABI==WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
+    build_binary_op(ass, Mov, reg(RDX), src, a, point);
+    build_binary_op(ass, Mov, reg(R8), size, a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    // copy memcpy into RCX & call
+    build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RCX), a, point);
 }

@@ -1,5 +1,4 @@
 #include "platform/signals.h"
-#include "platform/calling_convention.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
@@ -166,7 +165,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         // + push value (RAX)
         // + push return address (RCX)
         // + return ()
-        // TODO: ensure functions work in the context of a composite (large) value  
+        // TODO (BUG UB): ensure functions work in the context of a composite (large) value  
 
         // storage of function output 
         build_unary_op(ass, Pop, reg(RAX), a, point);
