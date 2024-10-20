@@ -13,11 +13,20 @@ typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
 typedef enum {
-    Unit,
-    Bool,
-    Address,
-    Int_64,
-    TFormer,
+    Unit = 0b0000,
+    Bool = 0b0001,
+    Address = 0b0010,
+    TFormer = 0b0011,
+
+    Int_8  = 0b0100,
+    Int_16 = 0b0101,
+    Int_32 = 0b0110,
+    Int_64 = 0b0111,
+
+    /* UInt_64, */
+    /* UInt_32, */
+    /* UInt_16, */
+    /* UInt_8, */
 } PrimType;
 
 typedef enum {
@@ -39,7 +48,8 @@ typedef enum {
     TKind,
 
     // Used only during unification
-    TUVar
+    TUVar,
+    TUVarDefaulted,
 } PiType_t;
 
 typedef struct {
@@ -112,6 +122,7 @@ size_t runtime_size_of(PiType* t, void* data);
 PiType mk_prim_type(PrimType t);
 
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
+PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 

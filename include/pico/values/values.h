@@ -23,8 +23,11 @@ void delete_symbol(Symbol s);
 Symbol copy_symbol(Symbol s, Allocator* a);
 
 typedef enum TermFormer {
-    // Term Formers
+    // Top Level Former
     FDefine,
+    FDeclare,
+
+    // Term Formers
     FProcedure,
     FAll,
     FApplication,
@@ -34,6 +37,9 @@ typedef enum TermFormer {
     FProjector,
     FIf,
     FLet,
+
+    // Special Term former
+    FIs,
 
     // Type formers
     FProcType,

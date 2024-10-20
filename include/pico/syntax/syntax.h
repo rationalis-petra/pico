@@ -25,7 +25,9 @@
 
 typedef enum {
     // Atoms
-    SLitI64,
+    SLitUntypedIntegral,
+    SLitTypedIntegral,
+    SLitString,
     SLitBool,
     SVariable,
 
@@ -42,6 +44,9 @@ typedef enum {
     // Helpers/convenience
     SLet,
     SIf,
+
+    // Special
+    SIs,
 
     // Types & Type formers
     SProcType,
@@ -61,6 +66,11 @@ typedef struct Syntax Syntax;
 typedef PtrArray SynArray;
 typedef PtrArray ClauseArray;
 typedef SymPtrAMap SymSynAMap;
+
+typedef struct {
+    int64_t value;
+    PrimType type;
+} SynIntegralLiteral;
 
 typedef struct {
     SymPtrAssoc args;
@@ -125,6 +135,12 @@ typedef struct {
     Syntax* false_branch;
 } SynIf;
 
+// Special
+typedef struct {
+    Syntax* val;
+    Syntax* type;
+} SynIs;
+
 // Types
 typedef struct {
     SymSynAMap bindings;
@@ -144,16 +160,12 @@ typedef struct {
     SymPtrAMap variants;
 } SynEnumType;
 
-typedef struct {
-    Syntax* val;
-    Syntax* type;
-} SynAnnotation;
-
 
 struct Syntax {
     Syntax_t type;
     union {
-        int64_t lit_i64;
+        SynIntegralLiteral integral;
+        bool boolean;
         Symbol variable;
 
         SynProcedure procedure;
@@ -168,13 +180,14 @@ struct Syntax {
         SynLet let_expr;
         SynIf if_expr;
 
+        SynIs is;
+
         SynProcType proc_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynBind bind_type;
         PiType* type_val;
 
-        SynAnnotation annotation;
     };
     PiType* ptype;
 };

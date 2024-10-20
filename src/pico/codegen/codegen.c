@@ -59,22 +59,21 @@ GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allo
 
 void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
     switch (syn.type) {
-    case SLitI64: {
+    case SLitUntypedIntegral: 
+        panic(mv_string("Cannot generate monomorphic code for untyped integral!"));
+    case SLitTypedIntegral: {
         // Does it fit into 32 bits?
-        if (syn.lit_i64 < 0x80000000) {
-            int32_t immediate = syn.lit_i64;
-            build_unary_op(ass, Push, imm32(immediate), a, point);
-        } else {
-            throw_error(point, mk_string("literals must fit into less than 64 bits", a));
-        }
+        if (syn.integral.value >= 0x80000000) 
+            throw_error(point, mk_string("Codegen: Literals must fit into less than 64 bits", a));
+
+        int32_t immediate = (int32_t)syn.integral.value;
+        build_unary_op(ass, Push, imm32(immediate), a, point);
         address_stack_grow(env, pi_size_of(*syn.ptype));
-        // push literal onto stack
         break;
     }
     case SLitBool: {
-        // TODO: squash to smallest size (8 bits)
-        int32_t immediate = syn.lit_i64;
-        build_unary_op(ass, Push, imm32(immediate), a, point);
+        int8_t immediate = syn.boolean;
+        build_unary_op(ass, Push, imm8(immediate), a, point);
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
@@ -163,7 +162,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         // + push value (RAX)
         // + push return address (RCX)
         // + return ()
-        // TODO (BUG UB): ensure functions work in the context of a composite (large) value  
+        // TODO (TAGS: BUG UB): ensure functions work in the context of a composite (large) value  
 
         // storage of function output 
         build_unary_op(ass, Pop, reg(RAX), a, point);
@@ -439,6 +438,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
     case SLet:
         throw_error(point, mk_string("No assembler implemented for Let", a));
         break;
+    case SIs:
+        generate(*syn.is.val, env, ass, links, a, point);
+        break;
     case SIf: {
         // generate the condition
         generate(*syn.if_expr.condition, env, ass, links, a, point);
@@ -525,7 +527,8 @@ size_t calc_variant_size(PtrArray* types) {
 
 size_t calc_max_vars(Syntax syn) {
     switch (syn.type) {
-    case SLitI64:
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
     case SLitBool:
     case SVariable:
         return 0;
@@ -580,6 +583,8 @@ size_t calc_max_vars(Syntax syn) {
         max = max < sz ? sz : max;
         return max;
     }
+    case SIs:
+        return calc_max_vars(*syn.is.val);
 
     // Types are evaluated at typechecking time, therefore no runtime binds.
     case SProcType:
@@ -590,8 +595,6 @@ size_t calc_max_vars(Syntax syn) {
     case STypeFamily:
     case SCheckedType:
         return 0;
-    case SAnnotation:
-        return calc_max_vars(*syn.annotation.val);
     default: 
         return -1;
     }

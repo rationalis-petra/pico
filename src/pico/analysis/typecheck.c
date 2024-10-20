@@ -58,7 +58,6 @@ void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocato
 }
 
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
-    // TODO copy type, use in type_check_i
     type_check_i (untyped, &type, env, gen, a, point);
     squash_types(untyped, a, point);
 }
@@ -99,18 +98,20 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* ge
         throw_error(point, out.error_message);
 }
 
-// "internal" type inference. Destructively mutates types
+// "internal" type inference. Destructively mutates types.
 void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
     switch (untyped->type) {
-    case SLitI64:
-        untyped->ptype = mem_alloc(sizeof(PiType),a);
-        untyped->ptype->sort = TPrim; 
-        untyped->ptype->prim = Int_64;
+    case SLitUntypedIntegral:
+        untyped->type = SLitTypedIntegral;
+        untyped->ptype = mk_uvar_with_default(gen, a);
+        break;
+    case SLitTypedIntegral:
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = (PiType) {.sort = TPrim, .prim = untyped->integral.type,};
         break;
     case SLitBool:
-        untyped->ptype = mem_alloc(sizeof(PiType),a);
-        untyped->ptype->sort = TPrim; 
-        untyped->ptype->prim = Bool;
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
@@ -141,7 +142,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 eval_type(arg.val, env, a, point);
                 aty = ((Syntax*)arg.val)->type_val;
             } else  {
-                aty= mk_uvar(gen, a);
+                aty = mk_uvar(gen, a);
             }
             type_var(arg.key, aty, env);
             push_ptr(aty, &proc_ty->proc.args);
@@ -376,7 +377,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SLet:
-        throw_error(point, mv_string("Type inference not implemented for this syntactic form"));
+        throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'let'"));
+        break;
+    case SIs:
+        eval_type(untyped->is.type, env, a, point);
+        type_check_i(untyped->is.val,
+                     untyped->is.type->type_val,
+                     env, gen, a, point);
+        untyped->ptype = untyped->is.type->type_val; 
         break;
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
@@ -406,7 +414,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
 void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     switch (typed->type) {
-    case SLitI64:
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
     case SLitBool:
     case SVariable:
         break;
@@ -416,7 +425,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     }
     case SAll: {
-        // TODO: need to squash args when HKTs are allowed 
+        // TODO (TAGS: FUTURE BUG): need to squash args when HKTs are allowed 
         squash_types(typed->all.body, a, point);
         break;
     }
@@ -461,15 +470,19 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->projector.val, a, point);
         break;
         
-    case SLet:
-        throw_error(point, mk_string("squash_types not implemented for let", a));
-        break;
     case SIf: {
         squash_types(typed->if_expr.condition, a, point);
         squash_types(typed->if_expr.true_branch, a, point);
         squash_types(typed->if_expr.false_branch, a, point);
         break;
     }
+    case SLet:
+        throw_error(point, mk_string("squash_types not implemented for let", a));
+        break;
+    case SIs:
+        squash_type(typed->is.type->type_val);
+        squash_types(typed->is.val, a, point);
+        break;
     case SCheckedType:
         squash_type(typed->type_val);
         break;
