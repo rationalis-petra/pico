@@ -58,7 +58,6 @@ void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocato
 }
 
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
-    // TODO copy type, use in type_check_i
     type_check_i (untyped, &type, env, gen, a, point);
     squash_types(untyped, a, point);
 }
@@ -426,7 +425,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     }
     case SAll: {
-        // TODO: need to squash args when HKTs are allowed 
+        // TODO (TAGS: FUTURE BUG): need to squash args when HKTs are allowed 
         squash_types(typed->all.body, a, point);
         break;
     }

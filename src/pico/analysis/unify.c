@@ -3,6 +3,7 @@
 
 PiType* trace_uvar(PiType* uvar);
 Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a);
+Result assert_maybe_integral(PiType* type);
 
 Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // Unification Implementation:
@@ -17,14 +18,12 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
     if (lhs->sort == TUVarDefaulted) {
-        // TODO: ensure value being unified with is integral!
-        lhs->uvar->subst = rhs;
-        out.type = Ok;
+        out = assert_maybe_integral(rhs);
+        if (out.type == Ok) lhs->uvar->subst = rhs;
     }
     else if (rhs->sort == TUVarDefaulted) {
-        // TODO: ensure value being unified with is integral!
-        rhs->uvar->subst = lhs;
-        out.type = Ok;
+        out = assert_maybe_integral(lhs);
+        if (out.type == Ok) rhs->uvar->subst = lhs;
     }
     else if (lhs->sort == TUVar) {
         lhs->uvar->subst = rhs;
@@ -78,6 +77,26 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         return out;
     }
 }
+
+Result assert_maybe_integral(PiType* type) {
+    // Use a while loop to trace through uvars
+    while (type) {
+        // If it is a primtive, check it is integral type
+        if (type->sort == TPrim && (type->prim & 0b0100)) {
+            return (Result) {.type = Ok};
+        } else if (type->sort == TUVar || type->sort == TUVarDefaulted) {
+            // continue on to next iteration
+            type = type->uvar->subst;
+        } else {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
+            };
+        }
+    }
+    return (Result) {.type = Ok};
+}
+
 
 bool has_unification_vars_p(PiType type) {
     // Only return t if uvars don't go anywhere

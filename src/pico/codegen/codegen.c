@@ -63,18 +63,15 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         panic(mv_string("Cannot generate monomorphic code for untyped integral!"));
     case SLitTypedIntegral: {
         // Does it fit into 32 bits?
-        if (syn.integral.value < 0x80000000) {
-            int32_t immediate = (int32_t)syn.integral.value;
-            build_unary_op(ass, Push, imm32(immediate), a, point);
-        } else {
+        if (syn.integral.value >= 0x80000000) 
             throw_error(point, mk_string("Codegen: Literals must fit into less than 64 bits", a));
-        }
+
+        int32_t immediate = (int32_t)syn.integral.value;
+        build_unary_op(ass, Push, imm32(immediate), a, point);
         address_stack_grow(env, pi_size_of(*syn.ptype));
-        // push literal onto stack
         break;
     }
     case SLitBool: {
-        // TODO: squash to smallest size (8 bits)
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);
         address_stack_grow(env, pi_size_of(*syn.ptype));
@@ -165,7 +162,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         // + push value (RAX)
         // + push return address (RCX)
         // + return ()
-        // TODO (BUG UB): ensure functions work in the context of a composite (large) value  
+        // TODO (TAGS: BUG UB): ensure functions work in the context of a composite (large) value  
 
         // storage of function output 
         build_unary_op(ass, Pop, reg(RAX), a, point);

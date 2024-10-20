@@ -13,15 +13,15 @@ typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
 typedef enum {
-    Unit,
-    Bool,
-    Address,
-    TFormer,
+    Unit = 0b0000,
+    Bool = 0b0001,
+    Address = 0b0010,
+    TFormer = 0b0011,
 
-    Int_64,
-    Int_32,
-    Int_16,
-    Int_8,
+    Int_8  = 0b0100,
+    Int_16 = 0b0101,
+    Int_32 = 0b0110,
+    Int_64 = 0b0111,
 
     /* UInt_64, */
     /* UInt_32, */

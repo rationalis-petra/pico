@@ -80,7 +80,6 @@ typedef struct exec_context {
     // Blocks
     PtrArray small_blocks;
 
-    // TODO: improve the medium block strategy...
     medium_block* medium_blocks;
     medium_block* medium_blocks_end;
 
@@ -159,6 +158,7 @@ void* exec_alloc(size_t size, void* ctx) {
 }
 
 void* exec_realloc(void* ptr, size_t new_size, void* ctx) {
+    // TODO (FEAT BUG): Implement ME!
     return NULL;
 }
 

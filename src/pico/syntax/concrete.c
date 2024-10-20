@@ -33,7 +33,6 @@ void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a) {
 void delete_rawtree(RawTree tree, Allocator* a) {
     switch (tree.type) {
     case RawAtom:
-        // TODO: correct this when pi values get garbage collection!
         break;
     case RawList:
         for (size_t i = 0; i < tree.nodes.len; i++)

@@ -69,6 +69,12 @@ void delete_pi_type(PiType t, Allocator* a) {
         }
         mem_free(t.uvar, a);
         break;
+    case TUVarDefaulted:
+        if (t.uvar->subst != NULL) {
+            delete_pi_type(*t.uvar->subst, a);
+        }
+        mem_free(t.uvar, a);
+        break;
     case TPrim: break;
 
     case TKind: break;
@@ -124,6 +130,15 @@ PiType copy_pi_type(PiType t, Allocator* a) {
 
 
     case TUVar:
+        out.uvar = mem_alloc(sizeof(UVarType), a);
+        out.uvar->id = t.uvar->id; 
+        if (t.uvar->subst) {
+            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
+        } else {
+            out.uvar->subst = NULL;
+        }
+        break;
+    case TUVarDefaulted:
         out.uvar = mem_alloc(sizeof(UVarType), a);
         out.uvar->id = t.uvar->id; 
         if (t.uvar->subst) {
@@ -333,6 +348,15 @@ Document* pretty_type(PiType* type, Allocator* a) {
         case Int_64: 
             out = mv_str_doc(mk_string("I64", a), a);
             break;
+        case Int_32: 
+            out = mv_str_doc(mk_string("I32", a), a);
+            break;
+        case Int_16: 
+            out = mv_str_doc(mk_string("I16", a), a);
+            break;
+        case Int_8: 
+            out = mv_str_doc(mk_string("I8", a), a);
+            break;
         case TFormer: 
             out = mv_str_doc(mk_string("Former", a), a);
             break;
@@ -438,9 +462,16 @@ size_t pi_size_of(PiType type) {
         switch (type.prim) {
         case Unit:
         case Bool:
+            return sizeof(uint8_t);
         case Address:
         case Int_64:
-            return sizeof(uint64_t);
+            return sizeof(int64_t);
+        case Int_32:
+            return sizeof(int32_t);
+        case Int_16:
+            return sizeof(int16_t);
+        case Int_8:
+            return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer); // sizeof(pi_term_former_t);
         }
@@ -449,8 +480,13 @@ size_t pi_size_of(PiType type) {
         return sizeof(uint64_t);
     case TStruct: {
         size_t total = 0; 
-        for (size_t i = 0; i < type.structure.fields.len; i++)
-            total += pi_size_of(*(PiType*)type.structure.fields.data[i].val);
+        for (size_t i = 0; i < type.structure.fields.len; i++) {
+            // Note: Data is padded to be 8-byte aligned!
+            // TODO (TAGS: FEAT): Make generic on padding size?
+            size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
+            size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
+            total += field_size + padding;
+        }
         return total;
     }
     case TEnum: {
@@ -458,8 +494,13 @@ size_t pi_size_of(PiType type) {
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             size_t total = 0;
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
-            for (size_t i = 0; i < types.len; i++)
-                total += pi_size_of(*(PiType*)types.data[i]);
+            for (size_t i = 0; i < types.len; i++) {
+                // Note: Data is padded to be 8-byte aligned!
+                // TODO (TAGS: FEAT): Make generic on padding size?
+                size_t field_size = pi_size_of(*(PiType*)types.data[i]);
+                size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
+                total += field_size + padding;
+            }
 
             if (total > max) {
                 max = total;
