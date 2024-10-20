@@ -77,10 +77,13 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
 
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
     switch (syn.type) {
-    case SLitI64: {
+    case SLitUntypedIntegral: {
+        panic(mv_string("Cannot generate polymorphic code for untyped integral."));
+    }
+    case SLitTypedIntegral: {
         // Does it fit into 32 bits?
-        if (syn.lit_i64 < 0x80000000 && syn.lit_i64 > -80000001) {
-            int32_t immediate = syn.lit_i64;
+        if (syn.integral.value < 0x80000000 && syn.integral.value > -80000001) {
+            int32_t immediate = syn.integral.value;
             build_unary_op(ass, Push, imm32(immediate), a, point);
         } else {
             throw_error(point, mk_string("Limitation: Literals must fit into less than 64 bits.", a));
@@ -88,9 +91,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArr
         break;
     }
     case SLitBool: {
-        // TODO: squash to smallest size (8 bits)
-        int32_t immediate = syn.lit_i64;
-        build_unary_op(ass, Push, imm32(immediate), a, point);
+        int8_t immediate = (int8_t) syn.boolean;
+        build_unary_op(ass, Push, imm8(immediate), a, point);
         break;
     }
     case SVariable: {

@@ -33,7 +33,6 @@ void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a) {
 void delete_rawtree(RawTree tree, Allocator* a) {
     switch (tree.type) {
     case RawAtom:
-        // TODO: correct this when pi values get garbage collection!
         break;
     case RawList:
         for (size_t i = 0; i < tree.nodes.len; i++)
@@ -46,7 +45,7 @@ void delete_rawtree(RawTree tree, Allocator* a) {
 Document* pretty_atom(Atom atom, Allocator* a) {
     Document* out = NULL;
     switch (atom.type) {
-    case AI64: {
+    case AIntegral: {
         out = pretty_i64(atom.int_64, a);
         break;
     }

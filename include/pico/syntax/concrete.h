@@ -13,7 +13,7 @@
 
 typedef enum {
     ABool,
-    AI64,
+    AIntegral,
     ASymbol,
 } Atom_t;
 

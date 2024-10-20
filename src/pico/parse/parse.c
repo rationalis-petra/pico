@@ -226,7 +226,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         }
         out.type = ParseSuccess;
         out.data.result.type = RawAtom;
-        out.data.result.atom.type = AI64;
+        out.data.result.atom.type = AIntegral;
         out.data.result.atom.int_64 = int_result;
     }
     sdelete_u8_array(arr);

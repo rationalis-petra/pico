@@ -8,36 +8,50 @@ typedef struct SyntaxCall {
 } SyntaxCall;
 
 
-Syntax* mk_lit_i64_syn(const int64_t value, Allocator* a) {
+Syntax* mk_lit_untyped_int_syn(const int64_t value, Allocator* a) {
     Syntax* out = (Syntax*)mem_alloc(sizeof(Syntax), a);
-    out->type = SLitI64;
-    out->lit_i64 = value; return out;
+    *out = (Syntax) {
+        .type = SLitUntypedIntegral,
+        .integral.value = value,
+    };
+    return out;
+}
+
+Syntax* mk_lit_typed_int_syn(const int64_t value, PrimType prim, Allocator* a) {
+    Syntax* out = (Syntax*)mem_alloc(sizeof(Syntax), a);
+    *out = (Syntax) {
+        .type = SLitTypedIntegral,
+        .integral.value = value,
+        .integral.type = prim,
+    };
+    return out;
 }
 
 /* The Syntax Destructor */
 void delete_syntax(Syntax syntax, Allocator* a) {
     switch (syntax.type) {
-        case SLitI64: 
-        case SLitBool: 
-            // Nothing 
-            break;
-        case SApplication: {
-            delete_syntax_pointer(syntax.application.function, a);
-            for (size_t i = 0; i < syntax.application.args.len; i++) {
-                delete_syntax_pointer(syntax.application.args.data[i], a);
-            }
-            sdelete_ptr_array(syntax.application.args);
-            break;
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
+    case SLitBool: 
+        // Nothing 
+        break;
+    case SApplication: {
+        delete_syntax_pointer(syntax.application.function, a);
+        for (size_t i = 0; i < syntax.application.args.len; i++) {
+            delete_syntax_pointer(syntax.application.args.data[i], a);
         }
-        case SIf: {
-            delete_syntax_pointer(syntax.if_expr.condition, a);
-            delete_syntax_pointer(syntax.if_expr.true_branch, a);
-            delete_syntax_pointer(syntax.if_expr.false_branch, a);
-            break;
-        }
-        default:
-            break;
-        }
+        sdelete_ptr_array(syntax.application.args);
+        break;
+    }
+    case SIf: {
+        delete_syntax_pointer(syntax.if_expr.condition, a);
+        delete_syntax_pointer(syntax.if_expr.true_branch, a);
+        delete_syntax_pointer(syntax.if_expr.false_branch, a);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 void delete_syntax_pointer(Syntax* syntax, Allocator* a) {
@@ -48,12 +62,13 @@ void delete_syntax_pointer(Syntax* syntax, Allocator* a) {
 Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     Document* out = NULL;
     switch (syntax->type) {
-    case SLitI64: {
-        out = pretty_u64(syntax->lit_i64, a);
+    case SLitUntypedIntegral: {
+    case SLitTypedIntegral: 
+        out = pretty_i64(syntax->integral.value, a);
         break;
     }
     case SLitBool: {
-        if (syntax->lit_i64 == 0) {
+        if (syntax->integral.value == 0) {
             out = mk_str_doc(mv_string(":false"), a);
         } else {
             out = mk_str_doc(mv_string(":true"), a);
