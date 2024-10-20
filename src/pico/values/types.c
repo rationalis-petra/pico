@@ -1,3 +1,5 @@
+#include "platform/signals.h"
+
 #include "pretty/standard_types.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
@@ -78,6 +80,8 @@ void delete_pi_type(PiType t, Allocator* a) {
     case TPrim: break;
 
     case TKind: break;
+    default:
+        panic(mv_string("In delete_pi_type: unrecognized sort."));
     }
 }
 
@@ -123,6 +127,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TExists:
     case TAll:
     case TCLam: {
+        out.binder.body = copy_pi_type_p(t.binder.body, a);
         break;
     }
     case TCApp:
