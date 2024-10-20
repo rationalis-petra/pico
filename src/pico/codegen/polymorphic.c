@@ -28,13 +28,17 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     }
 
     // Polymorphic ABI
-    // RBP+ -> types
-    // RBP+ -> arg-ptrs
-    // RBP  -> old RBP
-    // RBP- -> args
+    // RBP+  | types
+    // RBP+  | arg-ptrs
+    // RBP+8 | Space for return address
+    // RBP   | old RBP
+    // RBP-  | args
     // RSP → Return address
 
-    // Prelude: 
+    // Prelude: copy return address to RBP+8
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
+
     build_unary_op(ass, Push, reg(RBP), a, point);
     build_binary_op(ass, Mov, reg(RBP), reg(RSP), a, point);
 
@@ -45,32 +49,47 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // Codegen function postlude:
     // Stack now looks like:
     // 
-    // types + argument offfsets (to discard)
-    // RBP
-    // arguments (to discard)
-    // Return address
-    // output value 
-    // RSP
-    // Actions:
-    // 1. Push Old RBP 
+    // RBP+ | types + argument offfsets (to discard)
+    // RBP+ | return address
+    // RBP  | OLD RBP
+    // RBP- | args
+    // RSP  | output value 
+    // Postlude:
+    // 1. Push Old RBP & Return Address
     // 2. move output value to start of types
-    // 3. Pop Old RBP
-    // 4. move return address to end of value
-    // 5. move RSP to point at return address
+    // 3. Pop Old RBP & Return Address
+    // 5. move RSP to end of value & restore old RBP
+    // 4. push return address
     // 6. return
 
     // 1.
+    build_unary_op(ass, Push, rref(RBP, 8), a, point); 
     build_unary_op(ass, Push, rref(RBP, 0), a, point); 
 
     // 2.
-    build_binary_op(ass, Sub, reg(RSP), imm8(ADDRESS_SIZE), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm8(2 * ADDRESS_SIZE), a, point);
     generate_size_of(RAX, body.ptype, env, ass, a, point);
-    generate_poly_stack_move(reg(RSP), reg(RBX), reg(RAX), ass, a, point);
 
-    // 3. 
-    size_t offset = ADDRESS_SIZE + 8*types.len + 8*vars.len;
+    // store the difference 
+    // 2 * address size = old RBP + return addr
+    // types.len & vars.len - accounts for types + indirection
+    size_t offset = 2* ADDRESS_SIZE + ADDRESS_SIZE * types.len + ADDRESS_SIZE * vars.len;
+    build_binary_op(ass, Mov, reg(RBX), reg(RBP), a, point);
+    build_binary_op(ass, Sub, reg(RBX), imm32(offset), a, point);
+    build_binary_op(ass, Add, reg(RBX), reg(RAX), a, point);
 
-    build_unary_op(ass, Push, rref(RBP, 0), a, point); 
+    generate_poly_stack_move(reg(RBX), reg(RSP), reg(RAX), ass, a, point);
+
+    // 3. Pop old RBP and return address
+    build_binary_op(ass, Mov, reg(RDX), rref(RSP, 0), a, point);
+    build_binary_op(ass, Mov, reg(RCX), rref(RSP, 8), a, point);
+
+    // 4. Move RSP to end of value & restore old RBP
+    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
+    build_binary_op(ass, Mov, reg(RBP), reg(RDX), a, point);
+
+    // 5. push return address
+    build_unary_op(ass, Push, reg(RCX), a, point); 
 
     address_end_poly(env, a);
 }

@@ -2,8 +2,10 @@
 #define __PLATFORM_MACHINE_INFO_H
 
 // For now, we assume that the instruction set is x86_64
+// This gives the following sizes
 #define REGISTER_SIZE 8
 #define ADDRESS_SIZE 8
+#define ADDRESSABLE_BITS 1
 
 #if defined(_WIN32) || defined(WIN32) || defined(__CYGWIN__)
 #define OS_FAMILY WINDOWS
