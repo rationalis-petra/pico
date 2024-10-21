@@ -1,13 +1,14 @@
 // Relevant OS includes 
 #include "platform/machine_info.h"
-#if  OS_FAMILY==UNIX
-#include <sys/mman.h>
-#include <unistd.h>
-#elif OS_FAMILT==WINDOWS
-#include <windows.h>
-#include <memoryapi.h>
+
+#if OS_FAMILY == WINDOWS
+  #include <windows.h>
+  #include <memoryapi.h>
+#elif OS_FAMILY == UNIX
+  #include <sys/mman.h>
+  #include <unistd.h>
 #else 
-#error "memory/executable.c: Only support unix/windows families"
+  #error "memory/executable.c: Only support unix/windows families"
 #endif
 
 #include "memory/executable.h"
