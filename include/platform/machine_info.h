@@ -13,9 +13,9 @@
 #error "Only recognized families are Unix/Windows"
 #endif
 
-#if OS_FAMILY==WIN_64
+#if OS_FAMILY==WINDOWS
 #define ABI WIN_64
-#elif OS_FAMILY
+#elif OS_FAMILY==UNIX
 #define ABI SYSTEM_V_64
 #else 
 #error "Callign convention: only recongized families are Windows and Unix"
