@@ -21,9 +21,9 @@ typedef struct ex_mem {
 
 
 size_t platform_pagesize () {
-#if OS_FAMILY==UNIX
+#if OS_FAMILY == UNIX
     size_t pagesize = sysconf(_SC_PAGESIZE);
-#elif OS_fAMILY==WINDOWS
+#elif OS_FAMILY == WINDOWS
     size_t pagesize = 1024;
 #endif
     return pagesize;
@@ -36,9 +36,9 @@ ex_mem alloc_ex_mem(size_t min_size) {
     size_t pagesize = platform_pagesize();
     out.size = pagesize * ((min_size + pagesize - 1) / pagesize);
     
-#if OS_FAMILY==UNIX
+#if OS_FAMILY == UNIX
     void* memory = mmap(NULL, out.size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_FILE | MAP_PRIVATE, -1, 0);
-#elif OS_FAMILY==WINDOWS
+#elif OS_FAMILY == WINDOWS
     void* memory = VirtualAlloc(NULL, out.size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 #endif
     out.data = memory;
@@ -47,9 +47,9 @@ ex_mem alloc_ex_mem(size_t min_size) {
 }
 
 void free_ex_mem(ex_mem mem) {
-#if OS_FAMILY==UNIX
+#if OS_FAMILY == UNIX
     munmap(mem.data, mem.size);
-#elif OS_FAMILY==WINDOWS
+#elif OS_FAMILY == WINDOWS
     VirtualFree(mem.data, mem.size, MEM_DECOMMIT);
 #endif
 }
