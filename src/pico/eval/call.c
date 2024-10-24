@@ -38,10 +38,10 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
     }
     case TLDef:
         // copy into module
+        res.type = ERValue;
         switch (top.def.value->ptype->sort) {
         case TAll:
         case TProc:
-            res.type = ERSucc;
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
             res.def.name = top.def.bind;
             res.def.type = top.def.value->ptype;
@@ -50,7 +50,6 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         case TStruct:
         case TKind:
         case TPrim: {
-            res.type = ERValue;
             // assume int64 for now!
             res.val.type = top.def.value->ptype;
             res.val.val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
@@ -123,7 +122,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
 Document* pretty_res(EvalResult res, Allocator* a) {
     Document* out = NULL;
     switch (res.type) {
-    case ERSucc: {
+    case ERDef: {
         PtrArray docs = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
         push_ptr(mk_str_doc(*symbol_to_string(res.def.name), a), &docs);
