@@ -21,5 +21,7 @@
                                                                         \
     void push_ ## fprefix(type val, tprefix##Array* arr);               \
     type pop_ ## fprefix(tprefix##Array* arr);                          \
+                                                                        \
+    size_t find_ ## fprefix(type val, tprefix##Array* arr);             \
 
 #endif

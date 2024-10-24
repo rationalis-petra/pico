@@ -116,6 +116,28 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case SAllApplication: {
+        Document* head = pretty_syntax(syntax->all_application.function, a);
+        bool print_types = syntax->all_application.types.len == 0;
+        PtrArray nodes = mk_ptr_array((print_types ? 5 : 3) + syntax->all_application.types.len + syntax->all_application.args.len, a);
+        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
+        push_ptr(head, &nodes);
+
+        if (print_types) push_ptr(mk_str_doc(mv_string("{"), a), &nodes);
+        for (size_t i = 0; i < syntax->all_application.types.len; i++) {
+            Document* node = pretty_syntax(syntax->all_application.types.data[i], a);
+            push_ptr(node, &nodes);
+        }
+        if (print_types) push_ptr(mk_str_doc(mv_string("}"), a), &nodes);
+
+        for (size_t i = 0; i < syntax->all_application.args.len; i++) {
+            Document* node = pretty_syntax(syntax->all_application.args.data[i], a);
+            push_ptr(node, &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     case SConstructor: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(pretty_syntax(syntax->constructor.enum_type, a), &nodes);

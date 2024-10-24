@@ -1,4 +1,5 @@
 #include "platform/signals.h"
+#include "platform/machine_info.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
@@ -90,7 +91,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
-            if (syn.ptype->sort == TProc) {
+            if (syn.ptype->sort == TProc || syn.ptype->sort == TAll) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
@@ -115,7 +116,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
                 // Copy
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
-                throw_error(point, mv_string("Codegen: Global has unsupported sort: must be Primitive or Proc"));
+                throw_error(point, mv_string("Codegen: Global has unsupported sort"));
             }
             break;
         case ANotFound: {
@@ -181,27 +182,84 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         break;
     }
     case SApplication: {
-        // Generate the arguments
-        size_t args_size = 0;
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            Syntax* arg = (Syntax*) syn.application.args.data[i];
-            args_size += pi_size_of(*arg->ptype);
+        // Monomorphic Codegen
+            size_t args_size = 0;
+            for (size_t i = 0; i < syn.application.args.len; i++) {
+                Syntax* arg = (Syntax*) syn.application.args.data[i];
+                args_size += pi_size_of(*arg->ptype);
+                generate(*arg, env, ass, links, a, point);
+            }
+
+            // This will push a function pointer onto the stack
+            generate(*syn.application.function, env, ass, links, a, point);
+        
+            // Regular Function Call
+            // Pop the function into RCX; call the function
+            build_unary_op(ass, Pop, reg(RCX), a, point);
+            build_unary_op(ass, Call, reg(RCX), a, point);
+            // Update for popping all values off the stack
+            address_stack_shrink(env, args_size);
+
+            // Update as pushed the final value onto the stac
+            address_stack_grow(env, pi_size_of(*syn.ptype));
+            break;
+        }
+    case SAllApplication: {
+        // Polymorphic Funcall
+        // The polymorphic codegen is different, so we therefore must also
+        // call polymorphic functions differently!
+        // Step1: reserve space for types. 
+        // Recall the setup
+        // > Types
+        // > Argument Offsets
+        // > Old RBP
+        // > 64-bit space
+        // > arguments (in order)
+
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            build_unary_op(ass, Push, imm32(pi_size_of(*((Syntax*)syn.all_application.types.data[i])->type_val)), a, point);
+        }
+
+        // Calculation of offsets:
+        // • Remaining offset starts @ sum of ADDRESS_SIZE * 2
+        int32_t offset = 0;
+        
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+            offset += pi_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
+            build_unary_op(ass, Push, imm32(-offset), a, point);
+        }
+        //size_t args_size = offset - ADDRESS_SIZE;
+        build_binary_op(ass, Sub, reg(RSP), imm8(ADDRESS_SIZE), a, point);
+        build_unary_op(ass, Push, reg(RBP), a, point);
+
+        address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len + syn.all_application.args.len + 2));
+
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+            Syntax* arg = (Syntax*) syn.all_application.args.data[i];
             generate(*arg, env, ass, links, a, point);
         }
 
         // This will push a function pointer onto the stack
         generate(*syn.application.function, env, ass, links, a, point);
+
+        // Now, calculate what RBP should be 
+        // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
+        //     = RSP - offset
+        build_binary_op(ass, Mov, reg(RBP), reg(RSP), a, point);
+        build_binary_op(ass, Add, reg(RBP), imm32(offset + ADDRESS_SIZE), a, point);
         
         // Regular Function Call
         // Pop the function into RCX; call the function
         build_unary_op(ass, Pop, reg(RCX), a, point);
         build_unary_op(ass, Call, reg(RCX), a, point);
         // Update for popping all values off the stack
-        address_stack_shrink(env, args_size);
+        // TODO: make sure this gets done!
+        //address_stack_shrink(env, args_size);
 
-        // Update as pushed the final value onto the stac
+        // Update as pushed the final value onto the stack
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
+            
     }
     case SStructure: {
         // For structures, we have to be careful - this is because the order in
