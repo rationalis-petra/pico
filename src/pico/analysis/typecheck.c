@@ -209,6 +209,45 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = fn_type.proc.ret;
         break;
     }
+    case SAllApplication: {
+        type_infer_i(untyped->all_application.function, env, gen, a, point);
+
+        PiType all_type = *untyped->all_application.function->ptype;
+        if (all_type.sort == TUVar) {
+            throw_error(point, mk_string("Expected LHS of all application must be known (not currently inferrable)", a));
+        }
+        else if (all_type.sort != TAll) {
+            throw_error(point, mk_string("Expected LHS of all application to be an all", a));
+        }
+        
+        if (all_type.binder.vars.len != untyped->all_application.types.len) {
+            throw_error(point, mk_string("Incorrect number of all type function arguments", a));
+        }
+
+        if (all_type.binder.body->sort != TProc) {
+            throw_error(point, mk_string("Currently, can only typecheck application of all-proc, not arbitrary forall!", a));
+        }
+
+        // Check that all type args are actually types!
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
+        for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+            Syntax* type = untyped->all_application.types.data[i];
+            eval_type(type, env, a, point);
+            sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+        }
+        
+        // Bind the vars in the all type to specific types!
+        PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+
+        for (size_t i = 0; i < proc_type->proc.args.len; i++) {
+            type_check_i(untyped->all_application.args.data[i],
+                         (PiType*)proc_type->proc.args.data[i],
+                         env, gen, a, point);
+        }
+
+        untyped->ptype = proc_type->proc.ret;
+        break;
+    }
     case SConstructor: {
         // Typecheck variant
         eval_type (untyped->variant.enum_type, env, a, point);
@@ -451,6 +490,18 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         
         for (size_t i = 0; i < typed->procedure.args.len; i++) {
             squash_types(typed->application.args.data[i], a, point);
+        }
+        break;
+    }
+    case SAllApplication: {
+        squash_types(typed->application.function, a, point);
+
+        for (size_t i = 0; i < typed->all_application.types.len; i++) {
+            squash_types(typed->all_application.types.data[i], a, point);
+        }
+        
+        for (size_t i = 0; i < typed->all_application.args.len; i++) {
+            squash_types(typed->all_application.args.data[i], a, point);
         }
         break;
     }

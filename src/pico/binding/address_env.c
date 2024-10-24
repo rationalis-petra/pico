@@ -33,8 +33,17 @@ typedef struct {
     int64_t stack_offset;
 } SAddr;
 
+int compare_saddr(SAddr lhs, SAddr rhs) {
+    int out = lhs.type - rhs.type;
+    if (!out) return out;
+    out = lhs.symbol - rhs.symbol;
+    if (!out) return out;
+    out = lhs.stack_offset - rhs.stack_offset;
+    return out;
+}
+
 ARRAY_HEADER(SAddr, saddr, SAddr)
-ARRAY_IMPL(SAddr, saddr, SAddr)
+ARRAY_CMP_IMPL(SAddr, compare_saddr, saddr, SAddr)
 
 typedef enum {
     LPolymorphic,
@@ -183,24 +192,25 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
+    // This also means that we push args first, then types!
     for (size_t i = vars.len; i > 0; i--) {
         SAddr local;
-        local.type = SADirect;
+        local.type = SAIndirect;
 
-        local.symbol = types.data[i - 1];
+        local.symbol = vars.data[i - 1];
         stack_offset += REGISTER_SIZE;
         local.stack_offset = stack_offset;
 
         push_saddr(local, &new_local->vars);
     }
 
-    // Variables are in reverse order!
-    // due to how the stack pushes/pops args.
     for (size_t i = vars.len; i > 0; i--) {
         SAddr local;
-        local.type = SAIndirect;
+        local.type = SADirect;
 
-        local.symbol = vars.data[i - 1];
+        local.symbol = types.data[i - 1];
         stack_offset += REGISTER_SIZE;
         local.stack_offset = stack_offset;
 

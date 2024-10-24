@@ -1,10 +1,10 @@
 #ifndef __PICO_VALUES_TYPES_H
 #define __PICO_VALUES_TYPES_H
 
-#include "data/option.h"
 #include "data/array.h"
 #include "pretty/document.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/data/sym_ptr_assoc.h"
 
 /* Basic types in pico typesystem */
 
@@ -108,15 +108,19 @@ struct PiType {
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 
 Document* pretty_type(PiType* type, Allocator* a);
+
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
+
+size_t pi_size_of(PiType t);
+size_t pi_mono_size_of(PiType t);
+size_t runtime_size_of(PiType* t, void* data);
+
+// Resource Management
 void delete_pi_type(PiType t, Allocator* a);
 void delete_pi_type_p(PiType* t, Allocator* a);
 
 PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
-
-size_t pi_size_of(PiType t);
-size_t pi_mono_size_of(PiType t);
-size_t runtime_size_of(PiType* t, void* data);
 
 // Utilities for generating types
 PiType mk_prim_type(PrimType t);

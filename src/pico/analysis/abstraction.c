@@ -76,6 +76,28 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
             Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->variant.args);
         }
+    } else if (raw.nodes.len > 1
+               && ((RawTree*)raw.nodes.data[1])->type == RawList
+               && ((RawTree*)raw.nodes.data[1])->hint == HImplicit) {
+        RawTree typelist = *(RawTree*)raw.nodes.data[1];
+
+        *res = (Syntax) {
+            .type = SAllApplication,
+            .all_application.function = mem_alloc(sizeof(Syntax), a),
+            .all_application.types = mk_ptr_array(typelist.nodes.len, a),
+            .all_application.args = mk_ptr_array(raw.nodes.len - 2, a),
+        };
+        res->all_application.function = fn_syn;
+
+        for (size_t i = 0; i < typelist.nodes.len; i++) {
+            Syntax* type = abstract_expr_i(*(RawTree*)(typelist.nodes.data[i]), env, a, point);
+            push_ptr(type, &res->all_application.types);
+        }
+
+        for (size_t i = 2; i < raw.nodes.len; i++) {
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
+            push_ptr(arg, &res->all_application.args);
+        }
     } else {
         *res = (Syntax) {
             .type = SApplication,
@@ -180,32 +202,33 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             }
             else if (lit == string_to_symbol(mv_string("false"))) {
                 *res = (Syntax) {.type = SLitBool, .boolean = false,};
+            } else {
+                throw_error(point, mv_string("Variant term former needs two arguments!"));
             }
-
-            throw_error(point, mv_string("Variant term former needs two arguments!"));
         }
         // : sym Type
 
         else if (raw.nodes.len != 3) {
             throw_error(point, mv_string("Variant term former needs two arguments!"));
-        }
+        } else {
 
-        // Get the Type portion of the projector 
-        Syntax* var_type = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+            // Get the Type portion of the projector 
+            Syntax* var_type = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
         
-        // Check that we are indeed getting a result
-        // Get the tag gname of the variant
-        RawTree* msym = (RawTree*)raw.nodes.data[1];
-        if (msym->type != RawAtom && msym->atom.type != ASymbol) {
-            throw_error(point, mv_string("Second argument to projection term former should be symbol"));
-        };
+            // Check that we are indeed getting a result
+            // Get the tag gname of the variant
+            RawTree* msym = (RawTree*)raw.nodes.data[1];
+            if (msym->type != RawAtom && msym->atom.type != ASymbol) {
+                throw_error(point, mv_string("Second argument to projection term former should be symbol"));
+            };
 
-        //res.type = Ok;
-        *res = (Syntax) {
-            .type = SConstructor,
-            .constructor.enum_type = var_type,
-            .constructor.tagname = msym->atom.symbol,
-        };
+            //res.type = Ok;
+            *res = (Syntax) {
+                .type = SConstructor,
+                .constructor.enum_type = var_type,
+                .constructor.tagname = msym->atom.symbol,
+            };
+        }
         break;
     }
     case FMatch: {

@@ -35,6 +35,7 @@ typedef enum {
     SProcedure,
     SAll,
     SApplication,
+    SAllApplication,
     SConstructor,
     SVariant,
     SMatch,
@@ -88,6 +89,12 @@ typedef struct {
     Syntax* function;
     SynArray args;
 } SynApp;
+
+typedef struct {
+    Syntax* function;
+    SynArray types;
+    SynArray args;
+} SynAllApp;
 
 typedef struct {
     Syntax* enum_type;
@@ -181,6 +188,7 @@ struct Syntax {
         SynProcedure procedure;
         SynAll all;
         SynApp application;
+        SynAllApp all_application;
         SynConstructor constructor;
         SynVariant variant;
         SynMatch match;

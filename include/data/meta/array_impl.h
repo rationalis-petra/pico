@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#define ARRAY_IMPL(type, fprefix, tprefix)                              \
+#define ARRAY_COMMON_IMPL(type, fprefix, tprefix)                              \
     tprefix##Array mk_ ## fprefix ## _array(const size_t size, Allocator* a) { \
         return (tprefix##Array){                                        \
             .data = (type*)mem_alloc(sizeof(type) * size, a),           \
@@ -63,6 +63,26 @@
     type pop_ ## fprefix(tprefix ## Array* arr) {                       \
         arr->len--;                                                     \
         return arr->data[arr->len];                                     \
-    } 
+    }
+                                                                        
+
+#define ARRAY_IMPL(type, fprefix, tprefix)                      \
+    ARRAY_COMMON_IMPL(type, fprefix, tprefix)                          \
+    size_t find_ ## fprefix(type val, tprefix##Array* arr) {    \
+        for (size_t i = 0; i < arr->len; i++) {                 \
+            if (arr->data[i] == val) return i;                  \
+        }                                                       \
+        return arr->len;                                        \
+    }                                                           \
+
+#define ARRAY_CMP_IMPL(type, cmpfun, fprefix, tprefix)          \
+    ARRAY_COMMON_IMPL(type, fprefix, tprefix)                   \
+    size_t find_ ## fprefix(type val, tprefix##Array* arr) {    \
+        for (size_t i = 0; i < arr->len; i++) {                 \
+            if (cmpfun(arr->data[i], val)) return i;            \
+        }                                                       \
+        return arr->len;                                        \
+    }                                                           \
+
 
 #endif

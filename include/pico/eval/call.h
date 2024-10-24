@@ -14,19 +14,23 @@
 typedef enum EvalResult_t  {
     ERValue,
     ERSucc,
-    ERFail,
 } EvalResult_t;
 
-typedef struct EvalSucc {
+typedef struct EvalVal {
     PiType* type;
     void* val;
-} EvalSucc;
+} EvalVal;
+
+typedef struct EvalDef {
+    Symbol name;
+    PiType* type;
+} EvalDef;
 
 typedef struct EvalResult {
     EvalResult_t type;
     union {
-        EvalSucc val;
-        String error_message;
+        EvalVal val;
+        EvalDef def;
     };
 } EvalResult;
 

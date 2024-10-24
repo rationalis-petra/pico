@@ -38,7 +38,10 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
             res = parse_list(is, parse_state, ')', HExpression, a);
         }
         else if (point == '[') {
-            res = parse_list(is, parse_state, ']', HArgList, a);
+            res = parse_list(is, parse_state, ']', HSpecial, a);
+        }
+        else if (point == '{') {
+            res = parse_list(is, parse_state, '}', HImplicit, a);
         }
         else if (is_numchar(point)) {
             res = parse_number(is, parse_state, a);
@@ -324,6 +327,8 @@ bool is_symchar(uint32_t codepoint) {
                                           || codepoint == ')'
                                           || codepoint == '['
                                           || codepoint == ']'
+                                          || codepoint == '{'
+                                          || codepoint == '}'
                                           || codepoint == '.'
                                           || codepoint == ':');
 }

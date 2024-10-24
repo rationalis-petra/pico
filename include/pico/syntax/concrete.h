@@ -36,7 +36,8 @@ typedef enum {
 typedef enum {
     HNone,
     HExpression,
-    HArgList,
+    HSpecial,
+    HImplicit,
 } SyntaxHint;
 
 typedef struct {

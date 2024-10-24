@@ -1,3 +1,5 @@
+#include "platform/signals.h"
+
 #include "memory/arena.h"
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
@@ -7,8 +9,14 @@ typedef struct {
     size_t bmp;
 } ArenaBlock;
 
+int compare_arena_block() {
+    // TODO: fill this out if we ever need to compare two arenas
+    // used by array_cmp_impl to implement find!
+    panic(mv_string("compare arena block not implemented!"));
+}
+
 ARRAY_HEADER(ArenaBlock, block, Block)
-ARRAY_IMPL(ArenaBlock, block,Block)
+ARRAY_CMP_IMPL(ArenaBlock, compare_arena_block, block, Block)
 
 typedef struct {
     size_t blocksize;

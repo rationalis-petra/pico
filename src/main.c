@@ -143,7 +143,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    TermFormer former;
+    // TODO: we use int64_t as it has the requisite size (8 bytes)
+    // for pico values: currently don't support non-64 bit values 
+    int64_t former;
+    //TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
 
