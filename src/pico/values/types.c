@@ -83,7 +83,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     case TKind: break;
 
     default:
-        panic(mv_string("In delete_pi_type: unrecognized sort."));TKind: break;
+        panic(mv_string("In delete_pi_type: unrecognized sort."));
     }
 }
 
@@ -340,6 +340,9 @@ Document* pretty_type(PiType* type, Allocator* a) {
     }
     case TUVar:
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
+        break;
+    case TUVarDefaulted:
+        out = mv_str_doc(mk_string("No Print UVar Defaulted!", a), a);
         break;
     case TPrim:
         switch (type->prim) {

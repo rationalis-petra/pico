@@ -19,11 +19,11 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // instantiated to be the same as RHS
     if (lhs->sort == TUVarDefaulted) {
         out = assert_maybe_integral(rhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
+        if (out.type == Ok) rhs->uvar->subst = lhs;
     }
     else if (rhs->sort == TUVarDefaulted) {
         out = assert_maybe_integral(lhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
+        if (out.type == Ok) lhs->uvar->subst = rhs;
     }
     else if (lhs->sort == TUVar) {
         lhs->uvar->subst = rhs;

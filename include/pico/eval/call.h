@@ -13,7 +13,7 @@
 // Note: currently cannot proviide args/require no arguments!
 typedef enum EvalResult_t  {
     ERValue,
-    ERSucc,
+    ERDef,
 } EvalResult_t;
 
 typedef struct EvalVal {
