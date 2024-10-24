@@ -190,6 +190,14 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("if"));
     add_def(module, sym, type, &former);
 
+    former = FLabels;
+    sym = string_to_symbol(mv_string("labels"));
+    add_def(module, sym, type, &former);
+
+    former = FSequence;
+    sym = string_to_symbol(mv_string("seq"));
+    add_def(module, sym, type, &former);
+
     former = FLet;
     sym = string_to_symbol(mv_string("let"));
     add_def(module, sym, type, &former);

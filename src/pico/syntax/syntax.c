@@ -240,11 +240,25 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SIf: {
         PtrArray nodes = mk_ptr_array(6, a);
-        push_ptr(mv_str_doc(mk_string("(if", a), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(if"), a), &nodes);
         push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes);
         push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes);
         push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SLabels: {
+        out = mv_str_doc(mk_string("pretty_syntax not implemented for labels", a), a);
+        break;
+    }
+    case SSequence: {
+        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.terms.len, a);
+        push_ptr(mk_str_doc(mv_string("(seq"), a), &nodes);
+        for (size_t i = 0; i < syntax->sequence.terms.len; i++) {
+            push_ptr(pretty_syntax(syntax->sequence.terms.data[i], a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }

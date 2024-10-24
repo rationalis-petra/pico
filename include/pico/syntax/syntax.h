@@ -42,7 +42,9 @@ typedef enum {
     SStructure,
     SProjector,
 
-    // Helpers/convenience
+    // Control Flow & Binding
+    SLabels,
+    SSequence,
     SLet,
     SIf,
 
@@ -130,6 +132,14 @@ typedef struct {
     Syntax* val;
 } SynProjector;
 
+typedef struct {
+    SymPtrAssoc* terms;
+} SynLabels;
+
+typedef struct {
+    SynArray terms;
+} SynSequence;
+
 // Sugaring Syntax
 typedef struct {
     SymSynAMap bindings;
@@ -187,6 +197,8 @@ struct Syntax {
 
         SynLet let_expr;
         SynIf if_expr;
+        SynLabels labels;
+        SynSequence sequence;
 
         SynIs is;
 
