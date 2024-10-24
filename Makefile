@@ -116,6 +116,9 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
+.PHONY: all
+all: debug release test
+
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.

@@ -10,14 +10,25 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
         break;
     }
     case RawList: {
+        char* open; switch (tree.hint) {
+          case HSpecial: open = "["; break;
+          case HImplicit: open = "{"; break;
+          default: open = "("; break;
+        };
+        char* close; switch (tree.hint) {
+          case HSpecial: close = "]"; break;
+          case HImplicit: close = "}"; break;
+          default: close = ")"; break;
+        };
+
         PtrArray doc_arr = mk_ptr_array(tree.nodes.len + 2, a);
-        push_ptr(mv_str_doc(mk_string("(", a), a), &doc_arr);
+        push_ptr(mv_str_doc(mk_string(open, a), a), &doc_arr);
         for (size_t i = 0; i < tree.nodes.len; i++) {
             RawTree node = *((RawTree*)tree.nodes.data[i]);
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }
-        push_ptr(mv_str_doc(mk_string(")", a), a), &doc_arr);
+        push_ptr(mv_str_doc(mk_string(close, a), a), &doc_arr);
         out = mv_sep_doc(doc_arr, a);
         break;
     }

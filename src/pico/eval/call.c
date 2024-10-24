@@ -32,9 +32,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             res.val.val = pico_run_expr(ass, sz, a, point);
         }
         else  {
-            res.type = ERFail;
-            res.error_message = mv_string("Cannot evaluate values of this type.");
-            return res;
+            throw_error(point, mv_string("Cannot evaluate values of this type."));
         }
         break;
     }
@@ -45,6 +43,8 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         case TProc:
             res.type = ERSucc;
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
+            res.def.name = top.def.bind;
+            res.def.type = top.def.value->ptype;
             break;
         case TEnum:
         case TStruct:
@@ -58,8 +58,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             break;
         }
         default:
-            res.type = ERFail;
-            res.error_message = mv_string("Unrecognized type to define.");
+            throw_error(point, mv_string("Unrecognized type to define."));
             break;
         }
     }
@@ -124,12 +123,15 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
 Document* pretty_res(EvalResult res, Allocator* a) {
     Document* out = NULL;
     switch (res.type) {
-    case ERFail:
-        out = mk_str_doc(res.error_message, a);
+    case ERSucc: {
+        PtrArray docs = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
+        push_ptr(mk_str_doc(*symbol_to_string(res.def.name), a), &docs);
+        push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
+        push_ptr(pretty_type(res.def.type, a), &docs);
+        out = mv_cat_doc(docs, a);
         break;
-    case ERSucc:
-        out = mk_str_doc(mv_string("Success"), a);
-        break;
+    }
     case ERValue:
         out = pretty_pi_value(res.val.val, res.val.type, a);
         break;

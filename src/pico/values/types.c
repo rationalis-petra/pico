@@ -48,6 +48,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     case TAll:
     case TExists:
     case TCLam: {
+        sdelete_u64_array(t.binder.vars);
         delete_pi_type_p(t.binder.body, a);
         break;
     }
@@ -127,12 +128,12 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TExists:
     case TAll:
     case TCLam: {
+        out.binder.vars = scopy_u64_array(t.binder.vars, a);
         out.binder.body = copy_pi_type_p(t.binder.body, a);
         break;
     }
     case TCApp:
         break;
-
 
     case TUVar:
         out.uvar = mem_alloc(sizeof(UVarType), a);
@@ -457,6 +458,79 @@ Document* pretty_type(PiType* type, Allocator* a) {
     return out;
 }
 
+PiType* pi_type_subst_i(PiType* type, SymPtrAssoc binds, SymbolArray* shadow, Allocator* a) {
+    // Replace all (free) type variables in type with the variable given by binds
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    switch (type->sort) {
+    case TPrim: {
+        *out = *type;
+        return out;
+    }
+        
+    case TProc: {
+        PtrArray args = mk_ptr_array(type->proc.args.len, a);
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            push_ptr(pi_type_subst_i(type->proc.args.data[i], binds, shadow, a), &args);
+        }
+        *out = (PiType) {
+            .sort = TProc,
+            .proc.args = args,
+            .proc.ret = pi_type_subst_i(type->proc.ret, binds, shadow, a),
+        };
+        return out;
+    }
+    case TStruct: {
+        panic(mv_string("pi_type subst: struct not implemented"));
+    }
+    case TEnum: {
+        panic(mv_string("pi_type subst: enum not implemented"));
+    }
+
+    // Quantified Types
+    case TVar: {
+        if (find_u64(type->var, shadow) == shadow->len) {
+            PiType** result = (PiType**)sym_ptr_alookup(type->var, binds);
+            *out = result ? **result : *type;
+        }
+        return out;
+    }
+    case TAll: {
+        panic(mv_string("pi_type subst: all not implemented"));
+    }
+    case TExists: {
+        panic(mv_string("pi_type subst: exists not implemented"));
+    }
+
+    // Used by Sytem-Fω (type constructors)
+    case TCApp: {
+        panic(mv_string("pi_type subst: app not implemented"));
+    }
+    case TCLam: {
+        panic(mv_string("pi_type subst: lam not implemented"));
+    }
+
+    // Kinds (higher kinds not supported)
+    case TKind: {
+        panic(mv_string("pi_type subst: kind not implemented"));
+    }
+
+    // Used only during unification
+    case TUVar: {
+        panic(mv_string("pi_type subst: uvar not implemented"));
+    }
+    case TUVarDefaulted: {
+        panic(mv_string("pi_type subst: uvar-defaulted not implemented"));
+    }
+    default:
+        panic(mv_string("Unrecognized sort of type provided to pi_type_susbt_i"));
+    }
+}
+
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a) {
+    SymbolArray shadow = mk_u64_array(16, a);
+    return pi_type_subst_i(type, binds, &shadow, a);
+}
+
 size_t pi_mono_size_of(PiType type) {
     return pi_size_of(type);
 }
@@ -466,17 +540,18 @@ size_t pi_size_of(PiType type) {
     case TPrim:
         switch (type.prim) {
         case Unit:
-        case Bool:
-            return sizeof(uint8_t);
-        case Address:
-        case Int_64:
+        /* case Bool: */
+        /*     return sizeof(uint8_t); */
+        /* case Address: */
+        /* case Int_64: */
+        /*     return sizeof(int64_t); */
+        /* case Int_32: */
+        /*     return sizeof(int32_t); */
+        /* case Int_16: */
+        /*     return sizeof(int16_t); */
+        /* case Int_8: */
+        /*     return sizeof(int8_t); */
             return sizeof(int64_t);
-        case Int_32:
-            return sizeof(int32_t);
-        case Int_16:
-            return sizeof(int16_t);
-        case Int_8:
-            return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer); // sizeof(pi_term_former_t);
         }
