@@ -45,36 +45,49 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
 }
 
 Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
-    Result out;
     if (lhs->sort == TPrim && rhs->sort == TPrim) {
         if (lhs->prim == rhs->prim) {
-            out.type = Ok;
-            return out;
+            return (Result) {.type = Ok};
         } else {
-            out.type = Err;
-            out.error_message = mk_string("Unification failed: could not unify two unqueal primitives", a);
-            return out;
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Unification failed: could not unify two unqueal primitives", a),
+            };
         }
     } else if (lhs->sort == TProc && rhs->sort == TProc) {
         if (lhs->proc.args.len != rhs->proc.args.len) {
-            out.type = Err;
-            out.error_message = mk_string("Unification failed: two different procedures of differing types", a);
-            return out;
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Unification failed: two different procedures of differing types", a)
+            };
         }
 
         // Unify each argumet
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
-            out = unify(lhs->proc.args.data[i], rhs->proc.args.data[i], a);
+            Result out = unify(lhs->proc.args.data[i], rhs->proc.args.data[i], a);
             if (out.type == Err) return out;
         }
 
         // Unify the return values
         return unify(lhs->proc.ret, rhs->proc.ret, a);
         
+    } else if (lhs->sort == TStruct && rhs->sort == TStruct) {
+        if (lhs->structure.fields.len != rhs->structure.fields.len) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Unification failed: two different structures with differing number of fields.", a)
+            };
+        }
+
+        for (size_t i = 0; i < lhs->structure.fields.len; i++) {
+
+        }
+        return (Result) {.type = Ok};
     } else {
-        out.type = Err;
-        out.error_message = mk_string("Unification failed: types have different forms", a);
-        return out;
+        return (Result) {
+            .type = Err,
+            .error_message = mk_string("Unification failed: types have different forms", a),
+        }
     }
 }
 

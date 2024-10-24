@@ -538,8 +538,8 @@ size_t pi_mono_size_of(PiType type) {
 size_t pi_size_of(PiType type) {
     switch (type.sort) {
     case TPrim:
-        switch (type.prim) {
-        case Unit:
+        /* switch (type.prim) { */
+        /* case Unit: */
         /* case Bool: */
         /*     return sizeof(uint8_t); */
         /* case Address: */
@@ -551,10 +551,10 @@ size_t pi_size_of(PiType type) {
         /*     return sizeof(int16_t); */
         /* case Int_8: */
         /*     return sizeof(int8_t); */
-            return sizeof(int64_t);
-        case TFormer:
-            return sizeof(TermFormer); // sizeof(pi_term_former_t);
-        }
+        /*     return sizeof(int64_t); */
+        /* case TFormer: */
+        /*     return sizeof(TermFormer); // sizeof(pi_term_former_t); */
+        /* } */
         return sizeof(uint64_t);
     case TProc:
         return sizeof(uint64_t);
