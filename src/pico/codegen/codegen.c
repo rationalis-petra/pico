@@ -438,9 +438,6 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
     case SLet:
         throw_error(point, mk_string("No assembler implemented for Let", a));
         break;
-    case SIs:
-        generate(*syn.is.val, env, ass, links, a, point);
-        break;
     case SIf: {
         // generate the condition
         generate(*syn.if_expr.condition, env, ass, links, a, point);
@@ -489,6 +486,25 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         *jmp_loc = (uint8_t)(end_pos - start_pos);
         break;
     }
+    case SLabels:
+        throw_error(point, mv_string("Codegen is not implemented for this syntactic form: 'labels'"));
+        break;
+    case SSequence: {
+        for (size_t i = 0; i < syn.sequence.terms.len; i++) {
+            Syntax* term = (Syntax*)syn.sequence.terms.data[i];
+            generate(*term, env, ass, links, a, point);
+
+            if (i + 1 != syn.sequence.terms.len) {
+                size_t sz = pi_size_of(*term->ptype);
+                build_binary_op(ass, Add, reg(RSP), imm32(sz), a, point);
+                address_stack_shrink(env, sz);
+            }
+        }
+        break;
+    }
+    case SIs:
+        generate(*syn.is.val, env, ass, links, a, point);
+        break;
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(RBX), a, point);

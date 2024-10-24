@@ -379,17 +379,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SLet:
         throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'let'"));
         break;
-    case SIs:
-        eval_type(untyped->is.type, env, a, point);
-        type_check_i(untyped->is.val,
-                     untyped->is.type->type_val,
-                     env, gen, a, point);
-        untyped->ptype = untyped->is.type->type_val; 
-        break;
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
-        t->sort = TPrim;
-        t->prim = Bool;
+        *t = (PiType) {.sort = TPrim,.prim = Bool};
         type_check_i(untyped->if_expr.condition,
                            t, env, gen, a, point);
 
@@ -401,6 +393,31 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
+    case SLabels:
+        throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'labels'"));
+        break;
+    case SSequence: {
+        for (size_t i = 0; i < untyped->sequence.terms.len; i++) {
+            type_infer_i(untyped->sequence.terms.data[i], env, gen, a, point);
+        }
+
+        if (untyped->sequence.terms.len == 0) {
+            PiType* t = mem_alloc(sizeof(PiType), a);
+            *t = (PiType) {.sort = TPrim, .prim = Unit};
+            untyped->ptype = t;
+        } else {
+            untyped->ptype = ((Syntax*)untyped->sequence.terms.data[untyped->sequence.terms.len - 1])->ptype;
+        }
+
+        break;
+    }
+    case SIs:
+        eval_type(untyped->is.type, env, a, point);
+        type_check_i(untyped->is.val,
+                     untyped->is.type->type_val,
+                     env, gen, a, point);
+        untyped->ptype = untyped->is.type->type_val; 
+        break;
     case SProcType:
     case SStructType:
     case SEnumType:
@@ -470,14 +487,22 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->projector.val, a, point);
         break;
         
+    case SLet:
+        throw_error(point, mk_string("squash_types not implemented for let", a));
+        break;
     case SIf: {
         squash_types(typed->if_expr.condition, a, point);
         squash_types(typed->if_expr.true_branch, a, point);
         squash_types(typed->if_expr.false_branch, a, point);
         break;
     }
-    case SLet:
-        throw_error(point, mk_string("squash_types not implemented for let", a));
+    case SLabels:
+        throw_error(point, mk_string("squash_types not implemented for labels", a));
+        break;
+    case SSequence:
+        for (size_t i = 0; i < typed->sequence.terms.len; i++) {
+            squash_types(typed->sequence.terms.data[i], a, point);
+        }
         break;
     case SIs:
         squash_type(typed->is.type->type_val);

@@ -461,6 +461,7 @@ size_t pi_size_of(PiType type) {
     case TPrim:
         switch (type.prim) {
         case Unit:
+            return 0;
         case Bool:
             return sizeof(uint8_t);
         case Address:

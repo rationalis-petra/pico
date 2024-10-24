@@ -27,7 +27,7 @@ typedef enum TermFormer {
     FDefine,
     FDeclare,
 
-    // Term Formers
+    // Term Formers: value construction/destruction
     FProcedure,
     FAll,
     FApplication,
@@ -35,8 +35,13 @@ typedef enum TermFormer {
     FMatch,
     FStructure,
     FProjector,
-    FIf,
+
+    // Term Formers: Control flow + binding
     FLet,
+    FIf,
+    FLabels,
+    FSequence,
+
 
     // Special Term former
     FIs,

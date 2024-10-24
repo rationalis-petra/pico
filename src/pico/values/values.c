@@ -95,11 +95,18 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FProjector:
         out = mk_str_doc(mv_string("::projector"), a);
         break;
+
+    case FLet:
+        out = mk_str_doc(mv_string("::let"), a);
+        break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
         break;
-    case FLet:
-        out = mk_str_doc(mv_string("::let"), a);
+    case FLabels:
+        out = mk_str_doc(mv_string("::labels"), a);
+        break;
+    case FSequence:
+        out = mk_str_doc(mv_string("::sequence"), a);
         break;
 
     case FIs:

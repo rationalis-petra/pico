@@ -334,14 +334,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FLet: {
+        throw_error(point, mv_string("Term former 'let' not implemented!"));
+        break;
+    }
     case FIf: {
         if (raw.nodes.len != 4) {
             throw_error(point, mv_string("Term former 'if' expects precisely 3 arguments!"));
         }
         SynArray terms = mk_ptr_array(3, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            RawTree* rptr = raw.nodes.data[i];
-            Syntax* term = abstract_expr_i(*rptr, env, a, point);
+            Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[i], env, a, point);
             push_ptr(term, &terms);
         }
 
@@ -350,6 +353,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .if_expr.condition = terms.data[0],
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
+        };
+        break;
+    }
+    case FLabels: {
+        throw_error(point, mv_string("Term former 'labels' not implemented!"));
+        break;
+    }
+    case FSequence: {
+        SynArray terms = mk_ptr_array(raw.nodes.len - 1, a);
+        for (size_t i = 1; i < raw.nodes.len; i++) {
+            push_ptr(abstract_expr_i(*(RawTree*)raw.nodes.data[i], env, a, point), &terms);
+        }
+        
+        *res = (Syntax) {
+            .type = SSequence,
+            .sequence.terms = terms,
         };
         break;
     }
@@ -365,10 +384,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .type = SIs,
             .is = {.val = term, .type = type},
         };
-        break;
-    }
-    case FLet: {
-        throw_error(point, mv_string("Let term former not implemented!"));
         break;
     }
     case FProcType: {
