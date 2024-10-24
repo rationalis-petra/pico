@@ -80,14 +80,14 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         }
 
         for (size_t i = 0; i < lhs->structure.fields.len; i++) {
-
+            
         }
         return (Result) {.type = Ok};
     } else {
         return (Result) {
             .type = Err,
             .error_message = mk_string("Unification failed: types have different forms", a),
-        }
+        };
     }
 }
 
