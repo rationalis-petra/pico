@@ -93,7 +93,6 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
 
     // 4. Move RSP to end of value & restore old RBP
     build_binary_op(ass, Mov, reg(RSP), reg(RDX), a, point);
-    //build_binary_op(ass, Mov, reg(RBP), reg(RDX), a, point);
 
     // 5. push return address
     build_unary_op(ass, Push, reg(RCX), a, point); 
@@ -601,11 +600,16 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
     build_binary_op(ass, Mov, reg(RCX), dest, a, point);
     build_binary_op(ass, Mov, reg(RDX), src, a, point);
     build_binary_op(ass, Mov, reg(R8), size, a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
     // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RCX), a, point);
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
 }
