@@ -17,21 +17,21 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
 
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
-    if (lhs->sort == TUVarDefaulted) {
-        out = assert_maybe_integral(rhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
-    }
-    else if (rhs->sort == TUVarDefaulted) {
-        out = assert_maybe_integral(lhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
-    }
-    else if (lhs->sort == TUVar) {
+    if (lhs->sort == TUVar) {
         lhs->uvar->subst = rhs;
         out.type = Ok;
     }
     else if (rhs->sort == TUVar) {
         rhs->uvar->subst = lhs;
         out.type = Ok;
+    }
+    else if (lhs->sort == TUVarDefaulted) {
+        out = assert_maybe_integral(rhs);
+        if (out.type == Ok) lhs->uvar->subst = rhs;
+    }
+    else if (rhs->sort == TUVarDefaulted) {
+        out = assert_maybe_integral(lhs);
+        if (out.type == Ok) rhs->uvar->subst = lhs;
     }
     else if (rhs->sort == lhs->sort)
         out = unify_eq(lhs, rhs, a);

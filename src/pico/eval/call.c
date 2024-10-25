@@ -38,22 +38,23 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
     }
     case TLDef:
         // copy into module
-        res.type = ERValue;
+        res = (EvalResult) {
+            .type = ERDef,
+            .def.name = top.def.bind,
+            .def.type = top.def.value->ptype,
+        };
         switch (top.def.value->ptype->sort) {
         case TAll:
         case TProc:
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
-            res.def.name = top.def.bind;
-            res.def.type = top.def.value->ptype;
             break;
         case TEnum:
         case TStruct:
         case TKind:
         case TPrim: {
             // assume int64 for now!
-            res.val.type = top.def.value->ptype;
-            res.val.val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
-            add_def(module, top.def.bind, *top.def.value->ptype, res.val.val);
+            void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
+            add_def(module, top.def.bind, *top.def.value->ptype, val);
             break;
         }
         default:

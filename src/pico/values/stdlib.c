@@ -60,7 +60,7 @@ void set_exit_callback(jmp_buf* buf) {
 }
 
 void exit_callback() {
-    longjmp(m_buf, 1);
+    longjmp(*m_buf, 1);
 }
 
 void build_exit_callback(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -75,10 +75,6 @@ Module* base_module(Assembler* ass, Allocator* a) {
     PiType type;
     PiType type_val;
     PiType* type_data = &type_val;
-    type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);
@@ -150,9 +146,6 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
-    // ------------------------------------------------------------------------
-    // Types 
-    // ------------------------------------------------------------------------
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former);
@@ -169,8 +162,15 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("All"));
     add_def(module, sym, type, &former);
 
+    // ------------------------------------------------------------------------
+    // Types 
+    // ------------------------------------------------------------------------
 
-    // Types
+    type = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
+
     type_val = mk_prim_type(Unit);
     sym = string_to_symbol(mv_string("Unit"));
     add_def(module, sym, type, &type_data);
