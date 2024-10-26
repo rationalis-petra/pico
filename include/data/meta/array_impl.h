@@ -20,7 +20,7 @@
             .size = source.size,                                        \
             .gpa = a,                                                   \
         };                                                              \
-        for (size_t i = 0; i < out.size; i++) {                         \
+        for (size_t i = 0; i < out.len; i++) {                         \
             out.data[i] = copy_elt(source.data[i], a);                  \
         }                                                               \
         return out;                                                     \

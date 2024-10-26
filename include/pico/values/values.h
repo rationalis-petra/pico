@@ -42,9 +42,9 @@ typedef enum TermFormer {
     FLabels,
     FSequence,
 
-
-    // Special Term former
+    // Special Term formers
     FIs,
+    FSize,
 
     // Type formers
     FProcType,

@@ -100,6 +100,20 @@ void delete_block(ArenaBlock block, Allocator* a) {
     mem_free(block.data, a);
 }
 
+void reset_arena_allocator(Allocator a) {
+    ArenaContext* ctx = (ArenaContext*)a.ctx;
+    Allocator* ialloc = ctx->internal_allocator;
+
+    for (size_t i = 1; i < ctx->memory_blocks.len; i++)
+        delete_block(ctx->memory_blocks.data[i], ialloc);
+
+    ctx->memory_blocks.len = 1;
+    ArenaBlock* initial_block = &ctx->memory_blocks.data[0];
+    initial_block->bmp = 0;
+    
+    mem_free(ctx, ialloc);
+}
+
 void release_arena_allocator(Allocator a) {
     ArenaContext* ctx = (ArenaContext*)a.ctx;
     Allocator* ialloc = ctx->internal_allocator;

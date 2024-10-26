@@ -1,4 +1,10 @@
+#include <string.h>
+#include <stdlib.h>
+
+#include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "memory/arena.h"
+
 #include "pico/values/stdlib.h"
 
 PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
@@ -52,8 +58,7 @@ void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point)
     build_nullary_op (ass, Ret, a, point);
 }
 
-
-// TODO: thread local??
+// TODO (BUG UB): This seems to crash on windows
 static jmp_buf* m_buf;
 void set_exit_callback(jmp_buf* buf) {
     m_buf = buf;
@@ -63,9 +68,312 @@ void exit_callback() {
     longjmp(*m_buf, 1);
 }
 
-void build_exit_callback(Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)exit_callback), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
+}
+
+PiType build_store_fn_ty(Allocator* a) {
+    Symbol ty_sym = string_to_symbol(mv_string("A"));
+
+    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
+    PiType* arg2_ty = mem_alloc(sizeof(PiType), a);
+    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
+
+    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address, };
+    *arg2_ty = (PiType) {.sort = TVar, .var = ty_sym, };
+    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit, };
+
+    PtrArray args = mk_ptr_array(2, a);
+    push_ptr(arg1_ty, &args);
+    push_ptr(arg2_ty, &args);
+
+    PiType* proc_ty = mem_alloc(sizeof(PiType), a);
+    *proc_ty = (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+
+    SymbolArray types = mk_u64_array(1, a);
+    push_u64(ty_sym, &types);
+
+    return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
+}
+
+void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // The usual calling convention for polymorphic functions is assumed
+    // RBP+  | types + argument offfsets (to discard)
+    // RBP+8 | return address
+    // RBP   | OLD RBP
+    // RBP-  | args
+    // RSP   | output value 
+    // See polymorphic.c for details
+
+    // The usual prelude
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
+
+    // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
+    // also note that size = RBP + 0x10
+
+    // Store size in RAX, stash it in RBX
+    build_binary_op(ass, Mov, reg(RAX), rref(RBP, 2*ADDRESS_SIZE), a, point); 
+    build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point); 
+    // store ptr dest in RAX  
+    build_binary_op(ass, Add, reg(RAX), reg(RSP), a, point);
+    build_binary_op(ass, Add, reg(RAX), rref(RAX, 0), a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_binary_op(ass, Add, reg(RDI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
+
+#elif ABI == WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    // copy memcpy into RCX & call
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // Return : mov RSP to RBP + 0x10
+    // move return address to [RSP] + 8 
+    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
+    // 5 = len (Old RBP, Ret addr, Offset (a), Offset (addr), Type (Size))
+    build_binary_op(ass, Add, reg(RSP), imm8(ADDRESS_SIZE* 5), a, point);
+    build_unary_op(ass, Push, rref(RBP, 8), a, point);
+
+    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+    build_nullary_op(ass, Ret, a, point);
+}
+
+PiType build_load_fn_ty(Allocator* a) {
+    Symbol ty_sym = string_to_symbol(mv_string("A"));
+
+    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
+    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
+
+    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address, };
+    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit, };
+
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(arg1_ty, &args);
+
+    PiType* proc_ty = mem_alloc(sizeof(PiType), a);
+    *proc_ty = (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+
+    SymbolArray types = mk_u64_array(1, a);
+    push_u64(ty_sym, &types);
+
+    return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
+}
+
+void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // The usual calling convention for polymorphic functions is assumed
+    // RBP+24  | type
+    // RBP+16  | offset
+    // RBP+8   | return address
+    // RBP     | OLD RBP
+    // RBP-    | load address
+    // RSP     | return address 
+    // See polymorphic.c for details
+
+    // The usual prelude
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
+
+    // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
+    // also note that size = RBP + 0x10
+
+    // Store size in RAX, stash it in RBX
+    build_binary_op(ass, Mov, reg(RAX), rref(RBP, 2*ADDRESS_SIZE), a, point); 
+    build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point); 
+    // store ptr dest in RAX  
+    build_binary_op(ass, Add, reg(RAX), reg(RSP), a, point);
+    build_binary_op(ass, Add, reg(RAX), rref(RAX, 0), a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_binary_op(ass, Add, reg(RDI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
+
+#elif ABI == WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    // copy memcpy into RCX & call
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // Return : mov RSP to RBP + 0x10
+    // move return address to [RSP] + 8 
+    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
+    // 5 = len (Old RBP, Ret addr, Offset (a), Offset (addr), Type (Size))
+    build_binary_op(ass, Add, reg(RSP), imm8(ADDRESS_SIZE* 5), a, point);
+    build_unary_op(ass, Push, rref(RBP, 8), a, point);
+
+    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+    build_nullary_op(ass, Ret, a, point);
+}
+
+PiType build_realloc_fn_ty(Allocator* a) {
+    // realloc : Proc (Address U64) Address
+    PtrArray args = mk_ptr_array(2, a);
+    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
+    PiType* arg2_ty = mem_alloc(sizeof(PiType), a);
+    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
+
+    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address};
+    *arg2_ty = (PiType) {.sort = TPrim, .prim = UInt_64};
+    *ret_ty = (PiType) {.sort = TPrim, .prim = Address};
+
+    push_ptr(arg1_ty, &args);
+    push_ptr(arg2_ty, &args);
+
+    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+}
+
+void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // realloc : Proc (Address U64) Unit
+    build_unary_op(ass, Pop, reg(RAX), a, point);
+
+#if ABI == SYSTEM_V_64
+    // realloc (ptr = rdi, size = rsi)
+    // copy size into RDX
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Pop, reg(RSI), a, point);
+
+#elif ABI == WIN_64
+    // realloc (ptr = RCX, size = RDX)
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Pop, reg(RDX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_unary_op(ass, Push, reg(RAX), a, point);
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&realloc),  a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
+    build_unary_op(ass, Push, reg(RBX), a, point);
+
+    build_nullary_op(ass, Ret, a, point);
+    
+}
+
+PiType build_malloc_fn_ty(Allocator* a) {
+    // malloc : Proc (U64) Address
+
+    PtrArray args = mk_ptr_array(1, a);
+    PiType* adty = mem_alloc(sizeof(PiType), a);
+    PiType* szty = mem_alloc(sizeof(PiType), a);
+
+    *adty = (PiType) {.sort = TPrim, .prim = Address};
+    *szty = (PiType) {.sort = TPrim, .prim = UInt_64};
+
+    push_ptr(szty, &args);
+
+    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = adty};
+}
+
+void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // malloc : Proc (U64) Unit
+    build_unary_op(ass, Pop, reg(RAX), a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_unary_op(ass, Push, reg(RAX), a, point);
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc),  a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
+    build_unary_op(ass, Push, reg(RBX), a, point);
+
+    build_nullary_op(ass, Ret, a, point);
+}
+
+PiType build_free_fn_ty(Allocator* a) {
+    // free : Proc (Address) Unit
+
+    PtrArray args = mk_ptr_array(1, a);
+    PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
+
+    *arg_ty = (PiType) {.sort = TPrim, .prim = Address};
+    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit};
+
+    push_ptr(arg_ty, &args);
+
+    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+}
+
+void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // free : Proc (Address) Unit
+    build_unary_op(ass, Pop, reg(RAX), a, point);
+
+#if ABI == SYSTEM_V_64
+    // free (dest = rdi)
+    // copy address into RDI
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+
+#elif ABI == WIN_64
+    // free (addr = rcx)
+    // copy address into RCX
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_unary_op(ass, Push, reg(RAX), a, point);
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&free),  a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    build_nullary_op(ass, Ret, a, point);
 }
 
 Module* base_module(Assembler* ass, Allocator* a) {
@@ -146,6 +454,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
+    former = FSize;
+    sym = string_to_symbol(mv_string("size"));
+    add_def(module, sym, type, &former);
+
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former);
@@ -215,6 +527,7 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
+
     build_comp_fun(ass, SetL, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Bool);
     sym = string_to_symbol(mv_string("<"));
@@ -233,8 +546,45 @@ Module* base_module(Assembler* ass, Allocator* a) {
     delete_pi_type(type, a);
 
     type = mk_null_proc_type(a);
-    build_exit_callback(ass, a, &point);
+    build_exit_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("exit"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_store_fn_ty(a);
+    build_store_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("store"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_load_fn_ty(a);
+    build_load_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("load"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    // C Wrappers!
+
+    type = build_malloc_fn_ty(a);
+    build_malloc_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("malloc"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_realloc_fn_ty(a);
+    build_realloc_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("realloc"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_free_fn_ty(a);
+    build_free_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("free"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
