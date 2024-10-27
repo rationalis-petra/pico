@@ -290,13 +290,13 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     // realloc (ptr = rdi, size = rsi)
     // copy size into RDX
-    build_unary_op(ass, Pop, reg(RDI), a, point);
     build_unary_op(ass, Pop, reg(RSI), a, point);
+    build_unary_op(ass, Pop, reg(RDI), a, point);
 
 #elif ABI == WIN_64
     // realloc (ptr = RCX, size = RDX)
-    build_unary_op(ass, Pop, reg(RCX), a, point);
     build_unary_op(ass, Pop, reg(RDX), a, point);
+    build_unary_op(ass, Pop, reg(RCX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
 
