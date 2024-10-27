@@ -196,22 +196,42 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             break;
         }
         case Int_64: {
-            int64_t* uival = (int64_t*) val;
-            out =  pretty_i64(*uival, a);
+            int64_t* ival = (int64_t*) val;
+            out =  pretty_i64(*ival, a);
             break;
         }
         case Int_32: {
-            int32_t* uival = (int32_t*) val;
-            out =  pretty_i32(*uival, a);
+            int32_t* ival = (int32_t*) val;
+            out =  pretty_i32(*ival, a);
             break;
         }
         case Int_16: {
-            int16_t* uival = (int16_t*) val;
-            out =  pretty_i16(*uival, a);
+            int16_t* ival = (int16_t*) val;
+            out =  pretty_i16(*ival, a);
             break;
         }
         case Int_8: {
-            int8_t* uival = (int8_t*) val;
+            int8_t* ival = (int8_t*) val;
+            out =  pretty_i8(*ival, a);
+            break;
+        }
+        case UInt_64: {
+            uint64_t* uival = (uint64_t*) val;
+            out =  pretty_u64(*uival, a);
+            break;
+        }
+        case UInt_32: {
+            uint32_t* uival = (uint32_t*) val;
+            out =  pretty_u32(*uival, a);
+            break;
+        }
+        case UInt_16: {
+            uint16_t* uival = (uint16_t*) val;
+            out =  pretty_i16(*uival, a);
+            break;
+        }
+        case UInt_8: {
+            uint8_t* uival = (uint8_t*) val;
             out =  pretty_i8(*uival, a);
             break;
         }
@@ -366,6 +386,18 @@ Document* pretty_type(PiType* type, Allocator* a) {
             break;
         case Int_8: 
             out = mv_str_doc(mk_string("I8", a), a);
+            break;
+        case UInt_64: 
+            out = mv_str_doc(mk_string("U64", a), a);
+            break;
+        case UInt_32: 
+            out = mv_str_doc(mk_string("U32", a), a);
+            break;
+        case UInt_16: 
+            out = mv_str_doc(mk_string("U16", a), a);
+            break;
+        case UInt_8: 
+            out = mv_str_doc(mk_string("U8", a), a);
             break;
         case TFormer: 
             out = mv_str_doc(mk_string("Former", a), a);

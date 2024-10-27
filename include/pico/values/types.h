@@ -23,10 +23,10 @@ typedef enum {
     Int_32 = 0b0110,
     Int_64 = 0b0111,
 
-    /* UInt_64, */
-    /* UInt_32, */
-    /* UInt_16, */
-    /* UInt_8, */
+    UInt_8  = 0b1100,
+    UInt_16 = 0b1101,
+    UInt_32 = 0b1110,
+    UInt_64 = 0b1111,
 } PrimType;
 
 typedef enum {

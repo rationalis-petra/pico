@@ -112,6 +112,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FIs:
         out = mk_str_doc(mv_string("::is"), a);
         break;
+    case FSize:
+        out = mk_str_doc(mv_string("::size"), a);
+        break;
 
         // Type formers
     case FStructType:
