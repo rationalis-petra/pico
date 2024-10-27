@@ -249,7 +249,31 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SLabels: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented for labels", a), a);
+        PtrArray nodes = mk_ptr_array(2 + syntax->labels.terms.len, a);
+        push_ptr(mk_str_doc(mv_string("(labels "), a), &nodes);
+
+        for (size_t i = 0; i < syntax->labels.terms.len; i++) {
+            PtrArray label_nodes = mk_ptr_array(4, a);
+            SymPtrACell cell = syntax->labels.terms.data[i];
+
+            push_ptr(mk_str_doc(mv_string("["), a), &label_nodes);
+            push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &label_nodes);
+            push_ptr(pretty_syntax(cell.val, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &label_nodes);
+
+            push_ptr(mv_sep_doc(label_nodes, a), &nodes);
+        }
+
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case SGoTo: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("(go-to "), a), &nodes);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->go_to.label), a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
         break;
     }
     case SSequence: {

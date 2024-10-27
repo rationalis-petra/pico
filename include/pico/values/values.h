@@ -40,6 +40,7 @@ typedef enum TermFormer {
     FLet,
     FIf,
     FLabels,
+    FGoTo,
     FSequence,
 
     // Special Term formers
