@@ -99,45 +99,50 @@ PiType build_store_fn_ty(Allocator* a) {
 
 void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // The usual calling convention for polymorphic functions is assumed
-    // RBP+  | types + argument offfsets (to discard)
+    // RBP+32| size
+    // RBP+24| offset (address)
+    // RBP+16| offset (value)
     // RBP+8 | return address
     // RBP   | OLD RBP
-    // RBP-  | args
-    // RSP   | output value 
+    // RBP-8 | address
+    // -- size of value -- 
+    // RSP+8 | value
+    // RSP   | return address 
     // See polymorphic.c for details
-
-    // The usual prelude
-    build_unary_op(ass, Pop, reg(RBX), a, point);
-    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
 
     // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
     // also note that size = RBP + 0x10
+    // Store the return address in RBP + 8
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
 
-    // Store size in RAX, stash it in RBX
-    build_binary_op(ass, Mov, reg(RAX), rref(RBP, 2*ADDRESS_SIZE), a, point); 
-    build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point); 
-    // store ptr dest in RAX  
-    build_binary_op(ass, Add, reg(RAX), reg(RSP), a, point);
-    build_binary_op(ass, Add, reg(RAX), rref(RAX, 0), a, point);
+    // Store Dest address (located @ RBP - 8)
+    build_binary_op(ass, Mov, reg(RDI), rref(RBP, -8), a, point);
+
+    // SRC address = RSP 
+
+    // Store size in RBX
+    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 4*ADDRESS_SIZE), a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    build_binary_op(ass, Add, reg(RDI), reg(RSP), a, point);
+    //build_binary_op(ass, Add, reg(RDI), reg(RAX), a, point);
     build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
+    build_binary_op(ass, Mov, reg(RCX), reg(RDI), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
+
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    // copy memcpy into RCX & call
+    // call memcpy
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&memcpy), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 
@@ -145,14 +150,19 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    // Return : mov RSP to RBP + 0x10
-    // move return address to [RSP] + 8 
-    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
-    // 5 = len (Old RBP, Ret addr, Offset (a), Offset (addr), Type (Size))
-    build_binary_op(ass, Add, reg(RSP), imm8(ADDRESS_SIZE* 5), a, point);
-    build_unary_op(ass, Push, rref(RBP, 8), a, point);
+    // Store return address in RBX
+    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 8), a, point);
 
+    // set RSP = current RBP + 5*ADDRESS
+    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm8(5*ADDRESS_SIZE), a, point);
+
+    // Restore the old RBP
     build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+
+    // push return address
+    build_unary_op(ass, Push, reg(RBX), a, point);
+
     build_nullary_op(ass, Ret, a, point);
 }
 
@@ -163,7 +173,7 @@ PiType build_load_fn_ty(Allocator* a) {
     PiType* ret_ty = mem_alloc(sizeof(PiType), a);
 
     *arg1_ty = (PiType) {.sort = TPrim, .prim = Address, };
-    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit, };
+    *ret_ty = (PiType) {.sort = TVar, .prim = ty_sym, };
 
     PtrArray args = mk_ptr_array(1, a);
     push_ptr(arg1_ty, &args);
@@ -178,40 +188,66 @@ PiType build_load_fn_ty(Allocator* a) {
 }
 
 void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // The usual calling convention for polymorphic functions is assumed
-    // RBP+24  | type
-    // RBP+16  | offset
-    // RBP+8   | return address
+    // The usual calling convention for polymorphic functions is assumed, hence
+    // stack has the form:
+    // RBP+24  | type/size
+    // RBP+16  | offset (address)
+    // RBP+8   | padding (for return address)
     // RBP     | OLD RBP
-    // RBP-    | load address
+    // RBP-8   | load address
     // RSP     | return address 
     // See polymorphic.c for details
 
-    // The usual prelude
-    build_unary_op(ass, Pop, reg(RBX), a, point);
-    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
+    // Note: what we want to do is make the stack look like this
+    // RBP = old RBP
+    // -- OLD Stack FRAME
+    //  ------------------------------
+    //  -- Enough Padding for Value --
+    //  ------------------------------
+    // RSP -> Return address
+    // Then call memcpy & return
 
-    // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
-    // also note that size = RBP + 0x10
+    // Therefore, we need to do the following steps to wrangle the stack
+    // 1. Store Size
+    // 2. Stash return address
+    // 3. Stash load src address 
+    // 3. Set RSP = RBP + 4 ADDRESSES - Size
+    // 4. Set RBP = [RBP]
+    // 5. Push return address
 
-    // Store size in RAX, stash it in RBX
-    build_binary_op(ass, Mov, reg(RAX), rref(RBP, 2*ADDRESS_SIZE), a, point); 
-    build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point); 
-    // store ptr dest in RAX  
-    build_binary_op(ass, Add, reg(RAX), reg(RSP), a, point);
-    build_binary_op(ass, Add, reg(RAX), rref(RAX, 0), a, point);
+    // Store size in RBX
+    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 3*ADDRESS_SIZE), a, point); 
+
+    // Stash return address in RAX
+    build_unary_op(ass, Pop, reg(RAX), a, point); 
+
+    // Stash load src address
+    build_unary_op(ass, Pop, reg(RSI), a, point);
+
+    // Set RSP = RBP + 4 Addresses - Size (note that at this point, RSP = RBP
+    build_binary_op(ass, Add, reg(RSP), imm8(4*ADDRESS_SIZE), a, point);
+    build_binary_op(ass, Sub, reg(RSP), reg(RBX), a, point);
+
+    // Set RBP = [RBP]
+    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+
+    // Make sure return address is available when we Ret
+    build_unary_op(ass, Push, reg(RAX), a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
-    // copy size into RDX
-    build_binary_op(ass, Add, reg(RDI), reg(RSP), a, point);
-    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDI), reg(RSP), a, point);
+    build_binary_op(ass, Add, reg(RDI), imm8(ADDRESS_SIZE), a, point);
+
+    //build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
-    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
+    build_binary_op(ass, Add, reg(RCX), imm8(ADDRESS_SIZE), a, point);
+
+    build_binary_op(ass, Mov, reg(RDX), reg(RSI), a, point);
     build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
@@ -226,14 +262,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    // Return : mov RSP to RBP + 0x10
-    // move return address to [RSP] + 8 
-    build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
-    // 5 = len (Old RBP, Ret addr, Offset (a), Offset (addr), Type (Size))
-    build_binary_op(ass, Add, reg(RSP), imm8(ADDRESS_SIZE* 5), a, point);
-    build_unary_op(ass, Push, rref(RBP, 8), a, point);
-
-    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+    // Return
     build_nullary_op(ass, Ret, a, point);
 }
 
