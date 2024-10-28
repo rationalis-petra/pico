@@ -251,6 +251,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SLabels: {
         PtrArray nodes = mk_ptr_array(2 + syntax->labels.terms.len, a);
         push_ptr(mk_str_doc(mv_string("(labels "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->labels.entry, a), &nodes);
 
         for (size_t i = 0; i < syntax->labels.terms.len; i++) {
             PtrArray label_nodes = mk_ptr_array(4, a);
@@ -258,14 +259,14 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 
             push_ptr(mk_str_doc(mv_string("["), a), &label_nodes);
             push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &label_nodes);
-            push_ptr(pretty_syntax(cell.val, a), &nodes);
+            push_ptr(pretty_syntax(cell.val, a), &label_nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &label_nodes);
 
             push_ptr(mv_sep_doc(label_nodes, a), &nodes);
         }
 
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case SGoTo: {

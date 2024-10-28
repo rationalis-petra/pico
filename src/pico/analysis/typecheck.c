@@ -432,9 +432,31 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
-    case SLabels:
-        throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'labels'"));
+    case SGoTo:
+        if (label_present(untyped->go_to.label, env)) {
+            PiType* t = mk_uvar(gen, a);
+            untyped->ptype = t;
+        } else {
+            throw_error(point, mv_string("Error in go-to: Label Not found!"));
+        }
         break;
+    case SLabels: {
+        PiType* ty = mk_uvar(gen, a);
+        untyped->ptype = ty;
+        SymbolArray labels = mk_u64_array(untyped->labels.terms.len, a);
+        for (size_t i = 0;i < untyped->labels.terms.len; i++) {
+            push_u64(untyped->labels.terms.data[i].key, &labels);
+        }
+
+        add_labels(labels, env);
+        type_check_i(untyped->labels.entry, ty, env, gen, a, point);
+        for (size_t i = 0 ; i < untyped->labels.terms.len; i++) {
+            type_check_i(untyped->labels.terms.data[i].val, ty, env, gen, a, point);
+        }
+        pop_labels(env, labels.len);
+        
+        break;
+    }
     case SSequence: {
         for (size_t i = 0; i < untyped->sequence.terms.len; i++) {
             type_infer_i(untyped->sequence.terms.data[i], env, gen, a, point);
@@ -548,7 +570,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     }
     case SLabels:
-        throw_error(point, mk_string("squash_types not implemented for labels", a));
+        squash_types(typed->labels.entry, a, point);
+        for (size_t i = 0; i < typed->labels.terms.len; i++) {
+            squash_types(typed->labels.terms.data[i].val, a, point);
+        }
+        break;
+    case SGoTo:
         break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.terms.len; i++) {

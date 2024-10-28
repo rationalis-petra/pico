@@ -134,6 +134,7 @@ typedef struct {
 } SynProjector;
 
 typedef struct {
+    Syntax* entry;
     SymPtrAssoc terms;
 } SynLabels;
 
