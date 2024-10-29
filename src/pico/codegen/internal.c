@@ -1,13 +1,27 @@
 #include "pico/codegen/internal.h"
 
-void backlink_global(Symbol sym, size_t offset, SymSArrAMap* links, Allocator* a) {
+void backlink_global(Symbol sym, size_t offset, LinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
-    SizeArray* sarr = sym_sarr_lookup(sym, *links);
+    SizeArray* sarr = sym_sarr_lookup(sym, links->backlinks);
 
     if (!sarr) {
         // Create & Insert
-        sym_sarr_insert(sym, mk_size_array(4, a), links);
-        sarr = sym_sarr_lookup(sym, *links);
+        sym_sarr_insert(sym, mk_size_array(4, a), &links->backlinks);
+        sarr = sym_sarr_lookup(sym, links->backlinks);
+    }
+
+    // Step 2: insert offset into array
+    push_size(offset, sarr);
+}
+
+void backlink_goto(Symbol sym, size_t offset, LinkData* links, Allocator* a) {
+    // Step 1: Try lookup or else create & insert 
+    SizeArray* sarr = sym_sarr_lookup(sym, links->gotolinks);
+
+    if (!sarr) {
+        // Create & Insert
+        sym_sarr_insert(sym, mk_size_array(4, a), &links->gotolinks);
+        sarr = sym_sarr_lookup(sym, links->gotolinks);
     }
 
     // Step 2: insert offset into array

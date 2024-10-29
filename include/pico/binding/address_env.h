@@ -37,6 +37,11 @@ typedef struct {
     };
 } AddressEntry;
 
+typedef struct {
+    Result_t type;
+    uint32_t stack_offset;
+} LabelEntry;
+
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
 void delete_address_env(AddressEnv* env, Allocator* a);
 
@@ -55,6 +60,7 @@ void delete_address_env(AddressEnv* env, Allocator* a);
  */
 
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env);
+LabelEntry label_env_lookup(Symbol s, AddressEnv* env);
 
 // Push and pop a new local environment to deal with procedure
 void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
@@ -67,8 +73,12 @@ void address_end_poly(AddressEnv* env, Allocator* a);
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
 //   it establishes bindings for the members of the enum, but does not 
 // Unbind removes these bindings. Like bind, it does not adjust the stack head.
-void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
+void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env);
 void address_unbind_enum_vars(AddressEnv* env);
+
+// Start/end 
+void address_start_labels(SymbolArray labels, AddressEnv* env);
+void address_end_labels(AddressEnv* env);
 
 // Inform the environment that values have been pushed/popped from the stack.
 void address_stack_grow(AddressEnv* env, size_t amount);

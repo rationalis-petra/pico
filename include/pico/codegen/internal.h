@@ -10,7 +10,14 @@
 /* Utility functions shared across code generation  
  */
 
-void backlink_global(Symbol sym, size_t offset, SymSArrAMap* links, Allocator* a);
+typedef struct {
+    SymSArrAMap backlinks;
+    SymSArrAMap gotolinks;
+} LinkData;
+
+void backlink_global(Symbol sym, size_t offset, LinkData* links, Allocator* a);
+void backlink_goto(Symbol sym, size_t offset, LinkData* links, Allocator* a);
+
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 #endif

@@ -9,11 +9,11 @@
 #include "pico/binding/address_env.h"
 
 // Implementation details
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
-void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
     SymbolArray vars;
     Syntax body;
     if (syn.type == SProcedure) {
@@ -101,7 +101,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     address_end_poly(env, a);
 }
 
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
     switch (syn.type) {
     case SLitUntypedIntegral: {
         panic(mv_string("Cannot generate polymorphic code for untyped integral."));
