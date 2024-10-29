@@ -105,6 +105,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FLabels:
         out = mk_str_doc(mv_string("::labels"), a);
         break;
+    case FGoTo:
+        out = mk_str_doc(mv_string("::goto"), a);
+        break;
     case FSequence:
         out = mk_str_doc(mv_string("::sequence"), a);
         break;

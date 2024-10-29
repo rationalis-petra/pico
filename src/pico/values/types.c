@@ -524,7 +524,7 @@ PiType* pi_type_subst_i(PiType* type, SymPtrAssoc binds, SymbolArray* shadow, Al
     }
     // Quantified Types
     case TVar: {
-        if (find_u64(type->var, shadow) == shadow->len) {
+        if (find_u64(type->var, *shadow) == shadow->len) {
             PiType** result = (PiType**)sym_ptr_alookup(type->var, binds);
             *out = result ? **result : *type;
         }

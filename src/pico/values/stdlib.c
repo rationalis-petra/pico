@@ -471,6 +471,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("labels"));
     add_def(module, sym, type, &former);
 
+    former = FGoTo;
+    sym = string_to_symbol(mv_string("go-to"));
+    add_def(module, sym, type, &former);
+
     former = FSequence;
     sym = string_to_symbol(mv_string("seq"));
     add_def(module, sym, type, &former);

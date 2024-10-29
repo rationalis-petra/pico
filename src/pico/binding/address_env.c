@@ -4,7 +4,6 @@
 #include "platform/machine_info.h"
 
 #include "pico/binding/address_env.h"
-#include "pico/codegen/codegen.h"
 
 // Address Environment: Implementation
 // -----------------------------------
@@ -24,6 +23,7 @@ typedef enum {
     SADirect,
     SAIndirect,
     SASentinel,
+    SALabel,
 } SAddr_t;
 
 typedef struct {
@@ -108,7 +108,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
-        if (maddr.type != SASentinel && maddr.symbol == s) {
+        if ((maddr.type == SADirect || maddr.type == SAIndirect) && maddr.symbol == s) {
             // TOOD: Check if the offset can fit into an immediate
             return (AddressEntry) {
                 .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
@@ -135,6 +135,27 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
             .value = e.value
         };
     }
+}
+
+LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
+    if (env->local_envs.len == 0) return (LabelEntry) {.type = Err,};
+
+
+    // Search for symbol
+    LocalAddrs locals = *(LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+    for (size_t i = locals.vars.len; i > 0; i--) {
+        SAddr maddr = locals.vars.data[i - 1];
+        if (maddr.type == SALabel && maddr.symbol == s) {
+            // TOOD: Check if the offset can fit into an immediate
+            return (LabelEntry) {
+                .type = Ok,
+                .stack_offset = maddr.stack_offset,
+            };
+        };
+    }
+
+    return (LabelEntry) {.type = Err};
 }
 
 
@@ -228,7 +249,7 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
     mem_free(old_locals, a);
 }
 
-void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
+void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
     // Note: We don't adjust the stack head
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
@@ -270,6 +291,40 @@ void address_unbind_enum_vars(AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
     pop_saddr(&locals->vars);
+    for (size_t i = env->local_envs.len; i > 0; i--) {
+        SAddr local = pop_saddr(&locals->vars);
+        if (local.type == SASentinel) {
+            break;
+        }
+    }
+}
+
+void address_start_labels(SymbolArray labels, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    size_t stack_offset = locals->stack_head;
+
+    SAddr padding;
+    padding.type = SASentinel;
+    padding.symbol = 0;
+    padding.stack_offset = stack_offset;
+    push_saddr(padding, &locals->vars);
+
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
+    for (size_t i = labels.len; i > 0; i--) {
+        SAddr local;
+        local.type = SALabel;
+
+        local.symbol = labels.data[i - 1];
+        local.stack_offset = stack_offset;
+
+        push_saddr(local, &locals->vars);
+    }
+}
+
+void address_end_labels(AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
     for (size_t i = env->local_envs.len; i > 0; i--) {
         SAddr local = pop_saddr(&locals->vars);
         if (local.type == SASentinel) {

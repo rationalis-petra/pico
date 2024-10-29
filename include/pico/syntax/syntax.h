@@ -44,6 +44,7 @@ typedef enum {
 
     // Control Flow & Binding
     SLabels,
+    SGoTo,
     SSequence,
     SLet,
     SIf,
@@ -133,8 +134,13 @@ typedef struct {
 } SynProjector;
 
 typedef struct {
-    SymPtrAssoc* terms;
+    Syntax* entry;
+    SymPtrAssoc terms;
 } SynLabels;
+
+typedef struct {
+    Symbol label;
+} SynGoTo;
 
 typedef struct {
     SynArray terms;
@@ -198,6 +204,7 @@ struct Syntax {
         SynLet let_expr;
         SynIf if_expr;
         SynLabels labels;
+        SynGoTo go_to;
         SynSequence sequence;
 
         SynIs is;

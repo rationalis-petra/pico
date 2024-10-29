@@ -17,48 +17,55 @@
  *   is top of stack)
  */
 
+
 // Implementation details
-void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
+void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
 void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
 
 GenResult generate_expr(Syntax* syn, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
     AddressEnv* a_env = mk_address_env(env, NULL, a);
-    SymSArrAMap backlinks = mk_sym_sarr_amap(16, a);
-    generate(*syn, a_env, ass, &backlinks, a, point);
+    LinkData links = (LinkData) {
+        .backlinks = mk_sym_sarr_amap(32, a),
+        .gotolinks = mk_sym_sarr_amap(32, a),
+    };
+    generate(*syn, a_env, ass, &links, a, point);
     delete_address_env(a_env, a);
 
     GenResult out;
-    out.backlinks = backlinks;
+    out.backlinks = links.backlinks;
 
     return out;
 }
 
 GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    SymSArrAMap backlinks = mk_sym_sarr_amap(32, a);
+    LinkData links = (LinkData) {
+        .backlinks = mk_sym_sarr_amap(32, a),
+        .gotolinks = mk_sym_sarr_amap(32, a),
+    };
 
     switch(top.type) {
     case TLDef: {
         AddressEnv* a_env = mk_address_env(env, &top.def.bind, a);
-        generate(*top.def.value, a_env, ass, &backlinks, a, point);
+        generate(*top.def.value, a_env, ass, &links, a, point);
         delete_address_env(a_env, a);
         break;
     }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
-        generate(*top.expr, a_env, ass, &backlinks, a, point);
+        generate(*top.expr, a_env, ass, &links, a, point);
         delete_address_env(a_env, a);
         break;
     }
     }
 
     return (GenResult) {
-        .backlinks = backlinks,
+        .backlinks = links.backlinks,
     };
 }
 
-void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point) {
+void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
     switch (syn.type) {
     case SLitUntypedIntegral: 
         panic(mv_string("Cannot generate monomorphic code for untyped integral!"));
@@ -458,7 +465,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
                               , pi_mono_size_of(*(PiType*)variant_types.data[i])
                               , &arg_sizes);
             }
-            address_bind_enum_vars(arg_sizes, env, a);
+            address_bind_enum_vars(arg_sizes, env);
 
             generate(*clause.body, env, ass, links, a, point);
 
@@ -544,9 +551,96 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, A
         *jmp_loc = (uint8_t)(end_pos - start_pos);
         break;
     }
-    case SLabels:
-        throw_error(point, mv_string("Codegen is not implemented for this syntactic form: 'labels'"));
+    case SLabels: {
+        // Labels: The code-generation for labels is as follows: 
+        // 1. Add labels to environment
+        // 2. Generate expression
+        // 3. For each expression:
+        //  3.1 Mark Beginning of label expression
+        //  3.2 Generate label expressions
+        // 4. Backlink all labels.
+        SymbolArray labels = mk_u64_array(syn.labels.terms.len, a);
+        for (size_t i = 0; i < syn.labels.terms.len; i++) 
+            push_u64(syn.labels.terms.data[i].key, &labels);
+
+        address_start_labels(labels, env);
+
+        generate(*syn.labels.entry, env, ass, links, a, point);
+
+        SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
+        SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
+
+        for (size_t i = 0; i < syn.labels.terms.len; i++) {
+            SymPtrACell cell = syn.labels.terms.data[i];
+
+            // Mark Label
+            size_t pos = get_pos(ass);
+            sym_size_bind(cell.key, pos, &label_points);
+
+            generate(*(Syntax*)cell.val, env, ass, links, a, point);
+            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            sym_size_bind(cell.key, out.backlink, &label_jumps);
+        }
+
+        size_t label_end = get_pos(ass);
+
+        for (size_t i = 0; i < label_points.len; i++)  {
+            Symbol sym = label_points.data[i].key;
+            size_t dest = label_points.data[i].val;
+
+            // Step 1: make the end of the label jump to the end of the expression.
+            {
+                size_t backlink = label_jumps.data[i].val;
+                size_t origin = backlink + 1;
+                size_t dest = label_end;
+
+                int64_t amt = dest - origin;
+                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                
+                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
+                *loc = (int8_t) amt;
+            }
+
+
+            // Step 2: fill out each jump to this label.
+            SizeArray* arr = sym_sarr_lookup(sym, links->gotolinks);
+            if (!arr) panic(mv_string("Can't find size array when backlinking label!"));
+
+            for (size_t i = 0; i < arr->len; i++) {
+                size_t backlink = arr->data[i];
+                size_t origin = backlink + 1;
+
+                int64_t amt = dest - origin;
+                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                
+                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
+                *loc = (int8_t) amt;
+            }
+        }
+
+        address_end_labels(env);
         break;
+    }
+    case SGoTo: {
+        // Generating code for a goto:
+        // 1. Backlink the label
+        //throw_error(point, mv_string("Codegen is not implemented for this syntactic form: 'go-to'"));
+        LabelEntry lble = label_env_lookup(syn.go_to.label, env);
+        if (lble.type == Ok) {
+            if (lble.stack_offset != 0) {
+                // jump up stack
+                // TODO handle dynamic variable unbinding (if needed!)
+                build_binary_op(ass, Add, reg(RSP), imm32(lble.stack_offset), a, point);
+            }
+
+            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+
+            backlink_goto(syn.go_to.label, out.backlink, links, a);
+        } else {
+            throw_error(point, mv_string("Label not found during codegen!!"));
+        }
+        break;
+    }
     case SSequence: {
         for (size_t i = 0; i < syn.sequence.terms.len; i++) {
             Syntax* term = (Syntax*)syn.sequence.terms.data[i];

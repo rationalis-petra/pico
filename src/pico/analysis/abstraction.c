@@ -29,6 +29,21 @@ bool get_fieldname(RawTree* raw, Symbol* fieldname) {
     }
 }
 
+bool get_label(RawTree* raw, Symbol* fieldname) {
+    if (raw->type == RawList && raw->nodes.len == 2) {
+        raw = raw->nodes.data[0];
+        if (is_symbol(raw)) {
+            *fieldname = raw->atom.symbol;
+            return true;
+        } else {
+            return false;
+        }
+    }
+    else {
+        return false;
+    }
+}
+
 bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     if (nodes.type == RawAtom) { return false; }
 
@@ -380,7 +395,44 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FLabels: {
-        throw_error(point, mv_string("Term former 'labels' not implemented!"));
+        if (raw.nodes.len < 2) {
+            throw_error(point, mv_string("Term former 'labels' expects at least 1 argument!"));
+        }
+
+        Syntax* entry = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        SymPtrAssoc terms = mk_sym_ptr_assoc(raw.nodes.len - 2, a);
+        for (size_t i = 2; i < raw.nodes.len; i++) {
+            Symbol label;
+            RawTree* label_expr = raw.nodes.data[i];
+            if (!get_label(label_expr, &label)) {
+                throw_error(point, mv_string("Each label must be of the form [label expr]"));
+            }
+            Syntax* res = abstract_expr_i(*(RawTree*)label_expr->nodes.data[1], env, a, point);
+            sym_ptr_bind(label, res, &terms);
+        }
+
+        *res = (Syntax) {
+            .type = SLabels,
+            .labels.entry = entry,
+            .labels.terms = terms,
+        };
+        break;
+    }
+    case FGoTo: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
+        }
+        RawTree* label = raw.nodes.data[1]; 
+
+        if (label->type != RawAtom && label->atom.type != ASymbol) {
+            throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
+        }
+
+        *res = (Syntax) {
+            .type = SGoTo,
+            .go_to.label = label->atom.symbol,
+        };
         break;
     }
     case FSequence: {

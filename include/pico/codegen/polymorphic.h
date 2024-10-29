@@ -8,7 +8,8 @@
 #include "pico/binding/address_env.h"
 #include "pico/syntax/syntax.h"
 #include "pico/data/sym_sarr_amap.h"
+#include "pico/codegen/internal.h"
 
-void generate_polymorphic(SymbolArray arr, Syntax syn, AddressEnv* env, Assembler* ass, SymSArrAMap* links, Allocator* a, ErrorPoint* point);
+void generate_polymorphic(SymbolArray arr, Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
 
 #endif
