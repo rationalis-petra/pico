@@ -99,15 +99,15 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
             if (syn.ptype->sort == TProc || syn.ptype->sort == TAll) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)e.value), a, point);
+                AsmResult out = build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
-                build_unary_op(ass, Push, reg(RBX), a, point);
+                build_unary_op(ass, Push, reg(R9), a, point);
             } else if (syn.ptype->sort == TPrim) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(RBX), rref(RCX, 0), a, point);
-                build_unary_op(ass, Push, reg(RBX), a, point);
+                build_binary_op(ass, Mov, reg(R9), rref(RCX, 0), a, point);
+                build_unary_op(ass, Push, reg(R9), a, point);
             } else if (syn.ptype->sort == TKind) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
@@ -176,7 +176,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_unary_op(ass, Pop, reg(RAX), a, point);
         build_unary_op(ass, Pop, reg(RBP), a, point);
         // storage of return address
-        build_unary_op(ass, Pop, reg(RBX), a, point);
+        build_unary_op(ass, Pop, reg(R9), a, point);
         
         // pop args
         build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8), a, point);
@@ -184,7 +184,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // push value
         build_unary_op(ass, Push, reg(RAX), a, point);
         // push return address 
-        build_unary_op(ass, Push, reg(RBX), a, point);
+        build_unary_op(ass, Push, reg(R9), a, point);
         build_nullary_op(ass, Ret, a, point);
         break;
     }
@@ -507,9 +507,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // generate the condition
         generate(*syn.if_expr.condition, env, ass, links, a, point);
 
-        // Pop the bool into RBX; compare with 0
-        build_unary_op(ass, Pop, reg(RBX), a, point);
-        build_binary_op(ass, Cmp, reg(RBX), imm32(0), a, point);
+        // Pop the bool into R9; compare with 0
+        build_unary_op(ass, Pop, reg(R9), a, point);
+        build_binary_op(ass, Cmp, reg(R9), imm32(0), a, point);
         address_stack_shrink(env, pi_size_of((PiType) {.sort = TPrim, .prim = Bool}));
 
         // ---------- CONDITIONAL JUMP ----------
@@ -658,8 +658,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate(*syn.is.val, env, ass, links, a, point);
         break;
     case SCheckedType: {
-        build_binary_op(ass, Mov, reg(RBX), imm64((uint64_t)syn.type_val), a, point);
-        build_unary_op(ass, Push, reg(RBX), a, point);
+        build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)syn.type_val), a, point);
+        build_unary_op(ass, Push, reg(R9), a, point);
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
