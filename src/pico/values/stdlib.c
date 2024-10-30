@@ -39,9 +39,9 @@ PiType mk_null_proc_type(Allocator* a) {
 
 void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX), a, point);
-    build_unary_op (ass, Pop, reg(RBX), a, point);
+    build_unary_op (ass, Pop, reg(R9), a, point);
     build_unary_op (ass, Pop, reg(RAX), a, point);
-    build_binary_op (ass, op, reg(RAX), reg(RBX), a, point);
+    build_binary_op (ass, op, reg(RAX), reg(R9), a, point);
     build_unary_op (ass, Push, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RCX), a, point);
     build_nullary_op (ass, Ret, a, point);
@@ -49,9 +49,9 @@ void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* poi
 
 void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX), a, point);
-    build_unary_op (ass, Pop, reg(RBX), a, point);
+    build_unary_op (ass, Pop, reg(R9), a, point);
     build_unary_op (ass, Pop, reg(RAX), a, point);
-    build_binary_op (ass, Cmp, reg(RAX), reg(RBX), a, point);
+    build_binary_op (ass, Cmp, reg(RAX), reg(R9), a, point);
     build_unary_op (ass, op, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RCX), a, point);
@@ -113,29 +113,29 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
     // also note that size = RBP + 0x10
     // Store the return address in RBP + 8
-    build_unary_op(ass, Pop, reg(RBX), a, point);
-    build_binary_op(ass, Mov, rref(RBP, 8), reg(RBX), a, point);
+    build_unary_op(ass, Pop, reg(R9), a, point);
+    build_binary_op(ass, Mov, rref(RBP, 8), reg(R9), a, point);
 
     // Store Dest address (located @ RBP - 8)
     build_binary_op(ass, Mov, reg(RDI), rref(RBP, -8), a, point);
 
     // SRC address = RSP 
 
-    // Store size in RBX
-    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 4*ADDRESS_SIZE), a, point); 
+    // Store size in R9
+    build_binary_op(ass, Mov, reg(R9), rref(RBP, 4*ADDRESS_SIZE), a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     //build_binary_op(ass, Add, reg(RDI), reg(RAX), a, point);
     build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
-    build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(R9), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX), reg(RDI), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
-    build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
+    build_binary_op(ass, Mov, reg(R8), reg(R9), a, point);
 
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
@@ -150,8 +150,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    // Store return address in RBX
-    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 8), a, point);
+    // Store return address in R9
+    build_binary_op(ass, Mov, reg(R9), rref(RBP, 8), a, point);
 
     // set RSP = current RBP + 5*ADDRESS
     build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
@@ -161,7 +161,7 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
 
     // push return address
-    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(R9), a, point);
 
     build_nullary_op(ass, Ret, a, point);
 }
@@ -215,8 +215,8 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // 4. Set RBP = [RBP]
     // 5. Push return address
 
-    // Store size in RBX
-    build_binary_op(ass, Mov, reg(RBX), rref(RBP, 3*ADDRESS_SIZE), a, point); 
+    // Store size in R9
+    build_binary_op(ass, Mov, reg(R9), rref(RBP, 3*ADDRESS_SIZE), a, point); 
 
     // Stash return address in RAX
     build_unary_op(ass, Pop, reg(RAX), a, point); 
@@ -226,7 +226,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     // Set RSP = RBP + 4 Addresses - Size (note that at this point, RSP = RBP
     build_binary_op(ass, Add, reg(RSP), imm8(4*ADDRESS_SIZE), a, point);
-    build_binary_op(ass, Sub, reg(RSP), reg(RBX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), reg(R9), a, point);
 
     // Set RBP = [RBP]
     build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
@@ -240,7 +240,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RDI), imm8(ADDRESS_SIZE), a, point);
 
     //build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
-    build_binary_op(ass, Mov, reg(RDX), reg(RBX), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(R9), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
@@ -248,7 +248,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RCX), imm8(ADDRESS_SIZE), a, point);
 
     build_binary_op(ass, Mov, reg(RDX), reg(RSI), a, point);
-    build_binary_op(ass, Mov, reg(R8), reg(RBX), a, point);
+    build_binary_op(ass, Mov, reg(R8), reg(R9), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
@@ -292,15 +292,16 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // copy size into RDX
     build_unary_op(ass, Pop, reg(RSI), a, point);
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     // realloc (ptr = RCX, size = RDX)
     build_unary_op(ass, Pop, reg(RDX), a, point);
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
 
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&realloc),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
@@ -309,9 +310,9 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_unary_op(ass, Pop, reg(R9), a, point);
     build_unary_op(ass, Push, reg(RAX), a, point);
-    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(R9), a, point);
 
     build_nullary_op(ass, Ret, a, point);
     
@@ -340,13 +341,13 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
-
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
@@ -355,9 +356,9 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_unary_op(ass, Pop, reg(R9), a, point);
     build_unary_op(ass, Push, reg(RAX), a, point);
-    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(R9), a, point);
 
     build_nullary_op(ass, Ret, a, point);
 }
@@ -385,15 +386,15 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // free (dest = rdi)
     // copy address into RDI
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     // free (addr = rcx)
     // copy address into RCX
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
-
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&free),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
