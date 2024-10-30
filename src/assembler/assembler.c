@@ -642,7 +642,9 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
                 num_immediate_bytes = 1;
             } else if (loc.immediate_32 <= 256 * 256) {
                 opcode = 0x68;
-                num_immediate_bytes = 2;
+                // Encoding for 16 & 32 bit immediate are the same, 
+                // meaning a "16 bit immediate" is actually a padded 32-bit immediate!
+                num_immediate_bytes = 4;
             } else {
                 opcode = 0x68;
                 num_immediate_bytes = 4;
