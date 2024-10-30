@@ -292,15 +292,16 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // copy size into RDX
     build_unary_op(ass, Pop, reg(RSI), a, point);
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     // realloc (ptr = RCX, size = RDX)
     build_unary_op(ass, Pop, reg(RDX), a, point);
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
 
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&realloc),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
@@ -340,13 +341,13 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
-
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
@@ -385,15 +386,15 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // free (dest = rdi)
     // copy address into RDI
     build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
 
 #elif ABI == WIN_64
     // free (addr = rcx)
     // copy address into RCX
     build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
-
-    build_unary_op(ass, Push, reg(RAX), a, point);
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&free),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
