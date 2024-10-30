@@ -34,6 +34,7 @@ typedef enum {
     TProc,
     TStruct,
     TEnum,
+    TReset,
 
     // Quantified Types
     TVar,
@@ -66,6 +67,11 @@ typedef struct {
 } EnumType;
 
 typedef struct {
+    PiType* in;
+    PiType* out;
+} ResetType;
+
+typedef struct {
     PtrArray args;
     PiType* fam;
 } TAppType;
@@ -91,6 +97,7 @@ struct PiType {
         PrimType prim;
         ProcType proc;
         StructType structure;
+        ResetType reset;
         EnumType enumeration;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)

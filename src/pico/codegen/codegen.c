@@ -641,6 +641,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
         break;
     }
+    case SWithReset: {
+        throw_error(point, mv_string("Codegen for with-reset not implelemented!"));
+    }
+    case SResetTo: {
+        throw_error(point, mv_string("Codegen for reset-to not implelemented!"));
+    }
     case SSequence: {
         for (size_t i = 0; i < syn.sequence.terms.len; i++) {
             Syntax* term = (Syntax*)syn.sequence.terms.data[i];

@@ -1,5 +1,6 @@
 #include "pico/analysis/abstraction.h"
 
+#include "platform/signals.h"
 #include "data/result.h"
 #include "data/string.h"
 #include "pico/values/values.h"
@@ -435,6 +436,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FWithReset: {
+        throw_error(point, mv_string("Abstract for 'with-reset' not implemented!"));
+        break;
+    }
+    case FResetTo: {
+        throw_error(point, mv_string("Abstract for 'reset-to' not implemented!"));
+        break;
+    }
     case FSequence: {
         SynArray terms = mk_ptr_array(raw.nodes.len - 1, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
@@ -556,8 +565,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FResetType: {
+        throw_error(point, mv_string("Abstract for 'Reset' not implemented!"));
+        break;
+    }
+    case FAllType: {
+        throw_error(point, mv_string("Abstract for 'All' not implemented!"));
+        break;
+    }
     default:
-        throw_error(point, mv_string("Internal Error: Invalid term former!"));
+        panic(mv_string("Internal Error: Invalid term former!"));
     }
     return res;
 }
@@ -623,7 +640,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         break;
     }
     default: {
-        throw_error(point, mk_string("Name Resolution Received an invalid Raw Syntax Tree", a));
+        panic(mv_string("Internal Error: Name Resolution Received an invalid Raw Syntax Tree"));
     }
     }
     return res;

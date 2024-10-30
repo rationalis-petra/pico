@@ -1,5 +1,6 @@
 #include "pico/analysis/typecheck.h"
 
+#include "platform/signals.h"
 #include "data/string.h"
 #include "pretty/string_printer.h"
 
@@ -440,6 +441,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             throw_error(point, mv_string("Error in go-to: Label Not found!"));
         }
         break;
+    case SWithReset:
+        throw_error(point, mv_string("Typecheck not implemented for with-reset!"));
+        break;
+    case SResetTo:
+        throw_error(point, mv_string("Typecheck not implemented for reset-to!"));
+        break;
     case SLabels: {
         PiType* ty = mk_uvar(gen, a);
         untyped->ptype = ty;
@@ -482,10 +489,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SProcType:
     case SStructType:
     case SEnumType:
+    case SResetType:
         eval_type(untyped, env, a, point);
         break;
     default:
-        throw_error(point, mk_string("Internal Error: unrecognized syntactic form (type_infer_i)", a));
+        panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
         break;
     }
 }
@@ -577,6 +585,13 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SGoTo:
         break;
+    case SWithReset:
+        squash_types(typed->with_reset.expr, a, point);
+        squash_types(typed->with_reset.handler, a, point);
+        break;
+    case SResetTo:
+        squash_types(typed->reset_to.point, a, point);
+        break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.terms.len; i++) {
             squash_types(typed->sequence.terms.data[i], a, point);
@@ -590,7 +605,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_type(typed->type_val);
         break;
     default:
-        throw_error(point, mk_string("Internal Error: unrecognized syntactic form (squash_types)", a));
+        panic(mv_string("Internal Error: invalid syntactic form provided to (squash_types)"));
         break;
     }
 
@@ -687,6 +702,22 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         *out_type = (PiType) {
             .sort = TEnum,
             .enumeration.variants = variants,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SResetType: {
+        eval_type(untyped->reset_type.in, env, a, point);
+        PiType* in = untyped->reset_type.in->type_val;
+
+        eval_type(untyped->reset_type.out, env, a, point);
+        PiType* out = untyped->reset_type.out->type_val;
+        
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TReset,
+            .reset.in = in,
+            .reset.out = out,
         };
         untyped->type_val = out_type;
         break;

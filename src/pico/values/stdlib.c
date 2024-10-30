@@ -476,6 +476,14 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("go-to"));
     add_def(module, sym, type, &former);
 
+    former = FWithReset;
+    sym = string_to_symbol(mv_string("with-reset"));
+    add_def(module, sym, type, &former);
+
+    former = FResetTo;
+    sym = string_to_symbol(mv_string("reset-to"));
+    add_def(module, sym, type, &former);
+
     former = FSequence;
     sym = string_to_symbol(mv_string("seq"));
     add_def(module, sym, type, &former);
@@ -502,6 +510,10 @@ Module* base_module(Assembler* ass, Allocator* a) {
 
     former = FEnumType;
     sym = string_to_symbol(mv_string("Enum"));
+    add_def(module, sym, type, &former);
+
+    former = FResetType;
+    sym = string_to_symbol(mv_string("Reset"));
     add_def(module, sym, type, &former);
 
     former = FAllType;

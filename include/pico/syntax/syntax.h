@@ -46,6 +46,8 @@ typedef enum {
     SLabels,
     SGoTo,
     SSequence,
+    SWithReset,
+    SResetTo,
     SLet,
     SIf,
 
@@ -56,6 +58,7 @@ typedef enum {
     SProcType,
     SStructType,
     SEnumType,
+    SResetType,
     SForallType,
     SExistsType,
     STypeFamily,
@@ -146,6 +149,19 @@ typedef struct {
     SynArray terms;
 } SynSequence;
 
+typedef struct {
+    Symbol point_name;
+    Syntax* expr;
+
+    Symbol in_val_name;
+    Symbol cont_name;
+    Syntax* handler;
+} SynWithReset;
+
+typedef struct {
+    Syntax* point;
+} SynResetTo;
+
 // Sugaring Syntax
 typedef struct {
     SymSynAMap bindings;
@@ -183,6 +199,11 @@ typedef struct {
     SymPtrAMap variants;
 } SynEnumType;
 
+typedef struct {
+    Syntax* in;
+    Syntax* out;
+} SynResetType;
+
 
 struct Syntax {
     Syntax_t type;
@@ -205,6 +226,8 @@ struct Syntax {
         SynIf if_expr;
         SynLabels labels;
         SynGoTo go_to;
+        SynWithReset with_reset;
+        SynResetTo reset_to;
         SynSequence sequence;
 
         SynIs is;
@@ -212,6 +235,7 @@ struct Syntax {
         SynProcType proc_type;
         SynStructType struct_type;
         SynEnumType enum_type;
+        SynResetType reset_type;
         SynBind bind_type;
         PiType* type_val;
 

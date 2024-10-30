@@ -108,6 +108,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FGoTo:
         out = mk_str_doc(mv_string("::goto"), a);
         break;
+    case FWithReset:
+        out = mk_str_doc(mv_string("::with-reset"), a);
+        break;
+    case FResetTo:
+        out = mk_str_doc(mv_string("::reset-to"), a);
+        break;
     case FSequence:
         out = mk_str_doc(mv_string("::sequence"), a);
         break;
@@ -128,6 +134,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FProcType:
         out = mk_str_doc(mv_string("::ProcedureType"), a);
+        break;
+    case FResetPointType:
+        out = mk_str_doc(mv_string("::ResetPointType"), a);
         break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);

@@ -45,6 +45,11 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_sym_ptr_amap(t.enumeration.variants);
         break;
     }
+    case TReset: {
+        delete_pi_type_p(t.reset.in, a);
+        delete_pi_type_p(t.reset.out, a);
+        break;
+    }
     case TAll:
     case TExists:
     case TCLam: {
@@ -122,6 +127,10 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TEnum:
         out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, a);
+        break;
+    case TReset:
+        out.reset.in = copy_pi_type_p(t.reset.in, a);
+        out.reset.out = copy_pi_type_p(t.reset.out, a);
         break;
     case TVar:
         out.var = t.var;
