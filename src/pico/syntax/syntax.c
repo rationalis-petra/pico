@@ -277,6 +277,34 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
+    case SWithReset: {
+        PtrArray nodes = mk_ptr_array(3, a);
+
+        push_ptr(mk_str_doc(mv_string("(with-reset ["), a), &nodes);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.point_sym), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
+
+        push_ptr(pretty_syntax(syntax->with_reset.expr, a), &nodes);
+
+        push_ptr(mk_str_doc(mv_string("[handler"), a), &nodes);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.in_sym), a), &nodes);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.cont_sym), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
+
+        push_ptr(pretty_syntax(syntax->with_reset.handler, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SResetTo: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("(reset-to "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->reset_to.point, a), &nodes);
+        push_ptr(pretty_syntax(syntax->reset_to.arg, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     case SSequence: {
         PtrArray nodes = mk_ptr_array(2 + syntax->sequence.terms.len, a);
         push_ptr(mk_str_doc(mv_string("(seq"), a), &nodes);

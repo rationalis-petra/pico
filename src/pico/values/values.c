@@ -135,8 +135,8 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FProcType:
         out = mk_str_doc(mv_string("::ProcedureType"), a);
         break;
-    case FResetPointType:
-        out = mk_str_doc(mv_string("::ResetPointType"), a);
+    case FResetType:
+        out = mk_str_doc(mv_string("::ResetType"), a);
         break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);

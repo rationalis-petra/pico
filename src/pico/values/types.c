@@ -303,6 +303,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TReset: {
+        out = mk_str_doc(mv_string("#reset-point"), a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -461,6 +465,15 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(var_doc, &nodes);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TReset: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(Reset"), a), &nodes);
+        push_ptr(pretty_type(type->reset.in, a), &nodes);
+        push_ptr(pretty_type(type->reset.out, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -640,7 +653,7 @@ size_t pi_size_of(PiType type) {
     case TUVar:
         return 0;
     default:
-        return 0;
+        panic(mv_string("pi_size_of received invalid type."));
     }
 }
 

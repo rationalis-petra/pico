@@ -43,6 +43,11 @@ typedef enum {
     //  Memory
     // ------------------
     Mov,   // p 769.
+    LEA,
+
+    // ------------------
+    //  Meta
+    // ------------------
     Binary_Op_Count,
 } BinaryOp;
 
@@ -69,6 +74,19 @@ typedef enum {
     SetE,
     SetL,
     SetG,
+
+    // ------------------
+    //  Arithmetic
+    // ------------------
+    Mul,
+    Div,
+    IMul, 
+    IDiv,
+
+    // ------------------
+    //  Meta
+    // ------------------
+    Unary_Op_Count,
 } UnaryOp;
 
 typedef enum {
@@ -91,7 +109,10 @@ typedef enum {
     R12 = 0b1100,
     R13 = 0b1101,
     R14 = 0b1110,
-    R15 = 0b1111
+    R15 = 0b1111,
+
+    // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2
+    RIP = 0b10101,
 } Regname;
 
 typedef enum {
@@ -134,7 +155,8 @@ typedef struct {
 
 // Location Constructors 
 Location reg(Regname name);
-Location rref(Regname name, int8_t offset);
+Location rref8(Regname name, int8_t offset);
+Location rref32(Regname name, int32_t offset);
 Location imm8(int8_t immediate);
 Location imm16(int16_t immediate);
 Location imm32(int32_t immediate);

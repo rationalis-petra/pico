@@ -77,6 +77,7 @@ AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
     a_env->env = env;
     
     LocalAddrs* local = mem_alloc(sizeof(LocalAddrs), a);
+    local->type = LMonomorphic;
     local->stack_head = 0;
     local->vars = mk_saddr_array(32, a);
     push_ptr(local, &a_env->local_envs);
@@ -247,6 +248,33 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
     pop_ptr(&env->local_envs);
     sdelete_saddr_array(old_locals->vars);
     mem_free(old_locals, a);
+}
+
+void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    size_t stack_offset = locals->stack_head;
+
+    if (locals->type == LPolymorphic) {
+        panic(mv_string("Cannot bind relative in polymorphic env!"));
+    }
+
+    SAddr value;
+    value.type = SADirect;
+    value.symbol = s;
+    value.stack_offset = stack_offset - offset;
+    push_saddr(value, &locals->vars);
+}
+
+void address_pop_n(size_t n, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    for (size_t i = 0; i < n; i++) {
+        pop_saddr(&locals->vars);
+    }
+}
+
+void address_pop(AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    pop_saddr(&locals->vars);
 }
 
 void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {

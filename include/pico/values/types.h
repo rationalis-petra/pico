@@ -35,6 +35,7 @@ typedef enum {
     TStruct,
     TEnum,
     TReset,
+    TResumeMark,
 
     // Quantified Types
     TVar,

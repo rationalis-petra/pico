@@ -150,16 +150,20 @@ typedef struct {
 } SynSequence;
 
 typedef struct {
-    Symbol point_name;
+    Symbol point_sym;
     Syntax* expr;
 
-    Symbol in_val_name;
-    Symbol cont_name;
+    PiType* in_arg_ty;
+    Symbol in_sym;
+
+    PiType* cont_arg_ty;
+    Symbol cont_sym;
     Syntax* handler;
 } SynWithReset;
 
 typedef struct {
     Syntax* point;
+    Syntax* arg;
 } SynResetTo;
 
 // Sugaring Syntax

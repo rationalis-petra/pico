@@ -47,6 +47,16 @@ void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* poi
     build_nullary_op (ass, Ret, a, point);
 }
 
+void build_special_binary_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
+    build_unary_op (ass, Pop, reg(RCX), a, point);
+    build_unary_op (ass, Pop, reg(R9), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_unary_op (ass, op, reg(R9), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_unary_op (ass, Push, reg(RCX), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
 void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX), a, point);
     build_unary_op (ass, Pop, reg(R9), a, point);
@@ -114,15 +124,15 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // also note that size = RBP + 0x10
     // Store the return address in RBP + 8
     build_unary_op(ass, Pop, reg(R9), a, point);
-    build_binary_op(ass, Mov, rref(RBP, 8), reg(R9), a, point);
+    build_binary_op(ass, Mov, rref8(RBP, 8), reg(R9), a, point);
 
     // Store Dest address (located @ RBP - 8)
-    build_binary_op(ass, Mov, reg(RDI), rref(RBP, -8), a, point);
+    build_binary_op(ass, Mov, reg(RDI), rref8(RBP, -8), a, point);
 
     // SRC address = RSP 
 
     // Store size in R9
-    build_binary_op(ass, Mov, reg(R9), rref(RBP, 4*ADDRESS_SIZE), a, point); 
+    build_binary_op(ass, Mov, reg(R9), rref8(RBP, 4*ADDRESS_SIZE), a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
@@ -151,14 +161,14 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #endif
 
     // Store return address in R9
-    build_binary_op(ass, Mov, reg(R9), rref(RBP, 8), a, point);
+    build_binary_op(ass, Mov, reg(R9), rref8(RBP, 8), a, point);
 
     // set RSP = current RBP + 5*ADDRESS
     build_binary_op(ass, Mov, reg(RSP), reg(RBP), a, point);
     build_binary_op(ass, Add, reg(RSP), imm8(5*ADDRESS_SIZE), a, point);
 
     // Restore the old RBP
-    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+    build_binary_op(ass, Mov, reg(RBP), rref8(RBP, 0), a, point);
 
     // push return address
     build_unary_op(ass, Push, reg(R9), a, point);
@@ -216,7 +226,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // 5. Push return address
 
     // Store size in R9
-    build_binary_op(ass, Mov, reg(R9), rref(RBP, 3*ADDRESS_SIZE), a, point); 
+    build_binary_op(ass, Mov, reg(R9), rref8(RBP, 3*ADDRESS_SIZE), a, point); 
 
     // Stash return address in RAX
     build_unary_op(ass, Pop, reg(RAX), a, point); 
@@ -229,7 +239,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Sub, reg(RSP), reg(R9), a, point);
 
     // Set RBP = [RBP]
-    build_binary_op(ass, Mov, reg(RBP), rref(RBP, 0), a, point);
+    build_binary_op(ass, Mov, reg(RBP), rref8(RBP, 0), a, point);
 
     // Make sure return address is available when we Ret
     build_unary_op(ass, Push, reg(RAX), a, point); 
@@ -557,6 +567,22 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("I8"));
     add_def(module, sym, type, &type_data);
 
+    type_val = mk_prim_type(UInt_64);
+    sym = string_to_symbol(mv_string("U64"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(UInt_32);
+    sym = string_to_symbol(mv_string("U32"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(UInt_16);
+    sym = string_to_symbol(mv_string("U16"));
+    add_def(module, sym, type, &type_data);
+
+    type_val = mk_prim_type(UInt_8);
+    sym = string_to_symbol(mv_string("U8"));
+    add_def(module, sym, type, &type_data);
+
     // ------------------------------------------------------------------------
     // Operators & Functions
     // ------------------------------------------------------------------------
@@ -571,8 +597,17 @@ Module* base_module(Assembler* ass, Allocator* a) {
     sym = string_to_symbol(mv_string("-"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
 
+    build_special_binary_fun(ass, IMul, a, &point);
+    sym = string_to_symbol(mv_string("*"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fun(ass, IDiv, a, &point);
+    sym = string_to_symbol(mv_string("/"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
 
     build_comp_fun(ass, SetL, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Bool);

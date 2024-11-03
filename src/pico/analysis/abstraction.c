@@ -437,11 +437,55 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FWithReset: {
-        throw_error(point, mv_string("Abstract for 'with-reset' not implemented!"));
+        // with-reset [lbl] e [l1 l2] e
+        if (raw.nodes.len != 5) {
+          throw_error(point, mv_string("Term former 'with-reset' expects exactly 5 arguments!"));
+        }
+        SymbolArray reset_binds = mk_u64_array(1, a);
+        SymbolArray handle_binds = mk_u64_array(2, a);
+
+        if (!get_symbol_list(&reset_binds, *(RawTree*) raw.nodes.data[1]) || reset_binds.len != 1) {
+          throw_error(point, mv_string("Term former 'with-reset' 1st argument list malformed."));
+        }
+
+        Symbol reset_point_sym = reset_binds.data[0];
+        if (reset_binds.len != 1) {
+            throw_error(point, mv_string("Term former 'with-reset' expects exactly 5 arguments!"));
+        }
+
+        Syntax* expr = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+
+        if (!get_symbol_list(&handle_binds, *(RawTree*) raw.nodes.data[3]) || handle_binds.len != 3) {
+            throw_error(point, mv_string("Handler list malformed!"));
+        }
+
+        Symbol in_sym = handle_binds.data[1];
+        Symbol cont_sym = handle_binds.data[2];
+
+        Syntax* handler = abstract_expr_i(*(RawTree*)raw.nodes.data[4], env, a, point);
+
+        *res = (Syntax) {
+            .type = SWithReset,
+            .with_reset.point_sym = reset_point_sym,
+            .with_reset.expr = expr,
+            .with_reset.in_sym = in_sym,
+            .with_reset.cont_sym = cont_sym,
+            .with_reset.handler = handler,
+        };
         break;
     }
     case FResetTo: {
-        throw_error(point, mv_string("Abstract for 'reset-to' not implemented!"));
+        if (raw.nodes.len != 3) {
+            throw_error(point, mv_string("Term former 'reset-to' expects two arguments!"));
+        }
+
+        Syntax* rpoint = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* rarg = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        *res = (Syntax) {
+            .type = SResetTo,
+            .reset_to.point = rpoint,
+            .reset_to.arg = rarg,
+        };
         break;
     }
     case FSequence: {
@@ -566,7 +610,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FResetType: {
-        throw_error(point, mv_string("Abstract for 'Reset' not implemented!"));
+        if (raw.nodes.len != 3) {
+            throw_error(point, mv_string("Reset type former expects exactly 2 arguments!"));
+        }
+        Syntax* in_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[1], env, a, point);
+        Syntax* out_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[2], env, a, point);
+
+        *res = (Syntax) {
+            .type = SResetType,
+            .reset_type.in = in_ty,
+            .reset_type.out = out_ty,
+        };
         break;
     }
     case FAllType: {
