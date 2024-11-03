@@ -90,7 +90,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         AddressEntry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocalDirect:
-            build_unary_op(ass, Push, rref(RBP, e.stack_offset), a, point);
+            build_unary_op(ass, Push, rref8(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local direct"));
@@ -106,7 +106,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             } else if (syn.ptype->sort == TPrim) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9), rref(RCX, 0), a, point);
+                build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
                 build_unary_op(ass, Push, reg(R9), a, point);
             } else if (syn.ptype->sort == TKind) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
@@ -136,9 +136,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             throw_error(point, mk_string("Too Many Local variables!", a));
             break;
         }
-            address_stack_grow(env, pi_size_of(*syn.ptype));
-            break;
         }
+        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     case SAll: {
@@ -190,27 +189,27 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SApplication: {
         // Monomorphic Codegen
-            size_t args_size = 0;
-            for (size_t i = 0; i < syn.application.args.len; i++) {
-                Syntax* arg = (Syntax*) syn.application.args.data[i];
-                args_size += pi_size_of(*arg->ptype);
-                generate(*arg, env, ass, links, a, point);
-            }
-
-            // This will push a function pointer onto the stack
-            generate(*syn.application.function, env, ass, links, a, point);
-        
-            // Regular Function Call
-            // Pop the function into RCX; call the function
-            build_unary_op(ass, Pop, reg(RCX), a, point);
-            build_unary_op(ass, Call, reg(RCX), a, point);
-            // Update for popping all values off the stack
-            address_stack_shrink(env, args_size);
-
-            // Update as pushed the final value onto the stac
-            address_stack_grow(env, pi_size_of(*syn.ptype));
-            break;
+        size_t args_size = 0;
+        for (size_t i = 0; i < syn.application.args.len; i++) {
+            Syntax* arg = (Syntax*) syn.application.args.data[i];
+            args_size += pi_size_of(*arg->ptype);
+            generate(*arg, env, ass, links, a, point);
         }
+
+        // This will push a function pointer onto the stack
+        generate(*syn.application.function, env, ass, links, a, point);
+        
+        // Regular Function Call
+        // Pop the function into RCX; call the function
+        build_unary_op(ass, Pop, reg(RCX), a, point);
+        build_unary_op(ass, Call, reg(RCX), a, point);
+        // Update for popping all values off the stack (also the function itself)
+        address_stack_shrink(env, args_size + ADDRESS_SIZE);
+
+        // Update as pushed the final value onto the stac
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+        break;
+    }
     case SAllApplication: {
         // Polymorphic Funcall
         // The polymorphic codegen is different, so we therefore must also
@@ -380,7 +379,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Sub, reg(RSP), imm32(enum_size), a, point);
 
         // Set the tag
-        build_binary_op(ass, Mov, rref(RSP, 0), imm32(syn.constructor.tag), a, point);
+        build_binary_op(ass, Mov, rref8(RSP, 0), imm32(syn.constructor.tag), a, point);
 
         // Generate each argument
         for (size_t i = 0; i < syn.variant.args.len; i++) {
@@ -431,7 +430,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // 2. A jump to the relevant location
         for (size_t i = 0; i < syn.match.clauses.len; i++) {
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            build_binary_op(ass, Cmp, rref(RSP, 0), imm32(clause.tag), a, point);
+            build_binary_op(ass, Cmp, rref8(RSP, 0), imm32(clause.tag), a, point);
             AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
             push_size(get_pos(ass), &back_positions);
             push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
@@ -641,6 +640,152 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
         break;
     }
+    case SWithReset: {
+        // Overview of reset codegen
+        // 1. Push as reset point onto the stack
+        // 2. Push the ptr to reset point onto the stack - bind it
+
+        // 3. Evaluate Expr
+        // 4. Cleanup
+        // 5. Insert jump - on expr completion & cleanup, goto end of expr
+
+        // 6. Entry to handler - rework stack binding/understanding of stackstructure 
+        // 7. Generate handler code
+        // 8. Cleanup after handler and backlink jump from end of expr
+
+        // Step 1.
+        //-------
+        AsmResult out = build_binary_op(ass, LEA, reg(RAX), rref32(RIP, 0), a, point); // TODO: backlink N
+        size_t reset_backlink = out.backlink;
+        size_t reset_instr_end = get_pos(ass);
+
+        build_unary_op(ass, Push, reg(RAX), a, point);
+        build_unary_op(ass, Push, reg(RBP), a, point);
+
+        // Step 2.
+        //-------
+        build_unary_op(ass, Push, reg(RSP), a, point);
+        address_stack_grow(env, 3*ADDRESS_SIZE);
+        address_bind_relative(syn.with_reset.point_sym, 0, env);
+
+        // Step 3.
+        //--------
+        generate(*syn.with_reset.expr,env, ass, links, a, point);
+
+        // Step 4.
+        //--------
+
+        // Cleanup code for both 
+        // At this point, the stack should have the appearance:
+        // -- RIP for resetting to
+        // -- Old RBP
+        // -- Self-ptr + RSP
+        // -- Out Value
+        // So, the goal is do to a stack move from current RSP to current RSP - 3*ADDRESS
+
+        size_t val_size = pi_size_of(*syn.ptype);
+        size_t in_val_size = pi_size_of(*syn.with_reset.in_arg_ty);
+        generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
+        build_binary_op(ass, Add, reg(RSP), imm32(3 * ADDRESS_SIZE), a, point);
+        generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
+
+        address_stack_shrink(env, 3*ADDRESS_SIZE + val_size);
+        address_pop(env);
+
+        // Step 5.
+        //--------
+        out = build_unary_op(ass, JMP, imm8(0), a, point);
+        size_t end_expr_link = out.backlink;
+        size_t end_expr_pos = get_pos(ass);
+
+        // Note: 
+        const size_t reset_intro_pos = get_pos(ass);
+        size_t dist = reset_intro_pos - reset_instr_end; 
+        if (dist > INT32_MAX) {
+            panic(mv_string("Reset expression jump distance too large."));
+        }
+        // Note: cast to uint8_t to get correct ptr arithmetic!
+        *(int32_t*)((uint8_t*)get_instructions(ass).data + reset_backlink) = (int32_t)dist;
+
+        // TODO: backlink to jump here
+        // If we end up here, then we know the stacklooks like
+        //     > Value (argument)  / ADRESS_SIZE
+        // RSP > Continuation Mark / ADDRESS SIZE
+
+        //----------------------------------------------------------------------
+        // Handler Code begins here
+        //----------------------------------------------------------------------
+        // Step 6.
+        //--------
+        // Note: from reset-to, the stack now currently looks like
+        // value 
+        // Bind value + continuation mark
+        address_stack_grow(env, ADDRESS_SIZE + in_val_size);
+        address_bind_relative(syn.with_reset.cont_sym, 0, env);
+        address_bind_relative(syn.with_reset.in_sym, 8, env);
+        
+        /* Symbol cont_sym; */
+        /* Symbol in_sym; */
+        generate(*syn.with_reset.handler, env, ass, links, a, point);
+        address_stack_shrink(env, ADDRESS_SIZE + in_val_size);
+        address_pop_n(2, env);
+
+        // Step 7.
+        //--------
+        // At this point the stack looks like:
+        //     > in-value
+        //     > return-addr
+        // RSP > out value
+        // So do some cleanup
+        // - generate_stack_move(ADDRESS_SIZE + val_size, 0, val_size, ass, a, point);
+        generate_stack_move(ADDRESS_SIZE + in_val_size, 0, val_size, ass, a, point);
+        build_binary_op(ass, Add, reg(RSP), imm32(ADDRESS_SIZE + in_val_size), a, point);
+
+
+        // Step 8. 
+        //--------
+        size_t cleanup_start_pos = get_pos(ass);
+        dist = cleanup_start_pos - end_expr_pos;
+        if (dist > INT8_MAX) {
+            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT8_MAX"));
+        }
+        *(get_instructions(ass).data + end_expr_link) = (int8_t) dist;
+
+        break;
+    }
+    case SResetTo: {
+        generate(*syn.reset_to.arg, env, ass, links, a, point);
+        generate(*syn.reset_to.point, env, ass, links, a, point);
+        // there should how be a stack with the following:
+        // > arg
+        // > Ptr to reset-point
+
+        // Step 1: take the ptr to reset-point
+        build_unary_op(ass, Pop, reg(R10), a, point);
+
+        // Step 2: stash the current stack ptr in R9 (this will be used to copy the argument )
+        build_binary_op(ass, Mov, reg(R9), reg(RSP), a, point);
+
+        // Step 3: Deref return point ptr to get old RBP, RSP & RIP to jump up 
+        build_binary_op(ass, Mov, reg(RSP), rref8(R10, -8), a, point);
+        build_unary_op(ass, Pop, reg(RBP), a, point);
+        build_unary_op(ass, Pop, reg(RDI), a, point); //RDI = jump dest!
+
+        // Step 4: Copy the argument onto the (new) stack.
+        PiType* arg_type = syn.reset_to.arg->ptype;
+        size_t asize = pi_size_of(*arg_type);
+        build_binary_op(ass, Sub, reg(RSP), imm32(asize), a, point);
+        generate_monomorphic_copy(RSP, R9, asize, ass, a, point);
+
+        // Step 5: Long Jump (call) register
+        build_unary_op(ass, Call, reg(RDI), a, point);
+
+        // Address environment bookkeeping: shrink the stack appropriately
+        address_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+
+        break;
+    }
     case SSequence: {
         for (size_t i = 0; i < syn.sequence.terms.len; i++) {
             Syntax* term = (Syntax*)syn.sequence.terms.data[i];
@@ -664,7 +809,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     default: {
-        throw_error(point, mv_string("Unrecognized abstract term in monomorphic codegen."));
+        panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
     }
 }
@@ -680,8 +825,8 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
     };
 
     for (size_t i = 0; i < size / 8; i++) {
-        build_binary_op(ass, Mov, reg(RAX), rref(RSP, src_stack_offset + (i * 8) ), a, point);
-        build_binary_op(ass, Mov, rref(RSP, dest_stack_offset + (i * 8)), reg(RAX), a, point);
+        build_binary_op(ass, Mov, reg(RAX), rref8(RSP, src_stack_offset + (i * 8) ), a, point);
+        build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8)), reg(RAX), a, point);
     }
 }
 
@@ -691,79 +836,4 @@ size_t calc_variant_size(PtrArray* types) {
         total += pi_size_of(*(PiType*)types->data[i]);
     }
     return total;
-}
-
-size_t calc_max_vars(Syntax syn) {
-    switch (syn.type) {
-    case SLitUntypedIntegral:
-    case SLitTypedIntegral:
-    case SLitBool:
-    case SVariable:
-        return 0;
-    case SProcedure:
-        return syn.procedure.args.len + calc_max_vars(*syn.procedure.body);
-    case SAll:
-        return syn.all.args.len + calc_max_vars(*syn.all.body);
-    case SApplication: {
-        size_t max = calc_max_vars(*syn.application.function);
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.application.args.data[i]);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SConstructor:
-        return 0;
-    case SVariant: {
-        size_t max = 0;
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.variant.args.data[i]);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SMatch: {
-        size_t max = calc_max_vars(*syn.match.val); 
-        for (size_t i = 0; i < syn.match.clauses.len; i++) {
-            SynClause* clause = syn.match.clauses.data[i];
-            size_t sz = clause->vars.len + calc_max_vars(*clause->body);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SStructure: {
-        size_t max = 0;
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            size_t sz = calc_max_vars(*(Syntax*)syn.structure.fields.data[i].val);
-            max = max < sz ? sz : max;
-        }
-        return max;
-    }
-    case SProjector: 
-        return calc_max_vars(*syn.projector.val);
-    case SLet:
-        return syn.let_expr.bindings.len + calc_max_vars(*syn.let_expr.body);
-    case SIf: {
-        size_t max = calc_max_vars(*syn.if_expr.condition);
-        size_t sz = calc_max_vars(*syn.if_expr.true_branch);
-        max = max < sz ? sz : max;
-        sz = calc_max_vars(*syn.if_expr.false_branch);
-        max = max < sz ? sz : max;
-        return max;
-    }
-    case SIs:
-        return calc_max_vars(*syn.is.val);
-
-    // Types are evaluated at typechecking time, therefore no runtime binds.
-    case SProcType:
-    case SStructType:
-    case SEnumType:
-    case SForallType:
-    case SExistsType:
-    case STypeFamily:
-    case SCheckedType:
-        return 0;
-    default: 
-        return -1;
-    }
 }

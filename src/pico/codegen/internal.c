@@ -43,7 +43,7 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
     };
 
     for (size_t i = 0; i < size / 8; i++) {
-        build_binary_op(ass, Mov, reg(RAX), rref(src, i * 8), a, point);
-        build_binary_op(ass, Mov, rref(dest, i * 8), reg(RAX), a, point);
+        build_binary_op(ass, Mov, reg(RAX), rref8(src, i * 8), a, point);
+        build_binary_op(ass, Mov, rref8(dest, i * 8), reg(RAX), a, point);
     }
 }

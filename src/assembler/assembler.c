@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 
+#include "platform/signals.h"
 #include "assembler/assembler.h"
 #include "data/binary.h"
 #include "data/array.h"
@@ -87,13 +88,23 @@ Location ref(Regname name) {
     };
 }
 
-Location rref(Regname name, int8_t offset) {
+Location rref8(Regname name, int8_t offset) {
     return (Location) {
       .type = Deref,
       .sz = sz_64,
       .reg = name,
       .disp_sz = 1,
       .disp_8 = offset,
+    };
+}
+
+Location rref32(Regname name, int32_t offset) {
+    return (Location) {
+      .type = Deref,
+      .sz = sz_64,
+      .reg = name,
+      .disp_sz = 4,
+      .disp_32 = offset,
     };
 }
 
@@ -395,6 +406,12 @@ void build_binary_opcode_table() {
     // r64, r/m64
     binary_opcode_table[Mov][bindex(Register, sz_64, Register, sz_64)][0] = 0x8B;
     binary_opcode_table[Mov][bindex(Register, sz_64, Deref, sz_64)][0] = 0x8B;
+
+    //Lea,   // p 705.
+    // Lea is much more limited in how it works - operand 1 is always a register
+    //      and operand 2 is a "Deref"
+    // r64, r/m64
+    binary_opcode_table[LEA][bindex(Register, sz_64, Deref, sz_64)][0] = 0x8D;
 }
 
 uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
@@ -465,6 +482,9 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         // Store the R/M location
         switch (rm_loc.type) {
         case Register:
+            if (rm_loc.reg == RIP) {
+                throw_error(point, mv_string("Using RIP as a register is invalid"));
+            }
             // simplest : mod = 11, rm = register 
             modrm_byte |= modrm_mod(0b11);
             modrm_byte |= modrm_rm(rm_loc.reg);
@@ -480,15 +500,26 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
                 num_disp_bytes = 1;
                 disp_bytes[0] = rm_loc.disp_bytes[0];
 
-            } else if (rm_loc.disp_sz == 4 ){
-                modrm_byte |= modrm_mod(0b10);
+            } else if (rm_loc.disp_sz == 4) {
+                if (rm_loc.reg != RIP) {
+                    modrm_byte |= modrm_mod(0b10);
+                }
+                num_disp_bytes = 4;
                 for (uint8_t i = 0; i < 4; i++) {
                     disp_bytes[i]  = rm_loc.disp_bytes[i];
                 }
             } else {
                 throw_error(point, mv_string("Bad displacement size: not 0, 1 or 4"));
             }
-            if ((0b111 & rm_loc.reg) == RSP)  {
+
+            // Now the register
+            if (rm_loc.reg == RIP) {
+                if (rm_loc.disp_sz != 4) {
+                    throw_error(point, mv_string("RIP-relative addressing reqiures 32-bit displacement!"));
+                }
+                // modrm_mod = 00, so no need to do anything here
+                modrm_byte |= modrm_rm(RIP);
+            } else if ((0b111 & rm_loc.reg) == RSP)  {
                 // Using RSP - necessary to use SIB byte
                 modrm_byte |= modrm_rm(RSP);
             
@@ -515,8 +546,9 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
                 modrm_byte |= modrm_rm(rm_loc.reg);
                 rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
             }
+            break;
         case Immediate:
-            // ??: proably error
+            throw_error(point, mv_string("Internal error in build_binary_op: rm_loc is immediate."));
             break;
         }
 
@@ -536,6 +568,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     }
 
     // Step 5: write bytes
+    AsmResult out = {.backlink = 0};
     U8Array* instructions = &assembler->instructions;
     if (be.use_rex_byte)
         push_u8(rex_byte, instructions);
@@ -549,10 +582,12 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     if (use_sib_byte)
         push_u8(sib_byte, instructions);
     
+    if (num_disp_bytes != 0) 
+        out.backlink = instructions->len;
+        
     for (uint8_t i = 0; i < num_disp_bytes; i++)
         push_u8(disp_bytes[i], &assembler->instructions);
 
-    AsmResult out = {.backlink = 0};
     if (be.num_immediate_bytes != 0)
         out.backlink = instructions->len;
     for (uint8_t i = 0; i < be.num_immediate_bytes; i++)
@@ -581,11 +616,15 @@ uint8_t modrm_mem(Location mem) {
 }
 
 AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point) {
+    if (loc.type == Register && loc.reg == RIP) {
+        throw_error(point, mv_string("RIP-relative addressing not supported for unary operations!"));
+    }
+
     bool use_rex_byte = false;
     uint8_t rex_byte = 0b01000000;
 
     bool use_prefix_byte = false;
-    uint8_t prefix_byte;
+    uint8_t prefix_byte = 0;
 
     bool use_mod_rm_byte = false;
     uint8_t mod_rm_byte = 0;
@@ -721,7 +760,6 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         }
         break;
     case SetG:
-        //use_rex_byte = true;
         use_prefix_byte = true;
         use_mod_rm_byte = true;
 
@@ -733,9 +771,71 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
             break;
         default:
-            throw_error(point, mk_string("SetE requires a register argument", err_allocator));
+            throw_error(point, mk_string("SetG requires a register argument", err_allocator));
         }
         break;
+    case Mul:
+        use_rex_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        mod_rm_byte |= modrm_reg(0x4);
+        opcode = 0xF7; 
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+            throw_error(point, mk_string("Mul requires a register argument", err_allocator));
+        }
+        break;
+    case Div:
+        use_rex_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        mod_rm_byte |= modrm_reg(0x6);
+        opcode = 0xF7; //
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+            throw_error(point, mk_string("Div requires a register argument", err_allocator));
+        }
+        break;
+    case IMul:
+        use_rex_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        mod_rm_byte |= modrm_reg(0x5);
+        opcode = 0xF7;
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+            throw_error(point, mk_string("IMul requires a register argument", err_allocator));
+        }
+        break;
+    case IDiv:
+        use_rex_byte = true;
+        use_mod_rm_byte = true;
+
+        mod_rm_byte |= 0b11000000;
+        mod_rm_byte |= modrm_reg(0x7);
+        opcode = 0xF7;
+        switch (loc.type) {
+        case Register:
+            modrm_reg_rm_rex(&mod_rm_byte, &rex_byte, loc.reg);
+            break;
+        default:
+            throw_error(point, mk_string("IDiv requires a register argument", err_allocator));
+        }
+        break;
+    default:
+        panic(mv_string("Invalid unary operator."));
     }
 
     U8Array* instructions = &assembler->instructions;

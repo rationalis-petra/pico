@@ -69,6 +69,16 @@ void address_end_proc(AddressEnv* env, Allocator* a);
 void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
 
+
+//------------------------------------------------------------------------------
+// Manipulate an (extant) local environment: push and pop variables, or 
+//  bind values associated with specific forms/values (e.g. enums/structs)
+//------------------------------------------------------------------------------
+
+void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
+void address_pop_n(size_t n, AddressEnv* env);
+void address_pop(AddressEnv* env);
+
 // Bind and unbind enum vars: 
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
 //   it establishes bindings for the members of the enum, but does not 

@@ -37,7 +37,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
 
     // Prelude: copy return address to RBP+8
     build_unary_op(ass, Pop, reg(R9), a, point);
-    build_binary_op(ass, Mov, rref(RBP, 8), reg(R9), a, point);
+    build_binary_op(ass, Mov, rref8(RBP, 8), reg(R9), a, point);
 
     address_start_poly(types, vars, env, a);
 
@@ -60,8 +60,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // 6. return
 
     // 1. Stash old RBP & return address
-    build_unary_op(ass, Push, rref(RBP, 8), a, point); 
-    build_unary_op(ass, Push, rref(RBP, 0), a, point); 
+    build_unary_op(ass, Push, rref8(RBP, 8), a, point); 
+    build_unary_op(ass, Push, rref8(RBP, 0), a, point); 
 
     // 2. Move output value to start of types. We do this via a poly stack move,
     // which needs three pieces of info: 
@@ -126,7 +126,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         AddressEntry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocalDirect:
-            build_unary_op(ass, Push, rref(RBP, e.stack_offset), a, point);
+            build_unary_op(ass, Push, rref8(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
             // First, we need the size of the variable & allocate space for it on the stack
@@ -136,9 +136,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
             // Then, find the location of the variable on the stack 
             // *(RBP + stack offset) = offset2
             // RBP + offset2 = dest (stored here in R9)
-            build_binary_op(ass, Mov, reg(R9), rref(RBP, e.stack_offset), a, point);
+            build_binary_op(ass, Mov, reg(R9), rref8(RBP, e.stack_offset), a, point);
             build_binary_op(ass, Add, reg(R9), reg(RBP), a, point); // 
-            //build_binary_op(ass, Mov, reg(R9), rref(R9, 0), a, point);
+            //build_binary_op(ass, Mov, reg(R9), rref8(R9, 0), a, point);
             //build_binary_op(ass, Add, reg(R9), reg(RBP), a, point);
 
             generate_poly_stack_move(reg(RSP), reg(R9), reg(RAX), ass, a, point);
@@ -154,7 +154,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
             } else if (syn.ptype->sort == TPrim) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9), rref(RCX, 0), a, point);
+                build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
                 build_unary_op(ass, Push, reg(R9), a, point);
             } else if (syn.ptype->sort == TKind) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
@@ -342,7 +342,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         if (out.type == Err) return out;
 
         // Set the tag
-        out = build_binary_op(ass, Mov, rref(RSP, 0), imm32(syn.constructor.tag), a);
+        out = build_binary_op(ass, Mov, rref8(RSP, 0), imm32(syn.constructor.tag), a);
         if (out.type == Err) return out;
 
         // Generate each argument
@@ -399,7 +399,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         // 2. A jump to the relevant location
         for (size_t i = 0; i < syn.match.clauses.len; i++) {
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            out = build_binary_op(ass, Cmp, rref(RSP, 0), imm32(clause.tag), a);
+            out = build_binary_op(ass, Cmp, rref8(RSP, 0), imm32(clause.tag), a);
             if (out.type == Err) return out;
             out = build_unary_op(ass, JE, imm8(0), a);
             if (out.type == Err) return out;
@@ -561,7 +561,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
         AddressEntry e = address_env_lookup(type->var, env);
         switch (e.type) {
         case ALocalDirect:
-            build_binary_op(ass, Mov, reg(dest), rref(RBP, e.stack_offset), a, point);
+            build_binary_op(ass, Mov, reg(dest), rref8(RBP, e.stack_offset), a, point);
             break;
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local indirect."));

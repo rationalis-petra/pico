@@ -79,10 +79,19 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
 
-        for (size_t i = 0; i < lhs->structure.fields.len; i++) {
-            
-        }
-        return (Result) {.type = Ok};
+        return (Result) {
+            .type = Err,
+            .error_message = mk_string("Unification failed: not implemented for structs yet!.", a),
+        };
+    } else if (lhs->sort == TReset && rhs->sort == TReset) {
+        Result out = unify(lhs->reset.in, rhs->reset.in, a);
+        if (out.type == Err) return out;
+        return unify(lhs->reset.out, rhs->reset.out, a);
+    } else if (lhs->sort == rhs->sort) {
+        return (Result) {
+            .type = Err,
+            .error_message = mk_string("Unification not implemented for this type yet!", a),
+        };
     } else {
         return (Result) {
             .type = Err,
@@ -143,6 +152,9 @@ bool has_unification_vars_p(PiType type) {
         return false;
         break;
     }
+    case TReset: {
+        return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
+    }
 
     case TVar: return false;
     
@@ -199,6 +211,11 @@ void squash_type(PiType* type) {
                 squash_type((PiType*)types.data[j]);
             }
         }
+        break;
+    }
+    case TReset: {
+        squash_type((PiType*)type->reset.in);
+        squash_type((PiType*)type->reset.out);
         break;
     }
     case TVar: break;

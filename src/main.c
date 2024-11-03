@@ -1,5 +1,4 @@
 ﻿#include "platform/error.h"
-#include "platform/signals.h"
 
 #include "memory/std_allocator.h"
 #include "memory/executable.h"

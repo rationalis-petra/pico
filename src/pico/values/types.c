@@ -1,3 +1,4 @@
+#include "platform/machine_info.h"
 #include "platform/signals.h"
 
 #include "pretty/standard_types.h"
@@ -43,6 +44,11 @@ void delete_pi_type(PiType t, Allocator* a) {
         for (size_t i = 0; i < t.enumeration.variants.len; i++)
             delete_enum_variant_p(t.enumeration.variants.data[i].val, a);
         sdelete_sym_ptr_amap(t.enumeration.variants);
+        break;
+    }
+    case TReset: {
+        delete_pi_type_p(t.reset.in, a);
+        delete_pi_type_p(t.reset.out, a);
         break;
     }
     case TAll:
@@ -122,6 +128,12 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TEnum:
         out.enumeration.variants = copy_sym_ptr_amap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, a);
+        break;
+    case TReset:
+        out.reset.in = copy_pi_type_p(t.reset.in, a);
+        out.reset.out = copy_pi_type_p(t.reset.out, a);
+        break;
+    case TResumeMark:
         break;
     case TVar:
         out.var = t.var;
@@ -294,6 +306,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TReset: {
+        out = mk_str_doc(mv_string("#reset-point"), a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -452,6 +468,15 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(var_doc, &nodes);
         }
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TReset: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(Reset"), a), &nodes);
+        push_ptr(pretty_type(type->reset.in, a), &nodes);
+        push_ptr(pretty_type(type->reset.out, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
@@ -626,12 +651,17 @@ size_t pi_size_of(PiType type) {
         // Add 1 for tag!
         return max + sizeof(uint64_t);
     }
+
+    case TReset: {
+    case TResumeMark: 
+        return ADDRESS_SIZE;
+    }
     case TKind: 
         return sizeof(void*);
     case TUVar:
         return 0;
     default:
-        return 0;
+        panic(mv_string("pi_size_of received invalid type."));
     }
 }
 

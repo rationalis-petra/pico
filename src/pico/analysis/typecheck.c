@@ -1,5 +1,6 @@
 #include "pico/analysis/typecheck.h"
 
+#include "platform/signals.h"
 #include "data/string.h"
 #include "pretty/string_printer.h"
 
@@ -440,6 +441,47 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             throw_error(point, mv_string("Error in go-to: Label Not found!"));
         }
         break;
+    case SWithReset: {
+        // A = expression type
+        // in = reset (argument) type 
+        // out = continuation (argument) type 
+        PiType* tya = mk_uvar(gen, a);
+
+        PiType* tyin = mk_uvar(gen, a);
+        PiType* tyout = mk_uvar(gen, a);
+
+        untyped->ptype = tya;
+        untyped->with_reset.in_arg_ty = tyin;
+        untyped->with_reset.cont_arg_ty = tyout;
+        PiType* reset_ty = mem_alloc(sizeof(PiType), a);
+        *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
+
+        type_var(untyped->with_reset.point_sym, reset_ty, env);
+        type_check_i(untyped->with_reset.expr, tya, env, gen, a, point);
+        pop_type(env);
+
+        PiType* mark_ty = mem_alloc(sizeof(PiType), a);
+        *mark_ty = (PiType) {.sort = TResumeMark};
+
+        // continuation 
+        type_var(untyped->with_reset.in_sym, tyin, env);
+        type_var(untyped->with_reset.cont_sym, mark_ty, env);
+        type_check_i(untyped->with_reset.handler, tya, env, gen, a, point);
+        pop_types(env, 2);
+        break;
+    }
+    case SResetTo: {
+        PiType* tyin = mk_uvar(gen, a);
+        PiType* tyout = mk_uvar(gen, a);
+        untyped->ptype = tyout;
+
+        PiType* reset_ty = mem_alloc(sizeof(PiType), a);
+        *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
+
+        type_check_i(untyped->reset_to.point, reset_ty, env, gen, a, point);
+        type_check_i(untyped->reset_to.arg, tyin, env, gen, a, point);
+        break;
+    }
     case SLabels: {
         PiType* ty = mk_uvar(gen, a);
         untyped->ptype = ty;
@@ -482,10 +524,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SProcType:
     case SStructType:
     case SEnumType:
+    case SResetType:
         eval_type(untyped, env, a, point);
         break;
     default:
-        throw_error(point, mk_string("Internal Error: unrecognized syntactic form (type_infer_i)", a));
+        panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
         break;
     }
 }
@@ -577,6 +620,24 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SGoTo:
         break;
+    case SWithReset:
+        squash_types(typed->with_reset.expr, a, point);
+        squash_types(typed->with_reset.handler, a, point);
+
+        if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
+            squash_type(typed->with_reset.in_arg_ty);
+        } else {
+            throw_error(point, mv_string("reset argument type not instantiated"));
+        }
+        if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
+            squash_type(typed->with_reset.cont_arg_ty);
+        } else {
+            throw_error(point, mv_string("resume argument type not instantiated"));
+        }
+        break;
+    case SResetTo:
+        squash_types(typed->reset_to.point, a, point);
+        break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.terms.len; i++) {
             squash_types(typed->sequence.terms.data[i], a, point);
@@ -590,7 +651,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_type(typed->type_val);
         break;
     default:
-        throw_error(point, mk_string("Internal Error: unrecognized syntactic form (squash_types)", a));
+        panic(mv_string("Internal Error: invalid syntactic form provided to (squash_types)"));
         break;
     }
 
@@ -687,6 +748,22 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         *out_type = (PiType) {
             .sort = TEnum,
             .enumeration.variants = variants,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SResetType: {
+        eval_type(untyped->reset_type.in, env, a, point);
+        PiType* in = untyped->reset_type.in->type_val;
+
+        eval_type(untyped->reset_type.out, env, a, point);
+        PiType* out = untyped->reset_type.out->type_val;
+        
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TReset,
+            .reset.in = in,
+            .reset.out = out,
         };
         untyped->type_val = out_type;
         break;
