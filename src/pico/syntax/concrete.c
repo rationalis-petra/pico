@@ -1,3 +1,5 @@
+#include "platform/signals.h"
+
 #include "pico/syntax/concrete.h"
 #include "pretty/standard_types.h"
 
@@ -70,12 +72,10 @@ Document* pretty_atom(Atom atom, Allocator* a) {
     }
     case ASymbol: {
         String* str = symbol_to_string(atom.symbol);
-        if (str) {
-            out = mk_str_doc(*str, a);
+        if (!str) {
+            panic(mv_string("Error in pretty_atom: can't find symbol in symbol table!"));
         }
-        else {
-            out = mv_str_doc(mk_string("Can't find symbol!", a), a);
-        }
+        out = mk_str_doc(*str, a);
         break;
     }
     }

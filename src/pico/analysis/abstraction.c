@@ -672,7 +672,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:
-                throw_error(point, mk_string("Can't find symbol! ", a));
+                throw_error(point, string_cat(mv_string("Can't find symbol: "), *symbol_to_string(sym) , a));
                 break;
             case SShadowed: 
                 return mk_application(raw, env, a, point);

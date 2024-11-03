@@ -1,3 +1,4 @@
+#include "platform/machine_info.h"
 #include "platform/signals.h"
 
 #include "pretty/standard_types.h"
@@ -131,6 +132,8 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TReset:
         out.reset.in = copy_pi_type_p(t.reset.in, a);
         out.reset.out = copy_pi_type_p(t.reset.out, a);
+        break;
+    case TResumeMark:
         break;
     case TVar:
         out.var = t.var;
@@ -647,6 +650,11 @@ size_t pi_size_of(PiType type) {
         }
         // Add 1 for tag!
         return max + sizeof(uint64_t);
+    }
+
+    case TReset: {
+    case TResumeMark: 
+        return ADDRESS_SIZE;
     }
     case TKind: 
         return sizeof(void*);

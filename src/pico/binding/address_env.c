@@ -261,7 +261,7 @@ void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
     SAddr value;
     value.type = SADirect;
     value.symbol = s;
-    value.stack_offset = stack_offset - offset;
+    value.stack_offset = stack_offset + offset;
     push_saddr(value, &locals->vars);
 }
 

@@ -136,9 +136,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             throw_error(point, mk_string("Too Many Local variables!", a));
             break;
         }
-            address_stack_grow(env, pi_size_of(*syn.ptype));
-            break;
         }
+        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     case SAll: {
@@ -690,7 +689,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Add, reg(RSP), imm32(3 * ADDRESS_SIZE), a, point);
         generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
 
-        address_stack_shrink(env, 3*ADDRESS_SIZE);
+        address_stack_shrink(env, 3*ADDRESS_SIZE + val_size);
         address_pop(env);
 
         // Step 5.
@@ -712,7 +711,6 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // If we end up here, then we know the stacklooks like
         //     > Value (argument)  / ADRESS_SIZE
         // RSP > Continuation Mark / ADDRESS SIZE
-        // 
 
         //----------------------------------------------------------------------
         // Handler Code begins here
@@ -779,8 +777,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Sub, reg(RSP), imm32(asize), a, point);
         generate_monomorphic_copy(RSP, R9, asize, ass, a, point);
 
-        // Step 2: Long Jump (call) register
+        // Step 5: Long Jump (call) register
         build_unary_op(ass, Call, reg(RDI), a, point);
+
+        // Address environment bookkeeping: shrink the stack appropriately
+        address_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+
         break;
     }
     case SSequence: {
