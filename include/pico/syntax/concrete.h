@@ -15,6 +15,7 @@ typedef enum {
     ABool,
     AIntegral,
     ASymbol,
+    AString,
 } Atom_t;
 
 // Total value
@@ -23,6 +24,7 @@ typedef struct {
     union {
         int64_t int_64;
         Symbol symbol;
+        String string;
     };
 } Atom;
 

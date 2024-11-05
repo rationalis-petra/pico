@@ -78,6 +78,17 @@ Document* pretty_atom(Atom atom, Allocator* a) {
         out = mk_str_doc(*str, a);
         break;
     }
+    case AString: {
+        Document* delimiter = mk_str_doc(mv_string("\""), a);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(delimiter, &nodes);
+        push_ptr(mv_str_doc(atom.string, a), &nodes);
+        push_ptr(delimiter, &nodes);
+        out = mk_cat_doc(nodes, a);
+        break;
+    }
+    default:
+        panic(mv_string("Invalid Atom provided to pretty_atom!"));
     }
     return out;
 }

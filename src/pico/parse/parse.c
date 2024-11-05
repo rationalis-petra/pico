@@ -43,7 +43,7 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
         else if (point == '{') {
             res = parse_list(is, parse_state, '}', HImplicit, a);
         }
-        else if (is_numchar(point)) {
+        else if (is_numchar(point) || point == '-') {
             res = parse_number(is, parse_state, a);
         }
         else if (point == ':') {
@@ -207,33 +207,47 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
-    ParseResult out;
     U8Array arr = mk_u8_array(10, a);
+    bool is_positive = true;
+
+    result = peek(is, &codepoint);
+    if (result == StreamSuccess && codepoint == '-') {
+        next(is, &codepoint);
+        is_positive = false;
+    }
+
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
         next(is, &codepoint);
         // the cast is safe as is-numchar ensures codepoint < 256
         uint8_t val = (uint8_t) codepoint - 48;
         push_u8(val, &arr);
     }
+
+
     if (result != StreamSuccess) {
-        out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
+        return (ParseResult) {
+            .type = ParseFail,
+            .data.range.start = *parse_state,
+            .data.range.end = *parse_state,
+        };
     }
-    else {
-        int64_t int_result = 0;
-        uint64_t tens = 1;
-        for (size_t i = arr.len; i > 0; i--) {
-            int_result += tens * arr.data[i-1];
-            tens *= 10;
-        }
-        out.type = ParseSuccess;
-        out.data.result.type = RawAtom;
-        out.data.result.atom.type = AIntegral;
-        out.data.result.atom.int_64 = int_result;
+
+    int64_t int_result = 0;
+    uint64_t tens = 1;
+    for (size_t i = arr.len; i > 0; i--) {
+        int_result += tens * arr.data[i-1];
+        tens *= 10;
     }
+    int_result *= is_positive ? 1 : -1;
+
     sdelete_u8_array(arr);
-    return out;
+
+    return (ParseResult) {
+        .type = ParseSuccess,
+        .data.result.type = RawAtom,
+        .data.result.atom.type = AIntegral,
+        .data.result.atom.int_64 = int_result,
+    };
 }
 
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a) {
