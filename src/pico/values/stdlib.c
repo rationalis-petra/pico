@@ -51,6 +51,7 @@ void build_special_binary_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoi
     build_unary_op (ass, Pop, reg(RCX), a, point);
     build_unary_op (ass, Pop, reg(R9), a, point);
     build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op (ass, Mov, reg(RDX), imm32(0), a, point);
     build_unary_op (ass, op, reg(R9), a, point);
     build_unary_op (ass, Push, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RCX), a, point);
