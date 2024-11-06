@@ -640,25 +640,37 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
     res->ptype = NULL;
     switch (raw.type) {
     case RawAtom: {
-        if (raw.atom.type == ASymbol) {
+        switch(raw.atom.type) {
+        case ASymbol: {
             *res = (Syntax) {
                 .type = SVariable,
                 .variable = raw.atom.symbol,
             };
+            break;
         }
-        else if (raw.atom.type == AIntegral) {
+        case AIntegral: {
             *res = (Syntax) {
                 .type = SLitUntypedIntegral,
                 .integral.value = raw.atom.int_64,
             };
+            break;
         }
-        else if (raw.atom.type == ABool) {
+        case ABool: {
             *res = (Syntax) {
                 .type = SLitBool,
                 .boolean = (bool) raw.atom.int_64,
             };
-        } else  {
-            throw_error(point, mk_string("Currently, can only make literal values out of type i64." , a));
+            break;
+        }
+        case AString: {
+            *res = (Syntax) {
+                .type = SLitString,
+                .string = raw.atom.string,
+            };
+            break;
+        }
+        default:
+            panic(mv_string("Don't know how to make a literal from this atom!."));
         }
         break;
     }

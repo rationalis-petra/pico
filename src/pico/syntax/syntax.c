@@ -75,6 +75,15 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         break;
     }
+    case SLitString: {
+        Document* delimiter = mk_str_doc(mv_string("\""), a);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(delimiter, &nodes);
+        push_ptr(mv_str_doc(syntax->string, a), &nodes);
+        push_ptr(delimiter, &nodes);
+        out = mk_cat_doc(nodes, a);
+        break;
+    }
     case SVariable: {
         out = mk_str_doc(*symbol_to_string(syntax->variable), a);
         break;

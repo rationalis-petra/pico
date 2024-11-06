@@ -1,0 +1,296 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/data/string.c.o",
+      "src/data/string.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/data/string.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/data/string.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/data/amap.c.o",
+      "src/data/amap.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/data/amap.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/data/amap.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/data/stream.c.o",
+      "src/data/stream.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/data/stream.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/data/stream.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/data/array.c.o",
+      "src/data/array.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/data/array.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/data/array.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/assembler/assembler.c.o",
+      "src/assembler/assembler.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/assembler/assembler.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/assembler/assembler.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/values/values.c.o",
+      "src/pico/values/values.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/values/values.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/values/values.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/values/modular.c.o",
+      "src/pico/values/modular.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/values/modular.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/values/modular.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/values/types.c.o",
+      "src/pico/values/types.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/values/types.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/values/types.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/data/sym_sarr_amap.c.o",
+      "src/pico/data/sym_sarr_amap.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/data/sym_sarr_amap.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/data/sym_sarr_amap.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/data/sym_size_assoc.c.o",
+      "src/pico/data/sym_size_assoc.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/data/sym_size_assoc.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/data/sym_size_assoc.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/data/sym_ptr_assoc.c.o",
+      "src/pico/data/sym_ptr_assoc.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/data/sym_ptr_assoc.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/data/sym_ptr_assoc.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/data/sym_ptr_amap.c.o",
+      "src/pico/data/sym_ptr_amap.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/data/sym_ptr_amap.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/data/sym_ptr_amap.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/syntax/concrete.c.o",
+      "src/pico/syntax/concrete.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/syntax/concrete.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/syntax/concrete.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-I",
+      "include",
+      "-Wall",
+      "-Wextra",
+      "-g",
+      "-std=c11",
+      "-D_GNU_SOURCE",
+      "-c",
+      "-Ofast",
+      "-flto=auto",
+      "-o",
+      "build/release/./src/pico/syntax/syntax.c.o",
+      "src/pico/syntax/syntax.c"
+    ],
+    "directory": "/home/connorfr/Projects/Programming/pico",
+    "file": "/home/connorfr/Projects/Programming/pico/src/pico/syntax/syntax.c",
+    "output": "/home/connorfr/Projects/Programming/pico/build/release/src/pico/syntax/syntax.c.o"
+  }
+]

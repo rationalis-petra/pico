@@ -114,6 +114,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = mem_alloc(sizeof(PiType), a);
         *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
         break;
+    case SLitString:
+        untyped->ptype = mk_string_type(a);
+        break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
         if (te.type != TENotFound) {
@@ -538,6 +541,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
     case SLitBool:
+    case SLitString:
     case SVariable:
         break;
     case SProcedure: {

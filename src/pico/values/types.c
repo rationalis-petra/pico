@@ -702,4 +702,24 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
 }
 
+PiType* mk_string_type(Allocator* a) {
+    // Struct [.memsize U64] [.bytes Address]
+    PiType* string_type = mem_alloc(sizeof(PiType), a);
+
+    PiType* memsize_type = mem_alloc(sizeof(PiType), a);
+    PiType* bytes_type = mem_alloc(sizeof(PiType), a);
+
+    *memsize_type = (PiType) {.sort = TPrim, .prim = UInt_64};
+    *bytes_type = (PiType) {.sort = TPrim, .prim = Address};
+
+    SymPtrAMap fields = mk_sym_ptr_amap(2, a);
+    sym_ptr_insert(string_to_symbol(mv_string("memsize")), memsize_type, &fields);
+    sym_ptr_insert(string_to_symbol(mv_string("bytes")), bytes_type, &fields);
+    
+    *string_type = (PiType) {
+        .sort = TStruct,
+        .structure.fields = fields
+    };
+    return string_type;
+}
 

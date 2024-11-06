@@ -1,5 +1,15 @@
 #include "pico/codegen/internal.h"
 
+#include "data/meta/array_impl.h"
+
+int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
+    int diff_1 = lhs.offset - rhs.offset;
+    if (diff_1) return diff_1;
+    return lhs.expr - rhs.expr;
+}
+
+ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
+
 void backlink_global(Symbol sym, size_t offset, LinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
     SizeArray* sarr = sym_sarr_lookup(sym, links->backlinks);

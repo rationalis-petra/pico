@@ -138,4 +138,8 @@ PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 
+// Misc. and utility
+// Struct [.len U64] [.capacity U64] [.bytes Address]
+PiType* mk_string_type(Allocator* a);
+
 #endif
