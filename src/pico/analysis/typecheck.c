@@ -637,6 +637,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SResetTo:
         squash_types(typed->reset_to.point, a, point);
+        squash_types(typed->reset_to.arg, a, point);
         break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.terms.len; i++) {
