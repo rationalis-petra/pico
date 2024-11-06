@@ -659,7 +659,9 @@ size_t pi_size_of(PiType type) {
     case TKind: 
         return sizeof(void*);
     case TUVar:
-        return 0;
+        panic(mv_string("pi_size_of received invalid type: UVar."));
+    case TUVarDefaulted:
+        panic(mv_string("pi_size_of received invalid type: UVar with Default."));
     default:
         panic(mv_string("pi_size_of received invalid type."));
     }

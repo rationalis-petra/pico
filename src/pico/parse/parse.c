@@ -124,7 +124,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     U32Array arr = mk_u32_array(10, a);
 
     PtrArray terms = mk_ptr_array(2, a);
-    RawTree* rhs;
+    RawTree* rhs = NULL;
 
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
