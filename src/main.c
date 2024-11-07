@@ -23,7 +23,12 @@
 
 #include "app/command_line_opts.h"
 
-bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, ReplOpts opts) {
+typedef struct {
+    bool debug_print;
+    bool interactive;
+} IterOpts;
+
+bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, IterOpts opts) {
     // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
     // however, we are not expecting the arena to be mutated, so...
     // Create an arena allocator to use in this iteration.
@@ -39,8 +44,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
-    write_string(mv_string("> "), cout);
+    if (opts.interactive) {
+        write_string(mv_string("> "), cout);
+    }
+
     ParseResult res = parse_rawtree(cin, &arena);
+    if (res.type == ParseNone) goto on_exit;
+
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);
         release_arena_allocator(arena);
@@ -110,10 +120,12 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
         write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     }
 
-    doc = pretty_res(call_res, &arena);
+    if (opts.debug_print || opts.interactive) {
+        doc = pretty_res(call_res, &arena);
 
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     release_arena_allocator(arena);
     return true;
@@ -163,23 +175,38 @@ int main(int argc, char** argv) {
     sdelete_string_array(args);
 
     switch (command.type) {
-    case CRepl:
-        while (repl_iter(cin, cout, stdalloc, ass, module, command.repl));
+    case CRepl: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = command.repl.debug_print,
+            .interactive = true,
+        };
+        while (repl_iter(cin, cout, stdalloc, ass, module, opts));
         break;
-    case CScript:
-        write_string(mv_string("Script not yet implemented"), cout);
+    }
+    case CScript: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = false,
+            .interactive = false,
+        };
+
+        IStream* fin = open_file_istream(command.script.filename, stdalloc);
+        while (repl_iter(fin, cout, stdalloc, ass, module, opts));
+        delete_istream(fin, stdalloc);
+
         break;
+    }
     case CEval:
         write_string(mv_string("eval not yet implemented"), cout);
+        write_string(mv_string("\n"), cout);
         break;
     case CInvalid:
         write_string(command.error_message, cout);
         break;
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
+        write_string(mv_string("\n"), cout);
         break;
     }
-    write_string(mv_string("\n"), cout);
 
 
     // Cleanup

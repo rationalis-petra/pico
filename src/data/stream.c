@@ -14,8 +14,10 @@ typedef struct FileIStream {
     FILE* file_ptr;
     bool owns;
     bool peeked;
-    uint32_t peek_codepoint;
     Encoding encoding;
+
+    uint32_t peek_codepoint;
+    StreamResult peek_result;
 } FileIStream;
 
 struct IStream {
@@ -42,6 +44,21 @@ IStream* get_stdin_stream(void) {
     return &cin;
 }
 
+IStream* open_file_istream(String filename, Allocator* a) {
+    IStream* ifile = mem_alloc(sizeof(IStream), a);
+
+    FILE* cfile = fopen((char*)filename.bytes, "r");
+
+    *ifile = (IStream) {
+     .type = IStreamFile,
+     .impl.file_istream.peeked = false,
+     .impl.file_istream.file_ptr = cfile,
+     .impl.file_istream.owns = true,
+     .impl.file_istream.encoding = UTF_8,
+    };
+    return ifile;
+}
+
 void delete_istream(IStream* stream, Allocator* a) {
     switch (stream->type) {
     case IStreamFile: {
@@ -60,12 +77,13 @@ StreamResult peek(IStream* stream, uint32_t* out) {
         // save current position
         if (stream->impl.file_istream.peeked) {
             *out = stream->impl.file_istream.peek_codepoint;
-            return StreamSuccess;
+            return stream->impl.file_istream.peek_result;
         }
         else {
             StreamResult result = next(stream, &(stream->impl.file_istream.peek_codepoint));
             stream->impl.file_istream.peeked = true;
             *out = stream->impl.file_istream.peek_codepoint;
+            stream->impl.file_istream.peek_result = result;
             return result;
         }
     } break;
@@ -107,7 +125,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
         else {
             stream->impl.file_istream.peeked = false;
             *out = stream->impl.file_istream.peek_codepoint;
-            return StreamSuccess;
+            return stream->impl.file_istream.peek_result;
         }
     } break;
     default:
@@ -152,6 +170,21 @@ OStream* get_stdout_stream() {
         cout.impl.file_ostream.etype = UTF_8;
     }
     return &cout;
+}
+
+OStream* open_file_ostream(String filename, Allocator* a) {
+    OStream* ofile = mem_alloc(sizeof(OStream), a);
+
+    FILE* cfile = fopen((char*)filename.bytes, "w");
+
+    *ofile = (OStream) {
+        .type = OStreamFile,
+        .impl.file_ostream.file_ptr = cfile,
+        .impl.file_ostream.owns = false,
+        .impl.file_ostream.etype = UTF_8,
+    };
+
+    return ofile;
 }
 
 void delete_ostream(OStream* stream, Allocator* a) {

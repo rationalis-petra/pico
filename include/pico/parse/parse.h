@@ -16,6 +16,7 @@ typedef struct SourceRange {
 
 typedef enum ParseResult_t {
     ParseSuccess, 
+    ParseNone, 
     ParseFail
 } ParseResult_t;
 
