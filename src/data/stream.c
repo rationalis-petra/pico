@@ -1,16 +1,19 @@
 #include <stdio.h>
 
+#include "platform/signals.h"
 #include "data/stream.h"
+
 #include "encodings/types.h"
 #include "encodings/utf8.h"
 
 //--------------------------- istream definitions ---------------------------//
 
-typedef enum IStreamType {
-    IStreamFile
+typedef enum {
+    IStreamFile,
+    IStreamString,
 } IStreamType;
 
-typedef struct FileIStream {
+typedef struct {
     FILE* file_ptr;
     bool owns;
     bool peeked;
@@ -20,10 +23,22 @@ typedef struct FileIStream {
     StreamResult peek_result;
 } FileIStream;
 
+typedef struct {
+    String string;
+    bool owns;
+    bool peeked;
+    Encoding encoding;
+    size_t index;
+
+    uint32_t peek_codepoint;
+    StreamResult peek_result;
+} StringIStream;
+
 struct IStream {
     IStreamType type;
     union {
         FileIStream file_istream;
+        StringIStream string_istream;
     } impl;
 };
 
@@ -59,6 +74,34 @@ IStream* open_file_istream(String filename, Allocator* a) {
     return ifile;
 }
 
+IStream* mv_string_istream(String string, Allocator* a) {
+    IStream* istring = mem_alloc(sizeof(IStream), a);
+
+    *istring = (IStream) {
+     .type = IStreamString,
+     .impl.string_istream.peeked = false,
+     .impl.string_istream.string = string,
+     .impl.string_istream.index = 0,
+     .impl.string_istream.owns = false,
+     .impl.string_istream.encoding = UTF_8,
+    };
+    return istring;
+}
+
+IStream* mk_string_istream(String string, Allocator* a) {
+    IStream* istring = mem_alloc(sizeof(IStream), a);
+
+    *istring = (IStream) {
+     .type = IStreamString,
+     .impl.string_istream.peeked = false,
+     .impl.string_istream.string = copy_string(string, a),
+     .impl.string_istream.index = 0,
+     .impl.string_istream.owns = true,
+     .impl.string_istream.encoding = UTF_8,
+    };
+    return istring;
+}
+
 void delete_istream(IStream* stream, Allocator* a) {
     switch (stream->type) {
     case IStreamFile: {
@@ -67,6 +110,12 @@ void delete_istream(IStream* stream, Allocator* a) {
         }
         mem_free(stream, a);
     } break;
+    case IStreamString: {
+        if (stream->impl.string_istream.owns) {
+            delete_string(stream->impl.string_istream.string, a);
+        }
+        mem_free(stream, a);
+    }
     }
 }
 
@@ -87,8 +136,22 @@ StreamResult peek(IStream* stream, uint32_t* out) {
             return result;
         }
     } break;
+    case IStreamString: {
+        // save current position
+        if (stream->impl.string_istream.peeked) {
+            *out = stream->impl.string_istream.peek_codepoint;
+            return stream->impl.string_istream.peek_result;
+        }
+        else {
+            StreamResult result = next(stream, &(stream->impl.string_istream.peek_codepoint));
+            stream->impl.string_istream.peeked = true;
+            *out = stream->impl.string_istream.peek_codepoint;
+            stream->impl.string_istream.peek_result = result;
+            return result;
+        }
+    } break;
     default:
-        return StreamImplError;
+        panic(mv_string("Invalid istream provided to next!"));
     }
 }
 
@@ -127,9 +190,39 @@ StreamResult next(IStream* stream, uint32_t* out) {
             *out = stream->impl.file_istream.peek_codepoint;
             return stream->impl.file_istream.peek_result;
         }
-    } break;
+        break;
+    } 
+    case IStreamString: {
+        if (stream->impl.string_istream.peeked == false) {
+            size_t* index = &stream->impl.string_istream.index;
+            String* string = &stream->impl.string_istream.string;
+            if (*index == string->memsize - 1) {
+                *out = 0;
+                return StreamEnd;
+            };
+
+            //int next_int = fgetc(stream->impl.string_istream.file_ptr);
+            bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out);
+
+            // Assume utf-8 encoding (may be wrong!!)
+            uint8_t num_bytes;
+            if (decode_point_utf8(&num_bytes, string->bytes + *index, out)) {
+                *index += num_bytes;
+                return StreamSuccess;
+            }
+            else {
+                return StreamEncodingFailue;
+            }
+        }
+        else {
+            stream->impl.string_istream.peeked = false;
+            *out = stream->impl.string_istream.peek_codepoint;
+            return stream->impl.string_istream.peek_result;
+        }
+        break;
+    }
     default:
-        return StreamImplError;
+        panic(mv_string("Invalid istream provided to next!"));
     }
 }
 

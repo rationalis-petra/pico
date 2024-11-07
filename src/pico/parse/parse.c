@@ -21,7 +21,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_char(IStream* is, SourcePos* parse_state);
 
 // Helper functions
 StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
@@ -59,7 +59,7 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
             out = parse_string(is, parse_state, a);
         }
         else if (point == '#') {
-            out = parse_char(is, parse_state, a);
+            out = parse_char(is, parse_state);
         }
         else {
             out = parse_atom(is, parse_state, a);
@@ -242,7 +242,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     }
 
 
-    if (result != StreamSuccess) {
+    if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
             .data.range.start = *parse_state,
@@ -353,7 +353,7 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     StreamResult result;
     uint32_t codepoint;
     next(is, &codepoint); // consume token #)

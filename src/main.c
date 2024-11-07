@@ -195,10 +195,17 @@ int main(int argc, char** argv) {
 
         break;
     }
-    case CEval:
-        write_string(mv_string("eval not yet implemented"), cout);
-        write_string(mv_string("\n"), cout);
+    case CEval: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = false,
+            .interactive = false,
+        };
+
+        IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
+        while (repl_iter(sin, cout, stdalloc, ass, module, opts));
+        delete_istream(sin, stdalloc);
         break;
+    }
     case CInvalid:
         write_string(command.error_message, cout);
         break;
