@@ -1,3 +1,4 @@
+#include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
@@ -17,6 +18,13 @@
  *   is top of stack)
  */
 
+int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
+    long int diff = lhs.origin_offset - rhs.origin_offset;
+    if (diff) return diff;
+    return lhs.data_index - rhs.data_index;
+}
+
+ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 
 // Implementation details
 void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
@@ -29,6 +37,11 @@ GenResult generate_expr(Syntax* syn, Environment* env, Assembler* ass, Allocator
     LinkData links = (LinkData) {
         .backlinks = mk_sym_sarr_amap(32, a),
         .gotolinks = mk_sym_sarr_amap(32, a),
+
+        .to_generate = mk_to_gen_array(8, a),
+        .bytes = mk_u8_array(128, a),
+        .data_meta = mk_link_meta_array(8, a),
+        .code_meta = mk_link_meta_array(8, a),
     };
     generate(*syn, a_env, ass, &links, a, point);
     delete_address_env(a_env, a);
@@ -72,7 +85,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SLitTypedIntegral: {
         // Does it fit into 32 bits?
         if (syn.integral.value >= 0x80000000) 
-            throw_error(point, mk_string("Codegen: Literals must fit into less than 64 bits", a));
+            throw_error(point, mv_string("Codegen: Literals must fit into less than 32 bits"));
 
         int32_t immediate = (int32_t)syn.integral.value;
         build_unary_op(ass, Push, imm32(immediate), a, point);
@@ -82,6 +95,18 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+        break;
+    }
+    case SLitString: {
+        String immediate = syn.string; 
+        if (immediate.memsize > UINT32_MAX) 
+            throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
+
+        build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)immediate.bytes), a, point);
+        build_unary_op(ass, Push, reg(RAX), a, point);
+        build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
+
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }

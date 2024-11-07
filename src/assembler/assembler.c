@@ -598,7 +598,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
 #pragma GCC diagnostic pop
 
 void modrm_reg_rm_rex(uint8_t* modrm_byte, uint8_t* rex_byte, Regname reg) {
-    if (reg & 010) set_bit(rex_byte, 2);
+    if (reg & 0b1000) set_bit(rex_byte, 0);
     *modrm_byte |= reg & 0b111;
 }
 
@@ -775,9 +775,11 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         }
         break;
     case Mul:
+        use_prefix_byte = false;
         use_rex_byte = true;
         use_mod_rm_byte = true;
 
+        rex_byte |= 0b00001000;
         mod_rm_byte |= 0b11000000;
         mod_rm_byte |= modrm_reg(0x4);
         opcode = 0xF7; 
@@ -790,9 +792,11 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         }
         break;
     case Div:
+        use_prefix_byte = false;
         use_rex_byte = true;
         use_mod_rm_byte = true;
 
+        rex_byte |= 0b00001000;
         mod_rm_byte |= 0b11000000;
         mod_rm_byte |= modrm_reg(0x6);
         opcode = 0xF7; //
@@ -805,9 +809,11 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         }
         break;
     case IMul:
+        use_prefix_byte = false;
         use_rex_byte = true;
         use_mod_rm_byte = true;
 
+        rex_byte |= 0b00001000;
         mod_rm_byte |= 0b11000000;
         mod_rm_byte |= modrm_reg(0x5);
         opcode = 0xF7;
@@ -820,9 +826,11 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         }
         break;
     case IDiv:
+        use_prefix_byte = false;
         use_rex_byte = true;
         use_mod_rm_byte = true;
 
+        rex_byte |= 0b00001000;
         mod_rm_byte |= 0b11000000;
         mod_rm_byte |= modrm_reg(0x7);
         opcode = 0xF7;

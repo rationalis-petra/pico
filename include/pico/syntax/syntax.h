@@ -214,6 +214,8 @@ struct Syntax {
     union {
         SynIntegralLiteral integral;
         bool boolean;
+        String string;
+
         Symbol variable;
 
         SynProcedure procedure;
