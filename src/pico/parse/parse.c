@@ -21,6 +21,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a);
 
 // Helper functions
 StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
@@ -55,6 +56,9 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
         }
         else if (point == '"') {
             res = parse_string(is, parse_state, a);
+        }
+        else if (point == '#') {
+            res = parse_char(is, parse_state, a);
         }
         else {
             res = parse_atom(is, parse_state, a);
@@ -325,6 +329,14 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
         push_u32(codepoint, &arr);
     }
 
+    if (result != StreamSuccess) {
+        return (ParseResult) {
+            .type = ParseFail,
+            .data.range.start = *parse_state,
+            .data.range.end = *parse_state,
+        };
+    }
+
     next(is, &codepoint); // consume token (")
     return (ParseResult) {
         .type = ParseSuccess,
@@ -332,6 +344,30 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
         .data.result.hint = HNone,
         .data.result.atom.type = AString,
         .data.result.atom.string = string_from_UTF_32(arr, a),
+    };
+}
+
+ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a) {
+    StreamResult result;
+    uint32_t codepoint;
+    next(is, &codepoint); // consume token #)
+    result = next(is, &codepoint);
+
+    if (result != StreamSuccess) {
+        return (ParseResult) {
+            .type = ParseFail,
+            .data.range.start = *parse_state,
+            .data.range.end = *parse_state,
+        };
+    }
+
+    //next(is, &codepoint); // consume token (")
+    return (ParseResult) {
+        .type = ParseSuccess,
+        .data.result.type = RawAtom,
+        .data.result.hint = HNone,
+        .data.result.atom.type = AIntegral,
+        .data.result.atom.int_64 = codepoint,
     };
 }
 
