@@ -5,9 +5,11 @@
 #include "data/array.h"
 #include "assembler/assembler.h"
 
+#include "pico/data/sym_sarr_amap.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/values.h"
-#include "pico/data/sym_sarr_amap.h"
+
+#include "pico/codegen/codegen.h"
 
 
 /* Utility functions shared across code generation  

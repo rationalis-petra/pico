@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
@@ -66,6 +67,50 @@ void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point)
     build_unary_op (ass, op, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RAX), a, point);
     build_unary_op (ass, Push, reg(RCX), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
+PiType build_print_fun_ty(Allocator* a) {
+    PiType* string_ty = mk_string_type(a);
+    PiType* unit_ty = mem_alloc(sizeof(PiType), a);
+    *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
+
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(string_ty, &args);
+
+    return (PiType) {
+        .sort = TProc,
+        .proc.args = args,
+        .proc.ret = unit_ty,
+    };
+}
+
+void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+
+#if ABI == SYSTEM_V_64
+    // puts (bytes = rdi)
+    build_binary_op (ass, Mov, reg(RDI), rref8(RSP, 16), a, point);
+
+#elif ABI == WIN_64
+    // puts (bytes = rcx)
+    build_binary_op (ass, Mov, reg(RCX), rref8(RSP, 16), a, point);
+
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&puts), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // Store RSI, pop args & return
+    build_unary_op(ass, Pop, reg(RSI), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op(ass, Push, reg(RSI), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
 
@@ -138,7 +183,6 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    //build_binary_op(ass, Add, reg(RDI), reg(RAX), a, point);
     build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(R9), a, point);
 
@@ -667,6 +711,13 @@ Module* base_module(Assembler* ass, Allocator* a) {
     type = build_free_fn_ty(a);
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_print_fun_ty(a);
+    build_print_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("print"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);

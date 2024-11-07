@@ -21,11 +21,9 @@
 #include "pico/values/stdlib.h"
 #include "pico/values/types.h"
 
-typedef struct repl_opts {
-    bool debug_print;
-} repl_opts;
+#include "app/command_line_opts.h"
 
-bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, repl_opts opts) {
+bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, ReplOpts opts) {
     // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
     // however, we are not expecting the arena to be mutated, so...
     // Create an arena allocator to use in this iteration.
@@ -145,17 +143,6 @@ int cstrcmp (const char* lhs, const char* rhs) {
 }
 
 int main(int argc, char** argv) {
-    // Argument parsing
-    repl_opts opts;
-    opts.debug_print = false;
-    if (argc > 1) {
-        for (int i = 1; i < argc; i++) {
-            if (cstrcmp("-d", argv[i]) == 0) {
-                opts.debug_print = true;
-            }
-        }
-    }
-
     // Setup
     asm_init();
 
@@ -167,8 +154,33 @@ int main(int argc, char** argv) {
     Assembler* ass_base = mk_assembler(&exalloc);
     Module* module = base_module(ass_base, stdalloc);
 
-    // Main Loop
-    while (repl_iter(cin, cout, stdalloc, ass, module, opts));
+    // Argument parsing
+    StringArray args = mk_string_array(argc - 1, stdalloc);
+    for (int i = 1; i < argc; i++) {
+        push_string(mv_string(argv[i]), &args);
+    }
+    Command command = parse_command(args);
+    sdelete_string_array(args);
+
+    switch (command.type) {
+    case CRepl:
+        while (repl_iter(cin, cout, stdalloc, ass, module, command.repl));
+        break;
+    case CScript:
+        write_string(mv_string("Script not yet implemented"), cout);
+        break;
+    case CEval:
+        write_string(mv_string("eval not yet implemented"), cout);
+        break;
+    case CInvalid:
+        write_string(command.error_message, cout);
+        break;
+    default:
+        write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
+        break;
+    }
+    write_string(mv_string("\n"), cout);
+
 
     // Cleanup
     delete_module(module);
