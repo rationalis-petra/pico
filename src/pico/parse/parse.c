@@ -206,6 +206,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     StreamResult result;
     U8Array arr = mk_u8_array(10, a);
     bool is_positive = true;
+    bool just_negation = true;
 
     result = peek(is, &codepoint);
     if (result == StreamSuccess && codepoint == '-') {
@@ -214,10 +215,20 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     }
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+        just_negation = false;
         next(is, &codepoint);
         // the cast is safe as is-numchar ensures codepoint < 256
         uint8_t val = (uint8_t) codepoint - 48;
         push_u8(val, &arr);
+    }
+
+    if (just_negation) {
+        return (ParseResult) {
+            .type = ParseSuccess,
+            .data.result.type = RawAtom,
+            .data.result.atom.type = ASymbol,
+            .data.result.atom.symbol = string_to_symbol(mv_string("-")),
+        };
     }
 
 
