@@ -8,8 +8,29 @@
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
 
-// Internal functions 
+// Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
+TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
+
+//------------------------------------------------------------------------------
+// Interface Implementation
+//------------------------------------------------------------------------------
+
+Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
+    ShadowEnv* s_env = mk_shadow_env(a, env);
+    Syntax* out = abstract_expr_i(raw, s_env, a, point);
+    return out; 
+}
+
+TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
+    ShadowEnv* s_env = mk_shadow_env(a, env);
+    TopLevel out = abstract_i(raw, s_env, a, point);
+    return out;
+}
+
+//------------------------------------------------------------------------------
+// Internal Implementation
+//------------------------------------------------------------------------------
 
 bool is_symbol(RawTree* raw) {
     return (raw->type == RawAtom && raw->atom.type == ASymbol);
@@ -792,14 +813,3 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
     throw_error(point, mk_string("Logic error in abstract_i: reached unreachable area.", a));
 }
 
-Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
-    ShadowEnv* s_env = mk_shadow_env(a, env);
-    Syntax* out = abstract_expr_i(raw, s_env, a, point);
-    return out; 
-}
-
-TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point) {
-    ShadowEnv* s_env = mk_shadow_env(a, env);
-    TopLevel out = abstract_i(raw, s_env, a, point);
-    return out;
-}

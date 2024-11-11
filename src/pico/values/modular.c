@@ -38,7 +38,7 @@ struct Module {
 
     // The module owns all values defined within it, using memory allocated by
     // its' allocator. When the module is deleted, this will be used to free all
-    // values (except functions) 
+    // values (except functions, which are freed via the executable allocator) 
     Allocator* allocator;
 
     // RWX memory is kept separate from regular values, for storing assembled function code

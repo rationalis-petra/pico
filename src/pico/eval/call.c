@@ -75,7 +75,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     // Generate Code which will: 
     //  1. Copy the final value (on stack) into value
     //  2. Return to C
-#if ABI==SYSTEM_V_64
+#if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     if (rsize != 0) {
@@ -90,7 +90,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     }
     build_nullary_op(ass, Ret, a, point);
 
-#elif ABI==WIN_64
+#elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
     if (rsize != 0) {

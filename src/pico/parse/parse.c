@@ -46,9 +46,6 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
         else if (point == '{') {
             out = parse_list(is, parse_state, '}', HImplicit, a);
         }
-        else if (is_numchar(point) || point == '-') {
-            out = parse_number(is, parse_state, a);
-        }
         else if (point == ':') {
             out = parse_prefix(':', is, parse_state, a);
         }
@@ -60,6 +57,9 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
         }
         else if (point == '#') {
             out = parse_char(is, parse_state);
+        }
+        else if (is_numchar(point) || point == '-') {
+            out = parse_number(is, parse_state, a);
         }
         else {
             out = parse_atom(is, parse_state, a);

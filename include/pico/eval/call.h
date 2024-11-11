@@ -34,7 +34,6 @@ typedef struct EvalResult {
     };
 } EvalResult;
 
-
 EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a, ErrorPoint* point);
 
 void* pico_run_expr(Assembler* ass, size_t size, Allocator* a, ErrorPoint* point);

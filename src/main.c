@@ -37,8 +37,8 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     clear_assembler(ass);
     Environment* env = env_from_module(module, &arena);
 
-    jmp_buf exit_point;
-    if (setjmp(exit_point)) goto on_exit;
+    pi_jmp_buf exit_point;
+    if (pi_setjmp(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
 
     ErrorPoint point;
@@ -135,6 +135,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     write_string(mv_string("\n"), cout);
     release_arena_allocator(arena);
     return true;
+
  on_exit:
     release_arena_allocator(arena);
     return false;
