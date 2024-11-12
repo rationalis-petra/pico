@@ -2,7 +2,7 @@
 #define __PICO_SYNTAX_HEADER_H
 
 #include "data/meta/array_header.h"
-#include "data/string.h"
+#include "pico/values/values.h"
 
 //------------------------------------------------------------------------------
 // Import Clauses
@@ -17,12 +17,18 @@ typedef enum {
 
 typedef struct {
     ImportClause_t type;
+    Symbol name;
+    union {
+        Symbol rename;
+        Symbol member;
+        SymbolArray members;
+    };
 } ImportClause;
 
-ARRAY_HEADER(ImportClause, import_caluse, ImportClause)
+ARRAY_HEADER(ImportClause, import_clause, ImportClause)
 
 typedef struct {
-    bool exportAll;
+    bool importAll;
     ImportClauseArray import_clauses;
 } Imports;
 
@@ -37,12 +43,14 @@ typedef enum {
 
 typedef struct {
     ExportClause_t type;
+    Symbol name;
+    Symbol rename;
 } ExportClause;
 
-ARRAY_HEADER(ExportClause, export_caluse, ExportClause)
+ARRAY_HEADER(ExportClause, export_clause, ExportClause)
 
 typedef struct {
-    bool exportAll;
+    bool export_all;
     ExportClauseArray export_clauses;
 } Exports;
 
@@ -51,7 +59,7 @@ typedef struct {
 //------------------------------------------------------------------------------
 
 typedef struct {
-    String name;
+    Symbol name;
     Imports imports;
     Exports exports;
 } ModuleHeader;

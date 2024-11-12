@@ -9,6 +9,6 @@
 
 TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point);
 Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point);
-ModuleHeader* abstract_header(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point);
+ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point);
 
 #endif

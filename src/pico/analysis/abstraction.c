@@ -11,6 +11,12 @@
 // Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
+bool eq_symbol(RawTree* raw, Symbol s);
+bool is_symbol(RawTree* raw);
+Imports abstract_imports(RawTree* raw, Allocator* a, ErrorPoint* point);
+Exports abstract_exports(RawTree* raw, Allocator* a, ErrorPoint* point);
+ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* point);
+ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* point);
 
 //------------------------------------------------------------------------------
 // Interface Implementation
@@ -28,14 +34,119 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point
     return out;
 }
 
+ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
+    if (raw.type != RawList)
+        throw_error(point, mv_string("Expected module header to be list."));
+
+    // Expected format:
+    // (module <modulename>
+    //   (import import-clause*)?
+    //   (export import-clause*)?)
+    size_t idx = 0;
+    if (raw.nodes.len <= idx) 
+        throw_error(point, mv_string("Expecting keyword 'module' in module header. Got nothing!"));
+    if (raw.nodes.len > 4)
+        throw_error(point, mv_string("Too many parameters in module header."));
+
+    if (!eq_symbol(raw.nodes.data[0], string_to_symbol(mv_string("module"))))
+        throw_error(point, mv_string("Expecting keyword 'module' in module header."));
+
+    idx++;
+    if (raw.nodes.len <= idx) 
+        throw_error(point, mv_string("Expecting parameter 'modulename' in module header. Got nothing!"));
+
+    if (!is_symbol(raw.nodes.data[1]))
+        throw_error(point, mv_string("Expecting parameter 'modulename' in module header."));
+    Symbol module_name = ((RawTree*)raw.nodes.data[1])->atom.symbol;
+
+    // Now, imports/exports
+    Imports imports;
+    Exports exports;
+    exports.export_all = false;
+
+    idx++;
+    if (raw.nodes.len <= idx) {
+        imports.import_clauses = mk_import_clause_array(0, a);
+        exports.export_clauses = mk_export_clause_array(0, a);
+    } else if (raw.nodes.len <= idx+1){
+        RawTree* clauses_1 = raw.nodes.data[2];
+        if (clauses_1->type != RawList)
+            throw_error(point, mv_string("Expecting import/export list."));
+        if (clauses_1->nodes.len < 1)
+            throw_error(point, mv_string("Not enough elements in import/export list"));
+
+        if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import")))) {
+            imports.import_clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+            exports.export_clauses = mk_export_clause_array(0, a);
+
+            for (size_t i = 1; i < clauses_1->nodes.len; i++) {
+                ImportClause clause = abstract_import_clause(clauses_1->nodes.data[i], a, point);
+                push_import_clause(clause, &imports.import_clauses);
+            }
+        } else if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("export")))) {
+            imports.import_clauses = mk_import_clause_array(0, a);
+            exports.export_clauses = mk_export_clause_array(clauses_1->nodes.len - 1, a);
+
+            for (size_t i = 1; i < clauses_1->nodes.len; i++) {
+                ExportClause clause = abstract_export_clause(clauses_1->nodes.data[i], a, point);
+                push_export_clause(clause, &exports.export_clauses);
+            }
+        } else {
+            throw_error(point, mv_string("Expecting import/export list header."));
+        }
+    } else {
+        RawTree* clauses_1 = raw.nodes.data[2];
+        if (clauses_1->type != RawList)
+            throw_error(point, mv_string("Expecting import list."));
+        if (clauses_1->nodes.len < 1)
+            throw_error(point, mv_string("Not enough elements in import list"));
+        if (!eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import"))))
+            throw_error(point, mv_string("Expecting 'import' at head of import list"));
+
+        imports.import_clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+
+        for (size_t i = 1; i < clauses_1->nodes.len; i++) {
+        }
+
+        RawTree* clauses_2 = raw.nodes.data[3];
+        if (clauses_2->type != RawList)
+            throw_error(point, mv_string("Expecting export list."));
+        if (clauses_2->nodes.len < 1)
+            throw_error(point, mv_string("Not enough elements in export list"));
+        if (!eq_symbol(clauses_2->nodes.data[0], string_to_symbol(mv_string("export"))))
+            throw_error(point, mv_string("Expecting 'export' at head of export list"));
+
+        for (size_t i = 1; i < clauses_2->nodes.len; i++) {
+        }
+
+        exports.export_clauses = mk_export_clause_array(clauses_2->nodes.len - 1, a);
+    }
+
+    ModuleHeader* out = mem_alloc(sizeof(ModuleHeader), a);
+    *out = (ModuleHeader) {
+        .name = module_name,
+        .imports = imports,
+        .exports = exports,
+    };
+    return out;
+}
+
 //------------------------------------------------------------------------------
 // Internal Implementation
 //------------------------------------------------------------------------------
+
+bool eq_symbol(RawTree* raw, Symbol s) {
+    return (raw->type == RawAtom
+            && raw->atom.type == ASymbol
+            && raw->atom.symbol == s);
+}
 
 bool is_symbol(RawTree* raw) {
     return (raw->type == RawAtom && raw->atom.type == ASymbol);
 }
 
+//  Helper function for various struct-related, helpers, when handling 
+//  [. fieldname] clauses
 bool get_fieldname(RawTree* raw, Symbol* fieldname) {
     if (raw->type == RawList && raw->nodes.len == 2) {
         raw = raw->nodes.data[1];
@@ -51,6 +162,8 @@ bool get_fieldname(RawTree* raw, Symbol* fieldname) {
     }
 }
 
+// Helper function for labels, when we are expecting [label expr] clauses
+// returns true on success, false on failure
 bool get_label(RawTree* raw, Symbol* fieldname) {
     if (raw->type == RawList && raw->nodes.len == 2) {
         raw = raw->nodes.data[0];
@@ -66,8 +179,10 @@ bool get_label(RawTree* raw, Symbol* fieldname) {
     }
 }
 
+// Helper function for retrieving a symbol list
+// returns true on success, false on failure
 bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
-    if (nodes.type == RawAtom) { return false; }
+    if (nodes.type != RawList) { return false; }
 
     for (size_t i = 0; i < nodes.nodes.len; i++) {
         RawTree* node = nodes.nodes.data[i];
@@ -813,3 +928,108 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
     throw_error(point, mk_string("Logic error in abstract_i: reached unreachable area.", a));
 }
 
+ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* point) {
+    if (is_symbol(raw)) {
+        return (ImportClause) {
+            .type = ImportName,
+            .name = raw->atom.symbol,
+        };
+    } else if (raw->type == RawList) {
+        // Possibilities:
+        // (name1 :as name2)
+        // (. name2 name1)
+        // (. (list-of-names) name1)
+
+        if (raw->nodes.len != 3)
+            throw_error(point, mv_string("Invalid import clause"));
+        if (!is_symbol(raw->nodes.data[0]) || !is_symbol(raw->nodes.data[2]))
+            throw_error(point, mv_string("Invalid import clause"));
+
+        // Check for '.'
+        if (eq_symbol(raw->nodes.data[0], string_to_symbol(mv_string(".")))) {
+            Symbol src;
+            if(!get_fieldname(raw->nodes.data[2], &src))
+                throw_error(point, mv_string("Invalid import-. source"));
+
+            RawTree* raw_members = raw->nodes.data[1];
+            if (is_symbol(raw_members)) {
+                return (ImportClause) {
+                    .type = ImportPath,
+                    .name = src,
+                    .member = raw_members->atom.symbol,
+                };
+            } else if (raw_members->type == RawList) {
+                SymbolArray members = mk_u64_array(raw_members->nodes.len, a);
+                if (!get_symbol_list(&members, *raw_members))
+                    throw_error(point, mv_string("Invalid import-. members"));
+                return (ImportClause) {
+                    .type = ImportPathMany,
+                    .name = src,
+                    .members = members,
+                };
+            } else {
+                throw_error(point, mv_string("Invalid import-. member(s)"));
+            }
+
+        } else {
+            Symbol middle;
+            if(!get_fieldname(raw->nodes.data[1], &middle))
+                throw_error(point, mv_string("Invalid import clause"));
+            if (middle != string_to_symbol(mv_string("as")))
+                throw_error(point, mv_string("Invalid import clause"));
+
+            Symbol name;
+            Symbol rename;
+            if(!get_fieldname(raw->nodes.data[0], &name))
+                throw_error(point, mv_string("Invalid import-as name"));
+            if(!get_fieldname(raw->nodes.data[0], &rename))
+                throw_error(point, mv_string("Invalid import-as new name"));
+            return (ImportClause) {
+                .type = ImportNameAs,
+                .name = name,
+                .rename = rename,
+            };
+        }
+    } else {
+        throw_error(point, mv_string("Invalid import clause"));
+    }
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* point) {
+    if (is_symbol(raw)) {
+        return (ExportClause) {
+            .type = ExportName,
+            .name = raw->atom.symbol,
+        };
+    } else if (raw->type == RawList) {
+        // Export as
+        // looks like (<symbol/name> (<symbol/:> <symbol/as>) <symbol/name>)
+
+        if (raw->nodes.len != 3)
+            throw_error(point, mv_string("Invalid export clause"));
+
+        Symbol middle;
+        if(!get_fieldname(raw->nodes.data[1], &middle))
+            throw_error(point, mv_string("Invalid export clause"));
+        if (middle != string_to_symbol(mv_string("as")))
+            throw_error(point, mv_string("Invalid export clause"));
+
+        Symbol name;
+        Symbol rename;
+        if(!get_fieldname(raw->nodes.data[0], &name))
+            throw_error(point, mv_string("Invalid export-as name"));
+        if(!get_fieldname(raw->nodes.data[0], &rename))
+            throw_error(point, mv_string("Invalid export-as new name"));
+
+        return (ExportClause) {
+            .type = ExportNameAs,
+            .name = name,
+            .rename = rename,
+        };
+    } else {
+        throw_error(point, mv_string("Invalid export clause"));
+    }
+}
+#pragma GCC diagnostic pop

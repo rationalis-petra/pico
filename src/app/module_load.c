@@ -33,6 +33,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* pkg_parent, M
 
     // Step 2: Check / abstract module header
     // • module_header header = parse_module_header
+    ModuleHeader* header = abstract_header(ph_res.data.result, &arena, &point);
 
     // Step 3:
     //  • Generate environment based on imports

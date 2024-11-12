@@ -142,7 +142,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             push_u32(codepoint, &arr);
         } else if (codepoint == '.') {
             next(is, &codepoint);
-            out = parse_atom(is, parse_state, a);
+            out = parse_main(is, parse_state, a);
             if (out.type != ParseSuccess)
                 return out;
             RawTree* op = mem_alloc(sizeof(RawTree), a);
