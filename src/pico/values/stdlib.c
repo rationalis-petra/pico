@@ -594,8 +594,21 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
-Module* base_module(Assembler* ass, Allocator* a) {
-    Module* module = mk_module(a);
+
+void add_core_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
     Symbol sym;
 
     PiType type;
@@ -804,13 +817,6 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = mk_null_proc_type(a);
-    build_exit_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("exit"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
-
     type = build_store_fn_ty(a);
     build_store_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("store"));
@@ -825,7 +831,38 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
+    add_module(string_to_symbol(mv_string("core")), module, base);
+}
+
+void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("extra")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+
+    PiType type;
+    Symbol sym;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
     // C Wrappers!
+    type = mk_null_proc_type(a);
+    build_exit_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("exit"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
 
     type = build_malloc_fn_ty(a);
     build_malloc_fn(ass, a, &point);
@@ -855,5 +892,42 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    return module;
+    add_module(string_to_symbol(mv_string("extra")), module, base);
+}
+
+void add_user_module(Package* base, Allocator* a) {
+    Imports imports = (Imports) {.clauses = mk_import_clause_array(2, a),};
+    push_import_clause((ImportClause) {
+            .type = ImportPathAll,
+            .name = string_to_symbol(mv_string("core")),
+        },
+        &imports.clauses);
+    push_import_clause((ImportClause) {
+            .type = ImportPathAll,
+            .name = string_to_symbol(mv_string("extra")),
+        },
+        &imports.clauses);
+
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("user")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+
+    add_module(string_to_symbol(mv_string("user")), module, base);
+}
+
+Package* base_package(Assembler* ass, Allocator* a) {
+    Package* base = mk_package(string_to_symbol(mv_string("base")), a);
+    add_core_module(ass, base, a);
+    add_extra_module(ass, base, a);
+    add_user_module(base, a);
+
+    return base;
 }

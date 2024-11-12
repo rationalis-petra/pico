@@ -66,8 +66,8 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
 
     idx++;
     if (raw.nodes.len <= idx) {
-        imports.import_clauses = mk_import_clause_array(0, a);
-        exports.export_clauses = mk_export_clause_array(0, a);
+        imports.clauses = mk_import_clause_array(0, a);
+        exports.clauses = mk_export_clause_array(0, a);
     } else if (raw.nodes.len <= idx+1){
         RawTree* clauses_1 = raw.nodes.data[2];
         if (clauses_1->type != RawList)
@@ -76,20 +76,20 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
             throw_error(point, mv_string("Not enough elements in import/export list"));
 
         if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import")))) {
-            imports.import_clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
-            exports.export_clauses = mk_export_clause_array(0, a);
+            imports.clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+            exports.clauses = mk_export_clause_array(0, a);
 
             for (size_t i = 1; i < clauses_1->nodes.len; i++) {
                 ImportClause clause = abstract_import_clause(clauses_1->nodes.data[i], a, point);
-                push_import_clause(clause, &imports.import_clauses);
+                push_import_clause(clause, &imports.clauses);
             }
         } else if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("export")))) {
-            imports.import_clauses = mk_import_clause_array(0, a);
-            exports.export_clauses = mk_export_clause_array(clauses_1->nodes.len - 1, a);
+            imports.clauses = mk_import_clause_array(0, a);
+            exports.clauses = mk_export_clause_array(clauses_1->nodes.len - 1, a);
 
             for (size_t i = 1; i < clauses_1->nodes.len; i++) {
                 ExportClause clause = abstract_export_clause(clauses_1->nodes.data[i], a, point);
-                push_export_clause(clause, &exports.export_clauses);
+                push_export_clause(clause, &exports.clauses);
             }
         } else {
             throw_error(point, mv_string("Expecting import/export list header."));
@@ -103,7 +103,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
         if (!eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import"))))
             throw_error(point, mv_string("Expecting 'import' at head of import list"));
 
-        imports.import_clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+        imports.clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
 
         for (size_t i = 1; i < clauses_1->nodes.len; i++) {
         }
@@ -119,7 +119,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
         for (size_t i = 1; i < clauses_2->nodes.len; i++) {
         }
 
-        exports.export_clauses = mk_export_clause_array(clauses_2->nodes.len - 1, a);
+        exports.clauses = mk_export_clause_array(clauses_2->nodes.len - 1, a);
     }
 
     ModuleHeader* out = mem_alloc(sizeof(ModuleHeader), a);

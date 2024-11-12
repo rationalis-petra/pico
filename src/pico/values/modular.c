@@ -6,6 +6,7 @@
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
+#include "pico/syntax/header.h"
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_sarr_amap.h"
 
@@ -29,12 +30,15 @@ AMAP_IMPL(Symbol, ModuleEntryInternal, entry, Entry)
 struct Package {
     Symbol name;
     SymPtrAMap modules;
+    Allocator* gpa;
 };
 
 struct Module {
-    bool has_name;
-    Symbol name;
     EntryAMap entries;
+
+    ModuleHeader header;
+    Package* lexical_parent_package;
+    Module* lexical_parent_module;
 
     // The module owns all values defined within it, using memory allocated by
     // its' allocator. When the module is deleted, this will be used to free all
@@ -49,20 +53,36 @@ struct Module {
 // -----------------------------------------------------------------------------
 // Package Implementation
 // -----------------------------------------------------------------------------
-Package* mk_package(String name, Allocator* a) {
-    Package* package = (Package*) mem_alloc(sizeof(Package), a);
-    package->name = string_to_symbol(name);
+Package* mk_package(Symbol name, Allocator* a) {
+    Package* package = mem_alloc(sizeof(Package), a);
+    package->name = name;
     package->modules = mk_sym_ptr_amap(32, a);
+    package->gpa = a;
     return package;
 }
 
-Result add_module(String name, Module* module, Package* package) {
-    // TOOD: check if module already exists
-    sym_ptr_insert(string_to_symbol(name), (void*)module, &(package->modules));
+void delete_package(Package* package) {
+    Allocator* a = package->gpa;
+
+    for (size_t i = 0; i < package->modules.len; i++) {
+        Module* module = package->modules.data[i].val;
+        delete_module(module);
+    }
+    sdelete_sym_ptr_amap(package->modules);
+    mem_free(package, a);
+}
+
+Result add_module(Symbol name, Module* module, Package* package) {
+    // TOOD (Memory leak!): check if module already exists
+    sym_ptr_insert(name, (void*)module, &(package->modules));
 
     return (Result) {.type = Ok};
 }
 
+Module* get_module(Symbol name, Package* package) {
+    Module** module = (Module**) sym_ptr_lookup(name, package->modules);
+    if (module) return *module; else return NULL;
+}
 
 // -----------------------------------------------------------------------------
 // Module Implementation
@@ -71,10 +91,12 @@ Result add_module(String name, Module* module, Package* package) {
 // Forward declaration of utility functions
 void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links);
 
-Module* mk_module(Allocator* a) {
+Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a) {
     Module* module = (Module*) mem_alloc(sizeof(Module), a);
-    module->has_name = false;
     module->entries = mk_entry_amap(32, a);
+    module->header = header;
+    module->lexical_parent_package = pkg_parent;
+    module->lexical_parent_module = parent;
     module->allocator = a;
     module->executable_allocator = mk_executable_allocator(a);
     return module;
@@ -99,6 +121,8 @@ void delete_module(Module* module) {
         }
     };
     sdelete_entry_amap(module->entries);
+    sdelete_import_clause_array(module->header.imports.clauses);
+    sdelete_export_clause_array(module->header.exports.clauses);
 
     release_executable_allocator(module->executable_allocator);
     mem_free(module, module->allocator);
@@ -157,13 +181,38 @@ ModuleEntry* get_def(Symbol sym, Module* module) {
     return (ModuleEntry*)entry_lookup(sym, module->entries);
 }
 
-SymbolArray get_symbols(Module* module, Allocator* a) {
+String* get_name(Module* module) {
+    return symbol_to_string(module->header.name);
+}
+
+SymbolArray get_exported_symbols(Module* module, Allocator* a) {
     SymbolArray syms = mk_u64_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
         push_u64(module->entries.data[i].key, &syms);
     };
     return syms;
 }
+
+Package* get_package(Module* module) {
+    return module->lexical_parent_package;
+}
+
+Module* get_parent(Module* module) {
+    return module->lexical_parent_module;
+}
+
+Imports get_imports(Module* module) {
+    return module->header.imports;
+}
+
+Exports get_exports(Module* module) {
+    return module->header.exports;
+}
+
+
+//------------------------------------------------------------------------------
+// Implementation internals.
+//------------------------------------------------------------------------------
 
 void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
     for (size_t i = 0; i < new_vals.len; i++) {

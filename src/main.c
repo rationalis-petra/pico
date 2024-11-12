@@ -45,11 +45,16 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     if (catch_error(point)) goto on_error;
 
     if (opts.interactive) {
-        write_string(mv_string("> "), cout);
+        String* name = get_name(module);
+        if (name) write_string(*name, cout);
+        write_string(mv_string(" > "), cout);
     }
 
     ParseResult res = parse_rawtree(cin, &arena);
-    if (res.type == ParseNone) goto on_exit;
+    if (res.type == ParseNone) {
+        write_string(mv_string("\n"), cout);
+        goto on_exit;
+    }
 
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);
@@ -165,7 +170,8 @@ int main(int argc, char** argv) {
     Allocator exalloc = mk_executable_allocator(stdalloc);
     Assembler* ass = mk_assembler(&exalloc);
     Assembler* ass_base = mk_assembler(&exalloc);
-    Module* module = base_module(ass_base, stdalloc);
+    Package* base = base_package(ass_base, stdalloc);
+    Module* module = get_module(string_to_symbol(mv_string("user")), base);
 
     // Argument parsing
     StringArray args = mk_string_array(argc - 1, stdalloc);
@@ -216,9 +222,8 @@ int main(int argc, char** argv) {
         break;
     }
 
-
     // Cleanup
-    delete_module(module);
+    delete_package(base);
     delete_assembler(ass_base);
     delete_assembler(ass);
     clear_symbols();

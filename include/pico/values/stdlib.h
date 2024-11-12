@@ -13,6 +13,6 @@ void pi_longjmp(pi_jmp_buf buf, int val);
 // The (exit) function in the base module will pi_longjmp to the jump buffer set here!
 void set_exit_callback(pi_jmp_buf* buf);
 
-Module* base_module(Assembler* ass, Allocator* a);
+Package* base_package(Assembler* ass, Allocator* a);
 
 #endif

@@ -13,6 +13,7 @@ typedef enum {
     ImportNameAs,
     ImportPath,
     ImportPathMany,
+    ImportPathAll,
 } ImportClause_t;
 
 typedef struct {
@@ -28,8 +29,7 @@ typedef struct {
 ARRAY_HEADER(ImportClause, import_clause, ImportClause)
 
 typedef struct {
-    bool importAll;
-    ImportClauseArray import_clauses;
+    ImportClauseArray clauses;
 } Imports;
 
 //------------------------------------------------------------------------------
@@ -37,6 +37,7 @@ typedef struct {
 //------------------------------------------------------------------------------
 
 typedef enum {
+    ExportAll,
     ExportName,
     ExportNameAs,
 } ExportClause_t;
@@ -51,7 +52,7 @@ ARRAY_HEADER(ExportClause, export_clause, ExportClause)
 
 typedef struct {
     bool export_all;
-    ExportClauseArray export_clauses;
+    ExportClauseArray clauses;
 } Exports;
 
 //------------------------------------------------------------------------------

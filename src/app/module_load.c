@@ -36,9 +36,9 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* pkg_parent, M
     ModuleHeader* header = abstract_header(ph_res.data.result, &arena, &point);
 
     // Step 3:
-    //  • Generate environment based on imports
     //  • Create new module
-    Module* module = NULL;
+    //  • Update module based on imports
+    Module* module = mk_module(*header, pkg_parent, parent, a);
 
     // Step 4:
     //  • Using the environment, parse each expression in the 
@@ -49,7 +49,6 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* pkg_parent, M
         reset_arena_allocator(arena);
         Environment* env = env_from_module(module, &arena);
 
-        // 
         ParseResult res = parse_rawtree(in, &arena);
         if (res.type == ParseNone) goto on_exit;
 
