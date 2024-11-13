@@ -173,6 +173,11 @@ int main(int argc, char** argv) {
     Package* base = base_package(ass_base, stdalloc);
     Module* module = get_module(string_to_symbol(mv_string("user")), base);
 
+    set_current_module(module);
+    set_current_package(base);
+    set_std_istream(cin);
+    set_std_ostream(cout);
+
     // Argument parsing
     StringArray args = mk_string_array(argc - 1, stdalloc);
     for (int i = 1; i < argc; i++) {

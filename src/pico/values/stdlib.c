@@ -269,6 +269,7 @@ void load_file_c_fun(String filename) {
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
     load_module_from_istream(sfile, current_ostream, current_package, NULL, a);
+    delete_istream(sfile, a);
 }
 
 void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -277,12 +278,10 @@ void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     // load_file_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
     // pass in memory/on stack(?)
-    /* build_binary_op (ass, Mov, reg(RCX), rref8(RSP, 0), a, point); */
-    /* build_binary_op (ass, Mov, reg(RDI), rref8(RSP, 8), a, point); */
-    /* build_binary_op (ass, Mov, reg(RCX), imm32(0), a, point); */
-    build_unary_op (ass, Push, rref8(RSP, 0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, 8), a, point);
     build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
 
 #elif ABI == WIN_64
     // Structs are passed on the stack??
@@ -300,10 +299,15 @@ void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
 
-    // Store RSI, pop args & return
-    build_unary_op(ass, Pop, reg(RSI), a, point);
+    // To return:
+    // + pop argument we pushed onto stack
+    // + stash ret addr
+    // + pop argument we were called with
+    // + push ret addr & return
+    build_binary_op(ass, Add, reg(RSP), imm32(24), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
     build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
-    build_unary_op(ass, Push, reg(RSI), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
 

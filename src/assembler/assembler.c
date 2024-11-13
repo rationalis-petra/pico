@@ -843,6 +843,13 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             break;
             
         case Deref:
+            // If the register portion is R9-R15, we need to add REX!
+            if (loc.reg & 0b1000) {
+                //rex_byte |= 0b01001000; // REX.W
+                rex_byte |= 0b01000000; // REX.W
+                rex_byte |= rex_rm_ext((loc.reg & 0b1000) >> 3); 
+            }
+
             if (loc.disp_sz == 0)  {
                 modrm_byte |= modrm_mod(0b00);
             }
