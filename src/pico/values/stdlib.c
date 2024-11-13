@@ -4,15 +4,22 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "memory/arena.h"
+#include "memory/std_allocator.h"
 
 #include "pico/values/stdlib.h"
+#include "app/module_load.h"
 
+//------------------------------------------------------------------------------
+// Implementatino of C API 
+//------------------------------------------------------------------------------
 
 
 // We use the naked attribute to instruct gcc to avoid geneating a prolog/epilog
 // We store all registers (even ones that are caller saved) to avoid generating
 // different code for different ABIs,
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 __attribute__((naked))
 int pi_setjmp(pi_jmp_buf buf) {
 #if ABI == SYSTEM_V_64
@@ -76,6 +83,7 @@ int pi_setjmp(pi_jmp_buf buf) {
 
 __attribute__((naked,noreturn))
 void pi_longjmp(pi_jmp_buf buf, int val) {
+    // avoid unused parameter warnings
 #if ABI == SYSTEM_V_64
     __asm(
           // Restore the registers in inverse order of how they were pushed
@@ -120,11 +128,27 @@ void pi_longjmp(pi_jmp_buf buf, int val) {
 #error "Unknown calling convention"
 #endif
 }
+#pragma GCC diagnostic pop
 
 static pi_jmp_buf* m_buf;
-void set_exit_callback(pi_jmp_buf* buf) {
-    m_buf = buf;
-}
+void set_exit_callback(pi_jmp_buf* buf) { m_buf = buf; }
+
+static Module* current_module;
+void set_current_module(Module* current) { current_module = current; }
+
+static Package* current_package;
+void set_current_package(Package* current) { current_package = current; }
+
+static IStream* current_istream;
+void set_std_istream(IStream* current) { current_istream = current; }
+
+static OStream* current_ostream;
+void set_std_ostream(OStream* current) { current_ostream = current; }
+
+
+//------------------------------------------------------------------------------
+// Helper functions for pico base package
+//------------------------------------------------------------------------------
 
 PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     PiType* i1 = mem_alloc(sizeof(PiType), a);
@@ -188,6 +212,11 @@ void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point)
     build_nullary_op (ass, Ret, a, point);
 }
 
+
+//------------------------------------------------------------------------------
+// Helper functions: module extra
+//------------------------------------------------------------------------------
+
 PiType build_print_fun_ty(Allocator* a) {
     PiType* string_ty = mk_string_type(a);
     PiType* unit_ty = mem_alloc(sizeof(PiType), a);
@@ -233,8 +262,49 @@ void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 
-void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+// C implementation (called from pico!)
+void load_file_c_fun(String filename) {
+    // (ann load-file String → Unit) : load the module/code located in file! 
+    
+    Allocator* a = get_std_allocator();
+    IStream* sfile = open_file_istream(filename, a);
+    load_module_from_istream(sfile, current_ostream, current_package, NULL, a);
+}
 
+void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // (ann load-file String → Unit) : load the module/code located in file! 
+
+#if ABI == SYSTEM_V_64
+    // load_file_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // pass in memory/on stack(?)
+    /* build_binary_op (ass, Mov, reg(RCX), rref8(RSP, 0), a, point); */
+    /* build_binary_op (ass, Mov, reg(RDI), rref8(RSP, 8), a, point); */
+    /* build_binary_op (ass, Mov, reg(RCX), imm32(0), a, point); */
+    build_unary_op (ass, Push, rref8(RSP, 0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 8), a, point);
+    build_unary_op (ass, Push, imm32(0), a, point);
+
+#elif ABI == WIN_64
+    // Structs are passed on the stack??
+#error "Can't compile this for Win64 yet!"
+
+    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&load_file_c_fun), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // Store RSI, pop args & return
+    build_unary_op(ass, Pop, reg(RSI), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op(ass, Push, reg(RSI), a, point);
+    build_nullary_op (ass, Ret, a, point);
 }
 
 PiType build_load_file_fun_ty(Allocator* a) {
@@ -261,6 +331,12 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)exit_callback), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 }
+
+
+
+//------------------------------------------------------------------------------
+// Helper functions: module core
+//------------------------------------------------------------------------------
 
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
@@ -888,6 +964,13 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
     type = build_print_fun_ty(a);
     build_print_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("print"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_load_file_fun_ty(a);
+    build_load_file_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("load-file"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);

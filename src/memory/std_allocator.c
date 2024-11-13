@@ -18,7 +18,6 @@ void* std_realloc(void* location, size_t memsize, void* ctx) {
 void std_free(void* location, void* ctx) {
     free(location);
 }
-
 #pragma GCC diagnostic pop
 
 Allocator* get_std_allocator() {

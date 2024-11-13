@@ -12,7 +12,7 @@
 #include "pico/eval/call.h"
 
 
-void load_module_from_istream(IStream* in, OStream* serr, Package* pkg_parent, Module* parent, Allocator* a) {
+void load_module_from_istream(IStream* in, OStream* serr, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -31,14 +31,14 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* pkg_parent, M
         return;
     }
 
-    // Step 2: Check / abstract module header
+    // Step 2: check / abstract module header
     // • module_header header = parse_module_header
     ModuleHeader* header = abstract_header(ph_res.data.result, &arena, &point);
 
     // Step 3:
     //  • Create new module
     //  • Update module based on imports
-    Module* module = mk_module(*header, pkg_parent, parent, a);
+    Module* module = mk_module(*header, package, parent, a);
 
     // Step 4:
     //  • Using the environment, parse each expression in the 
