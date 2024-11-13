@@ -263,8 +263,8 @@ void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 
 // C implementation (called from pico!)
-void load_file_c_fun(String filename) {
-    // (ann load-file String → Unit) : load the module/code located in file! 
+void load_module_c_fun(String filename) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
@@ -272,11 +272,11 @@ void load_file_c_fun(String filename) {
     delete_istream(sfile, a);
 }
 
-void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // (ann load-file String → Unit) : load the module/code located in file! 
+void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
 
 #if ABI == SYSTEM_V_64
-    // load_file_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
     // pass in memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
@@ -292,7 +292,7 @@ void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&load_file_c_fun), a, point);
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&load_module_c_fun), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 
 #if ABI == WIN_64
@@ -311,7 +311,16 @@ void build_load_file_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op (ass, Ret, a, point);
 }
 
-PiType build_load_file_fun_ty(Allocator* a) {
+void run_script_c_fun(String filename) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+    
+    Allocator* a = get_std_allocator();
+    IStream* sfile = open_file_istream(filename, a);
+    run_script_from_istream(sfile, current_ostream, current_module, a);
+    delete_istream(sfile, a);
+}
+
+PiType build_load_module_fun_ty(Allocator* a) {
     PiType* string_ty = mk_string_type(a);
     PiType* unit_ty = mem_alloc(sizeof(PiType), a);
     *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
@@ -326,6 +335,44 @@ PiType build_load_file_fun_ty(Allocator* a) {
     };
 }
 
+void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+
+#if ABI == SYSTEM_V_64
+    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // pass in memory/on stack(?)
+    build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+
+#elif ABI == WIN_64
+    // Structs are passed on the stack??
+#error "Can't compile this for Win64 yet!"
+
+    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&run_script_c_fun), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // To return:
+    // + pop argument we pushed onto stack
+    // + stash ret addr
+    // + pop argument we were called with
+    // + push ret addr & return
+    build_binary_op(ass, Add, reg(RSP), imm32(24), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
 
 void exit_callback() {
     pi_longjmp(*m_buf, 1);
@@ -974,9 +1021,16 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_load_file_fun_ty(a);
-    build_load_file_fun(ass, a, &point);
-    sym = string_to_symbol(mv_string("load-file"));
+    type = build_load_module_fun_ty(a);
+    build_load_module_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("load-module"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_load_module_fun_ty(a);
+    build_run_script_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("run-script"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
