@@ -936,62 +936,81 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
         };
     } else if (raw->type == RawList) {
         // Possibilities:
+        // (name1 :all)
         // (name1 :as name2)
         // (. name2 name1)
         // (. (list-of-names) name1)
+        if (raw->nodes.len == 2) {
+            if (!is_symbol(raw->nodes.data[0]))
+                throw_error(point, mv_string("Invalid import clause: first element should be symbol"));
+            Symbol name = ((RawTree*)raw->nodes.data[0])->atom.symbol;
 
-        if (raw->nodes.len != 3)
-            throw_error(point, mv_string("Invalid import clause"));
-        if (!is_symbol(raw->nodes.data[0]) || !is_symbol(raw->nodes.data[2]))
-            throw_error(point, mv_string("Invalid import clause"));
-
-        // Check for '.'
-        if (eq_symbol(raw->nodes.data[0], string_to_symbol(mv_string(".")))) {
-            Symbol src;
-            if(!get_fieldname(raw->nodes.data[2], &src))
-                throw_error(point, mv_string("Invalid import-. source"));
-
-            RawTree* raw_members = raw->nodes.data[1];
-            if (is_symbol(raw_members)) {
-                return (ImportClause) {
-                    .type = ImportPath,
-                    .name = src,
-                    .member = raw_members->atom.symbol,
-                };
-            } else if (raw_members->type == RawList) {
-                SymbolArray members = mk_u64_array(raw_members->nodes.len, a);
-                if (!get_symbol_list(&members, *raw_members))
-                    throw_error(point, mv_string("Invalid import-. members"));
-                return (ImportClause) {
-                    .type = ImportPathMany,
-                    .name = src,
-                    .members = members,
-                };
-            } else {
-                throw_error(point, mv_string("Invalid import-. member(s)"));
-            }
-
-        } else {
+            
             Symbol middle;
             if(!get_fieldname(raw->nodes.data[1], &middle))
-                throw_error(point, mv_string("Invalid import clause"));
-            if (middle != string_to_symbol(mv_string("as")))
+                throw_error(point, mv_string("Invalid import clause - expected :all"));
+            if (middle != string_to_symbol(mv_string("all")))
+                throw_error(point, mv_string("Invalid import clause - expected :all"));
+
+            return (ImportClause) {
+                .type = ImportPathAll,
+                .name = name,
+            };
+        } else if (raw->nodes.len == 3) {
+
+            if (!is_symbol(raw->nodes.data[0]) || !is_symbol(raw->nodes.data[2]))
                 throw_error(point, mv_string("Invalid import clause"));
 
-            Symbol name;
-            Symbol rename;
-            if(!get_fieldname(raw->nodes.data[0], &name))
-                throw_error(point, mv_string("Invalid import-as name"));
-            if(!get_fieldname(raw->nodes.data[0], &rename))
-                throw_error(point, mv_string("Invalid import-as new name"));
-            return (ImportClause) {
-                .type = ImportNameAs,
-                .name = name,
-                .rename = rename,
-            };
+            // Check for '.'
+            if (eq_symbol(raw->nodes.data[0], string_to_symbol(mv_string(".")))) {
+                Symbol src;
+                if(!get_fieldname(raw->nodes.data[2], &src))
+                    throw_error(point, mv_string("Invalid import-. source"));
+
+                RawTree* raw_members = raw->nodes.data[1];
+                if (is_symbol(raw_members)) {
+                    return (ImportClause) {
+                        .type = ImportPath,
+                        .name = src,
+                        .member = raw_members->atom.symbol,
+                    };
+                } else if (raw_members->type == RawList) {
+                    SymbolArray members = mk_u64_array(raw_members->nodes.len, a);
+                    if (!get_symbol_list(&members, *raw_members))
+                        throw_error(point, mv_string("Invalid import-. members"));
+                    return (ImportClause) {
+                        .type = ImportPathMany,
+                        .name = src,
+                        .members = members,
+                    };
+                } else {
+                    throw_error(point, mv_string("Invalid import-. member(s)"));
+                }
+
+            } else {
+                Symbol middle;
+                if(!get_fieldname(raw->nodes.data[1], &middle))
+                    throw_error(point, mv_string("Invalid import clause"));
+                if (middle != string_to_symbol(mv_string("as")))
+                    throw_error(point, mv_string("Invalid import clause"));
+
+                Symbol name;
+                Symbol rename;
+                if(!get_fieldname(raw->nodes.data[0], &name))
+                    throw_error(point, mv_string("Invalid import-as name"));
+                if(!get_fieldname(raw->nodes.data[0], &rename))
+                    throw_error(point, mv_string("Invalid import-as new name"));
+                return (ImportClause) {
+                    .type = ImportNameAs,
+                    .name = name,
+                    .rename = rename,
+                };
+            }
+        } else {
+            throw_error(point, mv_string("Invalid import clause - incorrect number of itesm"));
         }
     } else {
-        throw_error(point, mv_string("Invalid import clause"));
+        throw_error(point, mv_string("Invalid import clause - is atom!"));
     }
 }
 

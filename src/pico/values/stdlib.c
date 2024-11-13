@@ -689,6 +689,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
     Symbol sym;
 
     PiType type;
@@ -928,6 +929,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
 
     PiType type;
     Symbol sym;
@@ -1006,6 +1008,7 @@ void add_user_module(Package* base, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
 
     add_module(string_to_symbol(mv_string("user")), module, base);
 }

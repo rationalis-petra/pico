@@ -94,7 +94,7 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links);
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a) {
     Module* module = (Module*) mem_alloc(sizeof(Module), a);
     module->entries = mk_entry_amap(32, a);
-    module->header = header;
+    module->header = copy_module_header(header, a);
     module->lexical_parent_package = pkg_parent;
     module->lexical_parent_module = parent;
     module->allocator = a;

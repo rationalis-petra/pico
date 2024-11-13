@@ -88,13 +88,12 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
         // -------------------------------------------------------------------------
 
         pico_run_toplevel(abs, ass, &(gen_res.backlinks), module, &arena, &point);
-
-        release_arena_allocator(arena);
     }
 
     return;
 
  on_exit:
+    add_module(header->name, module, package);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
@@ -102,8 +101,8 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
  on_error:
     write_string(point.error_message, serr);
     write_string(mv_string("\n"), serr);
+    delete_module(module);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
-        
 }

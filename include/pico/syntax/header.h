@@ -65,4 +65,7 @@ typedef struct {
     Exports exports;
 } ModuleHeader;
 
+ModuleHeader copy_module_header(ModuleHeader h, Allocator* a);
+void delete_module_header(ModuleHeader h);
+
 #endif
