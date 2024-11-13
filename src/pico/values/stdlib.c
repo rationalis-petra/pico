@@ -1,11 +1,154 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "memory/arena.h"
+#include "memory/std_allocator.h"
 
 #include "pico/values/stdlib.h"
+#include "app/module_load.h"
+
+//------------------------------------------------------------------------------
+// Implementatino of C API 
+//------------------------------------------------------------------------------
+
+
+// We use the naked attribute to instruct gcc to avoid geneating a prolog/epilog
+// We store all registers (even ones that are caller saved) to avoid generating
+// different code for different ABIs,
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+__attribute__((naked))
+int pi_setjmp(pi_jmp_buf buf) {
+#if ABI == SYSTEM_V_64
+    __asm(
+          // Store the return RIP address (Currently @ top of stack) first
+          // element of BUF, which is located in RCX (as per SYSTEM_V_64)
+          "mov (%rsp), %rax\n"
+          "mov %rax,  0(%rdi)\n"
+
+          // Now, store the return stack pointer in the second element of buf
+          "lea 8(%rsp), %rax\n"
+          "mov %rax,  8(%rdi)\n"
+
+          // For the other buffers, we can directly write each into their
+          // respective indices in the buffer
+          "mov %rbp, 16(%rdi)\n"
+          "mov %rbx, 24(%rdi)\n"
+          /* "mov %rdi, 32(%rdi)\n" */
+          /* "mov %rsi, 40(%rdi)\n" */
+          "mov %r12, 48(%rdi)\n"
+          "mov %r13, 56(%rdi)\n"
+          "mov %r14, 64(%rdi)\n"
+          "mov %r15, 72(%rdi)\n"
+
+          // Set the return value to 0
+          // Note: we use eax as int is 32-bit!
+          "xor %eax, %eax\n"
+          "ret\n"
+          );
+#elif ABI == WIN_64
+    __asm(
+          // Store the return RIP address (Currently @ top of stack) first
+          // element of BUF, which is located in RCX (as per SYSTEM_V_64)
+          "mov (%rsp), %rax\n"
+          "mov %rax,  0(%rcx)\n"
+
+          // Now, store the return stack pointer in the second element of buf
+          "lea 8(%rsp), %rax\n"
+          "mov %rax,  8(%rcx)\n"
+
+          // For the other buffers, we can directly write each into their
+          // respective indices in the buffer
+          "mov %rbp, 16(%rcx)\n"
+          "mov %rbx, 24(%rcx)\n"
+          "mov %rdi, 32(%rcx)\n"
+          "mov %rsi, 40(%rcx)\n"
+          "mov %r12, 48(%rcx)\n"
+          "mov %r13, 56(%rcx)\n"
+          "mov %r14, 64(%rcx)\n"
+          "mov %r15, 72(%rcx)\n"
+
+          // Set the return value to 0
+          // Note: we use eax as int is 32-bit!
+          "xor %eax, %eax\n"
+          "ret\n"
+          );
+#else
+#error "Unknown calling convention"
+#endif
+}
+
+__attribute__((naked,noreturn))
+void pi_longjmp(pi_jmp_buf buf, int val) {
+    // avoid unused parameter warnings
+#if ABI == SYSTEM_V_64
+    __asm(
+          // Restore the registers in inverse order of how they were pushed
+          // This is completely arbitrary and therefore for aesthetic reasons only!
+          "mov 72(%rdi), %r15\n"
+          "mov 64(%rdi), %r14\n"
+          "mov 56(%rdi), %r13\n"
+          "mov 48(%rdi), %r12\n"
+          /* "mov 40(%rdi), %rsi\n" */
+          /* "mov 32(%rdi), %rdi\n" */
+          "mov 24(%rdi), %rbx\n"
+          "mov 16(%rdi), %rbp\n"
+          "mov  8(%rdi), %rsp\n"
+
+          // longjmp will 'return' (in eax) it's second argument (passed in esi)
+          "mov %esi, %eax\n"
+
+          // jmp to the cached RIP, making it look as if setjmp just returned!
+          "jmp *0(%rdi)\n"
+    );
+#elif ABI == WIN_64
+    __asm(
+          // Restore the registers in inverse order of how they were pushed
+          // This is completely arbitrary and therefore for aesthetic reasons only!
+          "mov 72(%rcx), %r15\n"
+          "mov 64(%rcx), %r14\n"
+          "mov 56(%rcx), %r13\n"
+          "mov 48(%rcx), %r12\n"
+          "mov 40(%rcx), %rsi\n"
+          "mov 32(%rcx), %rdi\n"
+          "mov 24(%rcx), %rbx\n"
+          "mov 16(%rcx), %rbp\n"
+          "mov  8(%rcx), %rsp\n"
+
+          // longjmp will 'return' (in eax) it's second argument (passed in edx)
+          "mov %edx, %eax\n"
+
+          // jmp to the cached RIP, making it look as if setjmp just returned!
+          "jmp *0(%rcx)\n"
+    );
+#else
+#error "Unknown calling convention"
+#endif
+}
+#pragma GCC diagnostic pop
+
+static pi_jmp_buf* m_buf;
+void set_exit_callback(pi_jmp_buf* buf) { m_buf = buf; }
+
+static Module* current_module;
+void set_current_module(Module* current) { current_module = current; }
+
+static Package* current_package;
+void set_current_package(Package* current) { current_package = current; }
+
+static IStream* current_istream;
+void set_std_istream(IStream* current) { current_istream = current; }
+
+static OStream* current_ostream;
+void set_std_ostream(OStream* current) { current_ostream = current; }
+
+
+//------------------------------------------------------------------------------
+// Helper functions for pico base package
+//------------------------------------------------------------------------------
 
 PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     PiType* i1 = mem_alloc(sizeof(PiType), a);
@@ -69,20 +212,182 @@ void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point)
     build_nullary_op (ass, Ret, a, point);
 }
 
-// TODO (BUG UB): This seems to crash on windows
-static jmp_buf* m_buf;
-void set_exit_callback(jmp_buf* buf) {
-    m_buf = buf;
+
+//------------------------------------------------------------------------------
+// Helper functions: module extra
+//------------------------------------------------------------------------------
+
+PiType build_print_fun_ty(Allocator* a) {
+    PiType* string_ty = mk_string_type(a);
+    PiType* unit_ty = mem_alloc(sizeof(PiType), a);
+    *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
+
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(string_ty, &args);
+
+    return (PiType) {
+        .sort = TProc,
+        .proc.args = args,
+        .proc.ret = unit_ty,
+    };
+}
+
+void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+
+#if ABI == SYSTEM_V_64
+    // puts (bytes = rdi)
+    build_binary_op (ass, Mov, reg(RDI), rref8(RSP, 16), a, point);
+
+#elif ABI == WIN_64
+    // puts (bytes = rcx)
+    build_binary_op (ass, Mov, reg(RCX), rref8(RSP, 16), a, point);
+
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&puts), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // Store RSI, pop args & return
+    build_unary_op(ass, Pop, reg(RSI), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op(ass, Push, reg(RSI), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
+
+// C implementation (called from pico!)
+void load_module_c_fun(String filename) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+    
+    Allocator* a = get_std_allocator();
+    IStream* sfile = open_file_istream(filename, a);
+    load_module_from_istream(sfile, current_ostream, current_package, NULL, a);
+    delete_istream(sfile, a);
+}
+
+void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+
+#if ABI == SYSTEM_V_64
+    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // pass in memory/on stack(?)
+    build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+
+#elif ABI == WIN_64
+    // Structs are passed on the stack??
+#error "Can't compile this for Win64 yet!"
+
+    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&load_module_c_fun), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // To return:
+    // + pop argument we pushed onto stack
+    // + stash ret addr
+    // + pop argument we were called with
+    // + push ret addr & return
+    build_binary_op(ass, Add, reg(RSP), imm32(24), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
+void run_script_c_fun(String filename) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+    
+    Allocator* a = get_std_allocator();
+    IStream* sfile = open_file_istream(filename, a);
+    run_script_from_istream(sfile, current_ostream, current_module, a);
+    delete_istream(sfile, a);
+}
+
+PiType build_load_module_fun_ty(Allocator* a) {
+    PiType* string_ty = mk_string_type(a);
+    PiType* unit_ty = mem_alloc(sizeof(PiType), a);
+    *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
+
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(string_ty, &args);
+
+    return (PiType) {
+        .sort = TProc,
+        .proc.args = args,
+        .proc.ret = unit_ty,
+    };
+}
+
+void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // (ann load-module String → Unit) : load the module/code located in file! 
+
+#if ABI == SYSTEM_V_64
+    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // pass in memory/on stack(?)
+    build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+
+#elif ABI == WIN_64
+    // Structs are passed on the stack??
+#error "Can't compile this for Win64 yet!"
+
+    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&run_script_c_fun), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+
+    // To return:
+    // + pop argument we pushed onto stack
+    // + stash ret addr
+    // + pop argument we were called with
+    // + push ret addr & return
+    build_binary_op(ass, Add, reg(RSP), imm32(24), a, point);
+    build_unary_op (ass, Pop, reg(RAX), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(16), a, point);
+    build_unary_op (ass, Push, reg(RAX), a, point);
+    build_nullary_op (ass, Ret, a, point);
 }
 
 void exit_callback() {
-    longjmp(*m_buf, 1);
+    pi_longjmp(*m_buf, 1);
 }
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)exit_callback), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 }
+
+
+
+//------------------------------------------------------------------------------
+// Helper functions: module core
+//------------------------------------------------------------------------------
 
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
@@ -138,7 +443,6 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    //build_binary_op(ass, Add, reg(RDI), reg(RAX), a, point);
     build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX), reg(R9), a, point);
 
@@ -417,8 +721,22 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
-Module* base_module(Assembler* ass, Allocator* a) {
-    Module* module = mk_module(a);
+
+void add_core_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
     Symbol sym;
 
     PiType type;
@@ -627,13 +945,6 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = mk_null_proc_type(a);
-    build_exit_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("exit"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
-
     type = build_store_fn_ty(a);
     build_store_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("store"));
@@ -648,7 +959,39 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
+    add_module(string_to_symbol(mv_string("core")), module, base);
+}
+
+void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("extra")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
+
+    PiType type;
+    Symbol sym;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
     // C Wrappers!
+    type = mk_null_proc_type(a);
+    build_exit_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("exit"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
 
     type = build_malloc_fn_ty(a);
     build_malloc_fn(ass, a, &point);
@@ -671,5 +1014,64 @@ Module* base_module(Assembler* ass, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    return module;
+    type = build_print_fun_ty(a);
+    build_print_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("print"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_load_module_fun_ty(a);
+    build_load_module_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("load-module"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = build_load_module_fun_ty(a);
+    build_run_script_fun(ass, a, &point);
+    sym = string_to_symbol(mv_string("run-script"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    add_module(string_to_symbol(mv_string("extra")), module, base);
+}
+
+void add_user_module(Package* base, Allocator* a) {
+    Imports imports = (Imports) {.clauses = mk_import_clause_array(2, a),};
+    push_import_clause((ImportClause) {
+            .type = ImportPathAll,
+            .name = string_to_symbol(mv_string("core")),
+        },
+        &imports.clauses);
+    push_import_clause((ImportClause) {
+            .type = ImportPathAll,
+            .name = string_to_symbol(mv_string("extra")),
+        },
+        &imports.clauses);
+
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("user")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
+
+    add_module(string_to_symbol(mv_string("user")), module, base);
+}
+
+Package* base_package(Assembler* ass, Allocator* a) {
+    Package* base = mk_package(string_to_symbol(mv_string("base")), a);
+    add_core_module(ass, base, a);
+    add_extra_module(ass, base, a);
+    add_user_module(base, a);
+
+    return base;
 }

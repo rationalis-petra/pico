@@ -21,11 +21,14 @@
 #include "pico/values/stdlib.h"
 #include "pico/values/types.h"
 
-typedef struct repl_opts {
-    bool debug_print;
-} repl_opts;
+#include "app/command_line_opts.h"
 
-bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, repl_opts opts) {
+typedef struct {
+    bool debug_print;
+    bool interactive;
+} IterOpts;
+
+bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, IterOpts opts) {
     // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
     // however, we are not expecting the arena to be mutated, so...
     // Create an arena allocator to use in this iteration.
@@ -34,15 +37,25 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     clear_assembler(ass);
     Environment* env = env_from_module(module, &arena);
 
-    jmp_buf exit_point;
-    if (setjmp(exit_point)) goto on_exit;
+    pi_jmp_buf exit_point;
+    if (pi_setjmp(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
-    write_string(mv_string("> "), cout);
+    if (opts.interactive) {
+        String* name = get_name(module);
+        if (name) write_string(*name, cout);
+        write_string(mv_string(" > "), cout);
+    }
+
     ParseResult res = parse_rawtree(cin, &arena);
+    if (res.type == ParseNone) {
+        write_string(mv_string("\n"), cout);
+        goto on_exit;
+    }
+
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);
         release_arena_allocator(arena);
@@ -112,10 +125,12 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
         write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     }
 
-    doc = pretty_res(call_res, &arena);
+    if (opts.debug_print || opts.interactive) {
+        doc = pretty_res(call_res, &arena);
 
-    write_doc(doc, cout);
-    write_string(mv_string("\n"), cout);
+        write_doc(doc, cout);
+        write_string(mv_string("\n"), cout);
+    }
 
     release_arena_allocator(arena);
     return true;
@@ -125,6 +140,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     write_string(mv_string("\n"), cout);
     release_arena_allocator(arena);
     return true;
+
  on_exit:
     release_arena_allocator(arena);
     return false;
@@ -145,17 +161,6 @@ int cstrcmp (const char* lhs, const char* rhs) {
 }
 
 int main(int argc, char** argv) {
-    // Argument parsing
-    repl_opts opts;
-    opts.debug_print = false;
-    if (argc > 1) {
-        for (int i = 1; i < argc; i++) {
-            if (cstrcmp("-d", argv[i]) == 0) {
-                opts.debug_print = true;
-            }
-        }
-    }
-
     // Setup
     asm_init();
 
@@ -165,13 +170,65 @@ int main(int argc, char** argv) {
     Allocator exalloc = mk_executable_allocator(stdalloc);
     Assembler* ass = mk_assembler(&exalloc);
     Assembler* ass_base = mk_assembler(&exalloc);
-    Module* module = base_module(ass_base, stdalloc);
+    Package* base = base_package(ass_base, stdalloc);
+    Module* module = get_module(string_to_symbol(mv_string("user")), base);
 
-    // Main Loop
-    while (repl_iter(cin, cout, stdalloc, ass, module, opts));
+    set_current_module(module);
+    set_current_package(base);
+    set_std_istream(cin);
+    set_std_ostream(cout);
+
+    // Argument parsing
+    StringArray args = mk_string_array(argc - 1, stdalloc);
+    for (int i = 1; i < argc; i++) {
+        push_string(mv_string(argv[i]), &args);
+    }
+    Command command = parse_command(args);
+    sdelete_string_array(args);
+
+    switch (command.type) {
+    case CRepl: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = command.repl.debug_print,
+            .interactive = true,
+        };
+        while (repl_iter(cin, cout, stdalloc, ass, module, opts));
+        break;
+    }
+    case CScript: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = false,
+            .interactive = false,
+        };
+
+        IStream* fin = open_file_istream(command.script.filename, stdalloc);
+        while (repl_iter(fin, cout, stdalloc, ass, module, opts));
+        delete_istream(fin, stdalloc);
+
+        break;
+    }
+    case CEval: {
+        IterOpts opts = (IterOpts) {
+            .debug_print = false,
+            .interactive = false,
+        };
+
+        IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
+        while (repl_iter(sin, cout, stdalloc, ass, module, opts));
+        delete_istream(sin, stdalloc);
+        break;
+    }
+    case CInvalid:
+        write_string(command.error_message, cout);
+        break;
+    default:
+        write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
+        write_string(mv_string("\n"), cout);
+        break;
+    }
 
     // Cleanup
-    delete_module(module);
+    delete_package(base);
     delete_assembler(ass_base);
     delete_assembler(ass);
     clear_symbols();

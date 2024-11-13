@@ -79,10 +79,23 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
 
-        return (Result) {
-            .type = Err,
-            .error_message = mk_string("Unification failed: not implemented for structs yet!.", a),
-        };
+        for (size_t i = 0; i < lhs->structure.fields.len; i++) {
+            Symbol lhs_sym = lhs->structure.fields.data[i].key;
+            PiType* lhs_ty = lhs->structure.fields.data[i].val;
+
+            PiType** rhs_ty = (PiType**)sym_ptr_lookup(lhs_sym, rhs->structure.fields);
+            if (rhs_ty) {
+                Result out = unify(*rhs_ty, lhs_ty, a);
+                if (out.type == Err) return out;
+            } else {
+                return (Result) {
+                    .type = Err,
+                    .error_message = mk_string("Unification failed: RHS structure missing a field from the LHS.", a)
+                };
+            }
+        }
+
+        return (Result) {.type = Ok,};
     } else if (lhs->sort == TReset && rhs->sort == TReset) {
         Result out = unify(lhs->reset.in, rhs->reset.in, a);
         if (out.type == Err) return out;

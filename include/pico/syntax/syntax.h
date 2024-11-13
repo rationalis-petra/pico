@@ -53,6 +53,8 @@ typedef enum {
 
     // Special
     SIs,
+    SSize,
+    SModule,
 
     // Types & Type formers
     SProcType,
@@ -178,11 +180,24 @@ typedef struct {
     Syntax* false_branch;
 } SynIf;
 
+//------------------------------------------------------------------------------
 // Special
+//------------------------------------------------------------------------------
+
 typedef struct {
     Syntax* val;
     Syntax* type;
 } SynIs;
+
+typedef struct {
+    Syntax* type;
+} SynSize;
+
+typedef struct {
+    // imports
+    // exports
+    // body - terms
+} SynModule;
 
 // Types
 typedef struct {

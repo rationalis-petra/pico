@@ -21,7 +21,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_char(IStream* is, SourcePos* parse_state);
 
 // Helper functions
 StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
@@ -30,48 +30,54 @@ bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
 ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
-    ParseResult res;
+    ParseResult out;
     uint32_t point;
 
     consume_whitespace(is, parse_state);
+
     switch (peek(is, &point)) {
     case StreamSuccess:
         if (point == '(') {
-            res = parse_list(is, parse_state, ')', HExpression, a);
+            out = parse_list(is, parse_state, ')', HExpression, a);
         }
         else if (point == '[') {
-            res = parse_list(is, parse_state, ']', HSpecial, a);
+            out = parse_list(is, parse_state, ']', HSpecial, a);
         }
         else if (point == '{') {
-            res = parse_list(is, parse_state, '}', HImplicit, a);
-        }
-        else if (is_numchar(point) || point == '-') {
-            res = parse_number(is, parse_state, a);
+            out = parse_list(is, parse_state, '}', HImplicit, a);
         }
         else if (point == ':') {
-            res = parse_prefix(':', is, parse_state, a);
+            out = parse_prefix(':', is, parse_state, a);
         }
         else if (point == '.') {
-            res = parse_prefix('.', is, parse_state, a);
+            out = parse_prefix('.', is, parse_state, a);
         }
         else if (point == '"') {
-            res = parse_string(is, parse_state, a);
+            out = parse_string(is, parse_state, a);
         }
         else if (point == '#') {
-            res = parse_char(is, parse_state, a);
+            out = parse_char(is, parse_state);
+        }
+        else if (is_numchar(point) || point == '-') {
+            out = parse_number(is, parse_state, a);
         }
         else {
-            res = parse_atom(is, parse_state, a);
+            out = parse_atom(is, parse_state, a);
         }
         break;
 
+    case StreamEnd: {
+        out.type = ParseNone;
+        break;
+    }
+        
     default: {
-        res.type = ParseFail;
-        res.data.range.start = *parse_state;
-        res.data.range.end = *parse_state;
+        out.type = ParseFail;
+        out.data.range.start = *parse_state;
+        out.data.range.end = *parse_state;
     } break;
     }
-    return res;
+    return out;
 }
 
 ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, SyntaxHint hint, Allocator* a) {
@@ -136,7 +142,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             push_u32(codepoint, &arr);
         } else if (codepoint == '.') {
             next(is, &codepoint);
-            out = parse_atom(is, parse_state, a);
+            out = parse_main(is, parse_state, a);
             if (out.type != ParseSuccess)
                 return out;
             RawTree* op = mem_alloc(sizeof(RawTree), a);
@@ -236,7 +242,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     }
 
 
-    if (result != StreamSuccess) {
+    if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
             .data.range.start = *parse_state,
@@ -347,7 +353,7 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     StreamResult result;
     uint32_t codepoint;
     next(is, &codepoint); // consume token #)

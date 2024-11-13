@@ -683,7 +683,9 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     case SVariable: {
         TypeEntry e = type_env_lookup(untyped->variable, env);
         if (e.type == TENotFound) {
-            throw_error(point, mv_string("Variable not found!"));
+            String msg = mv_string("Variable not found: ");
+            String sym = *symbol_to_string(untyped->variable);
+            throw_error(point, string_cat(msg, sym, a));
         }
         if (e.value) {
             untyped->type = SCheckedType;

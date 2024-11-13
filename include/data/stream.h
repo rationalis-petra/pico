@@ -13,7 +13,6 @@ typedef enum StreamResult {
     StreamEnd,
     StreamLostSource,
     StreamEncodingFailue,
-    StreamImplError,
 } StreamResult;
 
 typedef struct IStream IStream;
@@ -23,14 +22,20 @@ typedef struct IOStream {
     OStream* ostream;
 } IOStream;
 
+
 // Constructors
 IStream* get_stdin_stream();
+IStream* open_file_istream(String filename, Allocator* a);
+IStream* mk_string_istream(String contents, Allocator* a);
+IStream* mv_string_istream(String contents, Allocator* a);
+
 OStream* get_stdout_stream();
+OStream* open_file_ostream(String filename, Allocator* a);
+
 
 // Destructors
 void delete_istream(IStream* stream, Allocator* a);
 void delete_ostream(OStream* stream, Allocator* a);
-
 
 // istream methods
 StreamResult peek(IStream* stream, uint32_t* out);

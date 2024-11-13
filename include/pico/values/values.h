@@ -48,6 +48,7 @@ typedef enum TermFormer {
     // Special Term formers
     FIs,
     FSize,
+    FModule,
 
     // Type formers
     FProcType,

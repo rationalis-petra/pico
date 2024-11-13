@@ -110,8 +110,6 @@ void reset_arena_allocator(Allocator a) {
     ctx->memory_blocks.len = 1;
     ArenaBlock* initial_block = &ctx->memory_blocks.data[0];
     initial_block->bmp = 0;
-    
-    mem_free(ctx, ialloc);
 }
 
 void release_arena_allocator(Allocator a) {
