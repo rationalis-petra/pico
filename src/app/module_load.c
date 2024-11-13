@@ -33,16 +33,17 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
 
     // Step 2: check / abstract module header
     // • module_header header = parse_module_header
-    ModuleHeader* header = abstract_header(ph_res.data.result, &arena, &point);
+    // Note: volatile is to protect from clobbering by longjmp
+    ModuleHeader* volatile  header = abstract_header(ph_res.data.result, &arena, &point);
 
     // Step 3:
     //  • Create new module
     //  • Update module based on imports
-    Module* module = mk_module(*header, package, parent, a);
+    // Note: volatile is to protect from clobbering by longjmp
+    Module* volatile  module = mk_module(*header, package, parent, a);
 
     // Step 4:
-    //  • Using the environment, parse each expression in the 
-    //  • Create new module
+    //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
     while (next_iter) {
         // Prep the arena for another round

@@ -102,23 +102,28 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
     return module;
 }
 
+// Helper
+void delete_module_entry(ModuleEntryInternal entry, Module* module) {
+    if (entry.type.sort == TProc || entry.type.sort == TAll) {
+        mem_free(entry.value, &module->executable_allocator);
+    } else if (entry.type.sort == TKind) {
+        delete_pi_type_p(entry.value, module->allocator);
+    } else {
+        mem_free(entry.value, module->allocator);
+    }
+    delete_pi_type(entry.type, module->allocator);
+    if (entry.backlinks) {
+        delete_sym_sarr_amap(*entry.backlinks,
+                             delete_symbol,
+                             sdelete_size_array);
+        mem_free(entry.backlinks, module->allocator);
+    }
+}
+
 void delete_module(Module* module) {
     for (size_t i = 0; i < module->entries.len; i++) {
         ModuleEntryInternal entry = module->entries.data[i].val;
-        if (entry.type.sort == TProc || entry.type.sort == TAll) {
-            mem_free(entry.value, &module->executable_allocator);
-        } else if (entry.type.sort == TKind) {
-            delete_pi_type_p(entry.value, module->allocator);
-        } else {
-            mem_free(entry.value, module->allocator);
-        }
-        delete_pi_type(entry.type, module->allocator);
-        if (entry.backlinks) {
-            delete_sym_sarr_amap(*entry.backlinks,
-                                 delete_symbol,
-                                 sdelete_size_array);
-            mem_free(entry.backlinks, module->allocator);
-        }
+        delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
     sdelete_import_clause_array(module->header.imports.clauses);
@@ -141,7 +146,12 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     }
     entry.type = copy_pi_type(type, module->allocator);
     entry.backlinks = NULL;
-    entry_insert(name, entry, &(module->entries));
+
+    // Free a previous definition (if it exists!)
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    if (old_entry) delete_module_entry(*old_entry, module);
+
+    entry_insert(name, entry, &module->entries);
 
     Result out;
     out.type = Ok;
@@ -172,6 +182,11 @@ Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymS
     } else {
         entry.backlinks = NULL;
     }
+
+    // Free a previous definition (if it exists!)
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    if (old_entry) delete_module_entry(*old_entry, module);
+
     entry_insert(name, entry, &(module->entries));
 
     return (Result) {.type = Ok};
