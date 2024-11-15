@@ -524,9 +524,22 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, out_size);
         break;
     }
-    case SLet:
-        throw_error(point, mk_string("No assembler implemented for Let", a));
+    case SLet: {
+        size_t bsize = 0;
+        for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
+            Syntax* sy = syn.let_expr.bindings.data[i].val;
+            generate(*sy, env, ass, links, a, point);
+            address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
+            bsize += pi_size_of(*sy->ptype);
+        }
+        generate(*syn.let_expr.body, env, ass, links, a, point);
+        address_pop_n(syn.let_expr.bindings.len, env);
+
+        generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
+        build_binary_op(ass, Add, reg(RSP), imm32(bsize), a, point);
+        address_stack_shrink(env, bsize);
         break;
+    }
     case SIf: {
         // generate the condition
         generate(*syn.if_expr.condition, env, ass, links, a, point);

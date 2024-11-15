@@ -510,7 +510,48 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FLet: {
-        throw_error(point, mv_string("Term former 'let' not implemented!"));
+        SymSynAMap bindings = mk_sym_ptr_amap(raw.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special) {
+            RawTree* bind = raw.nodes.data[index];
+            // let [x₁ e₁]
+            //     [x₂ e₂]
+            //  body
+            is_special = bind->hint == HSpecial;
+            if (is_special) {
+                index++;
+                Symbol sym;
+                if (bind->type != RawList || bind->nodes.len != 2) {
+                    throw_error(point, mv_string("Malformed symbol binding in let-expression"));
+                }
+                if (!get_label(bind, &sym)) {
+                    throw_error(point, mv_string("Expected symbol binding in let-expression"));
+                }
+
+                shadow_var(sym, env);
+                Syntax* bind_body = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                sym_ptr_insert(sym, bind_body, &bindings);
+            }
+        }
+
+        if (index > raw.nodes.len - 1) {
+            throw_error(point, mv_string("Let expression has no body!"));
+        }
+
+        if (index < raw.nodes.len - 1) {
+            throw_error(point, mv_string("Let expression multiple bodies!"));
+        }
+
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        *res = (Syntax) {
+            .type = SLet,
+            .let_expr.bindings = bindings,
+            .let_expr.body = body,
+        };
         break;
     }
     case FIf: {

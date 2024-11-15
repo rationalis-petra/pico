@@ -420,7 +420,17 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SLet:
-        throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'let'"));
+        for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
+            Symbol arg = untyped->let_expr.bindings.data[i].key;
+            Syntax* val = untyped->let_expr.bindings.data[i].val;
+            PiType* ty = mk_uvar(gen, a);
+
+            type_check_i(val, ty, env, gen, a, point);
+            // TODO: recursive bindings?
+            type_var(arg, ty, env);
+        }
+        type_infer_i(untyped->let_expr.body, env, gen, a, point);
+        untyped->ptype = untyped->let_expr.body->ptype;
         break;
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
@@ -606,9 +616,11 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SProjector:
         squash_types(typed->projector.val, a, point);
         break;
-        
     case SLet:
-        throw_error(point, mk_string("squash_types not implemented for let", a));
+        for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
+            squash_types(typed->let_expr.bindings.data[i].val, a, point);
+        }
+        squash_types(typed->let_expr.body, a, point);
         break;
     case SIf: {
         squash_types(typed->if_expr.condition, a, point);
