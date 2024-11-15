@@ -148,7 +148,13 @@ typedef struct {
 } SynGoTo;
 
 typedef struct {
-    SynArray terms;
+    bool is_binding;
+    Symbol symbol;
+    Syntax* expr;
+} SeqElt;
+
+typedef struct {
+    PtrArray elements;
 } SynSequence;
 
 typedef struct {

@@ -666,14 +666,39 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FSequence: {
-        SynArray terms = mk_ptr_array(raw.nodes.len - 1, a);
+        SynArray elements = mk_ptr_array(raw.nodes.len - 1, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            push_ptr(abstract_expr_i(*(RawTree*)raw.nodes.data[i], env, a, point), &terms);
+            RawTree* tree = raw.nodes.data[i];
+            SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
+            if (tree->hint == HSpecial) {
+                Symbol sym;
+                if (tree->type != RawList
+                    || tree->nodes.len != 3
+                    || !eq_symbol(tree->nodes.data[0], string_to_symbol(mv_string("let!")))) {
+                    throw_error(point, mv_string("Invalid let! binding in seq"));
+                }
+                RawTree* rsym = tree->nodes.data[1];
+                if (rsym->type != RawAtom || rsym->atom.type != ASymbol) {
+                    throw_error(point, mv_string("Invalid let! binding in seq"));
+                }
+                
+                *elt = (SeqElt) {
+                    .is_binding = true,
+                    .symbol = rsym->atom.symbol,
+                    .expr = abstract_expr_i(*(RawTree*)tree->nodes.data[2], env, a, point),
+                };
+            } else {
+                *elt = (SeqElt) {
+                    .is_binding = false,
+                    .expr = abstract_expr_i(*tree, env, a, point),
+                };
+            }
+            push_ptr(elt, &elements);
         }
         
         *res = (Syntax) {
             .type = SSequence,
-            .sequence.terms = terms,
+            .sequence.elements = elements,
         };
         break;
     }

@@ -538,6 +538,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
         build_binary_op(ass, Add, reg(RSP), imm32(bsize), a, point);
         address_stack_shrink(env, bsize);
+        address_pop_n(syn.let_expr.bindings.len, env);
         break;
     }
     case SIf: {
@@ -825,15 +826,36 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     case SSequence: {
-        for (size_t i = 0; i < syn.sequence.terms.len; i++) {
-            Syntax* term = (Syntax*)syn.sequence.terms.data[i];
-            generate(*term, env, ass, links, a, point);
+        size_t binding_size = 0;
+        size_t num_bindings = 0;
+        size_t last_size = 0;
+        for (size_t i = 0; i < syn.sequence.elements.len; i++) {
+            SeqElt* elt = syn.sequence.elements.data[i];
+            generate(*elt->expr, env, ass, links, a, point);
 
-            if (i + 1 != syn.sequence.terms.len) {
-                size_t sz = pi_size_of(*term->ptype);
-                build_binary_op(ass, Add, reg(RSP), imm32(sz), a, point);
+            size_t sz = pi_size_of(*elt->expr->ptype);
+            if (elt->is_binding) {
+                num_bindings++;
+                binding_size += i + 1 == syn.sequence.elements.len ? 0 : sz;
+                address_bind_relative(elt->symbol, 0, env);
+            }
+            else if (i + 1 != syn.sequence.elements.len) {
+                if (sz != 0) {
+                    build_binary_op(ass, Add, reg(RSP), imm32(sz), a, point);
+                }
                 address_stack_shrink(env, sz);
             }
+
+            if (i + 1 == syn.sequence.elements.len) {
+                last_size = sz;
+            }
+            
+        }
+        if (binding_size != 0) {
+            generate_stack_move(binding_size, 0, last_size, ass, a, point);
+            build_binary_op(ass, Add, reg(RSP), imm32(binding_size), a, point);
+            address_stack_shrink(env, binding_size);
+            address_pop_n(num_bindings, env);
         }
         break;
     }

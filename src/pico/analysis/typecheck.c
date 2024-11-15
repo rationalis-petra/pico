@@ -513,16 +513,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SSequence: {
-        for (size_t i = 0; i < untyped->sequence.terms.len; i++) {
-            type_infer_i(untyped->sequence.terms.data[i], env, gen, a, point);
+        size_t num_binds = 0;
+        for (size_t i = 0; i < untyped->sequence.elements.len; i++) {
+            SeqElt* elt = untyped->sequence.elements.data[i];
+            if (elt->is_binding) {
+                PiType* type = mk_uvar(gen, a);
+                type_check_i(elt->expr, type, env, gen, a, point);
+                type_var (elt->symbol, type, env);
+                num_binds++;
+            } else {
+                type_infer_i(elt->expr, env, gen, a, point);
+            }
         }
 
-        if (untyped->sequence.terms.len == 0) {
+        pop_types(env, num_binds);
+        if (untyped->sequence.elements.len == 0) {
             PiType* t = mem_alloc(sizeof(PiType), a);
             *t = (PiType) {.sort = TPrim, .prim = Unit};
             untyped->ptype = t;
         } else {
-            untyped->ptype = ((Syntax*)untyped->sequence.terms.data[untyped->sequence.terms.len - 1])->ptype;
+            untyped->ptype = ((SeqElt*)untyped->sequence.elements.data[untyped->sequence.elements.len - 1])->expr->ptype;
         }
 
         break;
@@ -656,8 +666,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->reset_to.arg, a, point);
         break;
     case SSequence:
-        for (size_t i = 0; i < typed->sequence.terms.len; i++) {
-            squash_types(typed->sequence.terms.data[i], a, point);
+        for (size_t i = 0; i < typed->sequence.elements.len; i++) {
+            SeqElt* elt = typed->sequence.elements.data[i];
+            squash_types(elt->expr, a, point);
         }
         break;
     case SIs:
