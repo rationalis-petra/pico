@@ -38,6 +38,9 @@ typedef enum TermFormer {
 
     // Term Formers: Control flow + binding
     FLet,
+    FDynamic,
+    FDynamicLet,
+    FDynamicUse,
     FIf,
     FLabels,
     FGoTo,

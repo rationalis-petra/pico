@@ -821,6 +821,18 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("let"));
     add_def(module, sym, type, &former);
 
+    former = FDynamic;
+    sym = string_to_symbol(mv_string("dynamic"));
+    add_def(module, sym, type, &former);
+
+    former = FDynamicLet;
+    sym = string_to_symbol(mv_string("bind"));
+    add_def(module, sym, type, &former);
+
+    former = FDynamicUse;
+    sym = string_to_symbol(mv_string("use"));
+    add_def(module, sym, type, &former);
+
     former = FIs;
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);

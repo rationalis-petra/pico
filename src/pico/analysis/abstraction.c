@@ -671,7 +671,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             RawTree* tree = raw.nodes.data[i];
             SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
             if (tree->hint == HSpecial) {
-                Symbol sym;
                 if (tree->type != RawList
                     || tree->nodes.len != 3
                     || !eq_symbol(tree->nodes.data[0], string_to_symbol(mv_string("let!")))) {

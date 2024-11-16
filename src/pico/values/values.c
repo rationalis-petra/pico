@@ -99,6 +99,15 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
         break;
+    case FDynamic:
+        out = mk_str_doc(mv_string("::dynamic"), a);
+        break;
+    case FDynamicLet:
+        out = mk_str_doc(mv_string("::bind"), a);
+        break;
+    case FDynamicUse:
+        out = mk_str_doc(mv_string("::use"), a);
+        break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
         break;

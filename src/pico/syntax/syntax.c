@@ -244,7 +244,24 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SLet: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on let", a), a);
+        PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
+        push_ptr(mk_str_doc(mv_string("(let"), a), &nodes);
+        for (size_t i = 0; i < syntax->let_expr.bindings.len; i++) {
+            Symbol name = syntax->let_expr.bindings.data[i].key;
+            Syntax* expr = syntax->let_expr.bindings.data[i].val;
+            PtrArray let_nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
+            push_ptr(mk_str_doc(*symbol_to_string(name), a), &let_nodes);
+            push_ptr(pretty_syntax(expr, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+
+            push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+        }
+        push_ptr(pretty_syntax(syntax->let_expr.body, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
         break;
     }
     case SIf: {
@@ -315,10 +332,21 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SSequence: {
-        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.terms.len, a);
+        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.elements.len, a);
         push_ptr(mk_str_doc(mv_string("(seq"), a), &nodes);
-        for (size_t i = 0; i < syntax->sequence.terms.len; i++) {
-            push_ptr(pretty_syntax(syntax->sequence.terms.data[i], a), &nodes);
+        for (size_t i = 0; i < syntax->sequence.elements.len; i++) {
+            SeqElt* elt = syntax->sequence.elements.data[i];
+            if (elt->is_binding) {
+                PtrArray let_nodes = mk_ptr_array(4, a);
+                push_ptr(mk_str_doc(mv_string("[let!"), a), &let_nodes);
+                push_ptr(mk_str_doc(*symbol_to_string(elt->symbol), a), &let_nodes);
+                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+                push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+
+                push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+            } else {
+                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+            }
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
