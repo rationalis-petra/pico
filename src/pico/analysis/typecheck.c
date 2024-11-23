@@ -419,7 +419,27 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = ret_ty;
         break;
     }
-    case SLet:
+    case SDynamic: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* inner_type = untyped->dynamic->ptype; 
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType) {
+            .sort = TDynamic,
+            .dynamic = inner_type,
+        };
+        untyped->ptype = t;
+        break;
+    }
+    case SDynamicUse: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* dyn_type = untyped->dynamic->ptype; 
+        if (dyn_type->sort != TDynamic) {
+            throw_error(point, mv_string("use on non-dynamic type!"));
+        }
+        untyped->ptype = dyn_type->dynamic;
+        break;
+    }
+    case SLet: {
         for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
             Symbol arg = untyped->let_expr.bindings.data[i].key;
             Syntax* val = untyped->let_expr.bindings.data[i].val;
@@ -432,6 +452,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->let_expr.body, env, gen, a, point);
         untyped->ptype = untyped->let_expr.body->ptype;
         break;
+    }
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {.sort = TPrim,.prim = Bool};
@@ -446,7 +467,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
-    case SGoTo:
+    case SGoTo: {
         if (label_present(untyped->go_to.label, env)) {
             PiType* t = mk_uvar(gen, a);
             untyped->ptype = t;
@@ -454,6 +475,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             throw_error(point, mv_string("Error in go-to: Label Not found!"));
         }
         break;
+    }
     case SWithReset: {
         // A = expression type
         // in = reset (argument) type 
@@ -548,6 +570,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SStructType:
     case SEnumType:
     case SResetType:
+    case SDynamicType:
         eval_type(untyped, env, a, point);
         break;
     default:
@@ -625,6 +648,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     }
     case SProjector:
         squash_types(typed->projector.val, a, point);
+        break;
+    case SDynamic:
+        squash_types(typed->dynamic, a, point);
+        break;
+    case SDynamicUse:
+        squash_types(typed->use, a, point);
         break;
     case SLet:
         for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
@@ -798,13 +827,28 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         untyped->type_val = out_type;
         break;
     }
+    case SDynamicType: {
+        eval_type(untyped->dynamic_type, env, a, point);
+        PiType* dyn = untyped->dynamic_type->type_val;
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TDynamic,
+            .dynamic = dyn,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
     case SForallType: {
+        panic(mv_string("eval_type not implemented for All"));
         break;
     }
     case SExistsType: {
+        panic(mv_string("eval_type not implemented for Exists"));
         break;
     }
     case STypeFamily: {
+        panic(mv_string("eval_type not implemented for Family"));
         break;
     }
     case SCheckedType: break; // Can leave blank

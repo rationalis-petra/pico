@@ -11,22 +11,11 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
     case TLExpr: {
         size_t sz = pi_size_of(*top.expr->ptype);
 
-        if (top.expr->ptype->sort == TPrim) {
-            res.type = ERValue;
-            res.val.type = top.expr->ptype;
-            res.val.val = pico_run_expr(ass, sz, a, point);
-        }
-        else if (top.expr->ptype->sort == TStruct) {
-            res.type = ERValue;
-            res.val.type = top.expr->ptype;
-            res.val.val = pico_run_expr(ass, sz, a, point);
-        }
-        else if (top.expr->ptype->sort == TEnum) {
-            res.type = ERValue;
-            res.val.type = top.expr->ptype;
-            res.val.val = pico_run_expr(ass, sz, a, point);
-        }
-        else if (top.expr->ptype->sort == TKind) {
+        if (top.expr->ptype->sort == TPrim
+            || top.expr->ptype->sort == TStruct
+            || top.expr->ptype->sort == TEnum
+            || top.expr->ptype->sort == TDynamic
+            || top.expr->ptype->sort == TKind) {
             res.type = ERValue;
             res.val.type = top.expr->ptype;
             res.val.val = pico_run_expr(ass, sz, a, point);
@@ -48,10 +37,11 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         case TProc:
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
             break;
+        case TPrim:
         case TEnum:
         case TStruct:
-        case TKind:
-        case TPrim: {
+        case TDynamic:
+        case TKind: {
             // assume int64 for now!
             void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
             add_def(module, top.def.bind, *top.def.value->ptype, val);

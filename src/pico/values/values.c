@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <string.h>
+#include <threads.h>
 
 #include "data/amap.h"
 #include "data/array.h"
@@ -7,20 +9,37 @@
 
 
 // The global symbol table
-static bool initialized = false;
 static StrU64AMap symbol_table;
 static PtrArray symbol_names;
+static Allocator* symbol_allocator;
 
-
-void init_symtable(Allocator* a) {
-    symbol_table = mk_str_u64_amap(100, a);
-    symbol_names = mk_ptr_array(100, a);
-    initialized = true;
+// Helper functions
+void init_symbols(Allocator* a) {
+    symbol_allocator = a;
+    symbol_table = mk_str_u64_amap(1024, a);
+    symbol_names = mk_ptr_array(1024, a);
 }
 
 void delete_string_pointer(String* ptr, Allocator* a) {
     delete_string(*ptr, a);
     mem_free(ptr, a);
+}
+
+String* symbol_to_string(Symbol symbol) {
+    return symbol_names.data[symbol];
+}
+
+Symbol string_to_symbol(String str) {
+    uint64_t new_symbol_id = symbol_names.len;
+    Symbol* sym = str_u64_lookup(str, symbol_table);
+    if (!sym) {
+        String* map_str = mem_alloc(sizeof(String), symbol_allocator);
+        *map_str = copy_string(str, symbol_allocator);
+        push_ptr(map_str, &symbol_names);
+        str_u64_insert(*map_str, new_symbol_id, &symbol_table);
+        sym = &new_symbol_id;
+    }
+    return *sym;
 }
 
 void clear_symbols() {
@@ -39,29 +58,145 @@ void delete_symbol(Symbol s) {};
 Symbol copy_symbol(Symbol s, Allocator* a) { return s; };
 #pragma GCC diagnostic pop
 
-String* symbol_to_string(Symbol symbol) {
-    Allocator* a = get_std_allocator();
-    if (!initialized) init_symtable(a);
-    return symbol_names.data[symbol];
+// Helper functions for dynamic variables
+// Need to maintain a set of current/valid vars + default values
+// so new threads know what to copy!
+// 
+// Implementation of dynamic variables
+// Each thread has an array, sized for # of dynamic vars
+//static 
+_Thread_local PtrArray thread_dynamic_vars;
+static Allocator* dynamic_var_allocator;
+static PtrArray dynamic_var_metadata;
+static PtrArray all_dynamic_vars;
+static mtx_t dynamic_var_lock;
+
+// Metadata: 
+typedef struct {
+    bool free;
+    size_t size;
+    void* default_value;
+} DVarMetadata;
+
+void init_dynamic_vars(Allocator* a) {
+    dynamic_var_allocator = a;
+    mtx_init(&dynamic_var_lock, 0); 
+    all_dynamic_vars = mk_ptr_array(256, a);
+    dynamic_var_metadata = mk_ptr_array(256, a);
 }
 
-Symbol string_to_symbol(String str) {
-    Allocator* a = get_std_allocator();
-    if (!initialized) init_symtable(a);
-
-    uint64_t new_symbol_id = symbol_names.len;
-    Symbol* sym = str_u64_lookup(str, symbol_table);
-    if (!sym) {
-
-        String* map_str = mem_alloc(sizeof(String), a);
-        String tmp_str = copy_string(str, a);
-        map_str->memsize = tmp_str.memsize;
-        map_str->bytes = tmp_str.bytes;
-        push_ptr(map_str, &symbol_names);
-        str_u64_insert(tmp_str, new_symbol_id, &symbol_table);
-        sym = &new_symbol_id;
+void clear_dynamic_vars() {
+    // Clear dynamic vars in all arrays
+    for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+        // TODO (UB): when a thread gets deleted/ends,
+        PtrArray* arr = all_dynamic_vars.data[i];
+        for (size_t j = 0; j < dynamic_var_metadata.len; j++) {
+            DVarMetadata* data = dynamic_var_metadata.data[i];
+            if (!data->free) mem_free(arr->data[j], dynamic_var_allocator);
+        }
+        sdelete_ptr_array(*arr);
     }
-    return *sym;
+    for (size_t i = 0; i < dynamic_var_metadata.len; i++) {
+        DVarMetadata* data = dynamic_var_metadata.data[i];
+        mem_free(data->default_value, dynamic_var_allocator);
+        mem_free(data, dynamic_var_allocator);
+    }
+
+    sdelete_ptr_array(all_dynamic_vars);
+    sdelete_ptr_array(dynamic_var_metadata);
+}
+
+void thread_init_dynamic_vars() {
+    // Init just for this thread
+    mtx_lock(&dynamic_var_lock);
+    thread_dynamic_vars = mk_ptr_array(dynamic_var_metadata.size, dynamic_var_allocator);
+    for (size_t i = 0; i < dynamic_var_metadata.len; i++) {
+        DVarMetadata* meta = dynamic_var_metadata.data[i];
+        thread_dynamic_vars.data[i] = mem_alloc(meta->size, dynamic_var_allocator);
+        memcpy(thread_dynamic_vars.data[i], meta->default_value, meta->size);
+    }
+    push_ptr(&thread_dynamic_vars, &all_dynamic_vars);
+    mtx_unlock(&dynamic_var_lock);
+}
+
+void thread_clear_dynamic_vars () {
+    mtx_lock(&dynamic_var_lock);
+    for (size_t i = 0; i < thread_dynamic_vars.len; i++) {
+        mem_free(thread_dynamic_vars.data[i], dynamic_var_allocator);
+    }
+    sdelete_ptr_array(thread_dynamic_vars);
+
+    thread_dynamic_vars.data = NULL;
+    thread_dynamic_vars.len = 0;
+    thread_dynamic_vars.size = 0;
+
+    mtx_unlock(&dynamic_var_lock);
+}
+
+uint64_t mk_dynamic_var(size_t size, void* default_val) {
+    mtx_lock(&dynamic_var_lock);
+    // If there is space in the array, push back
+    uint64_t dvar = dynamic_var_metadata.len;
+    bool used_free = false;
+    if (dynamic_var_metadata.len == dynamic_var_metadata.size) {
+        for (size_t i = 0; i < dynamic_var_metadata.len; i++) {
+            DVarMetadata* data = dynamic_var_metadata.data[i];
+            if (data->free) {
+                used_free = true;
+                dvar = i;
+                break;
+            }
+        }
+    }
+
+    // Appropriately setup the dynamic variable metadata
+    DVarMetadata* data;
+    if (!used_free) {
+        data = mem_alloc(sizeof(DVarMetadata), dynamic_var_allocator);
+        push_ptr(data, &dynamic_var_metadata);
+    } else {
+        data = dynamic_var_metadata.data[dvar];
+    }
+
+    *data = (DVarMetadata) {
+        .free = false,
+        .size = size,
+        .default_value = mem_alloc(size, dynamic_var_allocator),
+    };
+    memcpy(data->default_value, default_val, size);
+    
+    // Now, populate all existing dynamic variable arrays:
+    if (!used_free) {
+        for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+            PtrArray* dvars = all_dynamic_vars.data[i];
+            dvars->data[dvar] = mem_alloc(size, dynamic_var_allocator);
+            memcpy(dvars->data[dvar], default_val, size);
+        }
+    } else {
+        for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+            PtrArray* dvars = all_dynamic_vars.data[i];
+            dvars->data[dvar] = mem_alloc(size, dynamic_var_allocator);
+            memcpy(dvars->data[dvar], default_val, size);
+        }
+    }
+
+    mtx_unlock(&dynamic_var_lock);
+    return dvar;
+}
+
+void* get_dynamic_val(uint64_t dvar) {
+    return thread_dynamic_vars.data[dvar];
+}
+
+void delete_dynamic_var(uint64_t var) {
+    DVarMetadata* data = dynamic_var_metadata.data[var];
+    mem_free(data->default_value, dynamic_var_allocator);
+    data->free = true;
+
+    for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+        PtrArray* dvars = all_dynamic_vars.data[i];
+        mem_free(dvars->data[var], dynamic_var_allocator);
+    }
 }
 
 Document* pretty_former(TermFormer op, Allocator* a) {
@@ -95,18 +230,18 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FProjector:
         out = mk_str_doc(mv_string("::projector"), a);
         break;
+    case FDynamic:
+        out = mk_str_doc(mv_string("::dynamic"), a);
+        break;
+    case FDynamicUse:
+        out = mk_str_doc(mv_string("::use"), a);
+        break;
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
         break;
-    case FDynamic:
-        out = mk_str_doc(mv_string("::dynamic"), a);
-        break;
     case FDynamicLet:
         out = mk_str_doc(mv_string("::bind"), a);
-        break;
-    case FDynamicUse:
-        out = mk_str_doc(mv_string("::use"), a);
         break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
@@ -149,6 +284,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FResetType:
         out = mk_str_doc(mv_string("::ResetType"), a);
+        break;
+    case FDynamicType:
+        out = mk_str_doc(mv_string("::DynamicType"), a);
         break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);

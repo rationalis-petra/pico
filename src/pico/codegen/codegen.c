@@ -128,7 +128,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 build_unary_op(ass, Push, reg(R9), a, point);
-            } else if (syn.ptype->sort == TPrim) {
+            } else if (syn.ptype->sort == TPrim || syn.ptype->sort == TDynamic) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
@@ -292,6 +292,146 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
             
     }
+    case SConstructor: {
+        PiType* enum_type = syn.constructor.enum_type->type_val;
+        size_t enum_size = pi_size_of(*enum_type);
+        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+
+        build_binary_op(ass, Sub, reg(RSP), imm32(enum_size - variant_size), a, point);
+        build_unary_op(ass, Push, imm32(syn.constructor.tag), a, point);
+
+        address_stack_grow(env, enum_size);
+        break;
+    }
+    case SVariant: {
+        const size_t tag_size = sizeof(uint64_t);
+        PiType* enum_type = syn.variant.enum_type->type_val;
+        size_t enum_size = pi_size_of(*enum_type);
+        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+
+        // Make space to fit the (final) variant
+        build_binary_op(ass, Sub, reg(RSP), imm32(enum_size), a, point);
+
+        // Set the tag
+        build_binary_op(ass, Mov, rref8(RSP, 0), imm32(syn.constructor.tag), a, point);
+
+        // Generate each argument
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+            generate(*(Syntax*)syn.variant.args.data[i], env, ass, links, a, point);
+        }
+
+        // Now, move them into the space allocated in reverse order
+        PtrArray args = *(PtrArray*)syn.ptype->enumeration.variants.data[syn.variant.tag].val;
+        size_t src_stack_offset = variant_size - tag_size;
+        size_t dest_stack_offset = variant_size;
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+            // We now both the source_offset and dest_offset. These are both
+            // relative to the 'bottom' of their respective structures.
+            // Therefore, we now need to find their offsets relative to the `top'
+            // of the stack.
+            
+            size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
+            src_stack_offset -= field_size;
+
+            // Now, move the data.
+            generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+
+            // Now, increase the amount of data we have used
+            dest_stack_offset += field_size;
+        }
+
+        // Remove the space occupied by the temporary values 
+        build_binary_op(ass, Add, reg(RSP), imm32(variant_size - tag_size), a, point);
+
+        // Grow the stack to account for the difference in enum & variant sizes
+        address_stack_grow(env, enum_size - variant_size);
+        break;
+    }
+    case SMatch: {
+        // Generate code for the value
+        Syntax* match_value = syn.match.val;
+        size_t enum_size = pi_size_of(*match_value->ptype);
+        size_t out_size = pi_size_of(*syn.ptype);
+
+        generate(*match_value, env, ass, links, a, point);
+
+        SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
+        PtrArray back_refs = mk_ptr_array(syn.match.clauses.len, a);
+
+        // For each pattern match, generate two things 
+        // 1. A comparison/check that the pattern has been matched
+        // 2. A jump to the relevant location
+        for (size_t i = 0; i < syn.match.clauses.len; i++) {
+            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
+            build_binary_op(ass, Cmp, rref8(RSP, 0), imm32(clause.tag), a, point);
+            AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
+            push_size(get_pos(ass), &back_positions);
+            push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
+        }
+
+        // The 'body positions' and 'body_refs' store the inidices we need to
+        // use to calculate jumps (and the bytes we need to update with those jumps)
+        SizeArray body_positions = mk_size_array(syn.match.clauses.len, a);
+        PtrArray body_refs = mk_ptr_array(syn.match.clauses.len, a);
+
+        for (size_t i = 0; i < syn.match.clauses.len; i++) {
+            // 1. Backpatch the jump so that it jumps to here
+            size_t branch_pos = back_positions.data[i];
+            uint8_t* branch_ref = back_refs.data[i];
+
+            // calc backlink offset
+            size_t body_pos = get_pos(ass);
+            if (body_pos - branch_pos > INT8_MAX) {
+                throw_error(point, mk_string("Jump in match too large", a));
+            } 
+
+            *branch_ref = (uint8_t)(body_pos - branch_pos);
+
+            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
+            PtrArray variant_types = *(PtrArray*)match_value->ptype->enumeration.variants.data[clause.tag].val; 
+
+            // Bind Clause Vars 
+            SymSizeAssoc arg_sizes = mk_sym_size_assoc(variant_types.len, a);
+            for (size_t i = 0; i < variant_types.len; i++) {
+                sym_size_bind(clause.vars.data[i]
+                              , pi_mono_size_of(*(PiType*)variant_types.data[i])
+                              , &arg_sizes);
+            }
+            address_bind_enum_vars(arg_sizes, env);
+
+            generate(*clause.body, env, ass, links, a, point);
+
+            // Generate jump to end of false branch to be backlinked later
+            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            push_size(get_pos(ass), &body_positions);
+            push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
+
+            address_unbind_enum_vars(env);
+            address_stack_shrink(env, out_size);
+        }
+
+        // Finally, backlink all jumps from the bodies to the end.
+        size_t curr_pos = get_pos(ass);
+        for (size_t i = 0; i < body_positions.len; i++) {
+            size_t body_pos = body_positions.data[i];
+            uint8_t* body_ref = body_refs.data[i];
+
+            if (curr_pos - body_pos > INT8_MAX) {
+                throw_error(point, mk_string("Jump in match too large", a));
+            } 
+
+            *body_ref = (uint8_t)(curr_pos - body_pos);
+        }
+
+
+        generate_stack_move(out_size + (enum_size - out_size), 0, out_size, ass, a, point);
+
+        build_binary_op(ass, Add, reg(RSP), imm32(enum_size), a, point);
+
+        address_stack_shrink(env, enum_size);
+        address_stack_grow(env, out_size);
+        break;
+    }
     case SStructure: {
         // For structures, we have to be careful - this is because the order in
         // which arguments are evaluated is not necessarily the order in which
@@ -382,146 +522,68 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, out_sz);
         break;
     }
+    case SDynamic: {
+        // Create a new dynamic variable, i.e. call the C function 
+        // mk_dynamic_var(size_t size, void* default_val)
+        generate(*syn.dynamic, env, ass, links, a, point);
 
-    case SConstructor: {
-        PiType* enum_type = syn.constructor.enum_type->type_val;
-        size_t enum_size = pi_size_of(*enum_type);
-        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+        // currently RSP = default_val
 
-        build_binary_op(ass, Sub, reg(RSP), imm32(enum_size - variant_size), a, point);
-        build_unary_op(ass, Push, imm32(syn.constructor.tag), a, point);
+#if ABI == SYSTEM_V_64 
+        // arg1 = rsi, arg2 = rdi
+        build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+        build_binary_op(ass, Mov, reg(RDI), imm32(pi_size_of(*syn.ptype)), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx, arg2 = rdx
+        build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
+        build_binary_op(ass, MOV, reg(RDX), imm32(pi_size_of(*syn.ptype)), a, point);
+        build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "unknown ABI"
+#endif
 
-        address_stack_grow(env, enum_size);
+        // call function
+        build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)mk_dynamic_var), a, point);
+        build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64 
+        build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+        // Pop value off stack
+        build_binary_op(ass, Add, reg(RSP), imm32(pi_size_of(*syn.ptype)), a, point);
+        build_unary_op(ass, Push, reg(RAX), a, point);
         break;
     }
-    case SVariant: {
-        const size_t tag_size = sizeof(uint64_t);
-        PiType* enum_type = syn.variant.enum_type->type_val;
-        size_t enum_size = pi_size_of(*enum_type);
-        size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+    case SDynamicUse: {
+        generate(*syn.use, env, ass, links, a, point);
 
-        // Make space to fit the (final) variant
-        build_binary_op(ass, Sub, reg(RSP), imm32(enum_size), a, point);
+        // We now have a dynamic variable: get its' value as ptr
 
-        // Set the tag
-        build_binary_op(ass, Mov, rref8(RSP, 0), imm32(syn.constructor.tag), a, point);
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi
+        build_unary_op(ass, Pop, reg(RDI), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx
+        build_unary_op(ass, Pop, reg(RCX), a, point);
+        build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else
+#error "unknown ABI"
+#endif
 
-        // Generate each argument
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            generate(*(Syntax*)syn.variant.args.data[i], env, ass, links, a, point);
-        }
+        // call function
+        build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)get_dynamic_val), a, point);
+        build_unary_op(ass, Call, reg(RAX), a, point);
 
-        // Now, move them into the space allocated in reverse order
-        PtrArray args = *(PtrArray*)syn.ptype->enumeration.variants.data[syn.variant.tag].val;
-        size_t src_stack_offset = variant_size - tag_size;
-        size_t dest_stack_offset = variant_size;
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            // We now both the source_offset and dest_offset. These are both
-            // relative to the 'bottom' of their respective structures.
-            // Therefore, we now need to find their offsets relative to the `top'
-            // of the stack.
-            
-            size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
-            src_stack_offset -= field_size;
+#if ABI == WIN_64 
+        build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif
+        // Now, allocate space on stack
+        size_t val_size = pi_size_of(*syn.ptype);
+        build_binary_op(ass, Sub, reg(RSP), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point);
 
-            // Now, move the data.
-            generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-
-            // Now, increase the amount of data we have used
-            dest_stack_offset += field_size;
-        }
-
-        // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP), imm32(variant_size - tag_size), a, point);
-
-        // Grow the stack to account for the difference in enum & variant sizes
-        address_stack_grow(env, enum_size - variant_size);
-        break;
-    }
-
-    case SMatch: {
-        // Generate code for the value
-        Syntax* match_value = syn.match.val;
-        size_t enum_size = pi_size_of(*match_value->ptype);
-        size_t out_size = pi_size_of(*syn.ptype);
-
-        generate(*match_value, env, ass, links, a, point);
-
-        SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
-        PtrArray back_refs = mk_ptr_array(syn.match.clauses.len, a);
-
-        // For each pattern match, generate two things 
-        // 1. A comparison/check that the pattern has been matched
-        // 2. A jump to the relevant location
-        for (size_t i = 0; i < syn.match.clauses.len; i++) {
-            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            build_binary_op(ass, Cmp, rref8(RSP, 0), imm32(clause.tag), a, point);
-            AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
-            push_size(get_pos(ass), &back_positions);
-            push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
-        }
-
-        // The 'body positions' and 'body_refs' store the inidices we need to
-        // use to calculate jumps (and the bytes we need to update with those jumps)
-        SizeArray body_positions = mk_size_array(syn.match.clauses.len, a);
-        PtrArray body_refs = mk_ptr_array(syn.match.clauses.len, a);
-
-        for (size_t i = 0; i < syn.match.clauses.len; i++) {
-            // 1. Backpatch the jump so that it jumps to here
-            size_t branch_pos = back_positions.data[i];
-            uint8_t* branch_ref = back_refs.data[i];
-
-            // calc backlink offset
-            size_t body_pos = get_pos(ass);
-            if (body_pos - branch_pos > INT8_MAX) {
-                throw_error(point, mk_string("Jump in match too large", a));
-            } 
-
-            *branch_ref = (uint8_t)(body_pos - branch_pos);
-
-            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            PtrArray variant_types = *(PtrArray*)match_value->ptype->enumeration.variants.data[clause.tag].val; 
-
-            // Bind Clause Vars 
-            SymSizeAssoc arg_sizes = mk_sym_size_assoc(variant_types.len, a);
-            for (size_t i = 0; i < variant_types.len; i++) {
-                sym_size_bind(clause.vars.data[i]
-                              , pi_mono_size_of(*(PiType*)variant_types.data[i])
-                              , &arg_sizes);
-            }
-            address_bind_enum_vars(arg_sizes, env);
-
-            generate(*clause.body, env, ass, links, a, point);
-
-            // Generate jump to end of false branch to be backlinked later
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
-            push_size(get_pos(ass), &body_positions);
-            push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
-
-            address_unbind_enum_vars(env);
-            address_stack_shrink(env, out_size);
-        }
-
-        // Finally, backlink all jumps from the bodies to the end.
-        size_t curr_pos = get_pos(ass);
-        for (size_t i = 0; i < body_positions.len; i++) {
-            size_t body_pos = body_positions.data[i];
-            uint8_t* body_ref = body_refs.data[i];
-
-            if (curr_pos - body_pos > INT8_MAX) {
-                throw_error(point, mk_string("Jump in match too large", a));
-            } 
-
-            *body_ref = (uint8_t)(curr_pos - body_pos);
-        }
-
-
-        generate_stack_move(out_size + (enum_size - out_size), 0, out_size, ass, a, point);
-
-        build_binary_op(ass, Add, reg(RSP), imm32(enum_size), a, point);
-
-        address_stack_shrink(env, enum_size);
-        address_stack_grow(env, out_size);
+        //void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+        generate_monomorphic_copy(RSP, RBX, val_size, ass, a, point);
         break;
     }
     case SLet: {

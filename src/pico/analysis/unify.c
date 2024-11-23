@@ -168,6 +168,9 @@ bool has_unification_vars_p(PiType type) {
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
     }
+    case TDynamic: {
+        return has_unification_vars_p(*type.dynamic);
+    };
 
     case TVar: return false;
     
@@ -229,6 +232,10 @@ void squash_type(PiType* type) {
     case TReset: {
         squash_type((PiType*)type->reset.in);
         squash_type((PiType*)type->reset.out);
+        break;
+    }
+    case TDynamic: {
+        squash_type((PiType*)type->dynamic);
         break;
     }
     case TVar: break;

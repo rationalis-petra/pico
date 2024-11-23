@@ -509,6 +509,30 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FDynamic: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed dynamic expression."));
+        }
+        Syntax* dynamic = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamic,
+            .dynamic = dynamic,
+        };
+        break;
+    }
+    case FDynamicUse: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed use expression."));
+        }
+        Syntax* use = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamicUse,
+            .use = use,
+        };
+        break;
+    }
     case FLet: {
         SymSynAMap bindings = mk_sym_ptr_amap(raw.nodes.len - 1, a);
         size_t index = 1;
@@ -551,6 +575,48 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .type = SLet,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
+        };
+        break;
+    }
+    case FDynamicLet: {
+        PtrArray bindings = mk_ptr_array(raw.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special) {
+            RawTree* bind = raw.nodes.data[index];
+            // let [x₁ e₁]
+            //     [x₂ e₂]
+            //  body
+            is_special = bind->hint == HSpecial;
+            if (is_special) {
+                index++;
+                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
+                if (bind->type != RawList || bind->nodes.len != 2) {
+                    throw_error(point, mv_string("Malformed symbol binding in bind-expression"));
+                }
+
+                dbind->var = abstract_expr_i(*(RawTree*)bind->nodes.data[0], env, a, point);
+                dbind->expr = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                push_ptr(dbind, &bindings);
+            }
+        }
+
+        if (index > raw.nodes.len - 1) {
+            throw_error(point, mv_string("Bind expression has no body!"));
+        }
+
+        if (index < raw.nodes.len - 1) {
+            throw_error(point, mv_string("Bind expression multiple bodies!"));
+        }
+
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        *res = (Syntax) {
+            .type = SDynamicLet,
+            .dyn_let_expr.bindings = bindings,
+            .dyn_let_expr.body = body,
         };
         break;
     }
@@ -821,6 +887,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .type = SResetType,
             .reset_type.in = in_ty,
             .reset_type.out = out_ty,
+        };
+        break;
+    }
+    case FDynamicType: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Dynamic type former expects exactly 1 arguments!"));
+        }
+        Syntax* dyn_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamicType,
+            .dynamic_type = dyn_ty,
         };
         break;
     }
