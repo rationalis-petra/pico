@@ -36,6 +36,7 @@ typedef enum {
     TEnum,
     TReset,
     TResumeMark,
+    TDynamic,
 
     // Quantified Types
     TVar,
@@ -100,6 +101,7 @@ struct PiType {
         StructType structure;
         ResetType reset;
         EnumType enumeration;
+        PiType* dynamic;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
         uint64_t var;

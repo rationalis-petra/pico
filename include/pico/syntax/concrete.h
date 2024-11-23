@@ -8,7 +8,6 @@
 #include "pico/values/values.h"
 
 /* This file describes the concrete syntax tree of pico. It is manipulated directly by L1 macros.
- * 
  */
 
 typedef enum {

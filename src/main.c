@@ -162,15 +162,22 @@ int cstrcmp (const char* lhs, const char* rhs) {
 
 int main(int argc, char** argv) {
     // Setup
-    asm_init();
 
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
+
+    asm_init();
+    init_symbols(stdalloc);
+    init_dynamic_vars(stdalloc);
+    thread_init_dynamic_vars();
+
     Assembler* ass = mk_assembler(&exalloc);
     Assembler* ass_base = mk_assembler(&exalloc);
     Package* base = base_package(ass_base, stdalloc);
+    delete_assembler(ass_base);
+
     Module* module = get_module(string_to_symbol(mv_string("user")), base);
 
     set_current_module(module);
@@ -229,10 +236,12 @@ int main(int argc, char** argv) {
 
     // Cleanup
     delete_package(base);
-    delete_assembler(ass_base);
     delete_assembler(ass);
-    clear_symbols();
     release_executable_allocator(exalloc);
+
+    clear_symbols();
+    thread_clear_dynamic_vars();
+    clear_dynamic_vars();
 
     return 0;
 }

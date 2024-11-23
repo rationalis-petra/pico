@@ -509,8 +509,115 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FDynamic: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed dynamic expression."));
+        }
+        Syntax* dynamic = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamic,
+            .dynamic = dynamic,
+        };
+        break;
+    }
+    case FDynamicUse: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed use expression."));
+        }
+        Syntax* use = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamicUse,
+            .use = use,
+        };
+        break;
+    }
     case FLet: {
-        throw_error(point, mv_string("Term former 'let' not implemented!"));
+        SymSynAMap bindings = mk_sym_ptr_amap(raw.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special) {
+            RawTree* bind = raw.nodes.data[index];
+            // let [x₁ e₁]
+            //     [x₂ e₂]
+            //  body
+            is_special = bind->hint == HSpecial;
+            if (is_special) {
+                index++;
+                Symbol sym;
+                if (bind->type != RawList || bind->nodes.len != 2) {
+                    throw_error(point, mv_string("Malformed symbol binding in let-expression"));
+                }
+                if (!get_label(bind, &sym)) {
+                    throw_error(point, mv_string("Expected symbol binding in let-expression"));
+                }
+
+                shadow_var(sym, env);
+                Syntax* bind_body = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                sym_ptr_insert(sym, bind_body, &bindings);
+            }
+        }
+
+        if (index > raw.nodes.len - 1) {
+            throw_error(point, mv_string("Let expression has no body!"));
+        }
+
+        if (index < raw.nodes.len - 1) {
+            throw_error(point, mv_string("Let expression multiple bodies!"));
+        }
+
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        *res = (Syntax) {
+            .type = SLet,
+            .let_expr.bindings = bindings,
+            .let_expr.body = body,
+        };
+        break;
+    }
+    case FDynamicLet: {
+        PtrArray bindings = mk_ptr_array(raw.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special) {
+            RawTree* bind = raw.nodes.data[index];
+            // let [x₁ e₁]
+            //     [x₂ e₂]
+            //  body
+            is_special = bind->hint == HSpecial;
+            if (is_special) {
+                index++;
+                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
+                if (bind->type != RawList || bind->nodes.len != 2) {
+                    throw_error(point, mv_string("Malformed symbol binding in bind-expression"));
+                }
+
+                dbind->var = abstract_expr_i(*(RawTree*)bind->nodes.data[0], env, a, point);
+                dbind->expr = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                push_ptr(dbind, &bindings);
+            }
+        }
+
+        if (index > raw.nodes.len - 1) {
+            throw_error(point, mv_string("Bind expression has no body!"));
+        }
+
+        if (index < raw.nodes.len - 1) {
+            throw_error(point, mv_string("Bind expression multiple bodies!"));
+        }
+
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        *res = (Syntax) {
+            .type = SDynamicLet,
+            .dyn_let_expr.bindings = bindings,
+            .dyn_let_expr.body = body,
+        };
         break;
     }
     case FIf: {
@@ -625,14 +732,38 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FSequence: {
-        SynArray terms = mk_ptr_array(raw.nodes.len - 1, a);
+        SynArray elements = mk_ptr_array(raw.nodes.len - 1, a);
         for (size_t i = 1; i < raw.nodes.len; i++) {
-            push_ptr(abstract_expr_i(*(RawTree*)raw.nodes.data[i], env, a, point), &terms);
+            RawTree* tree = raw.nodes.data[i];
+            SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
+            if (tree->hint == HSpecial) {
+                if (tree->type != RawList
+                    || tree->nodes.len != 3
+                    || !eq_symbol(tree->nodes.data[0], string_to_symbol(mv_string("let!")))) {
+                    throw_error(point, mv_string("Invalid let! binding in seq"));
+                }
+                RawTree* rsym = tree->nodes.data[1];
+                if (rsym->type != RawAtom || rsym->atom.type != ASymbol) {
+                    throw_error(point, mv_string("Invalid let! binding in seq"));
+                }
+                
+                *elt = (SeqElt) {
+                    .is_binding = true,
+                    .symbol = rsym->atom.symbol,
+                    .expr = abstract_expr_i(*(RawTree*)tree->nodes.data[2], env, a, point),
+                };
+            } else {
+                *elt = (SeqElt) {
+                    .is_binding = false,
+                    .expr = abstract_expr_i(*tree, env, a, point),
+                };
+            }
+            push_ptr(elt, &elements);
         }
         
         *res = (Syntax) {
             .type = SSequence,
-            .sequence.terms = terms,
+            .sequence.elements = elements,
         };
         break;
     }
@@ -756,6 +887,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .type = SResetType,
             .reset_type.in = in_ty,
             .reset_type.out = out_ty,
+        };
+        break;
+    }
+    case FDynamicType: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Dynamic type former expects exactly 1 arguments!"));
+        }
+        Syntax* dyn_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamicType,
+            .dynamic_type = dyn_ty,
         };
         break;
     }

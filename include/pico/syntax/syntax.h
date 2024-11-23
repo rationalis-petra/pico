@@ -41,15 +41,18 @@ typedef enum {
     SMatch,
     SStructure,
     SProjector,
+    SDynamic,
+    SDynamicUse,
 
     // Control Flow & Binding
+    SDynamicLet,
+    SLet,
+    SIf,
     SLabels,
     SGoTo,
     SSequence,
     SWithReset,
     SResetTo,
-    SLet,
-    SIf,
 
     // Special
     SIs,
@@ -61,6 +64,7 @@ typedef enum {
     SStructType,
     SEnumType,
     SResetType,
+    SDynamicType,
     SForallType,
     SExistsType,
     STypeFamily,
@@ -148,7 +152,13 @@ typedef struct {
 } SynGoTo;
 
 typedef struct {
-    SynArray terms;
+    bool is_binding;
+    Symbol symbol;
+    Syntax* expr;
+} SeqElt;
+
+typedef struct {
+    PtrArray elements;
 } SynSequence;
 
 typedef struct {
@@ -173,6 +183,16 @@ typedef struct {
     SymSynAMap bindings;
     Syntax* body;
 } SynLet;
+
+typedef struct {
+    Syntax* var;
+    Syntax* expr;
+} DynBinding;
+
+typedef struct {
+    PtrArray bindings;
+    Syntax* body;
+} SynDynLet;
 
 typedef struct {
     Syntax* condition;
@@ -242,7 +262,10 @@ struct Syntax {
         SynMatch match;
         SynStructure structure;
         SynProjector projector;
+        Syntax* dynamic;
+        Syntax* use;
 
+        SynDynLet dyn_let_expr;
         SynLet let_expr;
         SynIf if_expr;
         SynLabels labels;
@@ -252,11 +275,13 @@ struct Syntax {
         SynSequence sequence;
 
         SynIs is;
+        Syntax* size;
 
         SynProcType proc_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynResetType reset_type;
+        Syntax* dynamic_type;
         SynBind bind_type;
         PiType* type_val;
 

@@ -243,8 +243,62 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case SDynamic: {
+        PtrArray nodes = mk_ptr_array(3, a);
+
+        push_ptr(mk_str_doc(mv_string("(dynamic "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->dynamic, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case SDynamicUse: {
+        PtrArray nodes = mk_ptr_array(3, a);
+
+        push_ptr(mk_str_doc(mv_string("(use "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->use, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case SLet: {
-        out = mv_str_doc(mk_string("pretty_syntax not implemented on let", a), a);
+        PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
+        push_ptr(mk_str_doc(mv_string("(let"), a), &nodes);
+        for (size_t i = 0; i < syntax->let_expr.bindings.len; i++) {
+            Symbol name = syntax->let_expr.bindings.data[i].key;
+            Syntax* expr = syntax->let_expr.bindings.data[i].val;
+            PtrArray let_nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
+            push_ptr(mk_str_doc(*symbol_to_string(name), a), &let_nodes);
+            push_ptr(pretty_syntax(expr, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+
+            push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+        }
+        push_ptr(pretty_syntax(syntax->let_expr.body, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+        break;
+    }
+    case SDynamicLet: {
+        PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
+        push_ptr(mk_str_doc(mv_string("(bind"), a), &nodes);
+        for (size_t i = 0; i < syntax->dyn_let_expr.bindings.len; i++) {
+            DynBinding* bind = syntax->dyn_let_expr.bindings.data[i];
+            PtrArray let_nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
+            push_ptr(pretty_syntax(bind->var, a), &let_nodes);
+            push_ptr(pretty_syntax(bind->expr, a), &let_nodes);
+            push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+
+            push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+        }
+        push_ptr(pretty_syntax(syntax->let_expr.body, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case SIf: {
@@ -255,6 +309,28 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        break;
+    }
+
+    case SIs: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(is"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
+        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SSize: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(size"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->size, a), &nodes);
+        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SModule: {
+        out = mv_str_doc(mv_string("Pretty syntax not implemented for modules!"), a);
         break;
     }
     case SLabels: {
@@ -315,10 +391,21 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SSequence: {
-        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.terms.len, a);
+        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.elements.len, a);
         push_ptr(mk_str_doc(mv_string("(seq"), a), &nodes);
-        for (size_t i = 0; i < syntax->sequence.terms.len; i++) {
-            push_ptr(pretty_syntax(syntax->sequence.terms.data[i], a), &nodes);
+        for (size_t i = 0; i < syntax->sequence.elements.len; i++) {
+            SeqElt* elt = syntax->sequence.elements.data[i];
+            if (elt->is_binding) {
+                PtrArray let_nodes = mk_ptr_array(4, a);
+                push_ptr(mk_str_doc(mv_string("[let!"), a), &let_nodes);
+                push_ptr(mk_str_doc(*symbol_to_string(elt->symbol), a), &let_nodes);
+                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+                push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+
+                push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+            } else {
+                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+            }
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
@@ -381,13 +468,50 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case SResetType: {
+        PtrArray nodes = mk_ptr_array(4, a) ;
+        push_ptr(mv_str_doc(mk_string("(Reset ", a), a), &nodes);
+        push_ptr(pretty_syntax(syntax->reset_type.in, a), &nodes);
+        push_ptr(pretty_syntax(syntax->reset_type.out, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SDynamicType: {
+        PtrArray nodes = mk_ptr_array(3, a) ;
+        push_ptr(mv_str_doc(mk_string("(Dynamic ", a), a), &nodes);
+        push_ptr(pretty_syntax(syntax->dynamic_type, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case SForallType: {
+        out = mv_str_doc(mk_string("Pretty syntax not implemented for all type", a), a);
+        break;
+    }
+    case SExistsType: {
+        out = mv_str_doc(mk_string("Pretty syntax not implemented for existential type", a), a);
+        break;
+    }
+    case STypeFamily: {
+        out = mv_str_doc(mk_string("Pretty syntax not implemented for type family", a), a);
+        break;
+    }
     case SCheckedType: {
         out = pretty_type(syntax->type_val, a);
         break;
     }
-    default: {
-        out = mv_str_doc(mk_string("Internal Error in pretty_syntax: Unknown syntax Type", a), a);
+    case SAnnotation: {
+        out = mv_str_doc(mk_string("Pretty syntax not implemented for annotation!", a), a);
+        break;
     }
+    }
+
+    // If no valid type was provided, panic/error
+    // Note: this is done outside the switch so the compiler still warns us when
+    // we miss a case!
+    if (!out) {
+        out = mv_str_doc(mk_string("Internal Error in pretty_syntax: Unknown syntax Type", a), a);
     }
     return out;
 }
@@ -398,18 +522,18 @@ void delete_def(Definition def, Allocator* a) {
 
 void delete_toplevel(TopLevel top, Allocator* a) {
     switch(top.type) {
-    case TLExpr:
-        delete_syntax_pointer(top.expr, a);
-        break;
     case TLDef:
         delete_def(top.def, a);
+        break;
+    case TLExpr:
+        delete_syntax_pointer(top.expr, a);
         break;
     }
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {
     PtrArray nodes = mk_ptr_array(4, a);
-    push_ptr(mv_str_doc(mk_string("( def", a), a), &nodes);
+    push_ptr(mv_str_doc(mk_string("(def", a), a), &nodes);
     push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes);
     push_ptr(pretty_syntax(def->value, a), &nodes);
     push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
@@ -419,11 +543,11 @@ Document* pretty_def(Definition* def, Allocator* a) {
 Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     Document* out = NULL;
     switch (toplevel->type) {
-    case TLExpr:
-        out = pretty_syntax(toplevel->expr, a);
-        break;
     case TLDef:
         out = pretty_def(&toplevel->def, a);
+        break;
+    case TLExpr:
+        out = pretty_syntax(toplevel->expr, a);
         break;
     }
     return out;

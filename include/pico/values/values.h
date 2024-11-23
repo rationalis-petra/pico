@@ -16,11 +16,24 @@ typedef struct env_capture env_capture;
 // Symbol table
 String* symbol_to_string(Symbol symbol);
 Symbol string_to_symbol(String string);
+void init_symbols(Allocator* a);
 void clear_symbols();
 
-// useful for container methods
+// Useful for container methods
 void delete_symbol(Symbol s);
 Symbol copy_symbol(Symbol s, Allocator* a);
+
+// Dynamic Variables
+void init_dynamic_vars(Allocator* a);
+void clear_dynamic_vars();
+
+void thread_init_dynamic_vars();
+void thread_clear_dynamic_vars();
+
+uint64_t mk_dynamic_var(size_t size, void* default_val);
+void delete_dynamic_var(uint64_t var);
+void* get_dynamic_val(uint64_t dvar);
+void* get_dynamic_memory();
 
 typedef enum TermFormer {
     // Top Level Former
@@ -35,9 +48,12 @@ typedef enum TermFormer {
     FMatch,
     FStructure,
     FProjector,
+    FDynamic,
+    FDynamicUse,
 
     // Term Formers: Control flow + binding
     FLet,
+    FDynamicLet,
     FIf,
     FLabels,
     FGoTo,
@@ -55,6 +71,7 @@ typedef enum TermFormer {
     FStructType,
     FEnumType,
     FResetType,
+    FDynamicType,
     FAllType,
 } TermFormer;
 

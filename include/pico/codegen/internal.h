@@ -36,5 +36,6 @@ void backlink_global(Symbol sym, size_t offset, LinkData* links, Allocator* a);
 void backlink_goto(Symbol sym, size_t offset, LinkData* links, Allocator* a);
 
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 #endif

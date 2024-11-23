@@ -419,9 +419,59 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = ret_ty;
         break;
     }
-    case SLet:
-        throw_error(point, mv_string("Type inference not implemented for this syntactic form: 'let'"));
+    case SDynamic: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* inner_type = untyped->dynamic->ptype; 
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType) {
+            .sort = TDynamic,
+            .dynamic = inner_type,
+        };
+        untyped->ptype = t;
         break;
+    }
+    case SDynamicUse: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* dyn_type = untyped->dynamic->ptype; 
+        if (dyn_type->sort != TDynamic) {
+            throw_error(point, mv_string("use on non-dynamic type!"));
+        }
+        untyped->ptype = dyn_type->dynamic;
+        break;
+    }
+    case SDynamicLet: {
+        for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
+
+            PiType* dyn_ty = mem_alloc(sizeof(PiType), a);
+            PiType* val_ty = mk_uvar(gen, a);
+            *dyn_ty = (PiType) {
+                .sort = TDynamic,
+                .dynamic = val_ty,
+            };
+
+            type_check_i(dbind->var, dyn_ty, env, gen, a, point);
+            type_check_i(dbind->expr, val_ty, env, gen, a, point);
+        }
+        type_infer_i(untyped->dyn_let_expr.body, env, gen, a, point);
+        untyped->ptype = untyped->dyn_let_expr.body->ptype;
+        break;
+    }
+    case SLet: {
+        for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
+            Symbol arg = untyped->let_expr.bindings.data[i].key;
+            Syntax* val = untyped->let_expr.bindings.data[i].val;
+            PiType* ty = mk_uvar(gen, a);
+
+            type_check_i(val, ty, env, gen, a, point);
+            // TODO: recursive bindings?
+            type_var(arg, ty, env);
+        }
+        type_infer_i(untyped->let_expr.body, env, gen, a, point);
+        untyped->ptype = untyped->let_expr.body->ptype;
+        pop_types(env, untyped->let_expr.bindings.len);
+        break;
+    }
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {.sort = TPrim,.prim = Bool};
@@ -436,7 +486,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = untyped->if_expr.false_branch->ptype;
         break;
     }
-    case SGoTo:
+    case SGoTo: {
         if (label_present(untyped->go_to.label, env)) {
             PiType* t = mk_uvar(gen, a);
             untyped->ptype = t;
@@ -444,6 +494,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             throw_error(point, mv_string("Error in go-to: Label Not found!"));
         }
         break;
+    }
     case SWithReset: {
         // A = expression type
         // in = reset (argument) type 
@@ -503,16 +554,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SSequence: {
-        for (size_t i = 0; i < untyped->sequence.terms.len; i++) {
-            type_infer_i(untyped->sequence.terms.data[i], env, gen, a, point);
+        size_t num_binds = 0;
+        for (size_t i = 0; i < untyped->sequence.elements.len; i++) {
+            SeqElt* elt = untyped->sequence.elements.data[i];
+            if (elt->is_binding) {
+                PiType* type = mk_uvar(gen, a);
+                type_check_i(elt->expr, type, env, gen, a, point);
+                type_var (elt->symbol, type, env);
+                num_binds++;
+            } else {
+                type_infer_i(elt->expr, env, gen, a, point);
+            }
         }
 
-        if (untyped->sequence.terms.len == 0) {
+        pop_types(env, num_binds);
+        if (untyped->sequence.elements.len == 0) {
             PiType* t = mem_alloc(sizeof(PiType), a);
             *t = (PiType) {.sort = TPrim, .prim = Unit};
             untyped->ptype = t;
         } else {
-            untyped->ptype = ((Syntax*)untyped->sequence.terms.data[untyped->sequence.terms.len - 1])->ptype;
+            untyped->ptype = ((SeqElt*)untyped->sequence.elements.data[untyped->sequence.elements.len - 1])->expr->ptype;
         }
 
         break;
@@ -528,6 +589,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SStructType:
     case SEnumType:
     case SResetType:
+    case SDynamicType:
         eval_type(untyped, env, a, point);
         break;
     default:
@@ -606,9 +668,25 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SProjector:
         squash_types(typed->projector.val, a, point);
         break;
-        
+    case SDynamic:
+        squash_types(typed->dynamic, a, point);
+        break;
+    case SDynamicUse:
+        squash_types(typed->use, a, point);
+        break;
+    case SDynamicLet:
+        for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
+            squash_types(dbind->var, a, point);
+            squash_types(dbind->expr, a, point);
+        }
+        squash_types(typed->dyn_let_expr.body, a, point);
+        break;
     case SLet:
-        throw_error(point, mk_string("squash_types not implemented for let", a));
+        for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
+            squash_types(typed->let_expr.bindings.data[i].val, a, point);
+        }
+        squash_types(typed->let_expr.body, a, point);
         break;
     case SIf: {
         squash_types(typed->if_expr.condition, a, point);
@@ -644,8 +722,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->reset_to.arg, a, point);
         break;
     case SSequence:
-        for (size_t i = 0; i < typed->sequence.terms.len; i++) {
-            squash_types(typed->sequence.terms.data[i], a, point);
+        for (size_t i = 0; i < typed->sequence.elements.len; i++) {
+            SeqElt* elt = typed->sequence.elements.data[i];
+            squash_types(elt->expr, a, point);
         }
         break;
     case SIs:
@@ -775,13 +854,28 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         untyped->type_val = out_type;
         break;
     }
+    case SDynamicType: {
+        eval_type(untyped->dynamic_type, env, a, point);
+        PiType* dyn = untyped->dynamic_type->type_val;
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TDynamic,
+            .dynamic = dyn,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
     case SForallType: {
+        panic(mv_string("eval_type not implemented for All"));
         break;
     }
     case SExistsType: {
+        panic(mv_string("eval_type not implemented for Exists"));
         break;
     }
     case STypeFamily: {
+        panic(mv_string("eval_type not implemented for Family"));
         break;
     }
     case SCheckedType: break; // Can leave blank

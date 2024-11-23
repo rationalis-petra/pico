@@ -57,3 +57,25 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
         build_binary_op(ass, Mov, rref8(dest, i * 8), reg(RAX), a, point);
     }
 }
+
+void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // First, assert that size_t is divisible by 8 ( we use rax for copies )
+    if (size % 8 != 0)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_swap expected copy size to be divisible by 8"));
+    };
+
+    if (size > 255)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_swap copy size must be smaller than 255!"));
+    };
+
+    if (loc1 == RDI || loc2 == RDI || loc1 == RSI || loc2 == RSI)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_swap cannot swap with RDI or RSI"));
+    };
+
+    for (size_t i = 0; i < size / 8; i++) {
+        build_binary_op(ass, Mov, reg(RDI), rref8(loc1, i * 8), a, point);
+        build_binary_op(ass, Mov, reg(RSI), rref8(loc2, i * 8), a, point);
+        build_binary_op(ass, Mov, rref8(loc1, i * 8), reg(RSI), a, point);
+        build_binary_op(ass, Mov, rref8(loc2, i * 8), reg(RDI), a, point);
+    }
+}

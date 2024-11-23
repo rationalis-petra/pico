@@ -33,7 +33,7 @@ int pi_setjmp(pi_jmp_buf buf) {
           "lea 8(%rsp), %rax\n"
           "mov %rax,  8(%rdi)\n"
 
-          // For the other buffers, we can directly write each into their
+          // For the other registers, we can directly write each into their
           // respective indices in the buffer
           "mov %rbp, 16(%rdi)\n"
           "mov %rbx, 24(%rdi)\n"
@@ -60,7 +60,7 @@ int pi_setjmp(pi_jmp_buf buf) {
           "lea 8(%rsp), %rax\n"
           "mov %rax,  8(%rcx)\n"
 
-          // For the other buffers, we can directly write each into their
+          // For the other registers, we can directly write each into their
           // respective indices in the buffer
           "mov %rbp, 16(%rcx)\n"
           "mov %rbx, 24(%rcx)\n"
@@ -276,7 +276,7 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // (ann load-module String → Unit) : load the module/code located in file! 
 
 #if ABI == SYSTEM_V_64
-    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
+    // load_module_c_fun (struct on stack)
     // pass in memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
@@ -284,10 +284,16 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
 
 #elif ABI == WIN_64
-    // Structs are passed on the stack??
-#error "Can't compile this for Win64 yet!"
+    // load_module_c_fun: push struct
+    // pass in memory/on stack(?)
+    build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
 
-    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+    // store ptr to struct in rcx
+    build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -347,10 +353,16 @@ void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
 
 #elif ABI == WIN_64
-    // Structs are passed on the stack??
-#error "Can't compile this for Win64 yet!"
+    // load_module_c_fun: push struct
+    // pass in memory/on stack(?)
+    build_unary_op (ass, Push, imm32(0), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
+    // note: use 24 twice as RSP grows with push! 
+    build_unary_op (ass, Push, rref8(RSP, 24), a, point);
 
-    //build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+    // store ptr to struct in rcx
+    build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -781,6 +793,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("."));
     add_def(module, sym, type, &former);
 
+    former = FDynamic;
+    sym = string_to_symbol(mv_string("dynamic"));
+    add_def(module, sym, type, &former);
+
+    former = FDynamicUse;
+    sym = string_to_symbol(mv_string("use"));
+    add_def(module, sym, type, &former);
+
     former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
@@ -821,6 +841,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("let"));
     add_def(module, sym, type, &former);
 
+    former = FDynamicLet;
+    sym = string_to_symbol(mv_string("bind"));
+    add_def(module, sym, type, &former);
+
     former = FIs;
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
@@ -843,6 +867,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FResetType;
     sym = string_to_symbol(mv_string("Reset"));
+    add_def(module, sym, type, &former);
+
+    former = FDynamicType;
+    sym = string_to_symbol(mv_string("Dynamic"));
     add_def(module, sym, type, &former);
 
     former = FAllType;

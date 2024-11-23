@@ -51,6 +51,10 @@ void delete_pi_type(PiType t, Allocator* a) {
         delete_pi_type_p(t.reset.out, a);
         break;
     }
+    case TDynamic: {
+        delete_pi_type_p(t.dynamic, a);
+        break;
+    }
     case TAll:
     case TExists:
     case TCLam: {
@@ -132,6 +136,9 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TReset:
         out.reset.in = copy_pi_type_p(t.reset.in, a);
         out.reset.out = copy_pi_type_p(t.reset.out, a);
+        break;
+    case TDynamic:
+        out.dynamic = copy_pi_type_p(t.dynamic, a);
         break;
     case TResumeMark:
         break;
@@ -310,6 +317,17 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mk_str_doc(mv_string("#reset-point"), a);
         break;
     }
+    case TDynamic: {
+        uint64_t dvar = *(uint64_t*)val;
+        PtrArray nodes = mk_ptr_array(5, a);
+        push_ptr(mk_str_doc(mv_string("(dynamic #"), a), &nodes);
+        push_ptr(pretty_u64(dvar, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(": "), a), &nodes);
+        push_ptr(pretty_pi_value(get_dynamic_val(dvar), type->dynamic, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -478,6 +496,14 @@ Document* pretty_type(PiType* type, Allocator* a) {
         push_ptr(pretty_type(type->reset.out, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TDynamic: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
+        push_ptr(pretty_type(type->dynamic, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
         break;
     }
 
@@ -654,6 +680,7 @@ size_t pi_size_of(PiType type) {
 
     case TReset: {
     case TResumeMark: 
+    case TDynamic:
         return ADDRESS_SIZE;
     }
     case TKind: 
