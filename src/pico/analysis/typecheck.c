@@ -439,6 +439,24 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = dyn_type->dynamic;
         break;
     }
+    case SDynamicLet: {
+        for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
+
+            PiType* dyn_ty = mem_alloc(sizeof(PiType), a);
+            PiType* val_ty = mk_uvar(gen, a);
+            *dyn_ty = (PiType) {
+                .sort = TDynamic,
+                .dynamic = val_ty,
+            };
+
+            type_check_i(dbind->var, dyn_ty, env, gen, a, point);
+            type_check_i(dbind->expr, val_ty, env, gen, a, point);
+        }
+        type_infer_i(untyped->dyn_let_expr.body, env, gen, a, point);
+        untyped->ptype = untyped->dyn_let_expr.body->ptype;
+        break;
+    }
     case SLet: {
         for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
             Symbol arg = untyped->let_expr.bindings.data[i].key;
@@ -451,6 +469,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         type_infer_i(untyped->let_expr.body, env, gen, a, point);
         untyped->ptype = untyped->let_expr.body->ptype;
+        pop_types(env, untyped->let_expr.bindings.len);
         break;
     }
     case SIf: {
@@ -654,6 +673,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SDynamicUse:
         squash_types(typed->use, a, point);
+        break;
+    case SDynamicLet:
+        for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
+            squash_types(dbind->var, a, point);
+            squash_types(dbind->expr, a, point);
+        }
+        squash_types(typed->dyn_let_expr.body, a, point);
         break;
     case SLet:
         for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {

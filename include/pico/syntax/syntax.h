@@ -45,8 +45,8 @@ typedef enum {
     SDynamicUse,
 
     // Control Flow & Binding
-    SLet,
     SDynamicLet,
+    SLet,
     SIf,
     SLabels,
     SGoTo,
@@ -265,14 +265,14 @@ struct Syntax {
         Syntax* dynamic;
         Syntax* use;
 
+        SynDynLet dyn_let_expr;
+        SynLet let_expr;
+        SynIf if_expr;
         SynLabels labels;
         SynGoTo go_to;
         SynWithReset with_reset;
         SynResetTo reset_to;
         SynSequence sequence;
-        SynLet let_expr;
-        SynDynLet dyn_let_expr;
-        SynIf if_expr;
 
         SynIs is;
         Syntax* size;

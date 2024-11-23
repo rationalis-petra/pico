@@ -31,8 +31,9 @@ void thread_init_dynamic_vars();
 void thread_clear_dynamic_vars();
 
 uint64_t mk_dynamic_var(size_t size, void* default_val);
-void* get_dynamic_val(uint64_t dvar);
 void delete_dynamic_var(uint64_t var);
+void* get_dynamic_val(uint64_t dvar);
+void* get_dynamic_memory();
 
 typedef enum TermFormer {
     // Top Level Former

@@ -33,7 +33,7 @@ int pi_setjmp(pi_jmp_buf buf) {
           "lea 8(%rsp), %rax\n"
           "mov %rax,  8(%rdi)\n"
 
-          // For the other buffers, we can directly write each into their
+          // For the other registers, we can directly write each into their
           // respective indices in the buffer
           "mov %rbp, 16(%rdi)\n"
           "mov %rbx, 24(%rdi)\n"
@@ -60,7 +60,7 @@ int pi_setjmp(pi_jmp_buf buf) {
           "lea 8(%rsp), %rax\n"
           "mov %rax,  8(%rcx)\n"
 
-          // For the other buffers, we can directly write each into their
+          // For the other registers, we can directly write each into their
           // respective indices in the buffer
           "mov %rbp, 16(%rcx)\n"
           "mov %rbx, 24(%rcx)\n"

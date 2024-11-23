@@ -88,13 +88,16 @@ void init_dynamic_vars(Allocator* a) {
 void clear_dynamic_vars() {
     // Clear dynamic vars in all arrays
     for (size_t i = 0; i < all_dynamic_vars.len; i++) {
-        // TODO (UB): when a thread gets deleted/ends,
         PtrArray* arr = all_dynamic_vars.data[i];
-        for (size_t j = 0; j < dynamic_var_metadata.len; j++) {
-            DVarMetadata* data = dynamic_var_metadata.data[i];
-            if (!data->free) mem_free(arr->data[j], dynamic_var_allocator);
+
+        // Only delete the array if it hasn't already been deleted by thread_clear_dynamic_vars
+        if (arr->data) {
+            for (size_t j = 0; j < dynamic_var_metadata.len; j++) {
+                DVarMetadata* data = dynamic_var_metadata.data[i];
+                if (!data->free) mem_free(arr->data[j], dynamic_var_allocator);
+            }
+            sdelete_ptr_array(*arr);
         }
-        sdelete_ptr_array(*arr);
     }
     for (size_t i = 0; i < dynamic_var_metadata.len; i++) {
         DVarMetadata* data = dynamic_var_metadata.data[i];
@@ -151,11 +154,11 @@ uint64_t mk_dynamic_var(size_t size, void* default_val) {
 
     // Appropriately setup the dynamic variable metadata
     DVarMetadata* data;
-    if (!used_free) {
+    if (used_free) {
+        data = dynamic_var_metadata.data[dvar];
+    } else {
         data = mem_alloc(sizeof(DVarMetadata), dynamic_var_allocator);
         push_ptr(data, &dynamic_var_metadata);
-    } else {
-        data = dynamic_var_metadata.data[dvar];
     }
 
     *data = (DVarMetadata) {
@@ -166,16 +169,18 @@ uint64_t mk_dynamic_var(size_t size, void* default_val) {
     memcpy(data->default_value, default_val, size);
     
     // Now, populate all existing dynamic variable arrays:
-    if (!used_free) {
+    if (used_free) {
         for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+            // TODO (UB): when a thread gets deleted/ends,
             PtrArray* dvars = all_dynamic_vars.data[i];
             dvars->data[dvar] = mem_alloc(size, dynamic_var_allocator);
             memcpy(dvars->data[dvar], default_val, size);
         }
     } else {
         for (size_t i = 0; i < all_dynamic_vars.len; i++) {
+            // TODO (UB): when a thread gets deleted/ends,
             PtrArray* dvars = all_dynamic_vars.data[i];
-            dvars->data[dvar] = mem_alloc(size, dynamic_var_allocator);
+            push_ptr(mem_alloc(size, dynamic_var_allocator), dvars);
             memcpy(dvars->data[dvar], default_val, size);
         }
     }
@@ -197,6 +202,10 @@ void delete_dynamic_var(uint64_t var) {
         PtrArray* dvars = all_dynamic_vars.data[i];
         mem_free(dvars->data[var], dynamic_var_allocator);
     }
+}
+
+void* get_dynamic_memory() {
+    return thread_dynamic_vars.data;
 }
 
 Document* pretty_former(TermFormer op, Allocator* a) {

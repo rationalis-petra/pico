@@ -289,8 +289,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             DynBinding* bind = syntax->dyn_let_expr.bindings.data[i];
             PtrArray let_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
-            push_ptr(pretty_syntax(bind->var, a), &nodes);
-            push_ptr(pretty_syntax(bind->expr, a), &nodes);
+            push_ptr(pretty_syntax(bind->var, a), &let_nodes);
+            push_ptr(pretty_syntax(bind->expr, a), &let_nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
             push_ptr(mv_sep_doc(let_nodes, a), &nodes);
@@ -299,7 +299,6 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
-        break;
         break;
     }
     case SIf: {

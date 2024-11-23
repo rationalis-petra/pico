@@ -100,6 +100,8 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         Result out = unify(lhs->reset.in, rhs->reset.in, a);
         if (out.type == Err) return out;
         return unify(lhs->reset.out, rhs->reset.out, a);
+    } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
+        return unify(lhs->dynamic, rhs->dynamic, a);
     } else if (lhs->sort == rhs->sort) {
         return (Result) {
             .type = Err,

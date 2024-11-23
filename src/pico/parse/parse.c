@@ -16,7 +16,7 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, SyntaxHint hint, Allocator* a);
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a);
 ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
@@ -80,41 +80,39 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
     return out;
 }
 
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t term, SyntaxHint hint, Allocator* a) {
+ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a) {
     ParseResult res;
-    res.type = ParseFail;
+    res.type = ParseSuccess;
     res.data.range.start = *parse_state;
     ParseResult out;
-    PtrArray nodes = mk_ptr_array(5, a);
+    PtrArray nodes = mk_ptr_array(8, a);
     uint32_t codepoint;
 
     // Assume '(' is next character
     next(is, &codepoint);
     consume_whitespace(is, parse_state);
     StreamResult sres;
-    while ((sres = peek(is, &codepoint)) == StreamSuccess && !(codepoint == term)) {
+    while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
         res = parse_main(is, parse_state, a);
 
         if (res.type == ParseFail) {
             out = res;
             break;
-        }
-        else {
+        } else {
             RawTree* node = (RawTree*)mem_alloc(sizeof(RawTree), a);
             *node = res.data.result;
             push_ptr(node, &nodes);
         }
         consume_whitespace(is, parse_state);
     }
+
     if (sres != StreamSuccess) {
         out.type = ParseFail;
         out.data.range.start = *parse_state;
         out.data.range.end = *parse_state;
-    }
-    else if (res.type == ParseFail) {
+    } else if (res.type == ParseFail) {
         out = res;
-    }
-    else {
+    } else {
         out.type = ParseSuccess;
         out.data.result = (RawTree) {
             .type = RawList,

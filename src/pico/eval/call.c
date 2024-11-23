@@ -101,15 +101,20 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
 
     U8Array instructions = get_instructions(ass);
 
+    void* dvars = get_dynamic_memory();
+
     int64_t out;
     __asm__ __volatile__(
-        "push %%rbp       \n\t"
-        "mov %%rsp, %%rbp \n\t"
-        "sub $0x8, %%rbp  \n\t"
-        "call *%1         \n\t"
-        "pop %%rbp        \n\t"
+        "push %%rbp       \n"
+        "push %%r15       \n"
+        "mov %2, %%r15    \n"
+        "mov %%rsp, %%rbp \n"
+        "sub $0x8, %%rbp  \n" // TODO: Investigate - why is this here
+        "call *%1         \n"
+        "pop %%r15        \n"
+        "pop %%rbp        \n"
         : "=r" (out)
-        : "r"(instructions.data));
+        : "r" (instructions.data), "r" (dvars)) ;
 
     return value;
 }

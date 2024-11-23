@@ -528,11 +528,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate(*syn.dynamic, env, ass, links, a, point);
 
         // currently RSP = default_val
+        size_t val_size = pi_size_of(*syn.ptype);
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rsi, arg2 = rdi
         build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
-        build_binary_op(ass, Mov, reg(RDI), imm32(pi_size_of(*syn.ptype)), a, point);
+        build_binary_op(ass, Mov, reg(RDI), imm32(val_size), a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
         build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
@@ -550,8 +551,11 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif
         // Pop value off stack
-        build_binary_op(ass, Add, reg(RSP), imm32(pi_size_of(*syn.ptype)), a, point);
+        build_binary_op(ass, Add, reg(RSP), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX), a, point);
+        
+        address_stack_shrink(env, ADDRESS_SIZE);
+        address_stack_grow(env, val_size);
         break;
     }
     case SDynamicUse: {
@@ -584,6 +588,59 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         //void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
         generate_monomorphic_copy(RSP, RBX, val_size, ass, a, point);
+        
+        address_stack_shrink(env, ADDRESS_SIZE);
+        address_stack_grow(env, val_size);
+        break;
+    }
+    case SDynamicLet: {
+
+        // Step 1: evaluate all dynamic bindings & bind them
+        for (size_t i = 0; i < syn.dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = syn.dyn_let_expr.bindings.data[i];
+            size_t bind_size = pi_size_of(*dbind->expr->ptype);
+            generate(*dbind->var, env, ass, links, a, point);
+            generate(*dbind->expr, env, ass, links, a, point);
+
+            // Copy the value into the dynamic var
+            // R15 is the dynamic memory register
+            build_binary_op(ass, Mov, reg(RBX), reg(R15), a, point);
+            build_binary_op(ass, Add, reg(RBX), rref8(RSP, bind_size), a, point);
+            build_binary_op(ass, Mov, reg(RBX), rref8(RBX, 0), a, point);
+
+            generate_monomorphic_swap(RBX, RSP, bind_size, ass, a, point);
+        }
+
+        // Step 2: generate the body
+        generate(*syn.let_expr.body, env, ass, links, a, point);
+        size_t val_size = pi_size_of(*syn.dyn_let_expr.body->ptype);
+
+        // Step 3: unwind the bindings
+        //  • Store the (address of the) current dynamic value to restore in RDX
+        build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+        build_binary_op(ass, Add, reg(RDX), imm32(val_size), a, point);
+
+        size_t offset_size = 0;
+        for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
+            DynBinding* dbind = syn.dyn_let_expr.bindings.data[i];
+            size_t bind_size = pi_size_of(*dbind->expr->ptype);
+
+            // Store ptr to dynamic var value in RBX 
+            build_binary_op(ass, Mov, reg(RBX), reg(R15), a, point);
+            build_binary_op(ass, Add, reg(RBX), rref8(RDX, bind_size), a, point);
+            build_binary_op(ass, Mov, reg(RBX), rref8(RBX, 0), a, point);
+
+            // Store ptr to local value to restore in RDX 
+            generate_monomorphic_swap(RBX, RDX, bind_size, ass, a, point);
+            build_binary_op(ass, Add, reg(RDX), imm32(bind_size + ADDRESS_SIZE), a, point);
+
+            offset_size += bind_size + ADDRESS_SIZE;
+        }
+
+        // Step 4: cleanup: pop bindings
+        generate_stack_move(offset_size, 0, val_size, ass, a, point);
+        build_binary_op(ass, Add, reg(RSP), imm32(offset_size), a, point);
+        address_stack_shrink(env, offset_size);
         break;
     }
     case SLet: {
