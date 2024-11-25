@@ -9,6 +9,7 @@ typedef pthread_mutex_t Mutex;
 
 #elif OS_FAMILY == WINDOWS
 #include "windows.h"
+typedef HANDLE Mutex;
 
 #else
 #error "unsupportedOS"

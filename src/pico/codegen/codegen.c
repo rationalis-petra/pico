@@ -536,7 +536,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(ass, MOV, reg(RCX), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RCX), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
         build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
