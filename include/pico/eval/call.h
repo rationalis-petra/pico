@@ -2,7 +2,7 @@
 #define __PICO_EVAL_CALL_H
 #include <stdint.h>
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "assembler/assembler.h"
 #include "pretty/document.h"
 #include "pico/syntax/syntax.h"

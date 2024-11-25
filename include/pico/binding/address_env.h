@@ -1,7 +1,7 @@
 #ifndef __PICO_BINDING_ADDRESS_ENV_H
 #define __PICO_BINDING_ADDRESS_ENV_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "pico/data/sym_size_assoc.h"
 #include "pico/binding/environment.h"
 

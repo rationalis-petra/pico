@@ -1,7 +1,7 @@
 #ifndef __PICO_SYNTAX_SYNTAX_H
 #define __PICO_SYNTAX_SYNTAX_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"

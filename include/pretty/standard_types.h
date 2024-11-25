@@ -1,7 +1,7 @@
 #ifndef __PRETTY_STANDARD_TYPES_H
 #define __PRETTY_STANDARD_TYPES_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "pretty/document.h"
 
 Document* pretty_i64(int64_t  val, Allocator* a);

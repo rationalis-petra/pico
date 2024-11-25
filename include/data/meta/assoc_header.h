@@ -2,7 +2,7 @@
 #define __DATA_META_ASSOC_HEADER_H
 
 #include <stddef.h>
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #define ASSOC_HEADER(key_t, val_t, fprefix, tprefix)                    \
     typedef struct tprefix##ACell {                                     \

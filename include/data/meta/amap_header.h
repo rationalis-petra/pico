@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #define AMAP_HEADER(key_t, val_t, fprefix, tprefix)                     \
     typedef struct tprefix ## Cell {                                    \

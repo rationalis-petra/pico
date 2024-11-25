@@ -4,7 +4,7 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "memory/std_allocator.h"
+#include "platform/memory/std_allocator.h"
 
 #include "pico/values/stdlib.h"
 #include "app/module_load.h"
@@ -277,7 +277,7 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
     // load_module_c_fun (struct on stack)
-    // pass in memory/on stack(?)
+    // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
     // note: use 24 twice as RSP grows with push! 
@@ -285,7 +285,7 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #elif ABI == WIN_64
     // load_module_c_fun: push struct
-    // pass in memory/on stack(?)
+    // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
     // note: use 24 twice as RSP grows with push! 
@@ -346,7 +346,7 @@ void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
     // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
-    // pass in memory/on stack(?)
+    // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
     // note: use 24 twice as RSP grows with push! 
@@ -354,7 +354,7 @@ void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #elif ABI == WIN_64
     // load_module_c_fun: push struct
-    // pass in memory/on stack(?)
+    // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
     build_unary_op (ass, Push, rref8(RSP, 24), a, point);
     // note: use 24 twice as RSP grows with push! 

@@ -1,7 +1,7 @@
-#ifndef __MEMORY_ARENA_H
-#define __MEMORY_ARENA_H
+#ifndef __PLATFORM_MEMORY_ARENA_H
+#define __PLATFORM_MEMORY_ARENA_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 Allocator mk_arena_allocator(size_t blocksize, Allocator* a);
 

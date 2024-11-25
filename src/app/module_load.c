@@ -1,7 +1,7 @@
 #include "app/module_load.h"
 
-#include "memory/arena.h"
-#include "memory/executable.h"
+#include "platform/memory/arena.h"
+#include "platform/memory/executable.h"
 #include "assembler/assembler.h"
 
 #include "pico/binding/environment.h"

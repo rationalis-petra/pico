@@ -2,7 +2,7 @@
 #define __DATA_META_ASSOC_IMPL_H
 
 #include <stddef.h>
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #define ASSOC_IMPL(key_t, val_t, fprefix, tprefix)                      \
     tprefix##Assoc mk_ ## fprefix ## _assoc(size_t capacity, Allocator* a) { \

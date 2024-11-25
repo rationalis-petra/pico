@@ -3,7 +3,7 @@
 
 #include "data/meta/amap_header.h"
 #include "data/array.h"
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "pretty/document.h"
 #include "pico/values/values.h"
 

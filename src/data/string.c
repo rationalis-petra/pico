@@ -1,6 +1,6 @@
 #include <string.h>
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "data/string.h"
 #include "encodings/utf8.h"
 

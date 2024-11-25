@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #define AMAP_IMPL(key_t, val_t, fprefix, tprefix)                       \
     tprefix##AMap mk_ ## fprefix ## _amap(size_t capacity, Allocator* a) { \

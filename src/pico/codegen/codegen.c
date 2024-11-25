@@ -531,13 +531,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t val_size = pi_size_of(*syn.ptype);
 
 #if ABI == SYSTEM_V_64 
-        // arg1 = rsi, arg2 = rdi
-        build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+        // arg1 = rdi, arg2 = rsi
         build_binary_op(ass, Mov, reg(RDI), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(ass, Mov, reg(RCX), reg(RSP), a, point);
-        build_binary_op(ass, MOV, reg(RDX), imm32(pi_size_of(*syn.ptype)), a, point);
+        build_binary_op(ass, Mov, reg(RCX), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
         build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else
 #error "unknown ABI"
