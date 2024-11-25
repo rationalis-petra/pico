@@ -1,8 +1,8 @@
 ﻿#include "platform/error.h"
 
-#include "memory/std_allocator.h"
-#include "memory/executable.h"
-#include "memory/arena.h"
+#include "platform/memory/std_allocator.h"
+#include "platform/memory/executable.h"
+#include "platform/memory/arena.h"
 
 #include "data/string.h"
 #include "data/stream.h"

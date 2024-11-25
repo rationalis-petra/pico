@@ -2,7 +2,7 @@
 #define __DATA_META_ARRAY_HEADER_H
 
 #include <stddef.h>
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 
 #define ARRAY_HEADER(type, fprefix, tprefix)                            \
     typedef struct tprefix##Array {                                     \

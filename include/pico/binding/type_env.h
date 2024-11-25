@@ -1,7 +1,7 @@
 #ifndef __PICO_BINDING_TYPE_ENV_H
 #define __PICO_BINDING_TYPE_ENV_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "pico/binding/environment.h"
 
 typedef struct TypeEnv TypeEnv;

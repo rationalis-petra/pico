@@ -1,6 +1,6 @@
-#ifndef __MEMORY_EXECUTABLE_H
-#define __MEMORY_EXECUTABLE_H
-#include "memory/allocator.h"
+#ifndef __PLATFORM_MEMORY_EXECUTABLE_H
+#define __PLATFORM_MEMORY_EXECUTABLE_H
+#include "platform/memory/allocator.h"
 
 // utilities for getting executable memory
 // currently, memory is fixed size

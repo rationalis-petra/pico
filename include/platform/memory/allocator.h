@@ -1,5 +1,5 @@
-#ifndef __MEMORY_ALLOCATOR_H
-#define __MEMORY_ALLOCATOR_H
+#ifndef __PLATFORM_MEMORY_ALLOCATOR_H
+#define __PLATFORM_MEMORY_ALLOCATOR_H
 
 #include <stddef.h>
 

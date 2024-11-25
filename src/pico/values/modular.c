@@ -2,7 +2,7 @@
 #include "data/array.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
-#include "memory/executable.h"
+#include "platform/memory/executable.h"
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"

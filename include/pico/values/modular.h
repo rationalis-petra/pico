@@ -1,7 +1,7 @@
 #ifndef __PICO_VALUES_MODULAR_H
 #define __PICO_VALUES_MODULAR_H
 
-#include "memory/allocator.h"
+#include "platform/memory/allocator.h"
 #include "data/result.h"
 #include "assembler/assembler.h"
 

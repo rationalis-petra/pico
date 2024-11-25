@@ -8,10 +8,10 @@
   #include <sys/mman.h>
   #include <unistd.h>
 #else 
-  #error "memory/executable.c: Only support unix/windows families"
+  #error "platform/memory/executable.c: Only support unix/windows families"
 #endif
 
-#include "memory/executable.h"
+#include "platform/memory/executable.h"
 #include "data/array.h"
 
 typedef struct ex_mem {

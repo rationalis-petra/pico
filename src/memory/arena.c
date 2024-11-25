@@ -1,6 +1,6 @@
 #include "platform/signals.h"
 
-#include "memory/arena.h"
+#include "platform/memory/arena.h"
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
 
