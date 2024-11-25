@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <string.h>
-#include <threads.h>
+
+#include "platform/memory/std_allocator.h"
+#include "platform/threads.h"
 
 #include "data/amap.h"
 #include "data/array.h"
-#include "platform/memory/std_allocator.h"
 #include "pico/values/values.h"
 
 
@@ -69,7 +70,7 @@ _Thread_local PtrArray thread_dynamic_vars;
 static Allocator* dynamic_var_allocator;
 static PtrArray dynamic_var_metadata;
 static PtrArray all_dynamic_vars;
-static mtx_t dynamic_var_lock;
+static Mutex dynamic_var_lock;
 
 // Metadata: 
 typedef struct {
@@ -80,7 +81,7 @@ typedef struct {
 
 void init_dynamic_vars(Allocator* a) {
     dynamic_var_allocator = a;
-    mtx_init(&dynamic_var_lock, 0); 
+    mutex_init(&dynamic_var_lock); 
     all_dynamic_vars = mk_ptr_array(256, a);
     dynamic_var_metadata = mk_ptr_array(256, a);
 }
@@ -111,7 +112,7 @@ void clear_dynamic_vars() {
 
 void thread_init_dynamic_vars() {
     // Init just for this thread
-    mtx_lock(&dynamic_var_lock);
+    mutex_lock(&dynamic_var_lock);
     thread_dynamic_vars = mk_ptr_array(dynamic_var_metadata.size, dynamic_var_allocator);
     for (size_t i = 0; i < dynamic_var_metadata.len; i++) {
         DVarMetadata* meta = dynamic_var_metadata.data[i];
@@ -119,11 +120,11 @@ void thread_init_dynamic_vars() {
         memcpy(thread_dynamic_vars.data[i], meta->default_value, meta->size);
     }
     push_ptr(&thread_dynamic_vars, &all_dynamic_vars);
-    mtx_unlock(&dynamic_var_lock);
+    mutex_unlock(&dynamic_var_lock);
 }
 
 void thread_clear_dynamic_vars () {
-    mtx_lock(&dynamic_var_lock);
+    mutex_lock(&dynamic_var_lock);
     for (size_t i = 0; i < thread_dynamic_vars.len; i++) {
         mem_free(thread_dynamic_vars.data[i], dynamic_var_allocator);
     }
@@ -133,11 +134,11 @@ void thread_clear_dynamic_vars () {
     thread_dynamic_vars.len = 0;
     thread_dynamic_vars.size = 0;
 
-    mtx_unlock(&dynamic_var_lock);
+    mutex_unlock(&dynamic_var_lock);
 }
 
 uint64_t mk_dynamic_var(size_t size, void* default_val) {
-    mtx_lock(&dynamic_var_lock);
+    mutex_lock(&dynamic_var_lock);
     // If there is space in the array, push back
     uint64_t dvar = dynamic_var_metadata.len;
     bool used_free = false;
@@ -185,7 +186,7 @@ uint64_t mk_dynamic_var(size_t size, void* default_val) {
         }
     }
 
-    mtx_unlock(&dynamic_var_lock);
+    mutex_unlock(&dynamic_var_lock);
     return dvar;
 }
 
