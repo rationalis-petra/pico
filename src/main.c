@@ -3,6 +3,7 @@
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
+#include "platform/jump.h"
 
 #include "data/string.h"
 #include "data/stream.h"
@@ -37,8 +38,8 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     clear_assembler(ass);
     Environment* env = env_from_module(module, &arena);
 
-    pi_jmp_buf exit_point;
-    if (pi_setjmp(exit_point)) goto on_exit;
+    jump_buf exit_point;
+    if (set_jump(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
 
     ErrorPoint point;

@@ -102,6 +102,14 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         return unify(lhs->reset.out, rhs->reset.out, a);
     } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
         return unify(lhs->dynamic, rhs->dynamic, a);
+    } else if (lhs->sort == TKind && rhs->sort == TKind) {
+        if (lhs->kind.nargs == rhs->kind.nargs)
+            return (Result) {.type = Ok};
+        else 
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
+            };
     } else if (lhs->sort == rhs->sort) {
         return (Result) {
             .type = Err,

@@ -3,8 +3,9 @@
 #include <stdio.h>
 
 #include "platform/machine_info.h"
-#include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
+#include "platform/signals.h"
+#include "platform/jump.h"
 
 #include "pico/values/stdlib.h"
 #include "app/module_load.h"
@@ -13,125 +14,8 @@
 // Implementatino of C API 
 //------------------------------------------------------------------------------
 
-
-// We use the naked attribute to instruct gcc to avoid geneating a prolog/epilog
-// We store all registers (even ones that are caller saved) to avoid generating
-// different code for different ABIs,
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-__attribute__((naked))
-int pi_setjmp(pi_jmp_buf buf) {
-#if ABI == SYSTEM_V_64
-    __asm(
-          // Store the return RIP address (Currently @ top of stack) first
-          // element of BUF, which is located in RCX (as per SYSTEM_V_64)
-          "mov (%rsp), %rax\n"
-          "mov %rax,  0(%rdi)\n"
-
-          // Now, store the return stack pointer in the second element of buf
-          "lea 8(%rsp), %rax\n"
-          "mov %rax,  8(%rdi)\n"
-
-          // For the other registers, we can directly write each into their
-          // respective indices in the buffer
-          "mov %rbp, 16(%rdi)\n"
-          "mov %rbx, 24(%rdi)\n"
-          /* "mov %rdi, 32(%rdi)\n" */
-          /* "mov %rsi, 40(%rdi)\n" */
-          "mov %r12, 48(%rdi)\n"
-          "mov %r13, 56(%rdi)\n"
-          "mov %r14, 64(%rdi)\n"
-          "mov %r15, 72(%rdi)\n"
-
-          // Set the return value to 0
-          // Note: we use eax as int is 32-bit!
-          "xor %eax, %eax\n"
-          "ret\n"
-          );
-#elif ABI == WIN_64
-    __asm(
-          // Store the return RIP address (Currently @ top of stack) first
-          // element of BUF, which is located in RCX (as per SYSTEM_V_64)
-          "mov (%rsp), %rax\n"
-          "mov %rax,  0(%rcx)\n"
-
-          // Now, store the return stack pointer in the second element of buf
-          "lea 8(%rsp), %rax\n"
-          "mov %rax,  8(%rcx)\n"
-
-          // For the other registers, we can directly write each into their
-          // respective indices in the buffer
-          "mov %rbp, 16(%rcx)\n"
-          "mov %rbx, 24(%rcx)\n"
-          "mov %rdi, 32(%rcx)\n"
-          "mov %rsi, 40(%rcx)\n"
-          "mov %r12, 48(%rcx)\n"
-          "mov %r13, 56(%rcx)\n"
-          "mov %r14, 64(%rcx)\n"
-          "mov %r15, 72(%rcx)\n"
-
-          // Set the return value to 0
-          // Note: we use eax as int is 32-bit!
-          "xor %eax, %eax\n"
-          "ret\n"
-          );
-#else
-#error "Unknown calling convention"
-#endif
-}
-
-__attribute__((naked,noreturn))
-void pi_longjmp(pi_jmp_buf buf, int val) {
-    // avoid unused parameter warnings
-#if ABI == SYSTEM_V_64
-    __asm(
-          // Restore the registers in inverse order of how they were pushed
-          // This is completely arbitrary and therefore for aesthetic reasons only!
-          "mov 72(%rdi), %r15\n"
-          "mov 64(%rdi), %r14\n"
-          "mov 56(%rdi), %r13\n"
-          "mov 48(%rdi), %r12\n"
-          /* "mov 40(%rdi), %rsi\n" */
-          /* "mov 32(%rdi), %rdi\n" */
-          "mov 24(%rdi), %rbx\n"
-          "mov 16(%rdi), %rbp\n"
-          "mov  8(%rdi), %rsp\n"
-
-          // longjmp will 'return' (in eax) it's second argument (passed in esi)
-          "mov %esi, %eax\n"
-
-          // jmp to the cached RIP, making it look as if setjmp just returned!
-          "jmp *0(%rdi)\n"
-    );
-#elif ABI == WIN_64
-    __asm(
-          // Restore the registers in inverse order of how they were pushed
-          // This is completely arbitrary and therefore for aesthetic reasons only!
-          "mov 72(%rcx), %r15\n"
-          "mov 64(%rcx), %r14\n"
-          "mov 56(%rcx), %r13\n"
-          "mov 48(%rcx), %r12\n"
-          "mov 40(%rcx), %rsi\n"
-          "mov 32(%rcx), %rdi\n"
-          "mov 24(%rcx), %rbx\n"
-          "mov 16(%rcx), %rbp\n"
-          "mov  8(%rcx), %rsp\n"
-
-          // longjmp will 'return' (in eax) it's second argument (passed in edx)
-          "mov %edx, %eax\n"
-
-          // jmp to the cached RIP, making it look as if setjmp just returned!
-          "jmp *0(%rcx)\n"
-    );
-#else
-#error "Unknown calling convention"
-#endif
-}
-#pragma GCC diagnostic pop
-
-static pi_jmp_buf* m_buf;
-void set_exit_callback(pi_jmp_buf* buf) { m_buf = buf; }
+static jump_buf* m_buf;
+void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
 static Module* current_module;
 void set_current_module(Module* current) { current_module = current; }
@@ -170,6 +54,25 @@ PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
 
     type.proc.args = args;
     type.proc.ret = i3;
+
+    return type;
+}
+
+PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
+    PiType* i1 = mem_alloc(sizeof(PiType), a);
+    PiType* i2 = mem_alloc(sizeof(PiType), a);
+
+    *i1 = arg;
+    i2->sort = TPrim;
+    i2->prim = ret;
+
+    PiType type;
+    type.sort = TProc;
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(i1, &args);
+
+    type.proc.args = args;
+    type.proc.ret = i2;
 
     return type;
 }
@@ -387,7 +290,7 @@ void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void exit_callback() {
-    pi_longjmp(*m_buf, 1);
+    long_jump(*m_buf, 1);
 }
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -400,6 +303,35 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 //------------------------------------------------------------------------------
 // Helper functions: module core
 //------------------------------------------------------------------------------
+uint64_t stdlib_size_of(PiType* t) {
+    return pi_size_of(*t);
+}
+
+void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // size-of: PiType* -> uint64_t
+#if OS_FAMILY == UNIX
+    build_binary_op(ass, Mov, reg(RDI), rref8(RSP, 8), a, point);
+#elif OS_FAMILY == WINDOWS
+    build_binary_op(ass, Mov, reg(RCX), rref8(RSP, 8), a, point);
+#else 
+#error "build_size_of_fn does not support this OS!"
+#endif
+
+
+    // call pi_size_of
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&stdlib_size_of), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if OS_FAMILY == WINDOWS
+    build_binary_op(ass, Add, reg(RCX), imm32(32), a, point);
+#endif 
+
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(8), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
+    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_nullary_op(ass, Ret, a, point);
+}
 
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
@@ -849,8 +781,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
-    former = FSize;
-    sym = string_to_symbol(mv_string("size"));
+    former = FDynAlloc;
+    sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former);
 
     former = FProcType;
@@ -969,6 +901,13 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     build_comp_fun(ass, SetE, a, &point);
     sym = string_to_symbol(mv_string("="));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
+    build_size_of_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("size-of"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);

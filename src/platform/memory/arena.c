@@ -27,39 +27,35 @@ typedef struct {
 
 void* arena_malloc(size_t memsize, void* vctx) {
     ArenaContext* ctx = (ArenaContext*)vctx;
-    size_t alloc_size = memsize + sizeof(size_t);
+    size_t alloc_size = memsize;
     // TODO (TAGS: BUG FEAT): ensure allocations are aligned! 
 
     // if attempting to allocate more than a block of memory
     // allocate a larger than usual block
-    if (memsize > ctx->blocksize) {
+    if (alloc_size > ctx->blocksize) {
         // allocate new block
         ArenaBlock new_block;
         new_block.bmp = 0;
         new_block.data = mem_alloc(alloc_size, ctx->internal_allocator);
         push_block(new_block, &ctx->memory_blocks);
-        size_t* sz = new_block.data;
-        *sz = memsize;
-        return new_block.data + sizeof(size_t);
+        return new_block.data;
     } else {
-        // attempt to allocate in the currently free arena.
-        // Note: the len-1 is safe as there is always at least 1 element (and thus len - 1 > 0)
+        // Attempt to allocate in the currently free arena.
+        // Note: the len-1 is safe as there is always at least 1 block (and thus len - 1 > 0)
         ArenaBlock* current_block =
             ctx->memory_blocks.data + ctx->memory_blocks.len - 1;
 
         if (alloc_size < ctx->blocksize - current_block->bmp) {
             void* data = current_block->data + current_block->bmp;
             current_block->bmp += alloc_size;
-            *(size_t*)data = memsize;
-            return data + sizeof(size_t);
+            return data;
         } else {
             // allocate new block
             ArenaBlock new_block;
             new_block.data = mem_alloc(ctx->blocksize, ctx->internal_allocator);
             new_block.bmp = alloc_size;
             push_block(new_block, &ctx->memory_blocks);
-            *(size_t*)new_block.data = memsize;
-            return new_block.data + sizeof(size_t);
+            return new_block.data;
         }
     }
 }
