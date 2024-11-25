@@ -63,7 +63,7 @@ typedef enum TermFormer {
 
     // Special Term formers
     FIs,
-    FSize,
+    FDynAlloc,
     FModule,
 
     // Type formers

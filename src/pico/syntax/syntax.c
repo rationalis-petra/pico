@@ -314,19 +314,19 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 
     case SIs: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(is"), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(is "), a), &nodes);
         push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
         push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mv_cat_doc(nodes, a);
         break;
     }
-    case SSize: {
+    case SDynAlloc: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(size"), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(dyn-alloc "), a), &nodes);
         push_ptr(pretty_syntax(syntax->size, a), &nodes);
         push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mv_cat_doc(nodes, a);
         break;
     }
     case SModule: {

@@ -56,7 +56,7 @@ typedef enum {
 
     // Special
     SIs,
-    SSize,
+    SDynAlloc,
     SModule,
 
     // Types & Type formers

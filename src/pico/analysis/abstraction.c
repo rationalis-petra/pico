@@ -781,6 +781,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FDynAlloc: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Term former 'dynamic-alloc' expects precisely 1 arguments!"));
+        }
+
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SDynAlloc,
+            .size = term,
+        };
+        break;
+    }
     case FProcType: {
         if (raw.nodes.len != 3) {
             throw_error(point, mv_string("Wrong number of terms to proc type former."));

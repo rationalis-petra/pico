@@ -102,20 +102,28 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     U8Array instructions = get_instructions(ass);
 
     void* dvars = get_dynamic_memory();
+    void* dynamic_memory_space = mem_alloc(4096, a);
 
     int64_t out;
     __asm__ __volatile__(
         "push %%rbp       \n"
         "push %%r15       \n"
+        "push %%r14       \n"
+        "mov %3, %%r14    \n"
         "mov %2, %%r15    \n"
         "mov %%rsp, %%rbp \n"
-        "sub $0x8, %%rbp  \n" // TODO: Investigate - why is this here
+        "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
         "call *%1         \n"
+        "pop %%r14        \n"
         "pop %%r15        \n"
         "pop %%rbp        \n"
         : "=r" (out)
-        : "r" (instructions.data), "r" (dvars)) ;
 
+        : "r" (instructions.data)
+        , "r" (dvars)
+        , "r"(dynamic_memory_space)) ;
+
+    mem_free(dynamic_memory_space, a);
     return value;
 }
 

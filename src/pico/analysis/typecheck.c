@@ -585,6 +585,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                      env, gen, a, point);
         untyped->ptype = untyped->is.type->type_val; 
         break;
+    case SDynAlloc: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TPrim, .prim = UInt_64};
+        type_check_i(untyped->is.val, t, env, gen, a, point);
+
+        PiType* out = mem_alloc(sizeof(PiType), a);
+        *out = (PiType){.sort = TPrim, .prim = Address};
+        untyped->ptype = out; 
+        break;
+    }
     case SProcType:
     case SStructType:
     case SEnumType:
@@ -730,6 +740,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SIs:
         squash_type(typed->is.type->type_val);
         squash_types(typed->is.val, a, point);
+        break;
+    case SDynAlloc:
+        squash_types(typed->size, a, point);
         break;
     case SCheckedType:
         squash_type(typed->type_val);

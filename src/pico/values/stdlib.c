@@ -58,6 +58,25 @@ PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     return type;
 }
 
+PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
+    PiType* i1 = mem_alloc(sizeof(PiType), a);
+    PiType* i2 = mem_alloc(sizeof(PiType), a);
+
+    *i1 = arg;
+    i2->sort = TPrim;
+    i2->prim = ret;
+
+    PiType type;
+    type.sort = TProc;
+    PtrArray args = mk_ptr_array(1, a);
+    push_ptr(i1, &args);
+
+    type.proc.args = args;
+    type.proc.ret = i2;
+
+    return type;
+}
+
 PiType mk_null_proc_type(Allocator* a) {
     PiType* ret = mem_alloc(sizeof(PiType), a);
     *ret = (PiType) {.sort = TPrim, .prim = Unit};
@@ -284,6 +303,35 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 //------------------------------------------------------------------------------
 // Helper functions: module core
 //------------------------------------------------------------------------------
+uint64_t stdlib_size_of(PiType* t) {
+    return pi_size_of(*t);
+}
+
+void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // size-of: PiType* -> uint64_t
+#if OS_FAMILY == UNIX
+    build_binary_op(ass, Mov, reg(RDI), rref8(RSP, 8), a, point);
+#elif OS_FAMILY == WINDOWS
+    build_binary_op(ass, Mov, reg(RCX), rref8(RSP, 8), a, point);
+#else 
+#error "build_size_of_fn does not support this OS!"
+#endif
+
+
+    // call pi_size_of
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&stdlib_size_of), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if OS_FAMILY == WINDOWS
+    build_binary_op(ass, Add, reg(RCX), imm32(32), a, point);
+#endif 
+
+    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(8), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
+    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_nullary_op(ass, Ret, a, point);
+}
 
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
@@ -733,8 +781,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
-    former = FSize;
-    sym = string_to_symbol(mv_string("size"));
+    former = FDynAlloc;
+    sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former);
 
     former = FProcType;
@@ -853,6 +901,13 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     build_comp_fun(ass, SetE, a, &point);
     sym = string_to_symbol(mv_string("="));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
+    build_size_of_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("size-of"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);

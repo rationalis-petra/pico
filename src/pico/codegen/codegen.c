@@ -171,6 +171,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SProcedure: {
         // Codegen function setup
+        build_unary_op(ass, Push, reg(R14), a, point);
         build_unary_op(ass, Push, reg(RBP), a, point);
         build_binary_op(ass, Mov, reg(RBP), reg(RSP), a, point);
 
@@ -199,14 +200,17 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // storage of function output 
         build_unary_op(ass, Pop, reg(RAX), a, point);
         build_unary_op(ass, Pop, reg(RBP), a, point);
+        build_unary_op(ass, Pop, reg(R14), a, point);
         // storage of return address
         build_unary_op(ass, Pop, reg(R9), a, point);
         
         // pop args
         build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8), a, point);
 
-        // push value
+        // Push value
+        // TODO (INVESTIGATE BUG UB) what happens when arguments > 64 bit are used?
         build_unary_op(ass, Push, reg(RAX), a, point);
+
         // push return address 
         build_unary_op(ass, Push, reg(R9), a, point);
         build_nullary_op(ass, Ret, a, point);
@@ -980,6 +984,18 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SIs:
         generate(*syn.is.val, env, ass, links, a, point);
+        break;
+    case SDynAlloc:
+        generate(*syn.size, env, ass, links, a, point);
+
+        // The size to allocate will sit atop the stack; swap it with 
+        // the pointer to free stack memory
+        build_unary_op(ass, Pop, reg(RAX), a, point);
+        build_unary_op(ass, Push, reg(R14), a, point);
+
+        // Now, increment pointer to reserve the stack memory
+        build_binary_op(ass, Add, reg(R14), reg(RAX), a, point);
+
         break;
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)syn.type_val), a, point);
