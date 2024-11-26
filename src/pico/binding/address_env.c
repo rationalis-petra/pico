@@ -171,8 +171,8 @@ void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     SAddr padding;
     padding.type = SASentinel;
     padding.symbol = 0;
-    stack_offset += ADDRESS_SIZE; // We add the register size to account for the
-                                  // return address.
+    stack_offset += 2 * ADDRESS_SIZE; // We add 2x the register size to account for the
+                                      // return address and dynamic memory pointer.
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
