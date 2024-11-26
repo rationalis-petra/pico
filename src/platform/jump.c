@@ -1,4 +1,5 @@
 #include "platform/jump.h"
+#include "platform/machine_info.h"
 
 // We use the naked attribute to instruct gcc to avoid geneating a prolog/epilog
 // We store all registers (even ones that are caller saved) to avoid generating
