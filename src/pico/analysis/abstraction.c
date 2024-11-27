@@ -290,7 +290,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
 
             raw_term->nodes.len = raw.nodes.len - 2;
             raw_term->nodes.size = raw.nodes.size - 2;
-            raw_term->nodes.data = raw.nodes.data + 2;
+            raw_term->nodes.data = ((void**)raw.nodes.data) + 2;
             raw_term->type = RawList;
         }
         Syntax* body = abstract_expr_i(*raw_term, env, a, point);
@@ -1026,7 +1026,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
             raw_term->nodes.len = raw.nodes.len - 2;
             raw_term->nodes.size = raw.nodes.size - 2;
-            raw_term->nodes.data = raw.nodes.data + 2;
+            raw_term->nodes.data = ((void**)raw.nodes.data) + 2;
             raw_term->type = RawList;
         }
 

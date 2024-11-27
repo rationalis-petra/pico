@@ -176,11 +176,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Mov, reg(RBP), reg(RSP), a, point);
 
         // Codegen Procedure Body 
+        size_t args_size = 0;
         SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            sym_size_bind(syn.procedure.args.data[i].key
-                         , pi_size_of(*(PiType*)syn.ptype->proc.args.data[i])
-                         , &arg_sizes);
+            size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.args.data[i]);
+            args_size += arg_size;
+            sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
         }
 
         address_start_proc(arg_sizes, env, a);
@@ -188,28 +189,23 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_end_proc(env, a);
 
         // Codegen function teardown:
-        // + store output in RAX
-        // + restore rbp to original value
-        // + pop all arguments from stack
-        // + store return address in RCX
-        // + push value (RAX)
-        // + push return address (RCX)
-        // + return ()
-        // TODO (TAGS: BUG UB): ensure functions work in the context of a composite (large) value  
+        // + restore old RBP & R14 in registers
+        // + stash return address
+        // + copy result down stack, accounting for
+        //   + Return address, old RBP & old RSP
+        //   + all arguments
+        // + return to stashed address
 
-        // storage of function output 
-        build_unary_op(ass, Pop, reg(RAX), a, point);
-        build_unary_op(ass, Pop, reg(RBP), a, point);
-        build_unary_op(ass, Pop, reg(R14), a, point);
-        // storage of return address
-        build_unary_op(ass, Pop, reg(R9), a, point);
-        
-        // pop args
-        build_binary_op(ass, Add, reg(RSP), imm32(syn.procedure.args.len * 8), a, point);
+        // Storage of function output 
+        size_t ret_size = pi_size_of(*syn.procedure.body->ptype);
+        build_binary_op(ass, Mov, reg(R9),  rref8(RBP, 16), a, point);
+        build_binary_op(ass, Mov, reg(R14), rref8(RBP, 8), a, point);
+        build_binary_op(ass, Mov, reg(RBP), rref8(RBP, 0), a, point);
 
-        // Push value
-        // TODO (INVESTIGATE BUG UB) what happens when arguments > 64 bit are used?
-        build_unary_op(ass, Push, reg(RAX), a, point);
+        generate_stack_move(args_size + 3 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
+
+        // Pop args
+        build_binary_op(ass, Add, reg(RSP), imm32(args_size + 3 * ADDRESS_SIZE), a, point);
 
         // push return address 
         build_unary_op(ass, Push, reg(R9), a, point);
@@ -444,6 +440,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // Step 1: Make room on the stack for our struct
         size_t struct_size = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP), imm32(struct_size), a, point);
+        address_stack_grow(env, struct_size);
 
         // Step 2: evaluate each element/variable binding
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
@@ -496,8 +493,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
         // Remove the space occupied by the temporary values 
         build_binary_op(ass, Add, reg(RSP), imm32(struct_size), a, point);
-
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_shrink(env, struct_size);
         break;
     }
     case SProjector: {
