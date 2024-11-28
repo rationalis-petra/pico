@@ -999,6 +999,30 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
+    case SProcType:
+        panic(mv_string("Monomorphic codegen does not support proc type!"));
+        break;
+    case SStructType:
+        panic(mv_string("Monomorphic codegen does not support struct type!"));
+        break;
+    case SEnumType:
+        panic(mv_string("Monomorphic codegen does not support enum type!"));
+        break;
+    case SResetType:
+        panic(mv_string("Monomorphic codegen does not support reset type!"));
+        break;
+    case SDynamicType:
+        panic(mv_string("Monomorphic codegen does not support dynamic type!"));
+        break;
+    case SForallType:
+        panic(mv_string("Monomorphic codegen does not support forall type!"));
+        break;
+    case SExistsType:
+        panic(mv_string("Monomorphic codegen does not support exists type!"));
+        break;
+    case STypeFamily:
+        panic(mv_string("Monomorphic codegen does not support type family!"));
+        break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }

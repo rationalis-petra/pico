@@ -595,13 +595,63 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = out; 
         break;
     }
-    case SProcType:
-    case SStructType:
-    case SEnumType:
-    case SResetType:
-    case SDynamicType:
-        eval_type(untyped, env, a, point);
+    case SProcType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
+            Syntax* syn = untyped->proc_type.args.data[i];
+            type_check_i(syn, t, env, gen, a, point);
+        }
+
+        Syntax* ret = untyped->proc_type.return_type;
+        type_check_i(ret, t, env, gen, a, point);
         break;
+    }
+    case SStructType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
+            Syntax* syn = untyped->struct_type.fields.data[i].val;
+            type_check_i(syn, t, env, gen, a, point);
+        }
+        break;
+    }
+    case SEnumType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->enum_type.variants.len; i++) {
+            PtrArray* args = untyped->enum_type.variants.data[i].val;
+
+            for (size_t j = 0; j < args->len; j++) {
+                Syntax* syn = args->data[j];
+                type_check_i(syn, t, env, gen, a, point);
+            }
+        }
+        break;
+    }
+    case SResetType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        type_check_i(untyped->reset_type.in, t, env, gen, a, point);
+        type_check_i(untyped->reset_type.out, t, env, gen, a, point);
+        break;
+    }
+    case SDynamicType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        type_check_i(untyped->dynamic_type, t, env, gen, a, point);
+        break;
+    }
     default:
         panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
         break;
@@ -744,6 +794,39 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SDynAlloc:
         squash_types(typed->size, a, point);
         break;
+    case SProcType: {
+        for (size_t i = 0; i < typed->proc_type.args.len; i++) {
+            squash_types(typed->proc_type.args.data[i], a, point);
+        }
+
+        squash_types(typed->proc_type.return_type, a, point);
+        break;
+    }
+    case SStructType: {
+        for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
+            squash_types(typed->struct_type.fields.data[i].val, a, point);
+        }
+        break;
+    }
+    case SEnumType: {
+        for (size_t i = 0; i < typed->enum_type.variants.len; i++) {
+            PtrArray* args = typed->enum_type.variants.data[i].val;
+
+            for (size_t j = 0; j < args->len; j++) {
+                squash_types(args->data[j], a, point);
+            }
+        }
+        break;
+    }
+    case SResetType: {
+        squash_types(typed->reset_type.in, a, point);
+        squash_types(typed->reset_type.out, a, point);
+        break;
+    }
+    case SDynamicType: {
+        squash_types(typed->dynamic_type, a, point);
+        break;
+    }
     case SCheckedType:
         squash_type(typed->type_val);
         break;
@@ -779,6 +862,7 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
             String sym = *symbol_to_string(untyped->variable);
             throw_error(point, string_cat(msg, sym, a));
         }
+
         if (e.value) {
             untyped->type = SCheckedType;
             untyped->ptype = e.ptype;

@@ -683,6 +683,9 @@ size_t pi_size_of(PiType type) {
     case TDynamic:
         return ADDRESS_SIZE;
     }
+    case TAll: {
+        return sizeof(void*);
+    }
     case TKind: 
         return sizeof(void*);
     case TUVar:

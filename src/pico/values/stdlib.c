@@ -313,17 +313,17 @@ void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RDI), rref8(RSP, 8), a, point);
 #elif OS_FAMILY == WINDOWS
     build_binary_op(ass, Mov, reg(RCX), rref8(RSP, 8), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else 
 #error "build_size_of_fn does not support this OS!"
 #endif
-
 
     // call pi_size_of
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&stdlib_size_of), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 
 #if OS_FAMILY == WINDOWS
-    build_binary_op(ass, Add, reg(RCX), imm32(32), a, point);
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif 
 
     build_unary_op(ass, Pop, reg(RBX), a, point);
@@ -817,6 +817,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         .sort = TKind,
         .kind.nargs = 0,
     };
+
+    type_val = type;
+    sym = string_to_symbol(mv_string("Type"));
+    add_def(module, sym, type, &type_data);
 
     type_val = mk_prim_type(Unit);
     sym = string_to_symbol(mv_string("Unit"));
