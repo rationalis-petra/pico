@@ -77,12 +77,6 @@ PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
     return type;
 }
 
-PiType mk_null_proc_type(Allocator* a) {
-    PiType* ret = mem_alloc(sizeof(PiType), a);
-    *ret = (PiType) {.sort = TPrim, .prim = Unit};
-    return (PiType) {.sort = TProc, .proc.args = mk_ptr_array(0, a), .proc.ret = ret};
-}
-
 void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX), a, point);
     build_unary_op (ass, Pop, reg(R9), a, point);
@@ -119,21 +113,6 @@ void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point)
 //------------------------------------------------------------------------------
 // Helper functions: module extra
 //------------------------------------------------------------------------------
-
-PiType build_print_fun_ty(Allocator* a) {
-    PiType* string_ty = mk_string_type(a);
-    PiType* unit_ty = mem_alloc(sizeof(PiType), a);
-    *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
-
-    PtrArray args = mk_ptr_array(1, a);
-    push_ptr(string_ty, &args);
-
-    return (PiType) {
-        .sort = TProc,
-        .proc.args = args,
-        .proc.ret = unit_ty,
-    };
-}
 
 void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
@@ -227,21 +206,6 @@ void run_script_c_fun(String filename) {
     IStream* sfile = open_file_istream(filename, a);
     run_script_from_istream(sfile, current_ostream, current_module, a);
     delete_istream(sfile, a);
-}
-
-PiType build_load_module_fun_ty(Allocator* a) {
-    PiType* string_ty = mk_string_type(a);
-    PiType* unit_ty = mem_alloc(sizeof(PiType), a);
-    *unit_ty = (PiType) {.sort = TPrim, .prim = Unit};
-
-    PtrArray args = mk_ptr_array(1, a);
-    push_ptr(string_ty, &args);
-
-    return (PiType) {
-        .sort = TProc,
-        .proc.args = args,
-        .proc.ret = unit_ty,
-    };
 }
 
 void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -525,23 +489,6 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
-PiType build_realloc_fn_ty(Allocator* a) {
-    // realloc : Proc (Address U64) Address
-    PtrArray args = mk_ptr_array(2, a);
-    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
-    PiType* arg2_ty = mem_alloc(sizeof(PiType), a);
-    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
-
-    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address};
-    *arg2_ty = (PiType) {.sort = TPrim, .prim = UInt_64};
-    *ret_ty = (PiType) {.sort = TPrim, .prim = Address};
-
-    push_ptr(arg1_ty, &args);
-    push_ptr(arg2_ty, &args);
-
-    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
-}
-
 void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // realloc : Proc (Address U64) Unit
     build_unary_op(ass, Pop, reg(RAX), a, point);
@@ -577,21 +524,6 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     
 }
 
-PiType build_malloc_fn_ty(Allocator* a) {
-    // malloc : Proc (U64) Address
-
-    PtrArray args = mk_ptr_array(1, a);
-    PiType* adty = mem_alloc(sizeof(PiType), a);
-    PiType* szty = mem_alloc(sizeof(PiType), a);
-
-    *adty = (PiType) {.sort = TPrim, .prim = Address};
-    *szty = (PiType) {.sort = TPrim, .prim = UInt_64};
-
-    push_ptr(szty, &args);
-
-    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = adty};
-}
-
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // malloc : Proc (U64) Unit
     build_unary_op(ass, Pop, reg(RAX), a, point);
@@ -608,6 +540,10 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #endif
 
+    // Get the malloc dynamic variable
+    /* build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc_dyn_var),  a, point); */
+    /* build_unary_op(ass, Call, reg(RAX), a, point); */
+
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc),  a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 
@@ -620,21 +556,6 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Push, reg(R9), a, point);
 
     build_nullary_op(ass, Ret, a, point);
-}
-
-PiType build_free_fn_ty(Allocator* a) {
-    // free : Proc (Address) Unit
-
-    PtrArray args = mk_ptr_array(1, a);
-    PiType* arg_ty = mem_alloc(sizeof(PiType), a);
-    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
-
-    *arg_ty = (PiType) {.sort = TPrim, .prim = Address};
-    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit};
-
-    push_ptr(arg_ty, &args);
-
-    return (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
 }
 
 void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -933,7 +854,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     add_module(string_to_symbol(mv_string("core")), module, base);
 }
 
-void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
+void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -955,51 +876,71 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
     if (catch_error(point)) {
         panic(point.error_message);
     }
+    
+    //uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
+    //uint64_t dyn_curr_module = mk_dynamic_var(sizeof(void*), NULL); 
+    uint64_t dynamic_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+
+    //type = mk_dynamic_type(a, );
+    /* build_exit_fn(ass, a, &point); */
+    /* sym = string_to_symbol(mv_string("exit")); */
+    /* add_fn_def(module, sym, type, ass, NULL); */
+    /* clear_assembler(ass); */
+    /* delete_pi_type(type, a); */
 
     // C Wrappers!
-    type = mk_null_proc_type(a);
+    // exit : Proc [] Unit
+    type = mk_proc_type(a, 0, mk_prim_type(Unit));
     build_exit_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("exit"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_malloc_fn_ty(a);
+    // malloc : Proc [U64] Address
+    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
     build_malloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("malloc"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_realloc_fn_ty(a);
+    // realloc : Proc (Address U64) Address
+    type = mk_proc_type(a, 2, mk_prim_type(Address),
+                        mk_prim_type(UInt_64),
+                        mk_prim_type(Address));
     build_realloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("realloc"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_free_fn_ty(a);
+    // realloc : Proc [String] Unit
+    type = mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(Unit));
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_print_fun_ty(a);
+    // print : Proc [String] Unit
+    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
     build_print_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("print"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_load_module_fun_ty(a);
+    // print : Proc [String] Unit
+    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
     build_load_module_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("load-module"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = build_load_module_fun_ty(a);
+    // run-script : Proc [String] Unit
+    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
     build_run_script_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("run-script"));
     add_fn_def(module, sym, type, ass, NULL);
@@ -1038,10 +979,10 @@ void add_user_module(Package* base, Allocator* a) {
     add_module(string_to_symbol(mv_string("user")), module, base);
 }
 
-Package* base_package(Assembler* ass, Allocator* a) {
+Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator) {
     Package* base = mk_package(string_to_symbol(mv_string("base")), a);
     add_core_module(ass, base, a);
-    add_extra_module(ass, base, a);
+    add_extra_module(ass, base, default_allocator, a);
     add_user_module(base, a);
 
     return base;

@@ -1003,6 +1003,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         panic(mv_string("Monomorphic codegen does not support proc type!"));
         break;
     case SStructType:
+        // Generate struct type: for each element of the struct type
+
         panic(mv_string("Monomorphic codegen does not support struct type!"));
         break;
     case SEnumType:

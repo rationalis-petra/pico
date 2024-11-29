@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #include "platform/machine_info.h"
 #include "platform/signals.h"
 
@@ -696,14 +698,6 @@ size_t pi_size_of(PiType type) {
         panic(mv_string("pi_size_of received invalid type."));
     }
 }
-
-PiType mk_prim_type(PrimType t) {
-    return (PiType) {
-      .sort = TPrim,
-      .prim = t,
-    };
-}
-
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 
@@ -734,9 +728,41 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
 }
 
-PiType* mk_string_type(Allocator* a) {
+PiType mk_prim_type(PrimType t) {
+    return (PiType) {
+      .sort = TPrim,
+      .prim = t,
+    };
+}
+
+PiType mk_dynamic_type(Allocator* a, PiType t) {
+    PiType* dyn = mem_alloc(sizeof(PiType), a);
+    *dyn = t;
+    return (PiType){.sort = TDynamic, .dynamic = dyn};
+}
+
+PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
+    va_list args;
+    va_start(args, nargs);
+    
+    PtrArray ty_args = mk_ptr_array(nargs, a);
+    for (size_t i = 0; i < nargs ; i++) {
+        PiType* arg = mem_alloc(sizeof(PiType), a);
+        *arg = va_arg(args, PiType);
+        push_ptr(arg, &ty_args);
+    }
+
+    PiType* ret = mem_alloc(sizeof(PiType), a);
+    *ret = va_arg(args, PiType);
+    va_end(args);
+
+    return (PiType) {.sort = TProc, .proc.args = ty_args, .proc.ret = ret};
+}
+
+
+
+PiType mk_string_type(Allocator* a) {
     // Struct [.memsize U64] [.bytes Address]
-    PiType* string_type = mem_alloc(sizeof(PiType), a);
 
     PiType* memsize_type = mem_alloc(sizeof(PiType), a);
     PiType* bytes_type = mem_alloc(sizeof(PiType), a);
@@ -748,10 +774,9 @@ PiType* mk_string_type(Allocator* a) {
     sym_ptr_insert(string_to_symbol(mv_string("memsize")), memsize_type, &fields);
     sym_ptr_insert(string_to_symbol(mv_string("bytes")), bytes_type, &fields);
     
-    *string_type = (PiType) {
+    return (PiType) {
         .sort = TStruct,
         .structure.fields = fields
     };
-    return string_type;
 }
 
