@@ -90,21 +90,59 @@ Location ref(Regname name) {
 
 Location rref8(Regname name, int8_t offset) {
     return (Location) {
-      .type = Deref,
-      .sz = sz_64,
-      .reg = name,
-      .disp_sz = 1,
-      .disp_8 = offset,
+        .type = Deref,
+        .sz = sz_64,
+        .reg = name,
+        .disp_sz = 1,
+        .disp_8 = offset,
     };
 }
 
 Location rref32(Regname name, int32_t offset) {
     return (Location) {
-      .type = Deref,
-      .sz = sz_64,
-      .reg = name,
-      .disp_sz = 4,
-      .disp_32 = offset,
+        .type = Deref,
+        .sz = sz_64,
+        .reg = name,
+        .disp_sz = 4,
+        .disp_32 = offset,
+    };
+}
+
+Location sib(Regname base, Regname index, uint8_t scale) {
+    return (Location) {
+        .type = Deref,
+        .sz = sz_64,
+        .reg = base,
+        .index = index,
+        .is_scale = true,
+        .scale = scale,
+    };
+}
+
+Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement) {
+    return (Location) {
+        .type = Deref,
+        .sz = sz_64,
+        .reg = base,
+        .index = index,
+        .is_scale = true,
+        .scale = scale,
+
+        .disp_sz = 1, 
+        .disp_8 = displacement,
+    };
+}
+
+Location sib_32(Regname base, Regname index, uint8_t scale, int32_t displacement) {
+    return (Location) {
+        .type = Deref,
+        .sz = sz_64,
+        .reg = base,
+        .index = index,
+        .is_scale = true,
+        .scale = scale,
+        .disp_sz = 4, 
+        .disp_32 = displacement,
     };
 }
 
@@ -481,7 +519,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             if (rm_loc.reg == RIP) {
                 throw_error(point, mv_string("Using RIP as a register is invalid"));
             }
-            // simplest : mod = 11, rm = register 
+            // Simplest : mod = 11, rm = register 
             modrm_byte |= modrm_mod(0b11);
             modrm_byte |= modrm_rm(rm_loc.reg);
             rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
@@ -509,12 +547,39 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             }
 
             // Now the register
-            if (rm_loc.reg == RIP) {
+            // Step1: check for Index Register (implies SIB byte)
+            if (rm_loc.is_scale) {
+                use_sib_byte = true;
+
+                // set modrm byte reg = 0b100
+                modrm_byte |= modrm_rm(0b100);
+
+                if (rm_loc.scale == 1)  {
+                    sib_byte |= sib_ss(0b00);
+                } else if (rm_loc.scale == 2)  {
+                    sib_byte |= sib_ss(0b01);
+                } else if (rm_loc.scale == 4) {
+                    sib_byte |= sib_ss(0b10);
+                } else if (rm_loc.scale == 8) {
+                    sib_byte |= sib_ss(0b11);
+                } else {
+                    throw_error(point, mv_string("Bad scale: not 0, 1, 4 or 8"));
+                }
+
+                // Base should be register 
+                sib_byte |= sib_index(rm_loc.index);
+                sib_byte |= sib_base(rm_loc.reg);
+
+            // Here, we guarantee no index register exists
+            } else if (rm_loc.reg == RIP) {
                 if (rm_loc.disp_sz != 4) {
                     throw_error(point, mv_string("RIP-relative addressing reqiures 32-bit displacement!"));
                 }
                 // modrm_mod = 00, so no need to do anything here
                 modrm_byte |= modrm_rm(RIP);
+
+            // Special Case #1: we need to use SIB byte
+            // Check if we need to use SIB byte
             } else if ((0b111 & rm_loc.reg) == RSP)  {
                 // Using RSP - necessary to use SIB byte
                 modrm_byte |= modrm_rm(RSP);
@@ -525,6 +590,8 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
                 sib_byte |= sib_base(RSP);
                 rex_byte |= rex_sb_ext((rm_loc.reg & 0b1000) >> 3);
 
+            // Special Case #2: RBP MUST have a displacement - the encoding 
+            // for 'RBP without displacement' is just a 'disp32' 
             } else if (((0b111 & rm_loc.reg) == RBP)) {
                 // As usual...
                 modrm_byte |= modrm_rm(RBP);
@@ -550,6 +617,8 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
 
         // Step 4: Reg encoding
         // Store the Reg location
+        // TODO (INVESTIGATE): what if reg_loc is not register? (seems inserting
+        //    throw results in spurious errors)
         if (reg_loc.type == Register) {
             rex_byte |= rex_reg_ext((reg_loc.reg & 0b1000) >> 3); 
             modrm_byte |= modrm_reg(reg_loc.reg & 0b111);

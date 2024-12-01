@@ -29,6 +29,26 @@ void set_std_istream(IStream* current) { current_istream = current; }
 static OStream* current_ostream;
 void set_std_ostream(OStream* current) { current_ostream = current; }
 
+static uint64_t std_allocator; 
+
+static uint64_t std_tmp_allocator; 
+void bind_std_tmp_allocator(Allocator* al) {
+    void** data = get_dynamic_memory();
+    Allocator** dyn = data[std_tmp_allocator]; 
+    *dyn = al;
+}
+
+Allocator* get_std_tmp_allocator() {
+    void** data = get_dynamic_memory();
+    Allocator** dyn = data[std_tmp_allocator]; 
+    return *dyn;
+}
+
+void release_std_tmp_allocator(Allocator* al) {
+    void** data = get_dynamic_memory();
+    Allocator** dyn = data[std_tmp_allocator]; 
+    *dyn = al;
+}
 
 //------------------------------------------------------------------------------
 // Helper functions for pico base package
@@ -730,6 +750,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("All"));
     add_def(module, sym, type, &former);
 
+    former = FFamily;
+    sym = string_to_symbol(mv_string("Family"));
+    add_def(module, sym, type, &former);
+
     // ------------------------------------------------------------------------
     // Types 
     // ------------------------------------------------------------------------
@@ -878,15 +902,25 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     }
     
     //uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
-    //uint64_t dyn_curr_module = mk_dynamic_var(sizeof(void*), NULL); 
-    uint64_t dynamic_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+    std_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+    type = mk_dynamic_type(a, mk_struct_type(a, 4,
+                                             "malloc", mk_prim_type(Address),
+                                             "realloc", mk_prim_type(Address),
+                                             "free", mk_prim_type(Address),
+                                             "ctx", mk_prim_type(Address)));
+    sym = string_to_symbol(mv_string("allocator"));
+    add_def(module, sym, type, &std_allocator);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
 
-    //type = mk_dynamic_type(a, );
-    /* build_exit_fn(ass, a, &point); */
-    /* sym = string_to_symbol(mv_string("exit")); */
-    /* add_fn_def(module, sym, type, ass, NULL); */
-    /* clear_assembler(ass); */
-    /* delete_pi_type(type, a); */
+    void* nul = NULL;
+    std_tmp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
+
+    type = mk_dynamic_type(a, mk_prim_type(Address));
+    sym = string_to_symbol(mv_string("temp-allocator"));
+    add_def(module, sym, type, &std_tmp_allocator);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
 
     // C Wrappers!
     // exit : Proc [] Unit

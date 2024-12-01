@@ -1,6 +1,8 @@
 #include "pico/codegen/internal.h"
 
+#include "platform/machine_info.h"
 #include "data/meta/array_impl.h"
+#include "pico/values/stdlib.h"
 
 int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
     int diff_1 = lhs.offset - rhs.offset;
@@ -77,5 +79,69 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
         build_binary_op(ass, Mov, reg(RSI), rref8(loc2, i * 8), a, point);
         build_binary_op(ass, Mov, rref8(loc1, i * 8), reg(RSI), a, point);
         build_binary_op(ass, Mov, rref8(loc2, i * 8), reg(RDI), a, point);
+    }
+}
+
+void* tmp_malloc(uint64_t memsize) {
+    return mem_alloc(memsize, get_std_tmp_allocator());
+}
+
+void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI), mem_size, a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX), mem_size, a, point);
+    build_binary_op(ass, Sub, reg(RSP), , imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&tmp_malloc), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+
+    if (dest.type != Register && dest.reg != RAX) {
+        build_binary_op(ass, Mov, dest, reg(RAX), a, point);
+    }
+}
+
+void* mk_struct_ty(size_t len, void* data) {
+    Allocator* a = get_std_tmp_allocator();
+
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TStruct,
+        .structure.fields.data = data,
+        .structure.fields.len = len,
+        .structure.fields.capacity = len,
+        .structure.fields.gpa = a,
+    };
+    return ty;
+}
+
+void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI), nfields, a, point);
+    build_binary_op(ass, Mov, reg(RSI), data, a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX), nfields, a, point);
+    build_binary_op(ass, Mov, reg(RDX), data, a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_struct_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+
+    if (dest.type != Register && dest.reg != RAX) {
+        build_binary_op(ass, Mov, dest, reg(RAX), a, point);
     }
 }

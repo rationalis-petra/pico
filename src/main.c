@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
 
     Assembler* ass = mk_assembler(&exalloc);
     Assembler* ass_base = mk_assembler(&exalloc);
-    Package* base = base_package(ass_base, stdalloc);
+    Package* base = base_package(ass_base, stdalloc, stdalloc);
     delete_assembler(ass_base);
 
     Module* module = get_module(string_to_symbol(mv_string("user")), base);

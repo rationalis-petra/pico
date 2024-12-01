@@ -301,6 +301,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);
         break;
+    case FFamily:
+        out = mk_str_doc(mv_string("::Family"), a);
+        break;
     }
     return out;
 }

@@ -3,6 +3,8 @@
 #include "platform/machine_info.h"
 #include "platform/signals.h"
 
+#include "data/string.h"
+
 #include "pretty/standard_types.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
@@ -759,6 +761,22 @@ PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
     return (PiType) {.sort = TProc, .proc.args = ty_args, .proc.ret = ret};
 }
 
+PiType mk_struct_type(Allocator* a, size_t nfields, ...) {
+    va_list args;
+    va_start(args, nfields);
+    
+    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* arg = mem_alloc(sizeof(PiType), a);
+
+        *arg = va_arg(args, PiType);
+        sym_ptr_insert(name, arg, &fields);
+    }
+    va_end(args);
+
+    return (PiType) {.sort = TStruct, .structure.fields = fields,};
+}
 
 
 PiType mk_string_type(Allocator* a) {

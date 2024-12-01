@@ -132,7 +132,6 @@ void delete_pi_type_p(PiType* t, Allocator* a);
 PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
-
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
 PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
@@ -144,6 +143,7 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 PiType mk_prim_type(PrimType t);
 PiType mk_dynamic_type(Allocator* a, PiType t);
 PiType mk_proc_type(Allocator* a, size_t nargs, ...);
+PiType mk_struct_type(Allocator* a, size_t nfields, ...);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]

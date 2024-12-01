@@ -115,7 +115,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
         break;
     case SLitString:
-        untyped->ptype = mk_string_type(a);
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = mk_string_type(a);
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);

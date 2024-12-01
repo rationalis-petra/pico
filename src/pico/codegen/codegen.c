@@ -1004,8 +1004,36 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     case SStructType:
         // Generate struct type: for each element of the struct type
+        // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX), imm32(syn.struct_type.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(ass, Mov, reg(RCX), imm32(0), a, point);
 
-        panic(mv_string("Monomorphic codegen does not support struct type!"));
+        for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
+            SymPtrCell field = syn.struct_type.fields.data[i];
+            // First, move the field name
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0), imm32(field.key), a, point);
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(ass, Push, reg(RCX), a, point);
+            build_unary_op(ass, Push, reg(RAX), a, point);
+            address_stack_grow(env, 2*ADDRESS_SIZE);
+            generate(*(Syntax*)field.val, env, ass, links, a, point);
+
+            address_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(ass, Pop, reg(R9), a, point);
+            build_unary_op(ass, Pop, reg(RAX), a, point);
+            build_unary_op(ass, Pop, reg(RCX), a, point);
+
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8), reg(R9), a, point);
+
+            // Now, incremenet index by 2 (to account for struct size!)
+            build_binary_op(ass, Add, reg(RCX), imm32(2), a, point);
+        }
+
+        // Finally, generate function call to make type
+        gen_mk_struct_ty(reg(RAX), imm32(syn.struct_type.fields.len), reg(RAX), ass, a, point);
+        build_unary_op(ass, Push, reg(RAX), a, point);
+
         break;
     case SEnumType:
         panic(mv_string("Monomorphic codegen does not support enum type!"));
