@@ -284,7 +284,6 @@ struct Syntax {
         Syntax* dynamic_type;
         SynBind bind_type;
         PiType* type_val;
-
     };
     PiType* ptype;
 };

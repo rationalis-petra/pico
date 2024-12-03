@@ -9,6 +9,7 @@ typedef enum {
     CRepl,
     CScript,
     CEval,
+    CHelp,
     CInvalid,
 } SubCommand_t;
 
@@ -25,11 +26,17 @@ typedef struct {
 } EvalOpts;
 
 typedef struct {
+    bool help_all;
+    SubCommand_t help_for;
+} HelpOpts;
+
+typedef struct {
     SubCommand_t type;
     union {
         ReplOpts repl;
         ScriptOpts script;
         EvalOpts eval;
+        HelpOpts help;
         String error_message;
     };
 } Command;

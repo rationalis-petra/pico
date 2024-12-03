@@ -147,20 +147,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     return false;
 }
 
-int cstrcmp (const char* lhs, const char* rhs) {
-    int result = 0; 
-    while (result == 0 && !lhs && !rhs) {
-        if (*lhs < *rhs) {
-            result = -1;
-        } else if (*lhs > *rhs) {
-            result = 1;
-        }
-        lhs++;
-        rhs++;
-    }
-    return result;
-}
-
 int main(int argc, char** argv) {
     // Setup
 
