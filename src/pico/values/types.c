@@ -544,7 +544,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
             out = mk_str_doc(mv_string("Type"), a);
         } else {
             PtrArray nodes = mk_ptr_array(nargs + 2, a);
-            push_ptr(mk_str_doc(mv_string("Fam ("), a), &nodes);
+            push_ptr(mk_str_doc(mv_string("Kind ("), a), &nodes);
             for (size_t i = 0; i < nargs; i++) {
                 push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
             }
