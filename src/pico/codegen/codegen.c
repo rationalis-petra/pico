@@ -151,6 +151,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                 throw_error(point, mv_string("Codegen: Global has unsupported sort"));
             }
             break;
+        case ATypeVar:
+            gen_mk_type_var(syn.variable, ass, a, point);
+            break;
         case ANotFound: {
             String* sym = symbol_to_string(syn.variable);
             String msg = mv_string("Couldn't find variable during codegen: ");
@@ -1134,14 +1137,26 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate(*(Syntax*)syn.dynamic_type, env, ass, links, a, point);
         gen_mk_dynamic_ty(ass, a, point);
         break;
-    case SForallType:
-        panic(mv_string("Monomorphic codegen does not support forall type!"));
+    case SAllType:
+        // Forall type structure: (array symbol) body
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+        generate(*(Syntax*)syn.bind_type.body, env, ass, links, a, point);
+        gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
+        address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SExistsType:
         panic(mv_string("Monomorphic codegen does not support exists type!"));
         break;
     case STypeFamily:
-        panic(mv_string("Monomorphic codegen does not support type family!"));
+        // Forall type structure: (array symbol) body
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+        generate(*(Syntax*)syn.bind_type.body, env, ass, links, a, point);
+        gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
+        address_pop_n(syn.bind_type.bindings.len, env);
         break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));

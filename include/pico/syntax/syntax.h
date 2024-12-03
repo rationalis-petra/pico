@@ -65,7 +65,7 @@ typedef enum {
     SEnumType,
     SResetType,
     SDynamicType,
-    SForallType,
+    SAllType,
     SExistsType,
     STypeFamily,
 
@@ -221,7 +221,7 @@ typedef struct {
 
 // Types
 typedef struct {
-    SymSynAMap bindings;
+    SymbolArray bindings;
     Syntax* body;
 } SynBind;
 

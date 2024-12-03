@@ -653,6 +653,38 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_check_i(untyped->dynamic_type, t, env, gen, a, point);
         break;
     }
+    case SAllType: {
+        // For now, assume that each type has the kind Type (i.e. is not a family)
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = ty;
+
+        for (size_t i = 0; i < untyped->bind_type.bindings.len; i++) {
+            Symbol arg = untyped->bind_type.bindings.data[i];
+            type_var(arg, ty, env);
+        }
+
+        type_check_i(untyped->bind_type.body, ty, env, gen, a, point);
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
+    case STypeFamily: {
+        // For now, assume that each type has the kind Type (i.e. is not a family)
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = untyped->bind_type.bindings.len};
+        untyped->ptype = ty;
+
+        PiType* aty = mem_alloc(sizeof(PiType), a);
+        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped->bind_type.bindings.len; i++) {
+            Symbol arg = untyped->bind_type.bindings.data[i];
+            type_var(arg, aty, env);
+        }
+
+        type_check_i(untyped->bind_type.body, aty, env, gen, a, point);
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
     default:
         panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
         break;
@@ -828,6 +860,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->dynamic_type, a, point);
         break;
     }
+    case SAllType:
+        squash_types(typed->bind_type.body, a, point);
+        break;
+    case STypeFamily:
+        squash_types(typed->bind_type.body, a, point);
+        break;
     case SCheckedType:
         squash_type(typed->type_val);
         break;
@@ -964,7 +1002,7 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         untyped->type_val = out_type;
         break;
     }
-    case SForallType: {
+    case SAllType: {
         panic(mv_string("eval_type not implemented for All"));
         break;
     }

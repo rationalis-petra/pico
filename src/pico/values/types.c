@@ -61,7 +61,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
     case TAll:
     case TExists:
-    case TCLam: {
+    case TFam: {
         sdelete_u64_array(t.binder.vars);
         delete_pi_type_p(t.binder.body, a);
         break;
@@ -151,7 +151,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TExists:
     case TAll:
-    case TCLam: {
+    case TFam: {
         out.binder.vars = scopy_u64_array(t.binder.vars, a);
         out.binder.body = copy_pi_type_p(t.binder.body, a);
         break;
@@ -338,7 +338,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     }
     case TAll:
     case TExists:
-    case TCLam: {
+    case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
         if (type->sort == TAll) push_ptr(mk_str_doc(mv_string("(All "), a), &nodes);
         else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
@@ -510,7 +510,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
-
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -518,6 +517,18 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TAll: {
         PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
         push_ptr(mk_str_doc(mv_string("All [" ), a), &nodes);
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
+        push_ptr(pretty_type(type->binder.body, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TFam: {
+        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
+        push_ptr(mk_str_doc(mv_string("Family [" ), a), &nodes);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
@@ -595,7 +606,7 @@ PiType* pi_type_subst_i(PiType* type, SymPtrAssoc binds, SymbolArray* shadow, Al
     case TCApp: {
         panic(mv_string("pi_type subst: app not implemented"));
     }
-    case TCLam: {
+    case TFam: {
         panic(mv_string("pi_type subst: lam not implemented"));
     }
     // Kinds (higher kinds not supported)

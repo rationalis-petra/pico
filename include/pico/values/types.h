@@ -45,7 +45,7 @@ typedef enum {
 
     // Used by Sytem-Fω (type constructors)
     TCApp,
-    TCLam,
+    TFam,
 
     // Kinds (higher kinds not supported)
     TKind,

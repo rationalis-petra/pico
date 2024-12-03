@@ -22,6 +22,7 @@
 typedef enum {
     SADirect,
     SAIndirect,
+    SATypeVar,
     SASentinel,
     SALabel,
 } SAddr_t;
@@ -116,6 +117,10 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
                 .stack_offset = maddr.stack_offset,
             };
         };
+
+        if (maddr.type == SATypeVar) {
+            return (AddressEntry) {.type = ATypeVar};
+        }
     }
 
     // Now search the recsym
@@ -248,6 +253,20 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
     pop_ptr(&env->local_envs);
     sdelete_saddr_array(old_locals->vars);
     mem_free(old_locals, a);
+}
+
+void address_bind_type(Symbol s, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    size_t stack_offset = locals->stack_head;
+
+    if (locals->type == LPolymorphic) {
+        panic(mv_string("Cannot bind type var in polymorphic env!"));
+    }
+
+    SAddr value;
+    value.type = SATypeVar;
+    value.symbol = s;
+    push_saddr(value, &locals->vars);
 }
 
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
