@@ -22,6 +22,8 @@ typedef struct {
     void* value;
     PiType type;
     SymSArrAMap* backlinks;
+    Block text_segment;
+    Block data_segment;
 } ModuleEntryInternal;
 
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
@@ -133,7 +135,9 @@ void delete_module(Module* module) {
     mem_free(module, module->allocator);
 }
 
-Result add_def (Module* module, Symbol name, PiType type, void* data) {
+Result add_def(Module* module, Symbol name, PiType type, void* data,
+               SymSArrAMap* backlinks, //Asegment_references// 
+               Assembler* text_segment, Block data_segment) {
     ModuleEntryInternal entry;
     size_t size = pi_size_of(type);
 
@@ -145,7 +149,34 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
         memcpy(entry.value, data, size);
     }
     entry.type = copy_pi_type(type, module->allocator);
-    entry.backlinks = NULL;
+    entry.backlinks = backlinks;
+
+    // Copy data into blocks:
+    U8Array text_src = get_instructions(text_segment);
+    entry.text_segment.memory = mem_alloc(text_src.len * sizeof(uint8_t), &module->executable_allocator);
+    entry.text_segment.size = text_src.len * sizeof(uint8_t);
+    memcpy(entry.text_segment.memory, text_src.data, text_src.len * sizeof(uint8_t));
+
+    entry.data_segment.memory = mem_alloc(data_segment.size, module->allocator);
+    entry.data_segment.size = data_segment.size;
+    memcpy(entry.data_segment.memory, data_segment.memory, data_segment.size);
+
+    // Now, it's time to copy backlinks (if provided)
+    if (backlinks) {
+        entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
+        *(entry.backlinks) = copy_sym_sarr_amap(*backlinks, copy_symbol, scopy_size_array, module->allocator);
+
+        // swap out self-references
+        // TODO: check works after segment rework?
+        SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
+        sym_ptr_insert(name, entry.value, &self_ref);
+        update_function(entry.text_segment.memory, self_ref, *backlinks); 
+        sdelete_sym_ptr_amap(self_ref);
+    } else {
+        entry.backlinks = NULL;
+    }
+
+    // Finally, we update any references to the data and text segments
 
     // Free a previous definition (if it exists!)
     ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
@@ -153,9 +184,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
 
     entry_insert(name, entry, &module->entries);
 
-    Result out;
-    out.type = Ok;
-    return out;
+    return (Result) {.type = Ok};
 }
 
 Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks) {

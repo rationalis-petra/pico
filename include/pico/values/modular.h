@@ -3,6 +3,7 @@
 
 #include "platform/memory/allocator.h"
 #include "data/result.h"
+#include "data/block.h"
 #include "assembler/assembler.h"
 
 #include "pico/data/sym_sarr_amap.h"
@@ -33,8 +34,8 @@ Module* get_module(Symbol name, Package* package);
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a);
 void delete_module(Module* module);
 
-Result add_def(Module* module, Symbol name, PiType type, void* data); 
-Result add_fn_def(Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks); 
+Result add_def(Module* module, Symbol name, PiType type, void* data, SymSArrAMap* backlinks, Assembler* text_segment, Block data_segment); 
+//Result add_fn_def(Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks); 
 
 ModuleEntry* get_def(Symbol sym, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);
