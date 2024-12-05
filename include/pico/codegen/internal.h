@@ -11,8 +11,8 @@
 
 #include "pico/codegen/codegen.h"
 
-
 /* Utility functions shared across code generation  
+ * 
  */
 
 typedef struct {
@@ -40,6 +40,8 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
 
 // Wrappers around c functions
 void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point);
+
+void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);

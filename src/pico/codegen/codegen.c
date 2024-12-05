@@ -217,25 +217,47 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SApplication: {
         // Monomorphic Codegen
-        size_t args_size = 0;
-        for (size_t i = 0; i < syn.application.args.len; i++) {
-            Syntax* arg = (Syntax*) syn.application.args.data[i];
-            args_size += pi_size_of(*arg->ptype);
-            generate(*arg, env, ass, links, a, point);
-        }
+        if (syn.application.function->ptype->sort == TProc) {
+            size_t args_size = 0;
+            for (size_t i = 0; i < syn.application.args.len; i++) {
+                Syntax* arg = (Syntax*) syn.application.args.data[i];
+                args_size += pi_size_of(*arg->ptype);
+                generate(*arg, env, ass, links, a, point);
+            }
 
-        // This will push a function pointer onto the stack
-        generate(*syn.application.function, env, ass, links, a, point);
+            // This will push a function pointer onto the stack
+            generate(*syn.application.function, env, ass, links, a, point);
         
-        // Regular Function Call
-        // Pop the function into RCX; call the function
-        build_unary_op(ass, Pop, reg(RCX), a, point);
-        build_unary_op(ass, Call, reg(RCX), a, point);
-        // Update for popping all values off the stack (also the function itself)
-        address_stack_shrink(env, args_size + ADDRESS_SIZE);
+            // Regular Function Call
+            // Pop the function into RCX; call the function
+            build_unary_op(ass, Pop, reg(RCX), a, point);
+            build_unary_op(ass, Call, reg(RCX), a, point);
+            // Update for popping all values off the stack (also the function itself)
+            address_stack_shrink(env, args_size + ADDRESS_SIZE);
 
-        // Update as pushed the final value onto the stac
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+            // Update as pushed the final value onto the stac
+            address_stack_grow(env, pi_size_of(*syn.ptype));
+
+        // Is a type family 
+        } else {
+            size_t args_size = 0;
+            for (size_t i = 0; i < syn.application.args.len; i++) {
+                Syntax* arg = (Syntax*) syn.application.args.data[i];
+                args_size += pi_size_of(*arg->ptype);
+                generate(*arg, env, ass, links, a, point);
+            }
+
+            // push the type onto the stack:
+            generate(*syn.application.function, env, ass, links, a, point);
+
+            gen_mk_family_app(syn.application.args.len, ass, a, point);
+            // Update for popping all values off the stack (also the function itself)
+            address_stack_shrink(env, args_size + ADDRESS_SIZE);
+
+            // Update as pushed the final value onto the stac
+            address_stack_grow(env, pi_size_of(*syn.ptype));
+
+        }
         break;
     }
     case SAllApplication: {

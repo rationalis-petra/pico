@@ -1,5 +1,4 @@
 #include <stdarg.h>
-
 #include "platform/machine_info.h"
 #include "platform/signals.h"
 
@@ -739,6 +738,84 @@ UVarGenerator* mk_gen(Allocator* a) {
 
 void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
+}
+
+void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
+    switch (body->sort) {
+    case TPrim: break;
+    case TProc: 
+        for (size_t i = 0; i < body->proc.args.len; i++) {
+            type_app_subst(body->proc.args.data[i], subst, a);
+        }
+        type_app_subst(body->proc.ret, subst, a);
+        break;
+    case TStruct:
+        for (size_t i = 0; i < body->structure.fields.len; i++) {
+            type_app_subst(body->structure.fields.data[i].val, subst, a);
+        }
+        break;
+    case TEnum:
+        for (size_t i = 0; i < body->enumeration.variants.len; i++) {
+            PtrArray* variant = body->structure.fields.data[i].val;
+            for (size_t j = 0; j < variant->len; j++) {
+                type_app_subst(variant->data[i], subst, a);
+            }
+        }
+        break;
+    case TReset:
+        type_app_subst(body->reset.in, subst, a);
+        type_app_subst(body->reset.out, subst, a);
+        break;
+    case TResumeMark:
+        panic(mv_string("not implemetned type-app for ResumeMark"));
+        break;
+    case TDynamic:
+        type_app_subst(body->dynamic, subst, a);
+        break;
+
+    // Quantified Types
+    case TVar: {
+        PiType** val = (PiType**)sym_ptr_lookup(body->var, subst);
+        if (val) {*body = **val;}
+        break;
+    }
+    case TAll:
+        panic(mv_string("Not implemetned type-app for All"));
+        break;
+    case TExists:
+        panic(mv_string("Not implemetned type-app for Exists"));
+        break;
+
+    // Used by Sytem-Fω (type constructors)
+    case TCApp:
+        panic(mv_string("Not implemetned type-app for App"));
+        break;
+    case TFam:
+        panic(mv_string("Not implemetned type-app for Fam"));
+        break;
+
+    // Kinds (higher kinds not supported)
+    case TKind: break;
+    default:
+        panic(mv_string("not implemetned type-app for this type of unknown sort!"));
+        break;
+    }
+}
+
+PiType* type_app (PiType family, PtrArray args, Allocator* a) {
+    if (family.sort != TFam || family.binder.vars.len != args.len) {
+        panic(mv_string("Invalid type_app!"));
+    }
+    SymPtrAMap subst = mk_sym_ptr_amap(args.len, a);;
+    for (size_t i = 0; i < args.len; i++) {
+        Symbol var = family.binder.vars.data[i];
+        PiType* tipe = args.data[i];
+        sym_ptr_insert(var, tipe, &subst);
+    }
+
+    PiType* new_type = copy_pi_type_p(family.binder.body, a);
+    type_app_subst (new_type, subst, a);
+    return new_type;
 }
 
 PiType mk_prim_type(PrimType t) {

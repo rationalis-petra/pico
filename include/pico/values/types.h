@@ -7,7 +7,6 @@
 #include "pico/data/sym_ptr_assoc.h"
 
 /* Basic types in pico typesystem */
-
 // Forward declarations
 typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
@@ -138,7 +137,9 @@ UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 
 // Misc. and utility
-// Utilities for generating types
+// Utilities for generating or manipulating types
+
+PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 PiType mk_prim_type(PrimType t);
 PiType mk_dynamic_type(Allocator* a, PiType t);

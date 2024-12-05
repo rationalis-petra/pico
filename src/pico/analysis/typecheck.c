@@ -196,22 +196,35 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             fn_type.proc.args = args;
             fn_type.proc.ret = ret;
             *untyped->application.function->ptype = fn_type;
-        }
-        else if (fn_type.sort != TProc) {
-            throw_error(point, mk_string("Expected LHS of application to be a proc", a));
+
+        } else if (fn_type.sort == TProc) {
+            if (fn_type.proc.args.len != untyped->application.args.len) {
+                throw_error(point, mk_string("Incorrect number of function arguments", a));
+            }
+
+            for (size_t i = 0; i < fn_type.proc.args.len; i++) {
+                type_check_i(untyped->application.args.data[i],
+                             (PiType*)fn_type.proc.args.data[i],
+                             env, gen, a, point);
+            }
+            untyped->ptype = fn_type.proc.ret;
+
+        } else if (fn_type.sort == TKind) {
+            if (fn_type.kind.nargs != untyped->application.args.len) {
+                throw_error(point, mk_string("Incorrect number of family arguments", a));
+            }
+
+            PiType* kind = mem_alloc(sizeof(PiType), a);
+            *kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+            for (size_t i = 0; i < fn_type.kind.nargs; i++) {
+                type_check_i(untyped->application.args.data[i],
+                             kind, env, gen, a, point);
+            }
+            untyped->ptype = kind;
+        } else {
+            throw_error(point, mk_string("Expected LHS of application to be a proc or kind", a));
         }
         
-        if (fn_type.proc.args.len != untyped->application.args.len) {
-            throw_error(point, mk_string("Incorrect number of function arguments", a));
-        }
-
-        for (size_t i = 0; i < fn_type.proc.args.len; i++) {
-            type_check_i(untyped->application.args.data[i],
-                         (PiType*)fn_type.proc.args.data[i],
-                         env, gen, a, point);
-        }
-
-        untyped->ptype = fn_type.proc.ret;
         break;
     }
     case SAllApplication: {
@@ -1012,6 +1025,20 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     }
     case STypeFamily: {
         panic(mv_string("eval_type not implemented for Family"));
+        break;
+    }
+    case SApplication: {
+        eval_type(untyped->application.function, env, a, point);
+        if (untyped->application.function->ptype->sort != TKind) {
+            panic(mv_string("Type application expects kind"));
+        }
+        PtrArray args = mk_ptr_array(untyped->application.args.len, a);
+        for (size_t i = 0; i < untyped->application.args.len; i++) {
+            Syntax* arg = untyped->application.args.data[i];
+            eval_type(arg, env, a, point);
+            push_ptr(arg->type_val, &args);
+        }
+        untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
         break;
     }
     case SCheckedType: break; // Can leave blank

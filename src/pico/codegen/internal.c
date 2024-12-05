@@ -108,6 +108,37 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     }
 }
 
+PiType* internal_type_app(PiType* val, PiType** args, size_t num_args) {
+    Allocator* a = get_std_tmp_allocator();
+    return type_app (*val, (PtrArray){.data = (void**)args, .len = num_args, .size = num_args}, a);
+}
+
+void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
+
+#if ABI == SYSTEM_V_64
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+    build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDX), imm32(nfields), a, point);
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(R8), imm32(nfields), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&internal_type_app), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+
+    build_binary_op(ass, Add, reg(RSP), imm32(nfields * ADDRESS_SIZE), a, point);
+    build_unary_op(ass, Push, reg(RAX), a, point);
+}
+
 void* mk_struct_ty(size_t len, void* data) {
     Allocator* a = get_std_tmp_allocator();
 
