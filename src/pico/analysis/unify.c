@@ -249,7 +249,8 @@ void squash_type(PiType* type) {
         break;
     }
     case TVar: break;
-    case TAll: {
+    case TAll: 
+    case TFam: {
         squash_type(type->binder.body);
     }
 

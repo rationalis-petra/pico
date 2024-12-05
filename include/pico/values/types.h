@@ -7,7 +7,6 @@
 #include "pico/data/sym_ptr_assoc.h"
 
 /* Basic types in pico typesystem */
-
 // Forward declarations
 typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
@@ -45,7 +44,7 @@ typedef enum {
 
     // Used by Sytem-Fω (type constructors)
     TCApp,
-    TCLam,
+    TFam,
 
     // Kinds (higher kinds not supported)
     TKind,
@@ -132,16 +131,23 @@ void delete_pi_type_p(PiType* t, Allocator* a);
 PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
-// Utilities for generating types
-PiType mk_prim_type(PrimType t);
-
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
 PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 
 // Misc. and utility
+// Utilities for generating or manipulating types
+
+PiType* type_app (PiType family, PtrArray args, Allocator* a);
+
+PiType mk_prim_type(PrimType t);
+PiType mk_dynamic_type(Allocator* a, PiType t);
+PiType mk_proc_type(Allocator* a, size_t nargs, ...);
+PiType mk_struct_type(Allocator* a, size_t nfields, ...);
+
+// Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
-PiType* mk_string_type(Allocator* a);
+PiType mk_string_type(Allocator* a);
 
 #endif

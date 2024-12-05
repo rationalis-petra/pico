@@ -147,20 +147,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     return false;
 }
 
-int cstrcmp (const char* lhs, const char* rhs) {
-    int result = 0; 
-    while (result == 0 && !lhs && !rhs) {
-        if (*lhs < *rhs) {
-            result = -1;
-        } else if (*lhs > *rhs) {
-            result = 1;
-        }
-        lhs++;
-        rhs++;
-    }
-    return result;
-}
-
 int main(int argc, char** argv) {
     // Setup
 
@@ -176,7 +162,7 @@ int main(int argc, char** argv) {
 
     Assembler* ass = mk_assembler(&exalloc);
     Assembler* ass_base = mk_assembler(&exalloc);
-    Package* base = base_package(ass_base, stdalloc);
+    Package* base = base_package(ass_base, stdalloc, stdalloc);
     delete_assembler(ass_base);
 
     Module* module = get_module(string_to_symbol(mv_string("user")), base);

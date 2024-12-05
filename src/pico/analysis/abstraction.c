@@ -916,7 +916,69 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FAllType: {
-        throw_error(point, mv_string("Abstract for 'All' not implemented!"));
+        if (raw.nodes.len < 3) {
+            throw_error(point, mk_string("All term former requires at least 2 arguments!", a));
+        }
+
+        SymbolArray vars = mk_u64_array(8, a);
+        if (!get_symbol_list(&vars, *(RawTree*)raw.nodes.data[1])) {
+            throw_error(point, mk_string("All argument list malformed", a));
+        }
+
+        shadow_vars(vars, env);
+
+        RawTree* raw_term;
+        if (raw.nodes.len == 3) {
+            raw_term = (RawTree*)raw.nodes.data[2];
+        } else {
+            raw_term = mem_alloc (sizeof(RawTree), a);
+
+            raw_term->nodes.len = raw.nodes.len - 2;
+            raw_term->nodes.size = raw.nodes.size - 2;
+            raw_term->nodes.data = ((void**)raw.nodes.data) + 2;
+            raw_term->type = RawList;
+        }
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+        shadow_pop(vars.len, env);
+
+        *res = (Syntax) {
+            .type = SAllType,
+            .bind_type.bindings = vars,
+            .bind_type.body = body,
+        };
+        break;
+    }
+    case FFamily: {
+        if (raw.nodes.len < 3) {
+            throw_error(point, mk_string("Family term former requires at least 2 arguments!", a));
+        }
+
+        SymbolArray vars = mk_u64_array(8, a);
+        if (!get_symbol_list(&vars, *(RawTree*)raw.nodes.data[1])) {
+            throw_error(point, mk_string("All argument list malformed", a));
+        }
+
+        shadow_vars(vars, env);
+
+        RawTree* raw_term;
+        if (raw.nodes.len == 3) {
+            raw_term = (RawTree*)raw.nodes.data[2];
+        } else {
+            raw_term = mem_alloc (sizeof(RawTree), a);
+
+            raw_term->nodes.len = raw.nodes.len - 2;
+            raw_term->nodes.size = raw.nodes.size - 2;
+            raw_term->nodes.data = ((void**)raw.nodes.data) + 2;
+            raw_term->type = RawList;
+        }
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+        shadow_pop(vars.len, env);
+
+        *res = (Syntax) {
+            .type = STypeFamily,
+            .bind_type.bindings = vars,
+            .bind_type.body = body,
+        };
         break;
     }
     default:

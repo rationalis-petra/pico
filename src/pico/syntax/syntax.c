@@ -479,14 +479,26 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SDynamicType: {
         PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mv_str_doc(mk_string("(Dynamic ", a), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
         push_ptr(pretty_syntax(syntax->dynamic_type, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SForallType: {
-        out = mv_str_doc(mk_string("Pretty syntax not implemented for all type", a), a);
+    case SAllType: {
+        PtrArray nodes = mk_ptr_array(5, a) ;
+        push_ptr(mk_str_doc(mv_string("(All ["), a), &nodes);
+
+        SymbolArray arr = syntax->bind_type.bindings;
+        PtrArray arg_nodes = mk_ptr_array(arr.len, a);
+        for (size_t i = 0; i < arr.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(arr.data[i]), a), &arg_nodes);
+        }
+        push_ptr(mv_sep_doc(arg_nodes, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->bind_type.body, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case SExistsType: {
@@ -494,7 +506,19 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case STypeFamily: {
-        out = mv_str_doc(mk_string("Pretty syntax not implemented for type family", a), a);
+        PtrArray nodes = mk_ptr_array(5, a) ;
+        push_ptr(mk_str_doc(mv_string("(Family ["), a), &nodes);
+
+        SymbolArray arr = syntax->bind_type.bindings;
+        PtrArray arg_nodes = mk_ptr_array(arr.len, a);
+        for (size_t i = 0; i < arr.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(arr.data[i]), a), &arg_nodes);
+        }
+        push_ptr(mv_sep_doc(arg_nodes, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->bind_type.body, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case SCheckedType: {

@@ -2,8 +2,11 @@
 #include <string.h> // for memcpy
 
 #include "platform/machine_info.h"
+#include "platform/memory/arena.h"
+
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
+#include "pico/values/stdlib.h"
 
 EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a, ErrorPoint* point) {
     EvalResult res;
@@ -104,6 +107,9 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
 
+    Allocator* old_tmp_alloc = get_std_tmp_allocator();
+    bind_std_tmp_allocator(a);
+
     int64_t out;
     __asm__ __volatile__(
         "push %%rbp       \n"
@@ -123,6 +129,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
         , "r" (dvars)
         , "r"(dynamic_memory_space)) ;
 
+    release_std_tmp_allocator(old_tmp_alloc);
     mem_free(dynamic_memory_space, a);
     return value;
 }

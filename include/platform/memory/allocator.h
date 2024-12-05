@@ -6,7 +6,7 @@
 typedef struct Allocator {
     void* (*malloc)(size_t memsize, void* ctx);
     void* (*realloc)(void* ptr, size_t memsize, void* ctx);
-    void (*free)(void* location, void* ctx);
+    void  (*free)(void* location, void* ctx);
     void* ctx;
 } Allocator;
 

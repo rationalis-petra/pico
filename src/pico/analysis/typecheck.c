@@ -115,7 +115,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
         break;
     case SLitString:
-        untyped->ptype = mk_string_type(a);
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = mk_string_type(a);
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
@@ -195,22 +196,35 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             fn_type.proc.args = args;
             fn_type.proc.ret = ret;
             *untyped->application.function->ptype = fn_type;
-        }
-        else if (fn_type.sort != TProc) {
-            throw_error(point, mk_string("Expected LHS of application to be a proc", a));
+
+        } else if (fn_type.sort == TProc) {
+            if (fn_type.proc.args.len != untyped->application.args.len) {
+                throw_error(point, mk_string("Incorrect number of function arguments", a));
+            }
+
+            for (size_t i = 0; i < fn_type.proc.args.len; i++) {
+                type_check_i(untyped->application.args.data[i],
+                             (PiType*)fn_type.proc.args.data[i],
+                             env, gen, a, point);
+            }
+            untyped->ptype = fn_type.proc.ret;
+
+        } else if (fn_type.sort == TKind) {
+            if (fn_type.kind.nargs != untyped->application.args.len) {
+                throw_error(point, mk_string("Incorrect number of family arguments", a));
+            }
+
+            PiType* kind = mem_alloc(sizeof(PiType), a);
+            *kind = (PiType) {.sort = TKind, .kind.nargs = 0};
+            for (size_t i = 0; i < fn_type.kind.nargs; i++) {
+                type_check_i(untyped->application.args.data[i],
+                             kind, env, gen, a, point);
+            }
+            untyped->ptype = kind;
+        } else {
+            throw_error(point, mk_string("Expected LHS of application to be a proc or kind", a));
         }
         
-        if (fn_type.proc.args.len != untyped->application.args.len) {
-            throw_error(point, mk_string("Incorrect number of function arguments", a));
-        }
-
-        for (size_t i = 0; i < fn_type.proc.args.len; i++) {
-            type_check_i(untyped->application.args.data[i],
-                         (PiType*)fn_type.proc.args.data[i],
-                         env, gen, a, point);
-        }
-
-        untyped->ptype = fn_type.proc.ret;
         break;
     }
     case SAllApplication: {
@@ -595,13 +609,95 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = out; 
         break;
     }
-    case SProcType:
-    case SStructType:
-    case SEnumType:
-    case SResetType:
-    case SDynamicType:
-        eval_type(untyped, env, a, point);
+    case SProcType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
+            Syntax* syn = untyped->proc_type.args.data[i];
+            type_check_i(syn, t, env, gen, a, point);
+        }
+
+        Syntax* ret = untyped->proc_type.return_type;
+        type_check_i(ret, t, env, gen, a, point);
         break;
+    }
+    case SStructType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
+            Syntax* syn = untyped->struct_type.fields.data[i].val;
+            type_check_i(syn, t, env, gen, a, point);
+        }
+        break;
+    }
+    case SEnumType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        for (size_t i = 0; i < untyped->enum_type.variants.len; i++) {
+            PtrArray* args = untyped->enum_type.variants.data[i].val;
+
+            for (size_t j = 0; j < args->len; j++) {
+                Syntax* syn = args->data[j];
+                type_check_i(syn, t, env, gen, a, point);
+            }
+        }
+        break;
+    }
+    case SResetType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        type_check_i(untyped->reset_type.in, t, env, gen, a, point);
+        type_check_i(untyped->reset_type.out, t, env, gen, a, point);
+        break;
+    }
+    case SDynamicType: {
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = t;
+
+        type_check_i(untyped->dynamic_type, t, env, gen, a, point);
+        break;
+    }
+    case SAllType: {
+        // For now, assume that each type has the kind Type (i.e. is not a family)
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = ty;
+
+        for (size_t i = 0; i < untyped->bind_type.bindings.len; i++) {
+            Symbol arg = untyped->bind_type.bindings.data[i];
+            type_var(arg, ty, env);
+        }
+
+        type_check_i(untyped->bind_type.body, ty, env, gen, a, point);
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
+    case STypeFamily: {
+        // For now, assume that each type has the kind Type (i.e. is not a family)
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = untyped->bind_type.bindings.len};
+        untyped->ptype = ty;
+
+        PiType* aty = mem_alloc(sizeof(PiType), a);
+        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped->bind_type.bindings.len; i++) {
+            Symbol arg = untyped->bind_type.bindings.data[i];
+            type_var(arg, aty, env);
+        }
+
+        type_check_i(untyped->bind_type.body, aty, env, gen, a, point);
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
     default:
         panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
         break;
@@ -744,6 +840,45 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SDynAlloc:
         squash_types(typed->size, a, point);
         break;
+    case SProcType: {
+        for (size_t i = 0; i < typed->proc_type.args.len; i++) {
+            squash_types(typed->proc_type.args.data[i], a, point);
+        }
+
+        squash_types(typed->proc_type.return_type, a, point);
+        break;
+    }
+    case SStructType: {
+        for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
+            squash_types(typed->struct_type.fields.data[i].val, a, point);
+        }
+        break;
+    }
+    case SEnumType: {
+        for (size_t i = 0; i < typed->enum_type.variants.len; i++) {
+            PtrArray* args = typed->enum_type.variants.data[i].val;
+
+            for (size_t j = 0; j < args->len; j++) {
+                squash_types(args->data[j], a, point);
+            }
+        }
+        break;
+    }
+    case SResetType: {
+        squash_types(typed->reset_type.in, a, point);
+        squash_types(typed->reset_type.out, a, point);
+        break;
+    }
+    case SDynamicType: {
+        squash_types(typed->dynamic_type, a, point);
+        break;
+    }
+    case SAllType:
+        squash_types(typed->bind_type.body, a, point);
+        break;
+    case STypeFamily:
+        squash_types(typed->bind_type.body, a, point);
+        break;
     case SCheckedType:
         squash_type(typed->type_val);
         break;
@@ -779,6 +914,7 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
             String sym = *symbol_to_string(untyped->variable);
             throw_error(point, string_cat(msg, sym, a));
         }
+
         if (e.value) {
             untyped->type = SCheckedType;
             untyped->ptype = e.ptype;
@@ -879,7 +1015,7 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         untyped->type_val = out_type;
         break;
     }
-    case SForallType: {
+    case SAllType: {
         panic(mv_string("eval_type not implemented for All"));
         break;
     }
@@ -889,6 +1025,20 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     }
     case STypeFamily: {
         panic(mv_string("eval_type not implemented for Family"));
+        break;
+    }
+    case SApplication: {
+        eval_type(untyped->application.function, env, a, point);
+        if (untyped->application.function->ptype->sort != TKind) {
+            panic(mv_string("Type application expects kind"));
+        }
+        PtrArray args = mk_ptr_array(untyped->application.args.len, a);
+        for (size_t i = 0; i < untyped->application.args.len; i++) {
+            Syntax* arg = untyped->application.args.data[i];
+            eval_type(arg, env, a, point);
+            push_ptr(arg->type_val, &args);
+        }
+        untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
         break;
     }
     case SCheckedType: break; // Can leave blank

@@ -73,6 +73,7 @@ typedef enum TermFormer {
     FResetType,
     FDynamicType,
     FAllType,
+    FFamily,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

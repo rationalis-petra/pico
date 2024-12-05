@@ -25,6 +25,7 @@ typedef enum {
     ALocalDirect,
     ALocalIndirect,
     AGlobal,
+    ATypeVar,
     ANotFound,
     ATooManyLocals,
 } AddressEntry_t;
@@ -71,9 +72,11 @@ void address_end_poly(AddressEnv* env, Allocator* a);
 
 
 //------------------------------------------------------------------------------
-// Manipulate an (extant) local environment: push and pop variables, or 
+// Manipulate an (extant) local environment: push and pop ariables, or 
 //  bind values associated with specific forms/values (e.g. enums/structs)
 //------------------------------------------------------------------------------
+
+void address_bind_type(Symbol s, AddressEnv* env);
 
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
 void address_pop_n(size_t n, AddressEnv* env);

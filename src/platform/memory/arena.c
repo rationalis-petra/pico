@@ -27,7 +27,7 @@ typedef struct {
 
 void* arena_malloc(size_t memsize, void* vctx) {
     ArenaContext* ctx = (ArenaContext*)vctx;
-    size_t alloc_size = memsize;
+    size_t alloc_size = memsize + sizeof(size_t);
     // TODO (TAGS: BUG FEAT): ensure allocations are aligned! 
 
     // if attempting to allocate more than a block of memory
@@ -48,14 +48,16 @@ void* arena_malloc(size_t memsize, void* vctx) {
         if (alloc_size < ctx->blocksize - current_block->bmp) {
             void* data = current_block->data + current_block->bmp;
             current_block->bmp += alloc_size;
-            return data;
+            *(size_t*)data = memsize;
+            return data + sizeof(size_t);
         } else {
             // allocate new block
             ArenaBlock new_block;
             new_block.data = mem_alloc(ctx->blocksize, ctx->internal_allocator);
             new_block.bmp = alloc_size;
             push_block(new_block, &ctx->memory_blocks);
-            return new_block.data;
+            *(size_t*)new_block.data = memsize;
+            return new_block.data + sizeof(size_t);
         }
     }
 }

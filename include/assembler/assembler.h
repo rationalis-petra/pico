@@ -131,6 +131,7 @@ typedef enum {
 // Location: Can be one of
 // + Register
 // + [Register + Offset]
+// + [Register + Index * Size + Offset ]
 // + Immediate
 typedef struct {
     Dest_t type;
@@ -142,13 +143,18 @@ typedef struct {
         int32_t immediate_32;
         int64_t immediate_64;
 
-        int8_t immediate_bytes[8];
+        uint8_t immediate_bytes[8];
     };
+
+    Regname index;
+    bool is_scale;  
+    uint8_t scale;
+
     uint8_t disp_sz;  
     union {
         int8_t disp_8;
         int32_t disp_32;
-        int8_t disp_bytes[4];
+        uint8_t disp_bytes[4];
     };
 
 } Location;
@@ -157,6 +163,9 @@ typedef struct {
 Location reg(Regname name);
 Location rref8(Regname name, int8_t offset);
 Location rref32(Regname name, int32_t offset);
+Location sib(Regname base, Regname index, uint8_t scale);
+Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement);
+Location sib32(Regname base, Regname index, uint8_t scale, int32_t displacement);
 Location imm8(int8_t immediate);
 Location imm16(int16_t immediate);
 Location imm32(int32_t immediate);
