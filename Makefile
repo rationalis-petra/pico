@@ -67,6 +67,7 @@ $(DEBUG_DIR)/%.c.o: %.c
 ## Same process as above but for tests
 
 TEST_DIR := $(BUILD_DIR)/test
+TEST_INC_DIR := ./test/include
 TEST_SRC_DIRS := ./test/src
 TARGET_TEST := pico_test
 
@@ -74,13 +75,13 @@ TEST_SRCS := $(shell find $(TEST_SRC_DIRS) -name '*.c')
 TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o)
 
 # Final build step for tests 
-$(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS)
-	$(CC) $(TEST_OBJS) -o $@ $(LDFLAGS)
+$(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS) $(DEBUG_OBJS)
+	$(CC) $(TEST_OBJS) $(DEBUG_OBJS) -I $(TEST_INC_DIR) -o $@ $(LDFLAGS) $(DEBUG_FLAGS) 
 
 # Build step for C tests
 $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(DEBUG_FLAGS) 
 
 .PHONY: clean
 clean:
