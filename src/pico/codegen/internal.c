@@ -91,7 +91,7 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     build_binary_op(ass, Mov, reg(RDI), mem_size, a, point);
 #elif ABI == WIN_64
     build_binary_op(ass, Mov, reg(RCX), mem_size, a, point);
-    build_binary_op(ass, Sub, reg(RSP), , imm32(32), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
@@ -108,8 +108,13 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     }
 }
 
-PiType* internal_type_app(PiType* val, PiType** args, size_t num_args) {
+PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
     Allocator* a = get_std_tmp_allocator();
+    // make args correct way round!
+    void** args = mem_alloc(sizeof(void*) * num_args, a);
+    for (size_t i = 0; i < num_args; i++){
+        args[i] = args_rev[(num_args - 1) - i];
+    }
     return type_app (*val, (PtrArray){.data = (void**)args, .len = num_args, .size = num_args}, a);
 }
 
@@ -245,7 +250,9 @@ void* mk_enum_ty(size_t len, uint64_t* shape, SymPtrCell* data) {
 
 void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Generate a dynamic allocation
-    // TODO (BUG UB): allocate this memory into a data-section
+    // Note: this allocation is fine for definitions as types get copied,
+    // probably not fine if we have a proc which returns an enum!
+    // in that case we maybe want this in a data-segment?
     uint64_t* sml_shape = mem_alloc(sizeof(uint64_t) * shape.variants.len, a);
     for (size_t i = 0; i < shape.variants.len; i++) {
         sml_shape[i] = ((PtrArray*)shape.variants.data[i].val)->len;
@@ -258,7 +265,7 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
 #elif ABI == WIN_64
     build_binary_op(ass, Mov, reg(RCX), imm64(shape.variants.len), a, point);
     build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)sml_shape), a, point);
-    build_binary_op(ass, Mov, reg(R8X), data, a, point);
+    build_binary_op(ass, Mov, reg(R8), data, a, point);
 
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else 
@@ -393,7 +400,9 @@ void* mk_forall_ty(size_t len, Symbol* syms, PiType* body) {
 
 
 void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // TODO (BUG UB): allocate symbol array in data section
+    // Note: this allocation is fine for definitions as types get copied,
+    // probably not fine if we have a proc which returns a forall!
+    // in that case we maybe want this in a data-segment?
 
     void* data = mem_alloc(syms.len * sizeof(Symbol), a);
     memcpy(data, syms.data, syms.len * sizeof(Symbol));
@@ -403,7 +412,9 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
     build_binary_op(ass, Mov, reg(RSI), imm64((uint64_t)data),a, point);
     build_unary_op(ass, Pop, reg(RDX), a, point);
 #elif ABI == WIN_64
-    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Mov, reg(RCX), imm64(syms.len), a, point);
+    build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)data),a, point);
+    build_unary_op(ass, Pop, reg(R8), a, point);
 
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else 
@@ -437,8 +448,9 @@ void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
 
 
 void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // TODO (BUG UB): allocate symbol array in data section
-
+    // Note: this allocation is fine for definitions as types get copied,
+    // probably not fine if we have a proc which returns a family!
+    // in that case we maybe want this in a data-segment?
     void* data = mem_alloc(syms.len * sizeof(Symbol), a);
     memcpy(data, syms.data, syms.len * sizeof(Symbol));
 
@@ -447,7 +459,9 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
     build_binary_op(ass, Mov, reg(RSI), imm64((uint64_t)data),a, point);
     build_unary_op(ass, Pop, reg(RDX), a, point);
 #elif ABI == WIN_64
-    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Mov, reg(RCX), imm64(syms.len), a, point);
+    build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)data),a, point);
+    build_unary_op(ass, Pop, reg(R8), a, point);
 
     build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
 #else 
