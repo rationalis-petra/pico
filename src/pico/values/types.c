@@ -58,6 +58,11 @@ void delete_pi_type(PiType t, Allocator* a) {
         delete_pi_type_p(t.dynamic, a);
         break;
     }
+    case TDistinct: {
+        delete_pi_type_p(t.distinct.type, a);
+        break;
+    }
+
     case TAll:
     case TExists:
     case TFam: {
@@ -144,6 +149,11 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.dynamic = copy_pi_type_p(t.dynamic, a);
         break;
     case TResumeMark:
+        break;
+    case TDistinct:
+        out.distinct.type = copy_pi_type_p(t.distinct.type, a);
+        out.distinct.id = t.distinct.id;
+        out.distinct.source_module = t.distinct.source_module;
         break;
     case TVar:
         out.var = t.var;
@@ -367,6 +377,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TDistinct:  {
+        out = pretty_pi_value(val, type->distinct.type, a);
+        break;
+    }
     case TKind:  {
         PiType** ptype = (PiType**) val;
         out = pretty_type(*ptype, a);
@@ -506,6 +520,15 @@ Document* pretty_type(PiType* type, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
         push_ptr(pretty_type(type->dynamic, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case TDistinct:  {
+        PtrArray nodes = mk_ptr_array(5, a);
+        push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
+        push_ptr(pretty_type(type->distinct.type, a), &nodes);
         out = mv_cat_doc(nodes, a);
         break;
     }
@@ -697,8 +720,14 @@ size_t pi_size_of(PiType type) {
     case TDynamic:
         return ADDRESS_SIZE;
     }
+    case TDistinct: {
+        return pi_size_of(*type.distinct.type);
+    }
     case TAll: {
         return sizeof(void*);
+    }
+    case TFam: {
+        panic(mv_string("pi_size_of received invalid type: Family."));
     }
     case TKind: 
         return sizeof(void*);
@@ -739,6 +768,10 @@ UVarGenerator* mk_gen(Allocator* a) {
 void delete_gen(UVarGenerator* gen, Allocator* a) {
     mem_free(gen, a);
 }
+
+// TODO (UB): make this thread safe
+static int id_counter = 0;
+uint64_t distinct_id() {return id_counter++;}
 
 void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
     switch (body->sort) {
@@ -865,7 +898,6 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...) {
 
     return (PiType) {.sort = TStruct, .structure.fields = fields,};
 }
-
 
 PiType mk_string_type(Allocator* a) {
     // Struct [.memsize U64] [.bytes Address]

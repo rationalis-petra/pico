@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/threads.h"
 
@@ -271,15 +272,21 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FSequence:
         out = mk_str_doc(mv_string("::sequence"), a);
         break;
+    case FModule:
+        out = mk_str_doc(mv_string("::module"), a);
+        break;
 
     case FIs:
         out = mk_str_doc(mv_string("::is"), a);
         break;
+    case FInTo:
+        out = mk_str_doc(mv_string("::into"), a);
+        break;
+    case FOutOf:
+        out = mk_str_doc(mv_string("::out-of"), a);
+        break;
     case FDynAlloc:
         out = mk_str_doc(mv_string("::dynamic-allocate"), a);
-        break;
-    case FModule:
-        out = mk_str_doc(mv_string("::module"), a);
         break;
 
         // Type formers
@@ -298,11 +305,18 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynamicType:
         out = mk_str_doc(mv_string("::DynamicType"), a);
         break;
+    case FDistinctType:
+        out = mk_str_doc(mv_string("::DistinctType"), a);
+        break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);
         break;
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
+        break;
+
+    default:
+        panic(mv_string("Unrecognized term former to pretty-former"));
         break;
     }
     return out;

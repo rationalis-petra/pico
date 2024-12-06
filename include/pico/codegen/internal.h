@@ -52,6 +52,7 @@ void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 
 
 #endif

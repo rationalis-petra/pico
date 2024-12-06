@@ -781,6 +781,34 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FInTo: {
+        if (raw.nodes.len != 3) {
+            throw_error(point, mv_string("Term former 'into' expects precisely 2 arguments!"));
+        }
+
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SInTo,
+            .into = {.val = term, .type = type},
+        };
+        break;
+    }
+    case FOutOf: {
+        if (raw.nodes.len != 3) {
+            throw_error(point, mv_string("Term former 'out-of' expects precisely 2 arguments!"));
+        }
+
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SOutOf,
+            .into = {.val = term, .type = type},
+        };
+        break;
+    }
     case FDynAlloc: {
         if (raw.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'dynamic-alloc' expects precisely 1 arguments!"));
@@ -912,6 +940,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         *res = (Syntax) {
             .type = SDynamicType,
             .dynamic_type = dyn_ty,
+        };
+        break;
+    }
+    case FDistinctType: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed distinct expression."));
+        }
+        Syntax* distinct = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDistinctType,
+            .distinct_type = distinct,
         };
         break;
     }

@@ -12,13 +12,15 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
     EvalResult res;
     switch (top.type) {
     case TLExpr: {
-        size_t sz = pi_size_of(*top.expr->ptype);
+        PiType indistinct_type = *top.expr->ptype;
+        while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
+        size_t sz = pi_size_of(indistinct_type);
 
-        if (top.expr->ptype->sort == TPrim
-            || top.expr->ptype->sort == TStruct
-            || top.expr->ptype->sort == TEnum
-            || top.expr->ptype->sort == TDynamic
-            || top.expr->ptype->sort == TKind) {
+        if (indistinct_type.sort == TPrim
+            || indistinct_type.sort == TStruct
+            || indistinct_type.sort == TEnum
+            || indistinct_type.sort == TDynamic
+            || indistinct_type.sort == TKind) {
             res.type = ERValue;
             res.val.type = top.expr->ptype;
             res.val.val = pico_run_expr(ass, sz, a, point);
@@ -28,14 +30,16 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         }
         break;
     }
-    case TLDef:
+    case TLDef: {
+        PiType indistinct_type = *top.def.value->ptype;
+        while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
         // copy into module
         res = (EvalResult) {
             .type = ERDef,
             .def.name = top.def.bind,
             .def.type = top.def.value->ptype,
         };
-        switch (top.def.value->ptype->sort) {
+        switch (indistinct_type.sort) {
         case TAll:
         case TProc:
             add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
@@ -54,6 +58,7 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             throw_error(point, mv_string("Unrecognized type to define."));
             break;
         }
+    }
     }
 
     return res;

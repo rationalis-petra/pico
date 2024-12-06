@@ -120,24 +120,28 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local direct"));
             break;
-        case AGlobal:
+        case AGlobal: {
+            PiType indistinct_type = *syn.ptype;
+            while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
+
             // Use RAX as a temp
-            // Note: casting void* to uint64_t only works for 64-bit systems...
-            if (syn.ptype->sort == TProc || syn.ptype->sort == TAll) {
+            // Note: casting void* to uint64_t only works for 64-bit systems,
+            // will need other option in 32 bit systems
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 build_unary_op(ass, Push, reg(R9), a, point);
-            } else if (syn.ptype->sort == TPrim || syn.ptype->sort == TDynamic) {
+            } else if (indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
                 build_unary_op(ass, Push, reg(R9), a, point);
-            } else if (syn.ptype->sort == TKind) {
+            } else if (indistinct_type.sort == TKind) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_unary_op(ass, Push, reg(RCX), a, point);
-            } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
+            } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
@@ -151,6 +155,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                 throw_error(point, mv_string("Codegen: Global has unsupported sort"));
             }
             break;
+        }
         case ATypeVar:
             gen_mk_type_var(syn.variable, ass, a, point);
             break;
@@ -1006,6 +1011,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SIs:
         generate(*syn.is.val, env, ass, links, a, point);
         break;
+    case SInTo:
+        generate(*syn.into.val, env, ass, links, a, point);
+        break;
+    case SOutOf:
+        generate(*syn.out_of.val, env, ass, links, a, point);
+        break;
     case SDynAlloc:
         generate(*syn.size, env, ass, links, a, point);
 
@@ -1172,13 +1183,17 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         panic(mv_string("Monomorphic codegen does not support exists type!"));
         break;
     case STypeFamily:
-        // Forall type structure: (array symbol) body
+        // Family type structure: (array symbol) body
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
         generate(*(Syntax*)syn.bind_type.body, env, ass, links, a, point);
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
+        break;
+    case SDistinctType:
+        generate(*(Syntax*)syn.distinct_type, env, ass, links, a, point);
+        gen_mk_distinct_ty(ass, a, point);
         break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));

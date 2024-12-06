@@ -1,5 +1,4 @@
 ﻿#include "platform/error.h"
-
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"

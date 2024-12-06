@@ -21,29 +21,14 @@
  */
 
 
-#include "platform/error.h"
-
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
-#include "platform/memory/arena.h"
-#include "platform/jump.h"
 
 #include "data/string.h"
 #include "data/stream.h"
 
 #include "assembler/assembler.h"
-#include "pretty/stream_printer.h"
-#include "pretty/document.h"
-
-#include "pico/syntax/concrete.h"
-#include "pico/parse/parse.h"
-#include "pico/binding/environment.h"
-#include "pico/analysis/abstraction.h"
-#include "pico/analysis/typecheck.h"
-#include "pico/codegen/codegen.h"
-#include "pico/eval/call.h"
 #include "pico/values/stdlib.h"
-#include "pico/values/types.h"
 
 #include "test/command_line_opts.h"
 #include "test_pico/pico.h"

@@ -599,6 +599,32 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                      env, gen, a, point);
         untyped->ptype = untyped->is.type->type_val; 
         break;
+    case SInTo: {
+        eval_type(untyped->is.type, env, a, point);
+        PiType* distinct_type = untyped->is.type->type_val;
+        if (distinct_type->sort != TDistinct) {
+            throw_error(point, mv_string("into must move a value into a distinct type!"));
+        }
+
+        type_check_i(untyped->into.val,
+                     distinct_type->distinct.type,
+                     env, gen, a, point);
+        untyped->ptype = distinct_type; 
+        break;
+    }
+    case SOutOf: {
+        eval_type(untyped->is.type, env, a, point);
+        PiType* distinct_type = untyped->out_of.type->type_val;
+        if (distinct_type->sort != TDistinct) {
+            throw_error(point, mv_string("out-of must move a value out of a distinct type!"));
+        }
+
+        type_check_i(untyped->is.val,
+                     distinct_type,
+                     env, gen, a, point);
+        untyped->ptype = distinct_type->distinct.type; 
+        break;
+    }
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -696,6 +722,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         type_check_i(untyped->bind_type.body, aty, env, gen, a, point);
         pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
+    case SDistinctType: {
+        type_infer_i(untyped->distinct_type, env, gen, a, point);
+        untyped->ptype= untyped->distinct_type->ptype;
+        if (untyped->ptype->sort != TKind) {
+            throw_error(point, mv_string("Distinct expects types and families as arguments!"));
+        }
         break;
     }
     default:
@@ -837,6 +871,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_type(typed->is.type->type_val);
         squash_types(typed->is.val, a, point);
         break;
+    case SInTo:
+        squash_type(typed->into.type->type_val);
+        squash_types(typed->into.val, a, point);
+        break;
+    case SOutOf:
+        squash_type(typed->out_of.type->type_val);
+        squash_types(typed->out_of.val, a, point);
+        break;
     case SDynAlloc:
         squash_types(typed->size, a, point);
         break;
@@ -878,6 +920,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);
+        break;
+    case SDistinctType:
+        squash_types(typed->distinct_type, a, point);
         break;
     case SCheckedType:
         squash_type(typed->type_val);

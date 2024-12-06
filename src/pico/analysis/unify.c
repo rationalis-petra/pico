@@ -102,6 +102,14 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         return unify(lhs->reset.out, rhs->reset.out, a);
     } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
         return unify(lhs->dynamic, rhs->dynamic, a);
+    } else if (lhs->sort == TDistinct && rhs->sort == TDistinct) {
+        if (lhs->distinct.id != rhs->distinct.id) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs", a),
+            };
+        }
+        return unify(lhs->distinct.type, rhs->distinct.type, a);
     } else if (lhs->sort == TKind && rhs->sort == TKind) {
         if (lhs->kind.nargs == rhs->kind.nargs)
             return (Result) {.type = Ok};
@@ -181,10 +189,15 @@ bool has_unification_vars_p(PiType type) {
     case TDynamic: {
         return has_unification_vars_p(*type.dynamic);
     };
-
+    case TDistinct: {
+        return has_unification_vars_p(*type.distinct.type);
+    }
     case TVar: return false;
     
     case TAll: {
+        return has_unification_vars_p(*type.binder.body);
+    }
+    case TFam: {
         return has_unification_vars_p(*type.binder.body);
     }
 
@@ -252,6 +265,11 @@ void squash_type(PiType* type) {
     case TAll: 
     case TFam: {
         squash_type(type->binder.body);
+        break;
+    }
+    case TDistinct: {
+        squash_type(type->distinct.type);
+        break;
     }
 
     case TKind: break;

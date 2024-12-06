@@ -722,6 +722,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("is"));
     add_def(module, sym, type, &former);
 
+    former = FInTo;
+    sym = string_to_symbol(mv_string("into"));
+    add_def(module, sym, type, &former);
+
+    former = FOutOf;
+    sym = string_to_symbol(mv_string("out-of"));
+    add_def(module, sym, type, &former);
+
     former = FDynAlloc;
     sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former);
@@ -744,6 +752,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FDynamicType;
     sym = string_to_symbol(mv_string("Dynamic"));
+    add_def(module, sym, type, &former);
+
+    former = FDistinctType;
+    sym = string_to_symbol(mv_string("Distinct"));
     add_def(module, sym, type, &former);
 
     former = FAllType;
