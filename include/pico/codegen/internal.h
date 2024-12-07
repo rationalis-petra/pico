@@ -11,9 +11,7 @@
 
 #include "pico/codegen/codegen.h"
 
-/* Utility functions shared across code generation  
- * 
- */
+/* Utility functions shared across code generation */
 
 typedef struct {
     size_t offset;
@@ -53,6 +51,7 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 
 
 #endif

@@ -1164,7 +1164,6 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate(*(Syntax*)syn.reset_type.out, env, ass, links, a, point);
         gen_mk_reset_ty(ass, a, point);
         address_stack_shrink(env, ADDRESS_SIZE);
-
         break;
     case SDynamicType:
         generate(*(Syntax*)syn.dynamic_type, env, ass, links, a, point);
@@ -1194,6 +1193,10 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SDistinctType:
         generate(*(Syntax*)syn.distinct_type, env, ass, links, a, point);
         gen_mk_distinct_ty(ass, a, point);
+        break;
+    case SOpaqueType:
+        generate(*(Syntax*)syn.opaque_type, env, ass, links, a, point);
+        gen_mk_opaque_ty(ass, a, point);
         break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));

@@ -506,17 +506,35 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Push, reg(RAX), a, point);
 }
 
+void* mk_opaque_ty(PiType* body) {
+    Allocator* a = get_std_tmp_allocator();
+    Module* current = get_std_current_module();
 
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = body,
+        .distinct.id = distinct_id(),
+        .distinct.source_module = current,
+    };
+    return ty;
+}
 
+void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
 
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_opaque_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
 
-
-
-
-
-
-
-
-
-
-
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+    build_unary_op(ass, Push, reg(RAX), a, point);
+}

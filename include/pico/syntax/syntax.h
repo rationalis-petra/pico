@@ -68,6 +68,7 @@ typedef enum {
     SResetType,
     SDynamicType,
     SDistinctType,
+    SOpaqueType,
     SAllType,
     SExistsType,
     STypeFamily,
@@ -289,6 +290,7 @@ struct Syntax {
         Syntax* dynamic_type;
         SynBind bind_type;
         Syntax* distinct_type;
+        Syntax* opaque_type;
         PiType* type_val;
     };
     PiType* ptype;

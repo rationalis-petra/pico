@@ -75,6 +75,7 @@ typedef enum TermFormer {
     FResetType,
     FDynamicType,
     FDistinctType,
+    FOpaqueType,
     FAllType,
     FFamily,
 } TermFormer;

@@ -17,8 +17,20 @@
 static jump_buf* m_buf;
 void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
-static Module* current_module;
-void set_current_module(Module* current) { current_module = current; }
+static uint64_t std_current_module;
+Module* get_std_current_module() {
+    void** data = get_dynamic_memory();
+    Module** dyn = data[std_current_module]; 
+    return *dyn;
+}
+
+Module* set_std_current_module(Module* md) {
+    void** data = get_dynamic_memory();
+    Module** mdle = data[std_current_module]; 
+    Module* old = *mdle;
+    *mdle = md;
+    return old;
+}
 
 static Package* current_package;
 void set_current_package(Package* current) { current_package = current; }
@@ -32,22 +44,18 @@ void set_std_ostream(OStream* current) { current_ostream = current; }
 static uint64_t std_allocator; 
 
 static uint64_t std_tmp_allocator; 
-void bind_std_tmp_allocator(Allocator* al) {
-    void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_tmp_allocator]; 
-    *dyn = al;
-}
-
 Allocator* get_std_tmp_allocator() {
     void** data = get_dynamic_memory();
     Allocator** dyn = data[std_tmp_allocator]; 
     return *dyn;
 }
 
-void release_std_tmp_allocator(Allocator* al) {
+Allocator* set_std_tmp_allocator(Allocator* al) {
     void** data = get_dynamic_memory();
     Allocator** dyn = data[std_tmp_allocator]; 
+    Allocator* old = *dyn;
     *dyn = al;
+    return old;
 }
 
 //------------------------------------------------------------------------------
@@ -224,6 +232,7 @@ void run_script_c_fun(String filename) {
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
+    Module* current_module = get_std_current_module();
     run_script_from_istream(sfile, current_ostream, current_module, a);
     delete_istream(sfile, a);
 }
@@ -758,6 +767,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Distinct"));
     add_def(module, sym, type, &former);
 
+    former = FOpaqueType;
+    sym = string_to_symbol(mv_string("Opaque"));
+    add_def(module, sym, type, &former);
+
     former = FAllType;
     sym = string_to_symbol(mv_string("All"));
     add_def(module, sym, type, &former);
@@ -927,6 +940,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
 
     void* nul = NULL;
     std_tmp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
+    std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     type = mk_dynamic_type(a, mk_prim_type(Address));
     sym = string_to_symbol(mv_string("temp-allocator"));

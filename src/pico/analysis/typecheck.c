@@ -7,6 +7,7 @@
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
+#include "pico/values/stdlib.h"
 
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
@@ -605,6 +606,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         if (distinct_type->sort != TDistinct) {
             throw_error(point, mv_string("into must move a value into a distinct type!"));
         }
+        Module* current = get_std_current_module();
+        if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
+            throw_error(point, mv_string("into for opaque types can only be used in the same module!"));
+        }
 
         type_check_i(untyped->into.val,
                      distinct_type->distinct.type,
@@ -617,6 +622,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* distinct_type = untyped->out_of.type->type_val;
         if (distinct_type->sort != TDistinct) {
             throw_error(point, mv_string("out-of must move a value out of a distinct type!"));
+        }
+        Module* current = get_std_current_module();
+        if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
+            throw_error(point, mv_string("out-of for opaque types can only be used in the same module!"));
         }
 
         type_check_i(untyped->is.val,
@@ -729,6 +738,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype= untyped->distinct_type->ptype;
         if (untyped->ptype->sort != TKind) {
             throw_error(point, mv_string("Distinct expects types and families as arguments!"));
+        }
+        break;
+    }
+    case SOpaqueType: {
+        type_infer_i(untyped->distinct_type, env, gen, a, point);
+        untyped->ptype= untyped->distinct_type->ptype;
+        if (untyped->ptype->sort != TKind) {
+            throw_error(point, mv_string("Opaque expects types and families as arguments!"));
         }
         break;
     }
@@ -923,6 +940,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SDistinctType:
         squash_types(typed->distinct_type, a, point);
+        break;
+    case SOpaqueType:
+        squash_types(typed->opaque_type, a, point);
         break;
     case SCheckedType:
         squash_type(typed->type_val);

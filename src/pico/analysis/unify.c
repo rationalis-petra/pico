@@ -103,10 +103,10 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
     } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
         return unify(lhs->dynamic, rhs->dynamic, a);
     } else if (lhs->sort == TDistinct && rhs->sort == TDistinct) {
-        if (lhs->distinct.id != rhs->distinct.id) {
+        if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
             return (Result) {
                 .type = Err,
-                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs", a),
+                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs or source modules", a),
             };
         }
         return unify(lhs->distinct.type, rhs->distinct.type, a);

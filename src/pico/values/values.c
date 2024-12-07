@@ -308,6 +308,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDistinctType:
         out = mk_str_doc(mv_string("::DistinctType"), a);
         break;
+    case FOpaqueType:
+        out = mk_str_doc(mv_string("::OpaqueType"), a);
+        break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);
         break;

@@ -525,7 +525,11 @@ Document* pretty_type(PiType* type, Allocator* a) {
     }
     case TDistinct:  {
         PtrArray nodes = mk_ptr_array(5, a);
-        push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+        if (type->distinct.source_module) {
+            push_ptr(mk_str_doc(mv_string("Opaque #" ), a), &nodes);
+        } else {
+            push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+        }
         push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
         push_ptr(pretty_type(type->distinct.type, a), &nodes);

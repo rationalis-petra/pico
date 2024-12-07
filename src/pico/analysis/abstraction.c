@@ -955,6 +955,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FOpaqueType: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed opaque expression."));
+        }
+        Syntax* opaque = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SOpaqueType,
+            .opaque_type = opaque,
+        };
+        break;
+    }
     case FAllType: {
         if (raw.nodes.len < 3) {
             throw_error(point, mk_string("All term former requires at least 2 arguments!", a));
