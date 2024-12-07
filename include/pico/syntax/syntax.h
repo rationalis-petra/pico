@@ -56,6 +56,8 @@ typedef enum {
 
     // Special
     SIs,
+    SInTo,
+    SOutOf,
     SDynAlloc,
     SModule,
 
@@ -65,6 +67,8 @@ typedef enum {
     SEnumType,
     SResetType,
     SDynamicType,
+    SDistinctType,
+    SOpaqueType,
     SAllType,
     SExistsType,
     STypeFamily,
@@ -275,6 +279,8 @@ struct Syntax {
         SynSequence sequence;
 
         SynIs is;
+        SynIs into;
+        SynIs out_of;
         Syntax* size;
 
         SynProcType proc_type;
@@ -283,15 +289,14 @@ struct Syntax {
         SynResetType reset_type;
         Syntax* dynamic_type;
         SynBind bind_type;
+        Syntax* distinct_type;
+        Syntax* opaque_type;
         PiType* type_val;
     };
     PiType* ptype;
 };
 
 
-/* The Syntax Destructor */
-void delete_syntax(Syntax syntax, Allocator* a);
-void delete_syntax_pointer(Syntax* syntax, Allocator* a);
 
 
 /* Other instances */
@@ -318,9 +323,6 @@ typedef struct {
         Syntax* expr;
     };
 } TopLevel;
-
-void delete_def(Definition def, Allocator* a);
-void delete_toplevel(TopLevel top, Allocator* a);
 
 Document* pretty_def(Definition* def, Allocator* a);
 Document* pretty_toplevel(TopLevel* TopLevel, Allocator* a);

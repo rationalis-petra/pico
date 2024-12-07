@@ -1,5 +1,4 @@
 ﻿#include "platform/error.h"
-
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
@@ -167,7 +166,7 @@ int main(int argc, char** argv) {
 
     Module* module = get_module(string_to_symbol(mv_string("user")), base);
 
-    set_current_module(module);
+    set_std_current_module(module);
     set_current_package(base);
     set_std_istream(cin);
     set_std_ostream(cout);

@@ -37,6 +37,9 @@ typedef enum {
     TResumeMark,
     TDynamic,
 
+    // Distinct is kinda special?
+    TDistinct,
+
     // Quantified Types
     TVar,
     TAll,
@@ -45,6 +48,7 @@ typedef enum {
     // Used by Sytem-Fω (type constructors)
     TCApp,
     TFam,
+
 
     // Kinds (higher kinds not supported)
     TKind,
@@ -88,6 +92,19 @@ typedef struct {
 } TypeBinder;
 
 typedef struct {
+    PiType* type;
+    uint64_t id;
+    void* source_module;
+} DistinctType;
+
+typedef struct {
+    PiType* body;
+    uint64_t id;
+    PtrArray* args;
+    void* source_module;
+} DistinctTypeApp;
+
+typedef struct {
     size_t nargs;
 } PiKind;
 
@@ -106,6 +123,9 @@ struct PiType {
         uint64_t var;
         TAppType app;
         TypeBinder binder;
+
+        DistinctType distinct;
+        DistinctTypeApp distinct_app;
 
         PiKind kind;
 
@@ -138,6 +158,7 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
+uint64_t distinct_id();
 
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
@@ -149,5 +170,6 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...);
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
 PiType mk_string_type(Allocator* a);
+
 
 #endif

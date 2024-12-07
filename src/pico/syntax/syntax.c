@@ -1,5 +1,7 @@
-#include "pico/syntax/syntax.h"
+#include "platform/signals.h"
 #include "pretty/standard_types.h"
+
+#include "pico/syntax/syntax.h"
 
 typedef struct SyntaxCall {
     Symbol field;
@@ -25,38 +27,6 @@ Syntax* mk_lit_typed_int_syn(const int64_t value, PrimType prim, Allocator* a) {
         .integral.type = prim,
     };
     return out;
-}
-
-/* The Syntax Destructor */
-void delete_syntax(Syntax syntax, Allocator* a) {
-    switch (syntax.type) {
-    case SLitUntypedIntegral:
-    case SLitTypedIntegral:
-    case SLitBool: 
-        // Nothing 
-        break;
-    case SApplication: {
-        delete_syntax_pointer(syntax.application.function, a);
-        for (size_t i = 0; i < syntax.application.args.len; i++) {
-            delete_syntax_pointer(syntax.application.args.data[i], a);
-        }
-        sdelete_ptr_array(syntax.application.args);
-        break;
-    }
-    case SIf: {
-        delete_syntax_pointer(syntax.if_expr.condition, a);
-        delete_syntax_pointer(syntax.if_expr.true_branch, a);
-        delete_syntax_pointer(syntax.if_expr.false_branch, a);
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-void delete_syntax_pointer(Syntax* syntax, Allocator* a) {
-    delete_syntax(*syntax, a);
-    mem_free(syntax, a);
 }
 
 Document* pretty_syntax(Syntax* syntax, Allocator* a) {
@@ -321,6 +291,24 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
+    case SInTo: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(into "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
+        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case SOutOf: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("(out-of "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
+        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case SDynAlloc: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("(dyn-alloc "), a), &nodes);
@@ -485,6 +473,14 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case SDistinctType: {
+        PtrArray nodes = mk_ptr_array(3, a) ;
+        push_ptr(mk_str_doc(mv_string("(Distinct "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->distinct_type, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case SAllType: {
         PtrArray nodes = mk_ptr_array(5, a) ;
         push_ptr(mk_str_doc(mv_string("(All ["), a), &nodes);
@@ -529,30 +525,11 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_str_doc(mk_string("Pretty syntax not implemented for annotation!", a), a);
         break;
     }
+    default:
+        panic(mv_string("Internal Error in pretty_syntax: Unknown syntax Type"));
     }
 
-    // If no valid type was provided, panic/error
-    // Note: this is done outside the switch so the compiler still warns us when
-    // we miss a case!
-    if (!out) {
-        out = mv_str_doc(mk_string("Internal Error in pretty_syntax: Unknown syntax Type", a), a);
-    }
     return out;
-}
-
-void delete_def(Definition def, Allocator* a) {
-    delete_syntax_pointer(def.value, a);
-}
-
-void delete_toplevel(TopLevel top, Allocator* a) {
-    switch(top.type) {
-    case TLDef:
-        delete_def(top.def, a);
-        break;
-    case TLExpr:
-        delete_syntax_pointer(top.expr, a);
-        break;
-    }
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {
