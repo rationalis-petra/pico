@@ -10,15 +10,16 @@
 void set_exit_callback(jump_buf* buf);
 
 // Set the default value of dynamic variables
-void set_current_module(Module* current);
+
+Module* get_std_current_module();
+Module* set_std_current_module(Module* al);
+
 void set_current_package(Package* current);
 void set_std_istream(IStream* current);
 void set_std_ostream(OStream* current);
 
-
 Allocator* get_std_tmp_allocator();
-void bind_std_tmp_allocator(Allocator* al);
-void release_std_tmp_allocator(Allocator* al);
+Allocator* set_std_tmp_allocator(Allocator* al);
 
 Allocator* get_std_allocator();
 

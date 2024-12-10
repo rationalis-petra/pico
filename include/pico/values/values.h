@@ -60,11 +60,13 @@ typedef enum TermFormer {
     FWithReset,
     FResetTo,
     FSequence,
+    FModule,
 
     // Special Term formers
     FIs,
+    FInTo,
+    FOutOf,
     FDynAlloc,
-    FModule,
 
     // Type formers
     FProcType,
@@ -72,6 +74,8 @@ typedef enum TermFormer {
     FEnumType,
     FResetType,
     FDynamicType,
+    FDistinctType,
+    FOpaqueType,
     FAllType,
     FFamily,
 } TermFormer;

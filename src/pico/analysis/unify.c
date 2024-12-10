@@ -102,6 +102,27 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         return unify(lhs->reset.out, rhs->reset.out, a);
     } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
         return unify(lhs->dynamic, rhs->dynamic, a);
+    } else if (lhs->sort == TDistinct && rhs->sort == TDistinct) {
+        if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs or source modules", a),
+            };
+        }
+
+        // Note: we can assume that either LHS and RHS both have args or neither
+        // do, as we have already checked they have the same IDs! (I think??)
+        if (lhs->distinct.args) {
+            Result res;
+            PtrArray lhs_args = *lhs->distinct.args;
+            PtrArray rhs_args = *rhs->distinct.args;
+            for (size_t i = 0; i < lhs_args.len; i++) {
+                res = unify(lhs_args.data[i], rhs_args.data[i], a);
+                if (res.type == Err) return res;
+            }
+        }
+
+        return unify(lhs->distinct.type, rhs->distinct.type, a);
     } else if (lhs->sort == TKind && rhs->sort == TKind) {
         if (lhs->kind.nargs == rhs->kind.nargs)
             return (Result) {.type = Ok};
@@ -110,6 +131,15 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
             };
+    } else if (lhs->sort == TVar && rhs->sort == TVar) {
+        // check they are the same var
+        if (lhs->var != rhs->var) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify different type variables", a),
+            };
+        }
+        return (Result) {.type = Ok} ;
     } else if (lhs->sort == rhs->sort) {
         return (Result) {
             .type = Err,
@@ -181,10 +211,15 @@ bool has_unification_vars_p(PiType type) {
     case TDynamic: {
         return has_unification_vars_p(*type.dynamic);
     };
-
+    case TDistinct: {
+        return has_unification_vars_p(*type.distinct.type);
+    }
     case TVar: return false;
     
     case TAll: {
+        return has_unification_vars_p(*type.binder.body);
+    }
+    case TFam: {
         return has_unification_vars_p(*type.binder.body);
     }
 
@@ -252,6 +287,11 @@ void squash_type(PiType* type) {
     case TAll: 
     case TFam: {
         squash_type(type->binder.body);
+        break;
+    }
+    case TDistinct: {
+        squash_type(type->distinct.type);
+        break;
     }
 
     case TKind: break;

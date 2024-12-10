@@ -143,6 +143,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
 
             generate_poly_stack_move(reg(RSP), reg(R9), reg(RAX), ass, a, point);
             break;
+        case ATypeVar:
+            throw_error(point, mv_string("Codegen not implemented for ATypeVar"));
+            break;
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
@@ -197,6 +200,34 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
     case SApplication: {
         // Generate the arguments
         for (size_t i = 0; i < syn.application.args.len; i++) {
+            Syntax* arg = (Syntax*) syn.application.args.data[i];
+            generate_polymorphic_i(*arg, env, ass, links, a, point);
+        }
+
+        // This will push a function pointer onto the stack
+        generate_polymorphic_i(*syn.application.function, env, ass, links, a, point);
+        
+        // Regular Function Call
+        // Pop the function into RCX; call the function
+        build_unary_op(ass, Pop, reg(RCX), a, point);
+        build_unary_op(ass, Call, reg(RCX), a, point);
+        break;
+    }
+    case SAllApplication: {
+        throw_error(point, mv_string("Internal error: cannot generate all application inside polymorphic code"));
+        // Generate the arguments
+        /*
+
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            src_offset += pi_runtime_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
+        }
+
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            PiType* type = *((Syntax*)syn.all_application.args.data[i])->ptype;
+            generate_polymorphic_type(*type, env, ass, links, a, point);
+        }
+
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
             generate_polymorphic_i(*arg, env, ass, links, a, point);
         }

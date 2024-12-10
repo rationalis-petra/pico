@@ -115,7 +115,9 @@ PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
     for (size_t i = 0; i < num_args; i++){
         args[i] = args_rev[(num_args - 1) - i];
     }
-    return type_app (*val, (PtrArray){.data = (void**)args, .len = num_args, .size = num_args}, a);
+    PiType fam = *val;
+    PtrArray arr = (PtrArray){.data = (void**)args, .len = num_args, .size = num_args};
+    return type_app (fam, arr, a);
 }
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -430,7 +432,6 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
     build_unary_op(ass, Push, reg(RAX), a, point);
 }
 
-
 void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
     Allocator* a = get_std_tmp_allocator();
 
@@ -445,7 +446,6 @@ void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
     };
     return ty;
 }
-
 
 void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: this allocation is fine for definitions as types get copied,
@@ -469,6 +469,72 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
 #endif
 
     build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_fam_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+    build_unary_op(ass, Push, reg(RAX), a, point);
+}
+
+void* mk_distinct_ty(PiType* body) {
+    Allocator* a = get_std_tmp_allocator();
+
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = body,
+        .distinct.id = distinct_id(),
+        .distinct.source_module = NULL,
+        .distinct.args = NULL,
+    };
+    return ty;
+}
+
+void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_distinct_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+    build_unary_op(ass, Push, reg(RAX), a, point);
+}
+
+void* mk_opaque_ty(PiType* body) {
+    Allocator* a = get_std_tmp_allocator();
+    Module* current = get_std_current_module();
+
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = body,
+        .distinct.id = distinct_id(),
+        .distinct.source_module = current,
+    };
+    return ty;
+}
+
+void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_unary_op(ass, Pop, reg(RDI), a, point);
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_opaque_ty), a, point);
     build_unary_op(ass, Call, reg(RAX), a, point);
 
 #if ABI == WIN_64

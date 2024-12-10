@@ -7,6 +7,7 @@
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
+#include "pico/values/stdlib.h"
 
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
@@ -128,7 +129,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             }
         } else {
             String* sym = symbol_to_string(untyped->variable);
-            String msg = mv_string("Couldn't find type of variable: ");
+            String msg = string_cat(mv_string("Couldn't find type of variable: "), *sym, a);
             throw_error(point, string_cat(msg, *sym, a));
         }
         break;
@@ -159,8 +160,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SAll: {
-        // give each arg type kind.
-
+        // Give each arg type kind.
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
@@ -599,6 +599,40 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                      env, gen, a, point);
         untyped->ptype = untyped->is.type->type_val; 
         break;
+    case SInTo: {
+        eval_type(untyped->is.type, env, a, point);
+        PiType* distinct_type = untyped->is.type->type_val;
+        if (distinct_type->sort != TDistinct) {
+            throw_error(point, mv_string("into must move a value into a distinct type!"));
+        }
+        Module* current = get_std_current_module();
+        if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
+            throw_error(point, mv_string("into for opaque types can only be used in the same module!"));
+        }
+
+        type_check_i(untyped->into.val,
+                     distinct_type->distinct.type,
+                     env, gen, a, point);
+        untyped->ptype = distinct_type; 
+        break;
+    }
+    case SOutOf: {
+        eval_type(untyped->is.type, env, a, point);
+        PiType* distinct_type = untyped->out_of.type->type_val;
+        if (distinct_type->sort != TDistinct) {
+            throw_error(point, mv_string("out-of must move a value out of a distinct type!"));
+        }
+        Module* current = get_std_current_module();
+        if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
+            throw_error(point, mv_string("out-of for opaque types can only be used in the same module!"));
+        }
+
+        type_check_i(untyped->is.val,
+                     distinct_type,
+                     env, gen, a, point);
+        untyped->ptype = distinct_type->distinct.type; 
+        break;
+    }
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -696,6 +730,22 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         type_check_i(untyped->bind_type.body, aty, env, gen, a, point);
         pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
+    case SDistinctType: {
+        type_infer_i(untyped->distinct_type, env, gen, a, point);
+        untyped->ptype= untyped->distinct_type->ptype;
+        if (untyped->ptype->sort != TKind) {
+            throw_error(point, mv_string("Distinct expects types and families as arguments!"));
+        }
+        break;
+    }
+    case SOpaqueType: {
+        type_infer_i(untyped->distinct_type, env, gen, a, point);
+        untyped->ptype= untyped->distinct_type->ptype;
+        if (untyped->ptype->sort != TKind) {
+            throw_error(point, mv_string("Opaque expects types and families as arguments!"));
+        }
         break;
     }
     default:
@@ -837,6 +887,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_type(typed->is.type->type_val);
         squash_types(typed->is.val, a, point);
         break;
+    case SInTo:
+        squash_type(typed->into.type->type_val);
+        squash_types(typed->into.val, a, point);
+        break;
+    case SOutOf:
+        squash_type(typed->out_of.type->type_val);
+        squash_types(typed->out_of.val, a, point);
+        break;
     case SDynAlloc:
         squash_types(typed->size, a, point);
         break;
@@ -879,6 +937,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);
         break;
+    case SDistinctType:
+        squash_types(typed->distinct_type, a, point);
+        break;
+    case SOpaqueType:
+        squash_types(typed->opaque_type, a, point);
+        break;
     case SCheckedType:
         squash_type(typed->type_val);
         break;
@@ -920,7 +984,8 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
             untyped->ptype = e.ptype;
             untyped->type_val = e.value;
         } else {
-            throw_error(point, mv_string("Variable expected to be type, was not!"));
+            String var = *symbol_to_string(untyped->variable);
+            throw_error(point, string_cat(mv_string("Variable expected to be type, was not: "), var, a));
         }
         break;
     }
