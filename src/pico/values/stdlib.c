@@ -319,10 +319,10 @@ void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif 
 
-    build_unary_op(ass, Pop, reg(RBX), a, point);
+    build_unary_op(ass, Pop, reg(RCX), a, point);
     build_binary_op(ass, Add, reg(RSP), imm32(8), a, point);
     build_unary_op(ass, Push, reg(RAX), a, point);
-    build_unary_op(ass, Push, reg(RBX), a, point);
+    build_unary_op(ass, Push, reg(RCX), a, point);
     build_nullary_op(ass, Ret, a, point);
 }
 

@@ -614,10 +614,10 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP), imm32(val_size), a, point);
-        build_binary_op(ass, Mov, reg(RBX), reg(RAX), a, point);
+        build_binary_op(ass, Mov, reg(RCX), reg(RAX), a, point);
 
         //void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
-        generate_monomorphic_copy(RSP, RBX, val_size, ass, a, point);
+        generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
         
         address_stack_shrink(env, ADDRESS_SIZE);
         address_stack_grow(env, val_size);
@@ -633,12 +633,18 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             generate(*dbind->expr, env, ass, links, a, point);
 
             // Copy the value into the dynamic var
-            // R15 is the dynamic memory register
-            build_binary_op(ass, Mov, reg(RBX), reg(R15), a, point);
-            build_binary_op(ass, Add, reg(RBX), rref8(RSP, bind_size), a, point);
-            build_binary_op(ass, Mov, reg(RBX), rref8(RBX, 0), a, point);
-
-            generate_monomorphic_swap(RBX, RSP, bind_size, ass, a, point);
+            // Currently, the stack looks like:
+            // + dynamic-var-index
+            //   new-value
+            // R15 is the dynamic memory register, move it into RCX
+            // Move the index into RAX
+            build_binary_op(ass, Mov, reg(RCX), reg(R15), a, point);
+            build_binary_op(ass, Mov, reg(RAX), rref8(RSP, bind_size), a, point);
+            // RCX holds the array - we need to index it with index located in RAX
+            build_binary_op(ass, Mov, reg(RCX), sib(RCX, RAX, 8), a, point);
+            // Now we have a pointer to the value stored in RCX, swap it with
+            // the value on the stack
+            generate_monomorphic_swap(RCX, RSP, bind_size, ass, a, point);
         }
 
         // Step 2: generate the body
@@ -646,7 +652,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t val_size = pi_size_of(*syn.dyn_let_expr.body->ptype);
 
         // Step 3: unwind the bindings
-        //  • Store the (address of the) current dynamic value to restore in RDX
+        //  • Store the (address of the) current dynamic value index to restore in RDX
         build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
         build_binary_op(ass, Add, reg(RDX), imm32(val_size), a, point);
 
@@ -655,13 +661,14 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             DynBinding* dbind = syn.dyn_let_expr.bindings.data[i];
             size_t bind_size = pi_size_of(*dbind->expr->ptype);
 
-            // Store ptr to dynamic var value in RBX 
-            build_binary_op(ass, Mov, reg(RBX), reg(R15), a, point);
-            build_binary_op(ass, Add, reg(RBX), rref8(RDX, bind_size), a, point);
-            build_binary_op(ass, Mov, reg(RBX), rref8(RBX, 0), a, point);
+            // Store ptr to dynamic memory (array) in RCX, and the index in RAX
+            build_binary_op(ass, Mov, reg(RCX), reg(R15), a, point);
+            build_binary_op(ass, Mov, reg(RAX), rref8(RDX, 0), a, point);
+            // RCX holds the array - we need to index it with index located in RAX
+            build_binary_op(ass, Mov, reg(RCX), sib(RCX, RAX, 8), a, point);
 
             // Store ptr to local value to restore in RDX 
-            generate_monomorphic_swap(RBX, RDX, bind_size, ass, a, point);
+            generate_monomorphic_swap(RCX, RDX, bind_size, ass, a, point);
             build_binary_op(ass, Add, reg(RDX), imm32(bind_size + ADDRESS_SIZE), a, point);
 
             offset_size += bind_size + ADDRESS_SIZE;
