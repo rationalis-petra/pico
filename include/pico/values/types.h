@@ -95,6 +95,7 @@ typedef struct {
     PiType* type;
     uint64_t id;
     void* source_module;
+    PtrArray* args;
 } DistinctType;
 
 typedef struct {

@@ -60,6 +60,11 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
     case TDistinct: {
         delete_pi_type_p(t.distinct.type, a);
+        if (t.distinct.args) {
+            for (size_t i = 0; i < t.distinct.args->len; i++)
+                delete_pi_type_p(t.distinct.args->data[i], a);
+            sdelete_ptr_array(*t.distinct.args);
+        }
         break;
     }
 
@@ -154,6 +159,8 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.distinct.type = copy_pi_type_p(t.distinct.type, a);
         out.distinct.id = t.distinct.id;
         out.distinct.source_module = t.distinct.source_module;
+        out.distinct.args = mem_alloc(sizeof(PtrArray), a);
+        *out.distinct.args = copy_ptr_array(*t.distinct.args,  (TyCopier)copy_pi_type_p, a);
         break;
     case TVar:
         out.var = t.var;
@@ -397,16 +404,15 @@ Document* pretty_type(PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        PtrArray nodes = mk_ptr_array(4 + type->proc.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(Proc (", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
+        PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            Document* arg = pretty_type(type->proc.args.data[i], a);
-            push_ptr(arg, &nodes);
+            push_ptr(pretty_type(type->proc.args.data[i], a), &arg_nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
         push_ptr(pretty_type(type->proc.ret, a), &nodes);
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TUVar:
@@ -456,33 +462,27 @@ Document* pretty_type(PiType* type, Allocator* a) {
         }
         break;
     case TStruct: {
-        PtrArray nodes = mk_ptr_array(2 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("(Struct ", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("Struct ", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            PtrArray fd_nodes = mk_ptr_array(4, a);
-            Document* pre = mk_str_doc(mv_string("[."), a);
+            PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
             Document* arg = pretty_type(type->structure.fields.data[i].val, a);
-            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &fd_nodes);
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
-            push_ptr(post,  &fd_nodes);
-            Document* fd_doc = mv_sep_doc(fd_nodes, a);
+            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
             push_ptr(fd_doc, &nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TEnum: {
-        PtrArray nodes = mk_ptr_array(2 + type->enumeration.variants.len, a);
-        push_ptr(mv_str_doc((mk_string("(Enum ", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
+        push_ptr(mv_str_doc((mk_string("Enum ", a)), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
-            PtrArray var_nodes = mk_ptr_array(4, a);
-            Document* pre = mk_str_doc(mv_string("[:"), a);
+            PtrArray var_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
@@ -492,43 +492,44 @@ Document* pretty_type(PiType* type, Allocator* a) {
                 push_ptr(arg, &ty_nodes);
             }
             Document* ptypes = mv_sep_doc(ty_nodes, a);
-            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &var_nodes);
             push_ptr(fname, &var_nodes);
             push_ptr(ptypes,   &var_nodes);
-            push_ptr(post,  &var_nodes);
-            Document* var_doc = mv_sep_doc(var_nodes, a);
+            Document* var_doc = mk_paren_doc("[:", "]",mv_sep_doc(var_nodes, a), a);
 
             push_ptr(var_doc, &nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(Reset"), a), &nodes);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("Reset"), a), &nodes);
         push_ptr(pretty_type(type->reset.in, a), &nodes);
         push_ptr(pretty_type(type->reset.out, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TDynamic: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
         push_ptr(pretty_type(type->dynamic, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TDistinct:  {
-        PtrArray nodes = mk_ptr_array(5, a);
+        PtrArray nodes = mk_ptr_array(6, a);
         if (type->distinct.source_module) {
             push_ptr(mk_str_doc(mv_string("Opaque #" ), a), &nodes);
         } else {
             push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+        }
+        if (type->distinct.args) {
+            PtrArray args = mk_ptr_array(type->distinct.args->len, a);
+            for (size_t i = 0; i < type->distinct.args->len; i++) {
+                push_ptr(pretty_type(type->distinct.args->data[i], a), &args);
+            }
+            push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
@@ -570,11 +571,11 @@ Document* pretty_type(PiType* type, Allocator* a) {
             out = mk_str_doc(mv_string("Type"), a);
         } else {
             PtrArray nodes = mk_ptr_array(nargs + 2, a);
-            push_ptr(mk_str_doc(mv_string("Kind ("), a), &nodes);
+            push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
             for (size_t i = 0; i < nargs; i++) {
                 push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
             }
-            push_ptr(mk_str_doc(mv_string(") Type"), a), &nodes);
+            push_ptr(mk_str_doc(mv_string("] Type"), a), &nodes);
             out = mv_sep_doc(nodes, a);
         }
         break;
@@ -840,19 +841,26 @@ void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
 }
 
 PiType* type_app (PiType family, PtrArray args, Allocator* a) {
-    if (family.sort != TFam || family.binder.vars.len != args.len) {
-        panic(mv_string("Invalid type_app!"));
-    }
-    SymPtrAMap subst = mk_sym_ptr_amap(args.len, a);;
-    for (size_t i = 0; i < args.len; i++) {
-        Symbol var = family.binder.vars.data[i];
-        PiType* tipe = args.data[i];
-        sym_ptr_insert(var, tipe, &subst);
-    }
+    if (family.sort == TDistinct) {
+        PiType* new_type = mem_alloc(sizeof(PiType), a);
+        *new_type = family;
+        new_type->distinct.type = type_app(*family.distinct.type, args, a);
+        return new_type;
+    } else {
+        if (family.sort != TFam || family.binder.vars.len != args.len) {
+            panic(mv_string("Invalid type_app!"));
+        }
+        SymPtrAMap subst = mk_sym_ptr_amap(args.len, a);;
+        for (size_t i = 0; i < args.len; i++) {
+            Symbol var = family.binder.vars.data[i];
+            PiType* tipe = args.data[i];
+            sym_ptr_insert(var, tipe, &subst);
+        }
 
-    PiType* new_type = copy_pi_type_p(family.binder.body, a);
-    type_app_subst (new_type, subst, a);
-    return new_type;
+        PiType* new_type = copy_pi_type_p(family.binder.body, a);
+        type_app_subst (new_type, subst, a);
+        return new_type;
+    }
 }
 
 PiType mk_prim_type(PrimType t) {

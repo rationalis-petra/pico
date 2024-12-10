@@ -129,7 +129,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             }
         } else {
             String* sym = symbol_to_string(untyped->variable);
-            String msg = mv_string("Couldn't find type of variable: ");
+            String msg = string_cat(mv_string("Couldn't find type of variable: "), *sym, a);
             throw_error(point, string_cat(msg, *sym, a));
         }
         break;
@@ -160,8 +160,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SAll: {
-        // give each arg type kind.
-
+        // Give each arg type kind.
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
@@ -985,7 +984,8 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
             untyped->ptype = e.ptype;
             untyped->type_val = e.value;
         } else {
-            throw_error(point, mv_string("Variable expected to be type, was not!"));
+            String var = *symbol_to_string(untyped->variable);
+            throw_error(point, string_cat(mv_string("Variable expected to be type, was not: "), var, a));
         }
         break;
     }

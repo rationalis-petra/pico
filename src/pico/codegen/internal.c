@@ -115,7 +115,9 @@ PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
     for (size_t i = 0; i < num_args; i++){
         args[i] = args_rev[(num_args - 1) - i];
     }
-    return type_app (*val, (PtrArray){.data = (void**)args, .len = num_args, .size = num_args}, a);
+    PiType fam = *val;
+    PtrArray arr = (PtrArray){.data = (void**)args, .len = num_args, .size = num_args};
+    return type_app (fam, arr, a);
 }
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -483,6 +485,8 @@ void* mk_distinct_ty(PiType* body) {
         .sort = TDistinct,
         .distinct.type = body,
         .distinct.id = distinct_id(),
+        .distinct.source_module = NULL,
+        .distinct.args = NULL,
     };
     return ty;
 }

@@ -98,6 +98,14 @@ Document* mk_vsep_doc(const PtrArray source, Allocator* a) {
     return doc;
 }
 
+Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(3, a);
+    push_ptr(mk_str_doc(mv_string(lhs), a), &nodes);
+    push_ptr(inner, &nodes);
+    push_ptr(mk_str_doc(mv_string(lhs),a), &nodes);
+    return mv_cat_doc(nodes, a);
+}
+
 void delete_doc(Document* doc, Allocator* a) {
     switch (doc->doc_type) {
     case StringDocument:

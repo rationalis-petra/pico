@@ -109,6 +109,19 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .error_message = mk_string("Cannot Unify two distinct types of unequal IDs or source modules", a),
             };
         }
+
+        // Note: we can assume that either LHS and RHS both have args or neither
+        // do, as we have already checked they have the same IDs! (I think??)
+        if (lhs->distinct.args) {
+            Result res;
+            PtrArray lhs_args = *lhs->distinct.args;
+            PtrArray rhs_args = *rhs->distinct.args;
+            for (size_t i = 0; i < lhs_args.len; i++) {
+                res = unify(lhs_args.data[i], rhs_args.data[i], a);
+                if (res.type == Err) return res;
+            }
+        }
+
         return unify(lhs->distinct.type, rhs->distinct.type, a);
     } else if (lhs->sort == TKind && rhs->sort == TKind) {
         if (lhs->kind.nargs == rhs->kind.nargs)
@@ -118,6 +131,15 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
             };
+    } else if (lhs->sort == TVar && rhs->sort == TVar) {
+        // check they are the same var
+        if (lhs->var != rhs->var) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify different type variables", a),
+            };
+        }
+        return (Result) {.type = Ok} ;
     } else if (lhs->sort == rhs->sort) {
         return (Result) {
             .type = Err,
