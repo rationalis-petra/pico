@@ -131,6 +131,14 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
             };
+    } else if (lhs->sort == TConstraint && rhs->sort == TConstraint) {
+        if (lhs->constraint.nargs == rhs->constraint.nargs)
+            return (Result) {.type = Ok};
+        else 
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify two constraints of unequal nags", a),
+            };
     } else if (lhs->sort == TVar && rhs->sort == TVar) {
         // check they are the same var
         if (lhs->var != rhs->var) {
@@ -224,6 +232,7 @@ bool has_unification_vars_p(PiType type) {
     }
 
     case TKind: return false;
+    case TConstraint: return false;
 
     // Special sort: unification variable
     case TUVar:
@@ -293,8 +302,15 @@ void squash_type(PiType* type) {
         squash_type(type->distinct.type);
         break;
     }
+    case TTrait: {
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            squash_type((type->trait.fields.data + i)->val);
+        }
+        break;
+    }
 
     case TKind: break;
+    case TConstraint: break;
     // Special sort: unification variable
     case TUVar: {
         PiType* subst = type->uvar->subst;

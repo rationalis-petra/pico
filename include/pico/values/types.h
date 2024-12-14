@@ -37,8 +37,9 @@ typedef enum {
     TResumeMark,
     TDynamic,
 
-    // Distinct is kinda special?
+    // 'Special'
     TDistinct,
+    TTrait,
 
     // Quantified Types
     TVar,
@@ -49,9 +50,9 @@ typedef enum {
     TCApp,
     TFam,
 
-
     // Kinds (higher kinds not supported)
     TKind,
+    TConstraint,
 
     // Used only during unification
     TUVar,
@@ -75,6 +76,11 @@ typedef struct {
     PiType* in;
     PiType* out;
 } ResetType;
+
+typedef struct {
+    SymbolArray vars;
+    SymPtrAMap fields; 
+} Trait; 
 
 typedef struct {
     PtrArray args;
@@ -109,6 +115,9 @@ typedef struct {
     size_t nargs;
 } PiKind;
 
+typedef struct {
+    size_t nargs;
+} PiConstraint;
 
 struct PiType {
     PiType_t sort; 
@@ -120,15 +129,18 @@ struct PiType {
         EnumType enumeration;
         PiType* dynamic;
 
+        Trait trait;
+
+        DistinctType distinct;
+        DistinctTypeApp distinct_app;
+
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
         uint64_t var;
         TAppType app;
         TypeBinder binder;
 
-        DistinctType distinct;
-        DistinctTypeApp distinct_app;
-
         PiKind kind;
+        PiConstraint constraint;
 
         // For typechecking/inference
         UVarType* uvar;

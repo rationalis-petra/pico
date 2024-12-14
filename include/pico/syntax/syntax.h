@@ -43,6 +43,7 @@ typedef enum {
     SProjector,
     SDynamic,
     SDynamicUse,
+    SIntance,
 
     // Control Flow & Binding
     SDynamicLet,
@@ -69,6 +70,7 @@ typedef enum {
     SDynamicType,
     SDistinctType,
     SOpaqueType,
+    STraitType,
     SAllType,
     SExistsType,
     STypeFamily,
@@ -204,6 +206,11 @@ typedef struct {
     Syntax* false_branch;
 } SynIf;
 
+typedef struct {
+    SymbolArray vars;
+    SymPtrAMap fields;
+} SynTrait;
+
 //------------------------------------------------------------------------------
 // Special
 //------------------------------------------------------------------------------
@@ -268,6 +275,7 @@ struct Syntax {
         SynProjector projector;
         Syntax* dynamic;
         Syntax* use;
+        SynTrait trait;
 
         SynDynLet dyn_let_expr;
         SynLet let_expr;

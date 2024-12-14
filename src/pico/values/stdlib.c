@@ -683,6 +683,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("use"));
     add_def(module, sym, type, &former);
 
+    former = FInstance;
+    sym = string_to_symbol(mv_string("instance"));
+    add_def(module, sym, type, &former);
+
     former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
@@ -769,6 +773,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FOpaqueType;
     sym = string_to_symbol(mv_string("Opaque"));
+    add_def(module, sym, type, &former);
+
+    former = FTraitType;
+    sym = string_to_symbol(mv_string("Trait"));
     add_def(module, sym, type, &former);
 
     former = FAllType;

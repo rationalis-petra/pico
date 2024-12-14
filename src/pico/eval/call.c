@@ -20,7 +20,8 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             || indistinct_type.sort == TStruct
             || indistinct_type.sort == TEnum
             || indistinct_type.sort == TDynamic
-            || indistinct_type.sort == TKind) {
+            || indistinct_type.sort == TKind
+            || indistinct_type.sort == TConstraint) {
             res.type = ERValue;
             res.val.type = top.expr->ptype;
             res.val.val = pico_run_expr(ass, sz, a, point);
@@ -48,7 +49,8 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         case TEnum:
         case TStruct:
         case TDynamic:
-        case TKind: {
+        case TKind:
+        case TConstraint: {
             // assume int64 for now!
             void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
             add_def(module, top.def.bind, *top.def.value->ptype, val);

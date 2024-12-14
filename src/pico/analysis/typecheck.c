@@ -740,6 +740,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         break;
     }
+    case STraitType: {
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TConstraint, .constraint.nargs = untyped->trait.vars.len};
+        untyped->ptype = ty;
+
+        PiType* aty = mem_alloc(sizeof(PiType), a);
+        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped->trait.vars.len; i++) {
+            Symbol arg = untyped->trait.vars.data[i];
+            type_var(arg, aty, env);
+        }
+
+        for (size_t i = 0; i < untyped->trait.fields.len; i++) {
+            Syntax* s = untyped->trait.fields.data[i].val;
+            type_check_i(s, aty, env, gen, a, point);
+        }
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
     case SOpaqueType: {
         type_infer_i(untyped->distinct_type, env, gen, a, point);
         untyped->ptype= untyped->distinct_type->ptype;
@@ -942,6 +961,11 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SOpaqueType:
         squash_types(typed->opaque_type, a, point);
+        break;
+    case STraitType:
+        for (size_t i = 0; i < typed->trait.fields.len; i++) {
+            squash_types(typed->trait.fields.data[i].val, a, point);
+        }
         break;
     case SCheckedType:
         squash_type(typed->type_val);

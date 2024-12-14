@@ -1047,7 +1047,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate_tmp_malloc(reg(RAX), imm32(syn.proc_type.args.len * ADDRESS_SIZE), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX), imm32(0), a, point);
 
-        for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
+        for (size_t i = 0; i < syn.proc_type.args.len; i++) {
             Syntax* arg = syn.proc_type.args.data[i];
 
             // Second, generate & move the type (note: stash & pop RCX)
@@ -1066,10 +1066,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             // Now, incremenet index by 1
             build_binary_op(ass, Add, reg(RCX), imm32(1), a, point);
         }
+        // Stash RAX
+        build_unary_op(ass, Push, reg(RAX), a, point);
+        address_stack_grow(env, ADDRESS_SIZE);
         generate(*syn.proc_type.return_type, env, ass, links, a, point);
-
-        address_stack_shrink(env, ADDRESS_SIZE);
+        address_stack_shrink(env, 2*ADDRESS_SIZE);
         build_unary_op(ass, Pop, reg(R9), a, point);
+        build_unary_op(ass, Pop, reg(RAX), a, point);
 
         // Finally, generate function call to make type
         gen_mk_proc_ty(reg(RAX), imm32(syn.proc_type.args.len), reg(RAX), reg(R9), ass, a, point);
@@ -1204,6 +1207,45 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SOpaqueType:
         generate(*(Syntax*)syn.opaque_type, env, ass, links, a, point);
         gen_mk_opaque_ty(ass, a, point);
+        break;
+    case STraitType:
+        // Generate trait type: first bind relevant variables
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+
+        // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX), imm32(syn.trait.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(ass, Mov, reg(RCX), imm32(0), a, point);
+
+
+        for (size_t i = 0; i < syn.trait.fields.len; i++) {
+            SymPtrCell field = syn.trait.fields.data[i];
+            // First, move the field name
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0), imm32(field.key), a, point);
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(ass, Push, reg(RCX), a, point);
+            build_unary_op(ass, Push, reg(RAX), a, point);
+            address_stack_grow(env, 2*ADDRESS_SIZE);
+            generate(*(Syntax*)field.val, env, ass, links, a, point);
+
+            address_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(ass, Pop, reg(R9), a, point);
+            build_unary_op(ass, Pop, reg(RAX), a, point);
+            build_unary_op(ass, Pop, reg(RCX), a, point);
+
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8), reg(R9), a, point);
+
+            // Now, incremenet index by 2 (to account for trait size!)
+            build_binary_op(ass, Add, reg(RCX), imm32(2), a, point);
+        }
+
+        // Finally, generate function call to make type
+        gen_mk_trait_ty(syn.trait.vars, reg(RAX), imm32(syn.trait.fields.len), reg(RAX), ass, a, point);
+        build_unary_op(ass, Push, reg(RAX), a, point);
+
+        address_pop_n(syn.trait.vars.len, env);
         break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
