@@ -462,8 +462,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 throw_error(point, mv_string("Structure expects all field descriptors to be lists."));
             }
             
-            if (fdesc->nodes.len != 2) {
-                throw_error(point, mv_string("Structure expects all field descriptors to have 2 elements."));
+            if (fdesc->nodes.len < 2) {
+                throw_error(point, mv_string("Structure expects all field descriptors to have at least 2 elements."));
             }
 
             Symbol field;
@@ -471,7 +471,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 throw_error(point, mv_string("Structure has malformed field name."));
             }
 
-            Syntax* syn = abstract_expr_i(*(RawTree*) fdesc->nodes.data[1], env, a, point);
+            RawTree* val_desc = fdesc->nodes.len == 2 ? fdesc->nodes.data[1] : raw_slice(fdesc, 1, a); 
+            Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
 
             sym_ptr_insert(field, syn, &fields);
         }
@@ -525,6 +526,79 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         *res = (Syntax) {
             .type = SDynamicUse,
             .use = use,
+        };
+        break;
+    }
+    case FInstance: {
+        SymbolArray params = mk_u64_array(0, a);
+        SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
+        Syntax* constraint;
+
+        size_t start_idx = 1;
+        RawTree* current = raw.nodes.data[start_idx];
+
+        switch (current->hint) {
+        case HNone: goto parse_constraint;
+        case HExpression: goto parse_constraint;
+        case HImplicit: goto parse_implicits;
+        case HSpecial: goto parse_params;
+        default: panic(mv_string("invalid hint!"));
+        }
+        // There are 2 optional nodes, we may skip them
+        parse_params:
+
+        if (!get_symbol_list(&params, *current)) {
+          throw_error(point, mv_string("Instance parameter list malformed."));
+        }
+
+        current = raw.nodes.data[++start_idx];
+        switch (current->hint) {
+        case HNone: goto parse_constraint;
+        case HExpression: goto parse_constraint;
+        case HImplicit: goto parse_implicits;
+        case HSpecial: throw_error(point, mv_string("Invalid instance"));
+        default: panic(mv_string("invalid hint!"));
+        }
+
+        parse_implicits:
+
+        get_annotated_symbol_list(&implicits, *current, env, a, point);
+
+        current = raw.nodes.data[++start_idx];
+
+        parse_constraint:
+
+        constraint = abstract_expr_i(*current, env, a, point);
+        start_idx++;
+
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.nodes.len - start_idx, a);
+        for (size_t i = start_idx; i < raw.nodes.len; i++) {
+            RawTree* fdesc = raw.nodes.data[i];
+            if (fdesc->type != RawList) {
+                throw_error(point, mv_string("Instance expects all field descriptors to be lists."));
+            }
+            
+            if (fdesc->nodes.len < 2) {
+                throw_error(point, mv_string("Instance expects all field descriptors to have at least 2 elements."));
+            }
+
+            Symbol field;
+            if (!get_fieldname(fdesc->nodes.data[0], &field)) {
+                throw_error(point, mv_string("Instance has malformed field name."));
+            }
+
+            RawTree* val_desc = fdesc->nodes.len == 2 ? fdesc->nodes.data[1] : raw_slice(fdesc, 1, a); 
+            Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
+
+            sym_ptr_insert(field, syn, &fields);
+        }
+
+        *res = (Syntax) {
+            .type = SInstance,
+            .instance.params = params,
+            .instance.implicits = implicits,
+            .instance.constraint = constraint,
+            .instance.fields = fields,
         };
         break;
     }
@@ -855,7 +929,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 throw_error(point, mv_string("Structure type expects all field descriptors to be lists."));
             };
             
-            if (fdesc->nodes.len <= 2) {
+            if (fdesc->nodes.len < 2) {
                 throw_error(point, mv_string("Structure type expects all field descriptors to have a type."));
             };
 

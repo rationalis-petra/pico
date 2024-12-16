@@ -43,7 +43,7 @@ typedef enum {
     SProjector,
     SDynamic,
     SDynamicUse,
-    SIntance,
+    SInstance,
 
     // Control Flow & Binding
     SDynamicLet,
@@ -147,6 +147,13 @@ typedef struct {
     Symbol field;
     Syntax* val;
 } SynProjector;
+
+typedef struct {
+    SymbolArray params;
+    SymPtrAssoc implicits;
+    Syntax* constraint;
+    SymSynAMap fields;
+} SynInstance;
 
 typedef struct {
     Syntax* entry;
@@ -275,7 +282,7 @@ struct Syntax {
         SynProjector projector;
         Syntax* dynamic;
         Syntax* use;
-        SynTrait trait;
+        SynInstance instance;
 
         SynDynLet dyn_let_expr;
         SynLet let_expr;
@@ -299,6 +306,7 @@ struct Syntax {
         SynBind bind_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
+        SynTrait trait;
         PiType* type_val;
     };
     PiType* ptype;
