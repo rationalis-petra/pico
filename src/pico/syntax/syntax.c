@@ -506,19 +506,37 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SDynamicType: {
-        PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a) ;
+        push_ptr(mk_str_doc(mv_string("Dynamic"), a), &nodes);
         push_ptr(pretty_syntax(syntax->dynamic_type, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SDistinctType: {
-        PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mk_str_doc(mv_string("(Distinct "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a) ;
+        push_ptr(mk_str_doc(mv_string("Distinct"), a), &nodes);
         push_ptr(pretty_syntax(syntax->distinct_type, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case STraitType: {
+        PtrArray nodes = mk_ptr_array(2 + syntax->trait.fields.len, a) ;
+        push_ptr(mk_str_doc(mv_string("Trait "), a), &nodes);
+
+        PtrArray pnodes = mk_ptr_array(syntax->trait.vars.len, a) ;
+        for (size_t i = 0; i < syntax->trait.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->trait.vars.data[i]), a), &pnodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(pnodes, a), a), &nodes);
+
+        for (size_t i = 0; i < syntax->trait.fields.len ; i++)  {
+            PtrArray fnodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->trait.fields.data[i].key), a), &fnodes);
+            push_ptr(pretty_syntax(syntax->trait.fields.data[i].val, a), &fnodes);
+            push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
+        }
+
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SAllType: {

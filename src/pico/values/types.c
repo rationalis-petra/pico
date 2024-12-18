@@ -74,6 +74,16 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_sym_ptr_amap(t.trait.fields);
         break;
     }
+    case TTraitInstance: {
+        for (size_t i = 0; i < t.instance.args.len; i++)
+            delete_pi_type_p(t.instance.args.data[i], a);
+        sdelete_ptr_array(t.instance.args);
+
+        for (size_t i = 0; i < t.instance.fields.len; i++)
+            delete_pi_type_p(t.instance.fields.data[i].val, a);
+        sdelete_sym_ptr_amap(t.instance.fields);
+        break;
+    }
 
     case TAll:
     case TExists:
@@ -162,8 +172,14 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.dynamic = copy_pi_type_p(t.dynamic, a);
         break;
     case TTrait:
+        out.trait.id = t.trait.id;
         out.trait.vars = scopy_u64_array(t.trait.vars, a);
         out.trait.fields = copy_sym_ptr_amap(t.trait.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
+        break;
+    case TTraitInstance:
+        out.instance.instance_of = t.instance.instance_of;
+        out.instance.args = copy_ptr_array(t.instance.args,  (TyCopier)copy_pi_type_p, a);
+        out.instance.fields = copy_sym_ptr_amap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
         break;
     case TResumeMark:
         break;
@@ -403,13 +419,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = pretty_pi_value(val, type->distinct.type, a);
         break;
     }
-    case TKind:  {
+    case TKind:
+    case TConstraint: {
         PiType** ptype = (PiType**) val;
         out = pretty_type(*ptype, a);
         break;
     }
     default:
-        out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
+        out = mk_str_doc(mv_string("Error printing value: it's type has unrecognised sort."), a);
         break;
     }
     return out;
@@ -574,6 +591,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(fd_doc, &nodes);
         }
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TTraitInstance: {
+        out = mk_str_doc(mv_string("#trait-instance"), a);
         break;
     }
     case TVar: {
@@ -829,7 +850,35 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
 }
 
 PiType* type_app (PiType family, PtrArray args, Allocator* a) {
-    if (family.sort == TDistinct) {
+    if (family.sort == TTrait) {
+        if (family.trait.vars.len != args.len) {
+            panic(mv_string("Invalid type_app!"));
+        }
+        
+        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
+        for (size_t i = 0; i < args.len; i++) {
+            Symbol var = family.trait.vars.data[i];
+            PiType* tipe = args.data[i];
+            sym_ptr_bind(var, tipe, &subst);
+        }
+
+        SymPtrAMap new_fields = mk_sym_ptr_amap(family.trait.fields.len, a);
+        for (size_t i = 0; i < family.trait.fields.len; i++) {
+            SymPtrCell cell = family.trait.fields.data[i];
+            PiType* new_type = copy_pi_type_p(cell.val, a);
+            type_app_subst (new_type, subst, a);
+            sym_ptr_insert(cell.key, new_type, &new_fields);
+        }
+
+        PiType* out_ty = mem_alloc(sizeof(PiType), a);
+        *out_ty = (PiType) {
+            .sort = TTraitInstance,
+            .instance.instance_of = family.trait.id,
+            .instance.args = args, // TODO (INVESTIGATE): is the non-copying of args a bug?
+            .instance.fields = new_fields,
+        };
+        return out_ty;
+    } else if (family.sort == TDistinct) {
         PiType* new_type = mem_alloc(sizeof(PiType), a);
         *new_type = family;
         new_type->distinct.type = type_app(*family.distinct.type, args, a);

@@ -222,6 +222,21 @@ bool has_unification_vars_p(PiType type) {
     case TDistinct: {
         return has_unification_vars_p(*type.distinct.type);
     }
+    case TTrait: {
+        return has_unification_vars_p(*type.distinct.type);
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type.instance.args.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.args.data[i]))
+                return true;
+        }
+
+        for (size_t i = 0; i < type.instance.fields.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.fields.data[i].val))
+                return true;
+        }
+        return false;
+    }
     case TVar: return false;
     
     case TAll: {
@@ -303,8 +318,19 @@ void squash_type(PiType* type) {
         break;
     }
     case TTrait: {
+        // TODO (INVESTIGATE BUG): do we need to sqyash implicits also?
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             squash_type((type->trait.fields.data + i)->val);
+        }
+        break;
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type->instance.args.len; i++) {
+            squash_type(type->instance.args.data[i]);
+        }
+
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            squash_type(type->instance.fields.data[i].val);
         }
         break;
     }

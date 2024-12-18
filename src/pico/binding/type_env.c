@@ -54,7 +54,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     } else {
         out.type = TEGlobal;
         out.ptype = e.type;
-        out.value = e.type->sort == TKind ? e.value : NULL;
+        out.value = (e.type->sort == TKind || e.type->sort == TConstraint) ? e.value : NULL;
     }
 
     return out;

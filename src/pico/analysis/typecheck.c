@@ -453,6 +453,58 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = dyn_type->dynamic;
         break;
     }
+    case SInstance: {
+        // Output type
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        untyped->ptype = ty;
+
+        PiType* constraint_ty = mem_alloc(sizeof(PiType), a);
+        *constraint_ty = (PiType) {.sort = TConstraint, .constraint.nargs = 0};
+
+        PiType* ty_ty = mem_alloc(sizeof(PiType), a);
+        *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
+
+        for (size_t i = 0; i < untyped->instance.params.len; i++) {
+            Symbol arg = untyped->instance.params.data[i];
+            type_var(arg, ty_ty, env);
+        }
+
+        for (size_t i = 0; i < untyped->instance.implicits.len; i++) {
+            SymPtrACell arg = untyped->instance.implicits.data[i];
+            PiType* aty;
+            if (arg.val) {
+                eval_type(arg.val, env, a, point);
+                aty = ((Syntax*)arg.val)->type_val;
+            } else  {
+                aty = mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
+        }
+
+        eval_type(untyped->instance.constraint, env, a, point);
+        *ty = *untyped->instance.constraint->type_val;
+
+        if (ty->sort != TTraitInstance) {
+            throw_error(point, mv_string("Instance type invalid"));
+        }
+
+        if (untyped->instance.fields.len != ty->trait.fields.len) {
+            throw_error(point, mv_string("Instance must have exactly n fields."));
+        }
+
+        for (size_t i = 0; i < ty->instance.fields.len; i++) {
+            Syntax** field_syn = (Syntax**)sym_ptr_lookup(ty->instance.fields.data[i].key, untyped->instance.fields);
+            if (field_syn) {
+                PiType* field_ty = ty->instance.fields.data[i].val;
+                type_check_i(*field_syn, field_ty, env, gen, a, point);
+            } else {
+                throw_error(point, mv_string("Trait instance is missing a field"));
+            }
+        }
+
+        pop_types(env, untyped->instance.params.len + untyped->instance.implicits.len);
+        break;
+    }
     case SDynamicLet: {
         for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
@@ -783,11 +835,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SProcedure: {
         // squash body
+        // TODO (FUTURE BUG): Need to squash types of annotated arguments!
         squash_types(typed->procedure.body, a, point);
         break;
     }
     case SAll: {
-        // TODO (TAGS: FUTURE BUG): need to squash args when HKTs are allowed 
+        // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
         squash_types(typed->all.body, a, point);
         break;
     }
@@ -833,7 +886,6 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     }
     case SStructure: {
-        // Loop for each element in the 
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
             squash_types(syn, a, point);
@@ -848,6 +900,19 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SDynamicUse:
         squash_types(typed->use, a, point);
+        break;
+    case SInstance:
+        squash_types(typed->instance.constraint, a, point);
+
+        for (size_t i = 0; i < typed->instance.implicits.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
+
+        for (size_t i = 0; i < typed->instance.fields.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
@@ -1118,16 +1183,18 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     }
     case SApplication: {
         eval_type(untyped->application.function, env, a, point);
-        if (untyped->application.function->ptype->sort != TKind) {
-            panic(mv_string("Type application expects kind"));
+        if (untyped->application.function->ptype->sort == TKind ||
+            untyped->application.function->ptype->sort == TConstraint) {
+            PtrArray args = mk_ptr_array(untyped->application.args.len, a);
+            for (size_t i = 0; i < untyped->application.args.len; i++) {
+                Syntax* arg = untyped->application.args.data[i];
+                eval_type(arg, env, a, point);
+                push_ptr(arg->type_val, &args);
+            }
+            untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
+        } else {
+            panic(mv_string("Type application expects kind or constraint"));
         }
-        PtrArray args = mk_ptr_array(untyped->application.args.len, a);
-        for (size_t i = 0; i < untyped->application.args.len; i++) {
-            Syntax* arg = untyped->application.args.data[i];
-            eval_type(arg, env, a, point);
-            push_ptr(arg->type_val, &args);
-        }
-        untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
         break;
     }
     case SCheckedType: break; // Can leave blank

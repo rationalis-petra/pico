@@ -550,6 +550,8 @@ void* mk_trait_ty(size_t sym_len, Symbol* syms, size_t field_len, void* data) {
     PiType* ty = mem_alloc(sizeof(PiType), a);
     *ty = (PiType) {
         .sort = TTrait,
+        .trait.id = distinct_id(),
+
         .trait.vars.data = syms,
         .trait.vars.len = sym_len,
         .trait.vars.size = sym_len,

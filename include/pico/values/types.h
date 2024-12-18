@@ -40,6 +40,7 @@ typedef enum {
     // 'Special'
     TDistinct,
     TTrait,
+    TTraitInstance, // note: not a "real" type in the theory
 
     // Quantified Types
     TVar,
@@ -78,9 +79,16 @@ typedef struct {
 } ResetType;
 
 typedef struct {
+    uint64_t id;
     SymbolArray vars;
     SymPtrAMap fields; 
-} Trait; 
+} TraitType; 
+
+typedef struct {
+    uint64_t instance_of;
+    PtrArray args; 
+    SymPtrAMap fields; 
+} TraitInstance; 
 
 typedef struct {
     PtrArray args;
@@ -129,7 +137,8 @@ struct PiType {
         EnumType enumeration;
         PiType* dynamic;
 
-        Trait trait;
+        TraitType trait;
+        TraitInstance instance;
 
         DistinctType distinct;
         DistinctTypeApp distinct_app;

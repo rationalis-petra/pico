@@ -106,7 +106,7 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.type.sort == TProc || entry.type.sort == TAll) {
         mem_free(entry.value, &module->executable_allocator);
-    } else if (entry.type.sort == TKind) {
+    } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
         delete_pi_type_p(entry.value, module->allocator);
     } else {
         mem_free(entry.value, module->allocator);
@@ -137,7 +137,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     ModuleEntryInternal entry;
     size_t size = pi_size_of(type);
 
-    if (type.sort == TKind) {
+    if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
     } else {
