@@ -62,6 +62,8 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
 
+        // TODO (BUG): Unify implicit arguments
+
         // Unify each argumet
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
             Result out = unify(lhs->proc.args.data[i], rhs->proc.args.data[i], a);
@@ -187,6 +189,10 @@ bool has_unification_vars_p(PiType type) {
     case TPrim:
         return false;
     case TProc: {
+        for (size_t i = 0; i < type.proc.impl_args.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.proc.impl_args.data[i]))
+                return true;
+        }
         for (size_t i = 0; i < type.proc.args.len; i++) {
             if (has_unification_vars_p(*(PiType*)type.proc.args.data[i]))
                 return true;

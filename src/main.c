@@ -70,7 +70,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     Document* doc;
     if (opts.debug_print) {
         doc = pretty_rawtree(res.data.result, &arena);
-        write_string(mv_string("Pretty Printing Raw Syntax\n"), cout);
+        write_string(mv_string("Pretty printing raw syntax\n"), cout);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -82,7 +82,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     TopLevel abs = abstract(res.data.result, env, &arena, &point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
+        write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
         doc = pretty_toplevel(&abs, &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);

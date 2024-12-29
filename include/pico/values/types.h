@@ -62,6 +62,7 @@ typedef enum {
 
 typedef struct {
     PtrArray args;
+    PtrArray impl_args;
     PiType* ret;
 } ProcType;
 
@@ -133,8 +134,8 @@ struct PiType {
         PrimType prim;
         ProcType proc;
         StructType structure;
-        ResetType reset;
         EnumType enumeration;
+        ResetType reset;
         PiType* dynamic;
 
         TraitType trait;

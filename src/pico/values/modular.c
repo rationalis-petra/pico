@@ -208,6 +208,25 @@ SymbolArray get_exported_symbols(Module* module, Allocator* a) {
     return syms;
 }
 
+PtrArray get_exported_instances(Module* module, Allocator* a) {
+    PtrArray instances = mk_ptr_array(module->entries.len, a);
+    for (size_t i = 0; i < module->entries.len; i++) {
+        ModuleEntryInternal m_entry = module->entries.data[i].val;
+        if (m_entry.type.sort == TTraitInstance) {
+            InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
+            *entry = (InstanceSrc) {
+                .id = m_entry.type.instance.instance_of,
+                .args = m_entry.type.instance.args,
+                .src_sym = module->entries.data[i].key,
+                .src = module,
+            };
+
+            push_ptr(entry, &instances);
+        }
+    };
+    return instances;
+}
+
 Package* get_package(Module* module) {
     return module->lexical_parent_package;
 }

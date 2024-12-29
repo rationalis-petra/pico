@@ -138,8 +138,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // give each arg a unification variable type. 
         PiType* proc_ty = mem_alloc(sizeof(PiType), a);
         proc_ty->sort = TProc;
+        proc_ty->proc.impl_args = mk_ptr_array(untyped->procedure.implicits.len, a);
         proc_ty->proc.args = mk_ptr_array(untyped->procedure.args.len, a);
         untyped->ptype = proc_ty;
+
+        for (size_t i = 0; i < untyped->procedure.implicits.len; i++) {
+            SymPtrACell arg = untyped->procedure.implicits.data[i];
+            PiType* aty;
+            if (arg.val) {
+                eval_type(arg.val, env, a, point);
+                aty = ((Syntax*)arg.val)->type_val;
+                if (aty->sort != TTraitInstance) {
+                    throw_error(point, mv_string("Instance procedure argument does not have instance type."));
+                }
+            } else  {
+                aty = mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
+            push_ptr(aty, &proc_ty->proc.impl_args);
+        }
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
             SymPtrACell arg = untyped->procedure.args.data[i];
@@ -415,42 +432,36 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
-        PiType struct_type = *untyped->projector.val->ptype;
-        if (struct_type.sort != TStruct) {
-            throw_error(point, mv_string("Projection only works on structs."));
-        }
-
-        // search for field
-        PiType* ret_ty = NULL;
-        for (size_t i = 0; i < struct_type.structure.fields.len; i++) {
-            if (struct_type.structure.fields.data[i].key == untyped->projector.field) {
-                ret_ty = struct_type.structure.fields.data[i].val;
+        PiType source_type = *untyped->projector.val->ptype;
+        if (source_type.sort == TStruct) {
+            // search for field
+            PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.structure.fields.len; i++) {
+                if (source_type.structure.fields.data[i].key == untyped->projector.field) {
+                    ret_ty = source_type.structure.fields.data[i].val;
+                }
             }
+            if (ret_ty == NULL) {
+                throw_error(point, mv_string("Field not found in struct!"));
+            }
+            untyped->ptype = ret_ty;
+
+        } else if (source_type.sort == TTraitInstance) {
+            // search for field
+            PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.instance.fields.len; i++) {
+                if (source_type.instance.fields.data[i].key == untyped->projector.field) {
+                    ret_ty = source_type.instance.fields.data[i].val;
+                }
+            }
+            if (ret_ty == NULL) {
+                throw_error(point, mv_string("Field not found in instance!"));
+            }
+            untyped->ptype = ret_ty;
+
+        } else {
+            throw_error(point, mv_string("Projection only works on structs and traits."));
         }
-        if (ret_ty == NULL) {
-            throw_error(point, mv_string("Projection only works on structs."));
-        }
-        untyped->ptype = ret_ty;
-        break;
-    }
-    case SDynamic: {
-        type_infer_i(untyped->dynamic, env, gen, a, point);
-        PiType* inner_type = untyped->dynamic->ptype; 
-        PiType* t = mem_alloc(sizeof(PiType), a);
-        *t = (PiType) {
-            .sort = TDynamic,
-            .dynamic = inner_type,
-        };
-        untyped->ptype = t;
-        break;
-    }
-    case SDynamicUse: {
-        type_infer_i(untyped->dynamic, env, gen, a, point);
-        PiType* dyn_type = untyped->dynamic->ptype; 
-        if (dyn_type->sort != TDynamic) {
-            throw_error(point, mv_string("use on non-dynamic type!"));
-        }
-        untyped->ptype = dyn_type->dynamic;
         break;
     }
     case SInstance: {
@@ -503,6 +514,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
 
         pop_types(env, untyped->instance.params.len + untyped->instance.implicits.len);
+        break;
+    }
+    case SDynamic: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* inner_type = untyped->dynamic->ptype; 
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType) {
+            .sort = TDynamic,
+            .dynamic = inner_type,
+        };
+        untyped->ptype = t;
+        break;
+    }
+    case SDynamicUse: {
+        type_infer_i(untyped->dynamic, env, gen, a, point);
+        PiType* dyn_type = untyped->dynamic->ptype; 
+        if (dyn_type->sort != TDynamic) {
+            throw_error(point, mv_string("use on non-dynamic type!"));
+        }
+        untyped->ptype = dyn_type->dynamic;
         break;
     }
     case SDynamicLet: {
@@ -847,7 +878,11 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SApplication: {
         squash_types(typed->application.function, a, point);
         
-        for (size_t i = 0; i < typed->procedure.args.len; i++) {
+        for (size_t i = 0; i < typed->application.implicits.len; i++) {
+            squash_types(typed->application.implicits.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->application.args.len; i++) {
             squash_types(typed->application.args.data[i], a, point);
         }
         break;
@@ -895,12 +930,6 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SProjector:
         squash_types(typed->projector.val, a, point);
         break;
-    case SDynamic:
-        squash_types(typed->dynamic, a, point);
-        break;
-    case SDynamicUse:
-        squash_types(typed->use, a, point);
-        break;
     case SInstance:
         squash_types(typed->instance.constraint, a, point);
 
@@ -913,6 +942,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
             Syntax* syn = typed->instance.fields.data[i].val;
             squash_types(syn, a, point);
         }
+        break;
+    case SDynamic:
+        squash_types(typed->dynamic, a, point);
+        break;
+    case SDynamicUse:
+        squash_types(typed->use, a, point);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {

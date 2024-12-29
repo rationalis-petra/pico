@@ -5,6 +5,7 @@
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/values/modular.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -30,6 +31,7 @@ typedef enum {
     SLitString,
     SLitBool,
     SVariable,
+    SAbsVariable,
 
     // Terms & term formers
     SProcedure,
@@ -41,9 +43,9 @@ typedef enum {
     SMatch,
     SStructure,
     SProjector,
+    SInstance,
     SDynamic,
     SDynamicUse,
-    SInstance,
 
     // Control Flow & Binding
     SDynamicLet,
@@ -92,7 +94,14 @@ typedef struct {
 } SynIntegralLiteral;
 
 typedef struct {
+    Symbol symbol;
+    size_t depth;
+    Module* src;
+} AbsVariable;
+
+typedef struct {
     SymPtrAssoc args;
+    SymPtrAssoc implicits;
     Syntax* body;
 } SynProcedure;
 
@@ -103,12 +112,14 @@ typedef struct {
 
 typedef struct {
     Syntax* function;
+    SynArray implicits;
     SynArray args;
 } SynApp;
 
 typedef struct {
     Syntax* function;
     SynArray types;
+    SynArray implicits;
     SynArray args;
 } SynAllApp;
 
@@ -269,6 +280,7 @@ struct Syntax {
         bool boolean;
         String string;
 
+        AbsVariable abvar;
         Symbol variable;
 
         SynProcedure procedure;
@@ -311,9 +323,6 @@ struct Syntax {
     };
     PiType* ptype;
 };
-
-
-
 
 /* Other instances */
 Document* pretty_syntax(Syntax* syntax, Allocator* a);

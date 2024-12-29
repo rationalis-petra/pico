@@ -1,10 +1,13 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#include "platform/signals.h"
-#include "assembler/assembler.h"
 #include "data/binary.h"
 #include "data/array.h"
+
+#include "assembler/assembler.h"
+#include "pretty/document.h"
+#include "pretty/standard_types.h"
+#include "pretty/string_printer.h"
 
 /* Personal Notes/hints
  * 
@@ -866,7 +869,13 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
 
     UnaryTableEntry ue = unary_table[uindex(loc.type, loc.sz)];
     if (!ue.valid) {
-        throw_error(point, mv_string("Invalid unary table entry."));
+        Allocator* a = err_allocator;
+        Document* dmsg = mk_str_doc(mv_string("Invalid unary table entry for op: "), a);
+        Document* dop = pretty_u64(op, a);
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(dmsg, &nodes);
+        push_ptr(dop, &nodes);
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
     }
     UnaryOpEntry uoe = unary_opcode_table[op][uindex(loc.type, loc.sz)];
 

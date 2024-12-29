@@ -167,7 +167,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
 
 /* void address_vars (sym_size_assoc vars, address_env* env, allocator a); */
 /* void pop_fn_vars(address_env* env); */
-void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
+void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
     new_local->type = LMonomorphic;
@@ -189,6 +189,16 @@ void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
 
         local.symbol = vars.data[i - 1].key;
         stack_offset += vars.data[i - 1].val;
+        local.stack_offset = stack_offset;
+
+        push_saddr(local, &new_local->vars);
+    }
+    for (size_t i = implicits.len; i > 0; i--) {
+        SAddr local;
+        local.type = SADirect;
+
+        local.symbol = implicits.data[i - 1].key;
+        stack_offset += implicits.data[i - 1].val;
         local.stack_offset = stack_offset;
 
         push_saddr(local, &new_local->vars);
@@ -257,7 +267,6 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
 
 void address_bind_type(Symbol s, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    size_t stack_offset = locals->stack_head;
 
     if (locals->type == LPolymorphic) {
         panic(mv_string("Cannot bind type var in polymorphic env!"));

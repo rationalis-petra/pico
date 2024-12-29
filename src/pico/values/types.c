@@ -32,6 +32,9 @@ void delete_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
+        for (size_t i = 0; i < t.proc.impl_args.len; i++)
+            delete_pi_type_p(t.proc.impl_args.data[i], a);
+        sdelete_ptr_array(t.proc.impl_args);
         for (size_t i = 0; i < t.proc.args.len; i++)
             delete_pi_type_p(t.proc.args.data[i], a);
         sdelete_ptr_array(t.proc.args);
@@ -156,6 +159,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
+        out.proc.impl_args = copy_ptr_array(t.proc.impl_args,  (TyCopier)copy_pi_type_p, a);
         out.proc.args = copy_ptr_array(t.proc.args,  (TyCopier)copy_pi_type_p, a);
         break;
     case TStruct:
@@ -436,8 +440,16 @@ Document* pretty_type(PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        PtrArray nodes = mk_ptr_array(3, a);
+        PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
+        if (type->proc.impl_args.len != 0) {
+            PtrArray arg_nodes = mk_ptr_array(type->proc.impl_args.len, a);
+            for (size_t i = 0; i < type->proc.impl_args.len; i++) {
+                push_ptr(pretty_type(type->proc.impl_args.data[i], a), &arg_nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
+        }
+
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(pretty_type(type->proc.args.data[i], a), &arg_nodes);
@@ -594,7 +606,22 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     }
     case TTraitInstance: {
-        out = mk_str_doc(mv_string("#trait-instance"), a);
+        PtrArray nodes = mk_ptr_array(2 + type->instance.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("Instance" ), a), &nodes);
+        push_ptr(pretty_u64(type->instance.instance_of, a), &nodes);
+
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            PtrArray fd_nodes = mk_ptr_array(2, a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
+            Document* arg = pretty_type(type->instance.fields.data[i].val, a);
+
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+
+            push_ptr(fd_doc, &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TVar: {
@@ -734,6 +761,12 @@ size_t pi_size_of(PiType type) {
     case TDistinct: {
         return pi_size_of(*type.distinct.type);
     }
+    case TTrait:
+        panic(mv_string("pi_size_of received invalid type: Trait."));
+        break;
+    case TTraitInstance:
+        return ADDRESS_SIZE;
+        break;
     case TAll: {
         return sizeof(void*);
     }
@@ -934,7 +967,12 @@ PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
     *ret = va_arg(args, PiType);
     va_end(args);
 
-    return (PiType) {.sort = TProc, .proc.args = ty_args, .proc.ret = ret};
+    return (PiType) {
+        .sort = TProc,
+        .proc.impl_args = mk_ptr_array(0, a),
+        .proc.args = ty_args,
+        .proc.ret = ret
+    };
 }
 
 PiType mk_struct_type(Allocator* a, size_t nfields, ...) {

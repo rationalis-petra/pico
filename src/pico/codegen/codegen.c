@@ -185,6 +185,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // Codegen Procedure Body 
         size_t args_size = 0;
+        SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
+        for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
+            size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.impl_args.data[i]);
+            args_size += arg_size;
+            sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
+        }
+
         SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
             size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.args.data[i]);
@@ -192,7 +199,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
         }
 
-        address_start_proc(arg_sizes, env, a);
+        address_start_proc(impl_sizes, arg_sizes, env, a);
         generate(*syn.procedure.body, env, ass, links, a, point);
         address_end_proc(env, a);
 
@@ -530,26 +537,49 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // First, allocate space on the stack for the value
         size_t out_sz = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP), imm32(out_sz), a, point);
-
-        // Second, generate the structure object
-        generate(*syn.projector.val, env, ass, links, a, point);
-
-        // Now, copy the structure to the destination
-        // for this, we need the struct size + offset of field in the struct
-        size_t struct_sz = pi_size_of(*syn.projector.val->ptype);
-        size_t offset = 0;
-        for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
-            if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
-                break;
-            offset += pi_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
-        }
-
-        generate_stack_move(struct_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
-        // now, remove the original struct from the stack
-        build_binary_op(ass, Add, reg(RSP), imm32(struct_sz), a, point);
-
-        address_stack_shrink(env, struct_sz);
         address_stack_grow(env, out_sz);
+
+        // Second, generate the structure/instance object
+        generate(*syn.projector.val, env, ass, links, a, point);
+        size_t src_sz = pi_size_of(*syn.projector.val->ptype);
+
+        // From this point, behaviour depends on whether we are projecting from
+        // a structure or from an instance
+        if (syn.projector.val->ptype->sort == TStruct) {
+            // Now, copy the structure to the destination
+            // for this, we need the struct size + offset of field in the struct
+            size_t offset = 0;
+            for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
+                if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
+                    break;
+                offset += pi_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
+            }
+
+            generate_stack_move(src_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
+            // now, remove the original struct from the stack
+            build_binary_op(ass, Add, reg(RSP), imm32(src_sz), a, point);
+
+            address_stack_shrink(env, src_sz);
+        } else {
+            // Pop the pointer to the instance from the stack - store in RSI
+            address_stack_shrink(env, src_sz);
+            build_unary_op(ass, Pop, reg(RSI), a, point);
+
+            // Now, calculate offset for field 
+            size_t offset = 0;
+            for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
+                if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
+                    break;
+                offset += pi_size_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val);
+            }
+            build_binary_op(ass, Add, reg(RSI), imm32(offset), a, point);
+
+            generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
+        }
+        break;
+    }
+    case SInstance: {
+        panic(mv_string("Codegen for instances not implemented yet!"));
         break;
     }
     case SDynamic: {

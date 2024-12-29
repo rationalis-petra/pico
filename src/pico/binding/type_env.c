@@ -60,6 +60,10 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     return out;
 }
 
+TypeEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
+    
+}
+
 void type_var (Symbol var, PiType* type, TypeEnv* env) {
     sym_local_bind(var, (Local){.sort = LVar, .type = type}, &env->locals);
 }

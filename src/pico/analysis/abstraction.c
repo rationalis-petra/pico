@@ -269,6 +269,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
         *res = (Syntax) {
             .type = SApplication,
             .application.function = mem_alloc(sizeof(Syntax), a),
+            .application.implicits = mk_ptr_array(0, a),
             .application.args = mk_ptr_array(raw.nodes.len - 1, a),
         };
         res->application.function = fn_syn;
@@ -290,18 +291,31 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             throw_error(point, mk_string("Procedure term former requires at least 2 arguments!", a));
         }
 
+        SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
         SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
-        SymbolArray to_shadow = mk_u64_array(8, a);
-        Result args_out = get_annotated_symbol_list(&arguments, *(RawTree*)raw.nodes.data[1], env, a, point);
-        if (args_out.type == Err) throw_error(point, args_out.error_message);
 
+        size_t args_index = 1;
+        if (((RawTree*)raw.nodes.data[args_index])->hint == HImplicit) {
+            Result args_out = get_annotated_symbol_list(&implicits, *(RawTree*)raw.nodes.data[args_index], env, a, point);
+            if (args_out.type == Err) throw_error(point, args_out.error_message);
+            args_index++;
+        }
+
+        if (((RawTree*)raw.nodes.data[args_index])->hint == HSpecial) {
+            Result args_out = get_annotated_symbol_list(&arguments, *(RawTree*)raw.nodes.data[args_index], env, a, point);
+            if (args_out.type == Err) throw_error(point, args_out.error_message);
+            args_index++;
+        }
+
+        // TODO (BUG): shadow the arguments!
+        SymbolArray to_shadow = mk_u64_array(8, a);
         shadow_vars(to_shadow, env);
 
         RawTree* raw_term;
-        if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)raw.nodes.data[2];
+        if (raw.nodes.len == args_index + 1) {
+            raw_term = raw.nodes.data[args_index];
         } else {
-            raw_term = raw_slice(&raw, 2, a);
+            raw_term = raw_slice(&raw, args_index, a);
         }
         Syntax* body = abstract_expr_i(*raw_term, env, a, point);
         shadow_pop(arguments.len, env);
@@ -309,6 +323,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         *res = (Syntax) {
             .type = SProcedure,
             .procedure.args = arguments,
+            .procedure.implicits = implicits, 
             .procedure.body = body
         };
         break;
@@ -504,31 +519,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
-    case FDynamic: {
-        if (raw.nodes.len <= 2) {
-            throw_error(point, mv_string("Malformed dynamic expression: expects at least 1 arg."));
-        }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
-        Syntax* dynamic = abstract_expr_i(*body, env, a, point);
-
-        *res = (Syntax) {
-            .type = SDynamic,
-            .dynamic = dynamic,
-        };
-        break;
-    }
-    case FDynamicUse: {
-        if (raw.nodes.len != 2) {
-            throw_error(point, mv_string("Malformed use expression."));
-        }
-        Syntax* use = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
-
-        *res = (Syntax) {
-            .type = SDynamicUse,
-            .use = use,
-        };
-        break;
-    }
     case FInstance: {
         SymbolArray params = mk_u64_array(0, a);
         SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
@@ -599,6 +589,31 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .instance.implicits = implicits,
             .instance.constraint = constraint,
             .instance.fields = fields,
+        };
+        break;
+    }
+    case FDynamic: {
+        if (raw.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed dynamic expression: expects at least 1 arg."));
+        }
+        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        Syntax* dynamic = abstract_expr_i(*body, env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamic,
+            .dynamic = dynamic,
+        };
+        break;
+    }
+    case FDynamicUse: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Malformed use expression."));
+        }
+        Syntax* use = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+
+        *res = (Syntax) {
+            .type = SDynamicUse,
+            .use = use,
         };
         break;
     }

@@ -59,16 +59,27 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SProcedure: {
-        PtrArray nodes = mk_ptr_array(4 + syntax->procedure.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(proc (", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc((mk_string("proc", a)), a), &nodes);
+
+        if (syntax->procedure.implicits.len != 0) {
+            PtrArray impl_nodes = mk_ptr_array(syntax->procedure.implicits.len, a);
+            for (size_t i = 0; i < syntax->procedure.implicits.len; i++) {
+                Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.implicits.data[i].key), a);
+                push_ptr(arg, &impl_nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
+        }
+
+        PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
         for (size_t i = 0; i < syntax->procedure.args.len; i++) {
             Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
-            push_ptr(arg, &nodes);
+            push_ptr(arg, &arg_nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+
         push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes);
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SAll: {
@@ -213,22 +224,6 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SDynamic: {
-        PtrArray nodes = mk_ptr_array(3, a);
-
-        push_ptr(mk_str_doc(mv_string("(dynamic "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->dynamic, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
-        break;
-    }
-    case SDynamicUse: {
-        PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("use "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->use, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
-        break;
-    }
     case SInstance: {
         PtrArray nodes = mk_ptr_array(4 + syntax->instance.fields.len, a);
 
@@ -268,6 +263,22 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
         }
 
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SDynamic: {
+        PtrArray nodes = mk_ptr_array(3, a);
+
+        push_ptr(mk_str_doc(mv_string("(dynamic "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->dynamic, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
+    case SDynamicUse: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("use "), a), &nodes);
+        push_ptr(pretty_syntax(syntax->use, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }

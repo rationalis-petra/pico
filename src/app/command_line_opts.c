@@ -2,7 +2,6 @@
 
 Command parse_command(StringArray args) {
     // Step 1: the default command (assuming no arguments) is repl
-    // 
     if (args.len == 0) {
         return (Command) {
             .type = CRepl,
