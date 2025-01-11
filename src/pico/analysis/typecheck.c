@@ -138,7 +138,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // give each arg a unification variable type. 
         PiType* proc_ty = mem_alloc(sizeof(PiType), a);
         proc_ty->sort = TProc;
-        proc_ty->proc.impl_args = mk_ptr_array(untyped->procedure.implicits.len, a);
+        proc_ty->proc.implicits = mk_ptr_array(untyped->procedure.implicits.len, a);
         proc_ty->proc.args = mk_ptr_array(untyped->procedure.args.len, a);
         untyped->ptype = proc_ty;
 
@@ -155,7 +155,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 aty = mk_uvar(gen, a);
             }
             type_var(arg.key, aty, env);
-            push_ptr(aty, &proc_ty->proc.impl_args);
+            push_ptr(aty, &proc_ty->proc.implicits);
         }
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
@@ -224,6 +224,37 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                              (PiType*)fn_type.proc.args.data[i],
                              env, gen, a, point);
             }
+
+            if (untyped->application.implicits.len != 0) {
+                throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
+            }
+            for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
+                PiType* arg_ty = fn_type.proc.implicits.data[i];
+                if (arg_ty->sort != TTraitInstance) {
+                    throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+                }
+
+                InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
+                switch (e.type) {
+                case IEAbsSymbol: {
+                    Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
+                    *new_impl = (Syntax) {
+                        .type = SAbsVariable,
+                        .abvar = e.abvar,
+                        .ptype = arg_ty,
+                    };
+                    push_ptr(new_impl, &untyped->application.implicits);
+                    break;
+                }
+                case IENotFound:
+                    throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+                case IEAmbiguous:
+                    throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+                default:
+                    panic(mv_string("Invalid instance entry type!"));
+                }
+            }
+
             untyped->ptype = fn_type.proc.ret;
 
         } else if (fn_type.sort == TKind) {
@@ -863,6 +894,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SLitBool:
     case SLitString:
     case SVariable:
+    case SAbsVariable:
         break;
     case SProcedure: {
         // squash body

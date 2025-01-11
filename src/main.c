@@ -29,9 +29,9 @@ typedef struct {
 } IterOpts;
 
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, IterOpts opts) {
-    // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
-    // however, we are not expecting the arena to be mutated, so...
-    // Create an arena allocator to use in this iteration.
+    // Note: we need to be aware of the arena and error point, as both are used
+    // by code in the 'true' branches of the nonlocal exits, and may be stored
+    // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
 
     clear_assembler(ass);

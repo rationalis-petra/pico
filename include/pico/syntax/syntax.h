@@ -94,9 +94,8 @@ typedef struct {
 } SynIntegralLiteral;
 
 typedef struct {
-    Symbol symbol;
-    size_t depth;
-    Module* src;
+    size_t index;
+    void* value;
 } AbsVariable;
 
 typedef struct {

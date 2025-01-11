@@ -1,3 +1,4 @@
+#include "platform/signals.h"
 #include "data/meta/assoc_header.h"
 #include "data/meta/assoc_impl.h"
 
@@ -60,8 +61,37 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     return out;
 }
 
-TypeEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
-    
+InstanceEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
+    PtrArray* instances = env_implicit_lookup(id, env->env);
+    if (!instances) {
+        return (InstanceEntry) {.type = IENotFound,};
+    }
+
+    size_t eql_count = 0;
+    InstanceEntry out = {.type = IENotFound,};
+    for (size_t i = 0; i < instances->len; i++) {
+        InstanceSrc* src = instances->data[i];
+        bool eql = true;
+        for (size_t i = 0 ; i < args.len; i++) {
+            eql &=  pi_type_eql(src->args.data[i], args.data[i]);
+        }
+        if (eql) {
+            if (eql_count > 0) {
+                return (InstanceEntry) {.type = IEAmbiguous,};
+            }
+            eql_count++;
+
+            ModuleEntry* m_entry = get_def(src->src_sym, src->src);
+            if (!m_entry) panic(mv_string("Module entry is null!"));
+
+            out = (InstanceEntry) {
+                .type = IEAbsSymbol,
+                .abvar.index = 0,
+                .abvar.value = m_entry->value,
+            };
+        }
+    }
+    return out;
 }
 
 void type_var (Symbol var, PiType* type, TypeEnv* env) {

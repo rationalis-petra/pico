@@ -28,7 +28,7 @@ typedef struct {
 void* arena_malloc(size_t memsize, void* vctx) {
     ArenaContext* ctx = (ArenaContext*)vctx;
     size_t alloc_size = memsize + sizeof(size_t);
-    // TODO (TAGS: BUG FEAT): ensure allocations are aligned! 
+    // TODO (BUG FEAT): ensure allocations are aligned! 
 
     // if attempting to allocate more than a block of memory
     // allocate a larger than usual block

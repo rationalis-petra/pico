@@ -143,6 +143,34 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
     }
 }
 
+AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
+    if (s.value) {
+        return (AddressEntry) {
+            .type = AGlobal,
+            .value = s.value,
+        };
+    } else {
+        // Search for symbol
+        LocalAddrs locals = *(LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+        for (size_t i = locals.vars.len; i > 0; i--) {
+            SAddr maddr = locals.vars.data[i - 1];
+            if (maddr.type != SASentinel) s.index--; 
+
+            // TODO: check for type vars?
+            if (s.index == 0) {
+                // TOOD: Check if the offset can fit into an immediate
+                return (AddressEntry) {
+                    .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
+                    .stack_offset = maddr.stack_offset,
+                };
+            };
+        }
+
+        return (AddressEntry) {.type = ANotFound,};
+    }
+}
+
 LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     if (env->local_envs.len == 0) return (LabelEntry) {.type = Err,};
 

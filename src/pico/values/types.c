@@ -32,9 +32,9 @@ void delete_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
-        for (size_t i = 0; i < t.proc.impl_args.len; i++)
-            delete_pi_type_p(t.proc.impl_args.data[i], a);
-        sdelete_ptr_array(t.proc.impl_args);
+        for (size_t i = 0; i < t.proc.implicits.len; i++)
+            delete_pi_type_p(t.proc.implicits.data[i], a);
+        sdelete_ptr_array(t.proc.implicits);
         for (size_t i = 0; i < t.proc.args.len; i++)
             delete_pi_type_p(t.proc.args.data[i], a);
         sdelete_ptr_array(t.proc.args);
@@ -159,7 +159,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
-        out.proc.impl_args = copy_ptr_array(t.proc.impl_args,  (TyCopier)copy_pi_type_p, a);
+        out.proc.implicits = copy_ptr_array(t.proc.implicits,  (TyCopier)copy_pi_type_p, a);
         out.proc.args = copy_ptr_array(t.proc.args,  (TyCopier)copy_pi_type_p, a);
         break;
     case TStruct:
@@ -383,6 +383,23 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
+    case TTraitInstance: {
+        void* data = *(void**)val;
+        PtrArray nodes = mk_ptr_array(5 + type->instance.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("(instance <TYPE>"), a), &nodes);
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            SymPtrCell cell = type->instance.fields.data[i];
+            PtrArray lcl_nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &lcl_nodes);
+            push_ptr(pretty_pi_value(data, (PiType*)cell.val, a), &lcl_nodes);
+
+            data += pi_size_of(*(PiType*)cell.val);
+            push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(lcl_nodes, a), a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -442,10 +459,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
-        if (type->proc.impl_args.len != 0) {
-            PtrArray arg_nodes = mk_ptr_array(type->proc.impl_args.len, a);
-            for (size_t i = 0; i < type->proc.impl_args.len; i++) {
-                push_ptr(pretty_type(type->proc.impl_args.data[i], a), &arg_nodes);
+        if (type->proc.implicits.len != 0) {
+            PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
+            for (size_t i = 0; i < type->proc.implicits.len; i++) {
+                push_ptr(pretty_type(type->proc.implicits.data[i], a), &arg_nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
         }
@@ -621,6 +638,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
 
             push_ptr(fd_doc, &nodes);
         }
+
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -725,7 +743,7 @@ size_t pi_size_of(PiType type) {
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             // Note: Data is padded to be 8-byte aligned!
-            // TODO (TAGS: FEAT): Make generic on padding size?
+            // TODO (FEAT): Make generic on padding size?
             size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
             size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
             total += field_size + padding;
@@ -739,7 +757,7 @@ size_t pi_size_of(PiType type) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
                 // Note: Data is padded to be 8-byte aligned!
-                // TODO (TAGS: FEAT): Make generic on padding size?
+                // TODO (FEAT): Make generic on padding size?
                 size_t field_size = pi_size_of(*(PiType*)types.data[i]);
                 size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
                 total += field_size + padding;
@@ -939,6 +957,68 @@ PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a) {
     return new_type;
 }
 
+bool pi_type_eql(PiType* lhs, PiType* rhs) {
+    if (lhs->sort != rhs->sort) return false;
+
+    switch (lhs->sort) {
+    case TPrim:
+        return lhs->prim == rhs->prim;
+        break;
+    case TProc:
+        if (lhs->proc.implicits.len != rhs->proc.implicits.len) return false;
+        for (size_t i = 0; i < lhs->proc.args.len; i++) {
+            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+        }
+
+        if (lhs->proc.args.len != rhs->proc.args.len) return false;
+        for (size_t i = 0; i < lhs->proc.args.len; i++) {
+            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+        }
+        return pi_type_eql(lhs->proc.ret, rhs->proc.ret);
+        break;
+    case TStruct:
+        panic(mv_string("pi_type_eql not implemented for structs"));
+    case TEnum:
+        panic(mv_string("pi_type_eql not implemented for enums"));
+    case TReset:
+        panic(mv_string("pi_type_eql not implemented for resets"));
+    case TResumeMark:
+        panic(mv_string("pi_type_eql not implemented for resume marks"));
+    case TDynamic:
+        panic(mv_string("pi_type_eql not implemented for dynamics"));
+
+    // 'Special'
+    case TDistinct:
+        panic(mv_string("pi_type_eql not implemented for distinct types"));
+    case TTrait:
+        panic(mv_string("pi_type_eql not implemented for trait types"));
+    case TTraitInstance: // note: not a "real" type in the theory
+        panic(mv_string("pi_type_eql not implemented for trait instance types"));
+
+    // Quantified Types
+    case TVar: // note: not a "real" type in the theory
+        panic(mv_string("pi_type_eql not implemented for type vars"));
+    case TAll:
+        panic(mv_string("pi_type_eql not implemented for all types"));
+    case TExists:
+        panic(mv_string("pi_type_eql not implemented for existential types"));
+
+    // Used by Sytem-Fω (type constructors)
+    case TCApp:
+        panic(mv_string("pi_type_eql not implemented for type applications"));
+    case TFam:
+        panic(mv_string("pi_type_eql not implemented for type families"));
+
+    // Kinds (higher kinds not supported)
+    case TKind:
+        panic(mv_string("pi_type_eql not implemented for kinds"));
+    case TConstraint:
+        panic(mv_string("pi_type_eql not implemented for constraints"));
+    default:
+        panic(mv_string("pi_type_eql provided invalid sort!"));
+    }
+}
+
 PiType mk_prim_type(PrimType t) {
     return (PiType) {
       .sort = TPrim,
@@ -969,7 +1049,7 @@ PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
 
     return (PiType) {
         .sort = TProc,
-        .proc.impl_args = mk_ptr_array(0, a),
+        .proc.implicits = mk_ptr_array(0, a),
         .proc.args = ty_args,
         .proc.ret = ret
     };

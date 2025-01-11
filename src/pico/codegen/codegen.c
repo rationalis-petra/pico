@@ -110,9 +110,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
-    case SVariable: {
+    case SVariable: 
+    case SAbsVariable: {
         // Lookup the variable in the assembly envionrment
-        AddressEntry e = address_env_lookup(syn.variable, env);
+        AddressEntry e = (syn.type == SVariable)
+            ? address_env_lookup(syn.variable, env)
+            : address_abs_lookup(syn.abvar, env);
         switch (e.type) {
         case ALocalDirect:
             build_unary_op(ass, Push, rref8(RBP, e.stack_offset), a, point);
@@ -124,23 +127,20 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             PiType indistinct_type = *syn.ptype;
             while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
 
-            // Use RAX as a temp
-            // Note: casting void* to uint64_t only works for 64-bit systems,
-            // will need other option in 32 bit systems
-            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll) {
+            // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-
                 build_unary_op(ass, Push, reg(R9), a, point);
-            } else if (indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic) {
+
+            // Primitives, Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
+            } else if (indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
                 build_unary_op(ass, Push, reg(R9), a, point);
-            } else if (indistinct_type.sort == TKind) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(ass, Push, reg(RCX), a, point);
+
+            // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
@@ -149,10 +149,14 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(ass, Sub, reg(RSP), imm32(value_size), a, point);
 
-                // Copy
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
-                throw_error(point, mv_string("Codegen: Global has unsupported sort"));
+                throw_error(point,
+                            string_ncat(a, 3,
+                                        mv_string("Codegen: Global var '"),
+                                        *symbol_to_string(syn.variable),
+                                        mv_string("' has unsupported sort")
+                                        ));
             }
             break;
         }
@@ -187,7 +191,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t args_size = 0;
         SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.impl_args.data[i]);
+            size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.implicits.data[i]);
             args_size += arg_size;
             sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
         }
@@ -231,6 +235,11 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // Monomorphic Codegen
         if (syn.application.function->ptype->sort == TProc) {
             size_t args_size = 0;
+            for (size_t i = 0; i < syn.application.implicits.len; i++) {
+                Syntax* arg = (Syntax*) syn.application.implicits.data[i];
+                args_size += pi_size_of(*arg->ptype);
+                generate(*arg, env, ass, links, a, point);
+            }
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
                 args_size += pi_size_of(*arg->ptype);
@@ -567,7 +576,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
             // Now, calculate offset for field 
             size_t offset = 0;
-            for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
+            for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
                 if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
                     break;
                 offset += pi_size_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val);
@@ -579,7 +588,57 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     case SInstance: {
-        panic(mv_string("Codegen for instances not implemented yet!"));
+        /* Instances work as follows:
+         * • Instances as values are expected to be passed as pointers and allocated temporarily. 
+         * • Non-parametric instances are simply pointers : codegen generates a
+         *   malloc and then assigns all values.
+         * • Parametric instances are functions (which may be instantiated by
+         *   the runtime)
+         */
+
+        size_t immediate_sz = 0;
+        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
+            immediate_sz += pi_size_of(*(PiType*)syn.ptype->instance.fields.data[i].val);
+        }
+        build_binary_op(ass, Mov, reg(RSI), imm32(immediate_sz), a, point);
+        generate_tmp_malloc(reg(RAX), reg(RSI), ass, a, point);
+        // build_binary_op(ass, Add, reg(RAX), imm32(immediate_sz), a, point);
+        build_binary_op(ass, Mov, reg(RCX), reg(RAX), a, point);
+
+        // Grow by address size to account for the fact that the for loop
+        // keeps a stack of the address, which is updated each iteration.
+        address_stack_grow(env, ADDRESS_SIZE);
+        build_unary_op(ass, Push, reg(RCX), a, point);
+
+        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
+
+            // Generate field
+            Syntax* val = syn.instance.fields.data[i].val;
+            generate(*val, env, ass, links, a, point);
+
+            size_t offset = pi_size_of(*val->ptype);
+            // Retrieve index (ptr) 
+            // TODO (BUG) Check offset is < int8_t max.
+            build_binary_op(ass, Mov, reg(RCX), rref8(RSP, offset), a, point);
+
+            generate_monomorphic_copy(RCX, RSP, offset, ass, a, point);
+
+            build_binary_op(ass, Add, reg(RCX), imm32(offset), a, point);
+
+            // Pop value from stack
+            build_binary_op(ass, Add, reg(RSP), imm32(offset), a, point);
+            address_stack_shrink(env, offset);
+
+            // Override index with new value
+            build_binary_op(ass, Mov, rref8(RSP, 0), reg(RCX), a, point);
+        }
+
+        build_binary_op(ass, Mov, reg(RCX), rref8(RSP, 0), a, point);
+        build_binary_op(ass, Sub, reg(RCX), imm32(immediate_sz), a, point);
+        build_binary_op(ass, Mov, rref8(RSP, 0), reg(RCX), a, point);
+
+        // Note: we don't shrink as the final address (on stack) is accounted
+        // for by the 'grow' prior to the above for-loop
         break;
     }
     case SDynamic: {

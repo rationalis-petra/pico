@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdarg.h>
 
 #include "platform/memory/allocator.h"
 #include "data/string.h"
@@ -66,5 +67,30 @@ String string_cat(const String lhs, const String rhs, Allocator* a) {
     memcpy(out.bytes, lhs.bytes, lhs.memsize);
     memcpy(out.bytes + (lhs.memsize - 1), rhs.bytes, rhs.memsize);
     out.bytes[out.memsize - 1] = '\0';
+    return out;
+}
+
+String string_ncat(Allocator* a, size_t n, ...) {
+    String out = (String) {.memsize = 0};
+    va_list args;
+    va_start(args, n);
+    for (size_t i = 0; i < n; i++) {
+        String sn = va_arg(args, String);
+        out.memsize += sn.memsize - 1;
+    }
+    out.memsize += 1;
+    va_end(args);
+
+    out.bytes = (uint8_t*)mem_alloc(out.memsize, a);
+    out.bytes[out.memsize - 1] = '\0';
+
+    ptrdiff_t index = 0;
+    va_start(args, n);
+    for (size_t i = 0; i < n; i++) {
+        String sn = va_arg(args, String);
+        memcpy(out.bytes + index, sn.bytes, sn.memsize);
+        index += sn.memsize - 1;
+    }
+    va_end(args);
     return out;
 }

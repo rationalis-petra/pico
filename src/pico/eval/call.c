@@ -51,7 +51,12 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         case TDynamic:
         case TKind:
         case TConstraint: {
-            // assume int64 for now!
+            void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
+            add_def(module, top.def.bind, *top.def.value->ptype, val);
+            break;
+        }
+        case TTraitInstance: {
+            // TODO: instances need to be copied (handlein add_def?)
             void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
             add_def(module, top.def.bind, *top.def.value->ptype, val);
             break;

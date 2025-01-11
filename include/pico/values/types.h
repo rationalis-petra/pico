@@ -62,7 +62,7 @@ typedef enum {
 
 typedef struct {
     PtrArray args;
-    PtrArray impl_args;
+    PtrArray implicits;
     PiType* ret;
 } ProcType;
 
@@ -157,15 +157,19 @@ struct PiType {
     };
 };
 
+// Transform and Analyse
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 
 Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
 
+bool pi_type_eql(PiType* lhs, PiType* rhs);
+
 size_t pi_size_of(PiType t);
 size_t pi_mono_size_of(PiType t);
 size_t runtime_size_of(PiType* t, void* data);
+
 
 // Resource Management
 void delete_pi_type(PiType t, Allocator* a);
