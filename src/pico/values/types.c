@@ -5,6 +5,7 @@
 #include "data/string.h"
 
 #include "pretty/standard_types.h"
+#include "pretty/string_printer.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 
@@ -840,6 +841,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
+        for (size_t i = 0; i < body->proc.implicits.len; i++) {
+            type_app_subst(body->proc.implicits.data[i], subst, a);
+        }
         for (size_t i = 0; i < body->proc.args.len; i++) {
             type_app_subst(body->proc.args.data[i], subst, a);
         }
@@ -868,6 +872,22 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     case TDynamic:
         type_app_subst(body->dynamic, subst, a);
         break;
+    case TDistinct:
+        panic(mv_string("not implemetned type-app for distinct"));
+        break;
+    case TTrait:
+        for (size_t i = 0; i < body->trait.fields.len; i++) {
+            type_app_subst(body->trait.fields.data[i].val, subst, a);
+        }
+        break;
+    case TTraitInstance: // note: not a "real" type in the theory
+        for (size_t i = 0; i < body->instance.args.len; i++) {
+            type_app_subst(body->instance.args.data[i], subst, a);
+        }
+        for (size_t i = 0; i < body->instance.fields.len; i++) {
+            type_app_subst(body->instance.fields.data[i].val, subst, a);
+        }
+        break;
 
     // Quantified Types
     case TVar: {
@@ -894,9 +914,14 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
 
     // Kinds (higher kinds not supported)
     case TKind: break;
-    default:
-        panic(mv_string("not implemetned type-app for this type of unknown sort!"));
+    default: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), a), &nodes);
+        push_ptr(pretty_type(body, a), &nodes);
+        Document* message = mk_sep_doc(nodes, a);
+        panic(doc_to_str(message, a));
         break;
+    }
     }
 }
 

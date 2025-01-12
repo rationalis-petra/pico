@@ -103,6 +103,7 @@ String doc_to_str(Document* doc, Allocator* a) {
     str.bytes = mem_alloc(total_len, a);
     uint8_t* mptr = str.bytes; // mptr is modified, but we don't want str.bytes modified!
     doc_str(doc, &mptr);
+    str.bytes[total_len-1] = '\0';
 
     return str;
 }

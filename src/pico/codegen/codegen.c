@@ -301,6 +301,10 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // • Remaining offset starts @ sum of ADDRESS_SIZE * 2
         int32_t offset = 0;
         
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            offset += pi_size_of(*((Syntax*)syn.all_application.implicits.data[i])->ptype);
+            build_unary_op(ass, Push, imm32(-offset), a, point);
+        }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             offset += pi_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
             build_unary_op(ass, Push, imm32(-offset), a, point);
@@ -309,8 +313,14 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Sub, reg(RSP), imm8(ADDRESS_SIZE), a, point);
         build_unary_op(ass, Push, reg(RBP), a, point);
 
-        address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len + syn.all_application.args.len + 2));
+        address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
+                                                + syn.all_application.implicits.len
+                                                + syn.all_application.args.len + 2));
 
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
+            generate(*arg, env, ass, links, a, point);
+        }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
             generate(*arg, env, ass, links, a, point);

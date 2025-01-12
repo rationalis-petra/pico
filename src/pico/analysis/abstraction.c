@@ -252,6 +252,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
             .type = SAllApplication,
             .all_application.function = mem_alloc(sizeof(Syntax), a),
             .all_application.types = mk_ptr_array(typelist.nodes.len, a),
+            .all_application.implicits = mk_ptr_array(0, a),
             .all_application.args = mk_ptr_array(raw.nodes.len - 2, a),
         };
         res->all_application.function = fn_syn;

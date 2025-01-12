@@ -55,14 +55,18 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
     } else if (lhs->sort == TProc && rhs->sort == TProc) {
-        if (lhs->proc.args.len != rhs->proc.args.len) {
+        if (lhs->proc.args.len != rhs->proc.args.len
+            || lhs->proc.implicits.len != rhs->proc.implicits.len) {
             return (Result) {
                 .type = Err,
                 .error_message = mk_string("Unification failed: two different procedures of differing types", a)
             };
         }
 
-        // TODO (BUG): Unify implicit arguments
+        for (size_t i = 0; i < lhs->proc.implicits.len; i++) {
+            Result out = unify(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], a);
+            if (out.type == Err) return out;
+        }
 
         // Unify each argumet
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
@@ -189,8 +193,8 @@ bool has_unification_vars_p(PiType type) {
     case TPrim:
         return false;
     case TProc: {
-        for (size_t i = 0; i < type.proc.impl_args.len; i++) {
-            if (has_unification_vars_p(*(PiType*)type.proc.impl_args.data[i]))
+        for (size_t i = 0; i < type.proc.implicits.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.proc.implicits.data[i]))
                 return true;
         }
         for (size_t i = 0; i < type.proc.args.len; i++) {
@@ -283,6 +287,9 @@ void squash_type(PiType* type) {
     case TPrim:
         break;
     case TProc: {
+        for (size_t i = 0; i < type->proc.implicits.len; i++) {
+            squash_type((PiType*)(type->proc.implicits.data[i]));
+        }
         for (size_t i = 0; i < type->proc.args.len; i++) {
             squash_type((PiType*)(type->proc.args.data[i]));
         }

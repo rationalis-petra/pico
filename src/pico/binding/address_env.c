@@ -271,7 +271,7 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
         push_saddr(local, &new_local->vars);
     }
 
-    for (size_t i = vars.len; i > 0; i--) {
+    for (size_t i = types.len; i > 0; i--) {
         SAddr local;
         local.type = SADirect;
 

@@ -311,6 +311,33 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                          env, gen, a, point);
         }
 
+        for (size_t i = 0; i < proc_type->proc.implicits.len; i++) {
+            PiType* arg_ty = proc_type->proc.implicits.data[i];
+            if (arg_ty->sort != TTraitInstance) {
+                throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+            }
+
+            InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
+            switch (e.type) {
+            case IEAbsSymbol: {
+                Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
+                *new_impl = (Syntax) {
+                    .type = SAbsVariable,
+                    .abvar = e.abvar,
+                    .ptype = arg_ty,
+                };
+                push_ptr(new_impl, &untyped->all_application.implicits);
+                break;
+            }
+            case IENotFound:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+            case IEAmbiguous:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+            default:
+                panic(mv_string("Invalid instance entry type!"));
+            }
+        }
+
         untyped->ptype = proc_type->proc.ret;
         break;
     }

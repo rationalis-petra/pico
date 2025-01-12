@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
+#include "pretty/string_printer.h"
 
 #include "pico/codegen/polymorphic.h"
 #include "pico/codegen/internal.h"
@@ -11,13 +12,16 @@
 // Implementation details
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
-void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
     SymbolArray vars;
     Syntax body;
     if (syn.type == SProcedure) {
-        vars = mk_u64_array(syn.procedure.args.len, a);
+        vars = mk_u64_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
+        for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
+            push_u64(syn.procedure.implicits.data[i].key, &vars);
+        }
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
             push_u64(syn.procedure.args.data[i].key, &vars);
         }
@@ -83,7 +87,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // Note: we push R9 (the new head of stack) so it can be used
     build_unary_op(ass, Push, reg(R9), a, point); 
     
-    generate_poly_stack_move(reg(R9), reg(RDX), reg(RAX), ass, a, point);
+    generate_poly_move(reg(R9), reg(RDX), reg(RAX), ass, a, point);
 
     // 3. Pop old RBP and return address
     //    Note that these are currently BELOW the top of the stack!
@@ -141,7 +145,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
             //build_binary_op(ass, Mov, reg(R9), rref8(R9, 0), a, point);
             //build_binary_op(ass, Add, reg(R9), reg(RBP), a, point);
 
-            generate_poly_stack_move(reg(RSP), reg(R9), reg(RAX), ass, a, point);
+            generate_poly_move(reg(RSP), reg(R9), reg(RAX), ass, a, point);
             break;
         case ATypeVar:
             throw_error(point, mv_string("Codegen not implemented for ATypeVar"));
@@ -199,6 +203,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
     }
     case SApplication: {
         // Generate the arguments
+        for (size_t i = 0; i < syn.application.implicits.len; i++) {
+            Syntax* arg = (Syntax*) syn.application.implicits.data[i];
+            generate_polymorphic_i(*arg, env, ass, links, a, point);
+        }
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
             generate_polymorphic_i(*arg, env, ass, links, a, point);
@@ -240,6 +248,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         build_unary_op(ass, Pop, reg(RCX), a, point);
         build_unary_op(ass, Call, reg(RCX), a, point);
         break;
+        */
     }
     case SStructure: {
         throw_error(point, mv_string("Not implemented: structure in forall."));
@@ -314,35 +323,62 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         */
     }
     case SProjector: {
-        throw_error(point, mv_string("Not implemented: projector in forall."));
-        /*
-        // First, allocate space on the stack for the value
-        size_t out_sz = pi_runtime_size_of(*syn.ptype);
-        out = build_binary_op(ass, Sub, reg(RSP), imm32(out_sz), a);
-        if (out.type == Err) return out;
+        if (syn.projector.val->ptype->sort == TStruct) {
+            panic(mv_string("Projector not implemented for structures in polymorphic function"));
+            /*
+            // First, allocate space on the stack for the value
+            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_binary_op(ass, Sub, reg(RSP), reg(RAX), a, point);
 
-        // Second, generate the structure object
-        out = generate(*syn.projector.val, env, ass, links, a);
+            // Second, generate the structure object
+            out = generate(*syn.projector.val, env, ass, links, a);
 
-        // Now, copy the structure to the destination
-        // for this, we need the struct size + offset of field in the struct
-        size_t struct_sz = pi_runtime_size_of(*syn.projector.val->ptype);
-        size_t offset = 0;
-        for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
+            // Now, copy the structure to the destination
+            // for this, we need the struct size + offset of field in the struct
+            size_t struct_sz = pi_runtime_size_of(*syn.projector.val->ptype);
+            size_t offset = 0;
+            for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
             if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
-                break;
+            break;
             offset += pi_runtime_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
+            }
+
+            out = generate_stack_move(struct_sz + out_sz - 0x8, offset, out_sz, ass, a);
+            if (out.type == Err) return out;
+            // now, remove the original struct from the stack
+            out = build_binary_op(ass, Add, reg(RSP), imm32(struct_sz), a);
+
+            address_stack_shrink(env, struct_sz);
+            address_stack_grow(env, out_sz);
+            */
+        } else {
+            generate_polymorphic_i(*syn.projector.val, env, ass, links, a, point);
+
+            // Now, calculate offset for field 
+            build_unary_op(ass, Push, imm8(0), a, point);
+            for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
+                if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
+                    break;
+                // Push the size into RAX; this is then added to the top of the stack  
+                generate_size_of(RAX, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
+                build_binary_op(ass, Add, rref8(RSP, 0), reg(RAX), a, point);
+            }
+            // Generate the size of the output.
+            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+
+            // Pop the index and instance ptr from the stack
+            build_unary_op(ass, Pop, reg(RCX), a, point);
+            build_unary_op(ass, Pop, reg(RSI), a, point);
+
+            // Generate the adderss of the field.
+            build_binary_op(ass, Add, reg(RSI), reg(RCX), a, point);
+
+            // Reserve space on the stack
+            build_binary_op(ass, Sub, reg(RSP), reg(RAX), a, point);
+
+            generate_poly_move(reg(RSP), reg(RSI), reg(RAX), ass, a, point);
         }
-
-        out = generate_stack_move(struct_sz + out_sz - 0x8, offset, out_sz, ass, a);
-        if (out.type == Err) return out;
-        // now, remove the original struct from the stack
-        out = build_binary_op(ass, Add, reg(RSP), imm32(struct_sz), a);
-
-        address_stack_shrink(env, struct_sz);
-        address_stack_grow(env, out_sz);
         break;
-        */
     }
     case SConstructor: {
         throw_error(point, mv_string("Not implemented: constructor in forall."));
@@ -588,6 +624,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
     switch (type->sort) {
+    case TPrim:
+    case TProc:
+    case TTraitInstance:
+        build_binary_op(ass, Mov, reg(dest), imm32(pi_size_of(*type)), a, point);
+        break;
     case TVar: {
         AddressEntry e = address_env_lookup(type->var, env);
         switch (e.type) {
@@ -597,9 +638,11 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local indirect."));
             break;
-        break;
         case AGlobal:
             panic(mv_string("Unexpected type variable sort: Global."));
+            break;
+        case ATypeVar:
+            panic(mv_string("Unexpected type variable sort: ATypeVar."));
             break;
         case ANotFound: {
             panic(mv_string("Type Variable not found during codegen."));
@@ -612,12 +655,18 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
         }
         break;
     }
-    default:
-        panic(mv_string("Unrecognized type to generate_size_of."));
+    default: {
+        // TODO BUG: This seems to cause crashes!
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc(mv_string("Unrecognized type to generate_size_of:"), a), &nodes);
+        push_ptr(pretty_type(type, a), &nodes);
+        Document* message = mk_sep_doc(nodes, a);
+        panic(doc_to_str(message, a));
+    }
     }
 }
 
-void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)

@@ -1,8 +1,10 @@
 #include <string.h>
+#include "platform/machine_info.h"
+#include "platform/memory/executable.h"
+
 #include "data/array.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
-#include "platform/memory/executable.h"
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
@@ -108,6 +110,9 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
         mem_free(entry.value, &module->executable_allocator);
     } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
         delete_pi_type_p(entry.value, module->allocator);
+    } else if (entry.type.sort == TTraitInstance) {
+        mem_free(*(void**)entry.value, module->allocator);
+        mem_free(entry.value, module->allocator);
     } else {
         mem_free(entry.value, module->allocator);
     }
@@ -140,6 +145,16 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
+    } else if (type.sort == TTraitInstance){
+        size_t total = 0;
+        for (size_t i = 0; i < type.instance.fields.len; i++) {
+            total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
+        }
+        void* new_memory = mem_alloc(total, module->allocator);
+        memcpy(new_memory, *(void**)data, total);
+
+        entry.value = mem_alloc(size, module->allocator);
+        memcpy(entry.value, &new_memory, ADDRESS_SIZE);
     } else {
         entry.value = mem_alloc(size, module->allocator);
         memcpy(entry.value, data, size);
