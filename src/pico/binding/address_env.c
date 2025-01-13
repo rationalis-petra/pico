@@ -303,6 +303,7 @@ void address_bind_type(Symbol s, AddressEnv* env) {
     SAddr value;
     value.type = SATypeVar;
     value.symbol = s;
+    // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
     push_saddr(value, &locals->vars);
 }
 
