@@ -3,6 +3,7 @@
 
 #include "platform/memory/allocator.h"
 #include "pico/data/sym_size_assoc.h"
+#include "pico/syntax/syntax.h"
 #include "pico/binding/environment.h"
 
 typedef struct AddressEnv AddressEnv;
@@ -61,10 +62,11 @@ void delete_address_env(AddressEnv* env, Allocator* a);
  */
 
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env);
+AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env);
 LabelEntry label_env_lookup(Symbol s, AddressEnv* env);
 
 // Push and pop a new local environment to deal with procedure
-void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a);
+void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
 
 void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);

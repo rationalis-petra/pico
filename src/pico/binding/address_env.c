@@ -143,6 +143,34 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
     }
 }
 
+AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
+    if (s.value) {
+        return (AddressEntry) {
+            .type = AGlobal,
+            .value = s.value,
+        };
+    } else {
+        // Search for symbol
+        LocalAddrs locals = *(LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+        for (size_t i = locals.vars.len; i > 0; i--) {
+            SAddr maddr = locals.vars.data[i - 1];
+            if (maddr.type != SASentinel) s.index--; 
+
+            // TODO: check for type vars?
+            if (s.index == 0) {
+                // TOOD: Check if the offset can fit into an immediate
+                return (AddressEntry) {
+                    .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
+                    .stack_offset = maddr.stack_offset,
+                };
+            };
+        }
+
+        return (AddressEntry) {.type = ANotFound,};
+    }
+}
+
 LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     if (env->local_envs.len == 0) return (LabelEntry) {.type = Err,};
 
@@ -167,7 +195,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
 
 /* void address_vars (sym_size_assoc vars, address_env* env, allocator a); */
 /* void pop_fn_vars(address_env* env); */
-void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
+void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
     new_local->type = LMonomorphic;
@@ -189,6 +217,16 @@ void address_start_proc(SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
 
         local.symbol = vars.data[i - 1].key;
         stack_offset += vars.data[i - 1].val;
+        local.stack_offset = stack_offset;
+
+        push_saddr(local, &new_local->vars);
+    }
+    for (size_t i = implicits.len; i > 0; i--) {
+        SAddr local;
+        local.type = SADirect;
+
+        local.symbol = implicits.data[i - 1].key;
+        stack_offset += implicits.data[i - 1].val;
         local.stack_offset = stack_offset;
 
         push_saddr(local, &new_local->vars);
@@ -233,7 +271,7 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
         push_saddr(local, &new_local->vars);
     }
 
-    for (size_t i = vars.len; i > 0; i--) {
+    for (size_t i = types.len; i > 0; i--) {
         SAddr local;
         local.type = SADirect;
 
@@ -257,7 +295,6 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
 
 void address_bind_type(Symbol s, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    size_t stack_offset = locals->stack_head;
 
     if (locals->type == LPolymorphic) {
         panic(mv_string("Cannot bind type var in polymorphic env!"));
@@ -266,6 +303,7 @@ void address_bind_type(Symbol s, AddressEnv* env) {
     SAddr value;
     value.type = SATypeVar;
     value.symbol = s;
+    // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
     push_saddr(value, &locals->vars);
 }
 

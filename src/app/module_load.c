@@ -22,6 +22,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     if (catch_error(point)) goto on_error;
 
     // Step 1: Parse Module header, get the result (ph_res)
+    // TODO (BUG) header & module (below) will be uninitialized if parse fails.
     ParseResult ph_res = parse_rawtree(in, &arena);
     if (ph_res.type == ParseNone) goto on_exit;
 
@@ -47,6 +48,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     bool next_iter = true;
     while (next_iter) {
         // Prep the arena for another round
+        clear_assembler(ass);
         reset_arena_allocator(arena);
         Environment* env = env_from_module(module, &arena);
 
@@ -120,6 +122,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     bool next_iter = true;
     while (next_iter) {
         // Prep the arena for another round
+        clear_assembler(ass);
         reset_arena_allocator(arena);
         Environment* env = env_from_module(current, &arena);
 

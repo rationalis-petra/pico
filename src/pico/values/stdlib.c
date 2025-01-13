@@ -63,46 +63,11 @@ Allocator* set_std_tmp_allocator(Allocator* al) {
 //------------------------------------------------------------------------------
 
 PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
-    PiType* i1 = mem_alloc(sizeof(PiType), a);
-    PiType* i2 = mem_alloc(sizeof(PiType), a);
-    PiType* i3 = mem_alloc(sizeof(PiType), a);
-
-    i1->sort = TPrim;
-    i1->prim = a1;
-    i2->sort = TPrim;
-    i2->prim = a2;
-    i3->sort = TPrim;
-    i3->prim = r;
-
-    PiType type;
-    type.sort = TProc;
-    PtrArray args = mk_ptr_array(2, a);
-    push_ptr(i1, &args);
-    push_ptr(i2, &args);
-
-    type.proc.args = args;
-    type.proc.ret = i3;
-
-    return type;
+    return mk_proc_type(a, 2, mk_prim_type(a1), mk_prim_type(a2), mk_prim_type(r));
 }
 
 PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
-    PiType* i1 = mem_alloc(sizeof(PiType), a);
-    PiType* i2 = mem_alloc(sizeof(PiType), a);
-
-    *i1 = arg;
-    i2->sort = TPrim;
-    i2->prim = ret;
-
-    PiType type;
-    type.sort = TProc;
-    PtrArray args = mk_ptr_array(1, a);
-    push_ptr(i1, &args);
-
-    type.proc.args = args;
-    type.proc.ret = i2;
-
-    return type;
+    return mk_proc_type(a, 1, arg, mk_prim_type(ret));
 }
 
 void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* point) {
@@ -329,20 +294,10 @@ void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
 
-    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
-    PiType* arg2_ty = mem_alloc(sizeof(PiType), a);
-    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
-
-    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address, };
-    *arg2_ty = (PiType) {.sort = TVar, .var = ty_sym, };
-    *ret_ty = (PiType) {.sort = TPrim, .prim = Unit, };
-
-    PtrArray args = mk_ptr_array(2, a);
-    push_ptr(arg1_ty, &args);
-    push_ptr(arg2_ty, &args);
-
     PiType* proc_ty = mem_alloc(sizeof(PiType), a);
-    *proc_ty = (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+
+    PiType tvar = (PiType) {.sort = TVar, .var = ty_sym, };
+    *proc_ty = mk_proc_type(a, 2, mk_prim_type(Address), tvar, mk_prim_type(Unit));
 
     SymbolArray types = mk_u64_array(1, a);
     push_u64(ty_sym, &types);
@@ -421,17 +376,9 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType build_load_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
 
-    PiType* arg1_ty = mem_alloc(sizeof(PiType), a);
-    PiType* ret_ty = mem_alloc(sizeof(PiType), a);
-
-    *arg1_ty = (PiType) {.sort = TPrim, .prim = Address, };
-    *ret_ty = (PiType) {.sort = TVar, .prim = ty_sym, };
-
-    PtrArray args = mk_ptr_array(1, a);
-    push_ptr(arg1_ty, &args);
-
+    PiType ret_ty = (PiType) {.sort = TVar, .prim = ty_sym, };
     PiType* proc_ty = mem_alloc(sizeof(PiType), a);
-    *proc_ty = (PiType) {.sort = TProc, .proc.args = args, .proc.ret = ret_ty};
+    *proc_ty = mk_proc_type(a, 1, mk_prim_type(Address), ret_ty);
 
     SymbolArray types = mk_u64_array(1, a);
     push_u64(ty_sym, &types);
@@ -683,6 +630,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("use"));
     add_def(module, sym, type, &former);
 
+    former = FInstance;
+    sym = string_to_symbol(mv_string("instance"));
+    add_def(module, sym, type, &former);
+
     former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former);
@@ -769,6 +720,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FOpaqueType;
     sym = string_to_symbol(mv_string("Opaque"));
+    add_def(module, sym, type, &former);
+
+    former = FTraitType;
+    sym = string_to_symbol(mv_string("Trait"));
     add_def(module, sym, type, &former);
 
     former = FAllType;

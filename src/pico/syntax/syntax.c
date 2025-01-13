@@ -59,16 +59,27 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SProcedure: {
-        PtrArray nodes = mk_ptr_array(4 + syntax->procedure.args.len, a);
-        push_ptr(mv_str_doc((mk_string("(proc (", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc((mk_string("proc", a)), a), &nodes);
+
+        if (syntax->procedure.implicits.len != 0) {
+            PtrArray impl_nodes = mk_ptr_array(syntax->procedure.implicits.len, a);
+            for (size_t i = 0; i < syntax->procedure.implicits.len; i++) {
+                Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.implicits.data[i].key), a);
+                push_ptr(arg, &impl_nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
+        }
+
+        PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
         for (size_t i = 0; i < syntax->procedure.args.len; i++) {
             Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
-            push_ptr(arg, &nodes);
+            push_ptr(arg, &arg_nodes);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+
         push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes);
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SAll: {
@@ -213,6 +224,48 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case SInstance: {
+        PtrArray nodes = mk_ptr_array(4 + syntax->instance.fields.len, a);
+
+        push_ptr(mk_str_doc(mv_string("instance "), a), &nodes);
+
+        if (syntax->instance.params.len > 0) {
+            const SymbolArray params = syntax->instance.params;
+            PtrArray pnodes = mk_ptr_array(params.len, a);
+            for (size_t i = 0; i < params.len; i++) {
+                push_ptr(mk_str_doc(*symbol_to_string(params.data[i]), a), &pnodes);
+            }
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(pnodes, a), a), &nodes);
+        }
+
+        if (syntax->instance.implicits.len > 0) {
+            const SymPtrAssoc implicits = syntax->instance.implicits;
+            PtrArray inodes = mk_ptr_array(implicits.len, a);
+            for (size_t i = 0; i < implicits.len; i++) {
+                if (implicits.data[i].val) {
+                    PtrArray anodes = mk_ptr_array(2, a);
+                    push_ptr(mk_str_doc(*symbol_to_string(implicits.data[i].key), a), &anodes);
+                    push_ptr(pretty_syntax(implicits.data[i].val, a), &anodes);
+                    push_ptr(mk_paren_doc("(", ")", mv_sep_doc(anodes, a), a), &inodes);
+                } else {
+                    push_ptr(mk_str_doc(*symbol_to_string(implicits.data[i].key), a), &inodes);
+                }
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(inodes, a), a), &nodes);
+        }
+
+        push_ptr(pretty_syntax(syntax->instance.constraint, a), &nodes);
+
+        for (size_t i = 0; i < syntax->instance.fields.len; i++) {
+            PtrArray fnodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->instance.fields.data[i].key), a), &fnodes);
+            push_ptr(pretty_syntax(syntax->instance.fields.data[i].val, a), &fnodes);
+            push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
+        }
+
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case SDynamic: {
         PtrArray nodes = mk_ptr_array(3, a);
 
@@ -223,12 +276,10 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SDynamicUse: {
-        PtrArray nodes = mk_ptr_array(3, a);
-
-        push_ptr(mk_str_doc(mv_string("(use "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("use "), a), &nodes);
         push_ptr(pretty_syntax(syntax->use, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SLet: {
@@ -466,19 +517,37 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SDynamicType: {
-        PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mk_str_doc(mv_string("(Dynamic "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a) ;
+        push_ptr(mk_str_doc(mv_string("Dynamic"), a), &nodes);
         push_ptr(pretty_syntax(syntax->dynamic_type, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SDistinctType: {
-        PtrArray nodes = mk_ptr_array(3, a) ;
-        push_ptr(mk_str_doc(mv_string("(Distinct "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a) ;
+        push_ptr(mk_str_doc(mv_string("Distinct"), a), &nodes);
         push_ptr(pretty_syntax(syntax->distinct_type, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case STraitType: {
+        PtrArray nodes = mk_ptr_array(2 + syntax->trait.fields.len, a) ;
+        push_ptr(mk_str_doc(mv_string("Trait "), a), &nodes);
+
+        PtrArray pnodes = mk_ptr_array(syntax->trait.vars.len, a) ;
+        for (size_t i = 0; i < syntax->trait.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->trait.vars.data[i]), a), &pnodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(pnodes, a), a), &nodes);
+
+        for (size_t i = 0; i < syntax->trait.fields.len ; i++)  {
+            PtrArray fnodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->trait.fields.data[i].key), a), &fnodes);
+            push_ptr(pretty_syntax(syntax->trait.fields.data[i].val, a), &fnodes);
+            push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
+        }
+
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SAllType: {

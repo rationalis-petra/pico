@@ -1,11 +1,16 @@
 #include "test/command_line_opts.h"
 
 TestOpts parse_test_opts(StringArray args, size_t len) {
+    /* return (TestOpts) { */
+    /*     String report_file; */
+    /*     ReportType report_type; */
+    /*     uint8_t report_level; */
+    /*     uint8_t print_level; */
+    /* }; */
 }
 
 TestCommand parse_test_command(StringArray args) {
     // Step 1: the default command (assuming no arguments) is repl
-    // 
     if (args.len == 0) {
         return (TestCommand) {
             .type = CAll,

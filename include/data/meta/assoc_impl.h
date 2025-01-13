@@ -37,7 +37,7 @@
                                                                         \
     void fprefix##_bind(key_t key, val_t val, tprefix##Assoc* map) {    \
         if (map->len >= map->capacity) {                                \
-            map->capacity *= 2;                                         \
+            map->capacity = map->capacity == 0 ? 8 : map->capacity * 2; \
             map->data = mem_realloc(map->data, sizeof(tprefix##ACell) * map->capacity, map->gpa); \
         }                                                               \
         map->data[map->len].key = key;                                  \

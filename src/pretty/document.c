@@ -102,7 +102,7 @@ Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Alloca
     PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mk_str_doc(mv_string(lhs), a), &nodes);
     push_ptr(inner, &nodes);
-    push_ptr(mk_str_doc(mv_string(lhs),a), &nodes);
+    push_ptr(mk_str_doc(mv_string(rhs),a), &nodes);
     return mv_cat_doc(nodes, a);
 }
 

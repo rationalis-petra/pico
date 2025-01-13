@@ -1,8 +1,10 @@
 #include <string.h>
+#include "platform/machine_info.h"
+#include "platform/memory/executable.h"
+
 #include "data/array.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
-#include "platform/memory/executable.h"
 
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
@@ -106,8 +108,11 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.type.sort == TProc || entry.type.sort == TAll) {
         mem_free(entry.value, &module->executable_allocator);
-    } else if (entry.type.sort == TKind) {
+    } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
         delete_pi_type_p(entry.value, module->allocator);
+    } else if (entry.type.sort == TTraitInstance) {
+        mem_free(*(void**)entry.value, module->allocator);
+        mem_free(entry.value, module->allocator);
     } else {
         mem_free(entry.value, module->allocator);
     }
@@ -137,9 +142,19 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     ModuleEntryInternal entry;
     size_t size = pi_size_of(type);
 
-    if (type.sort == TKind) {
+    if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
+    } else if (type.sort == TTraitInstance){
+        size_t total = 0;
+        for (size_t i = 0; i < type.instance.fields.len; i++) {
+            total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
+        }
+        void* new_memory = mem_alloc(total, module->allocator);
+        memcpy(new_memory, *(void**)data, total);
+
+        entry.value = mem_alloc(size, module->allocator);
+        memcpy(entry.value, &new_memory, ADDRESS_SIZE);
     } else {
         entry.value = mem_alloc(size, module->allocator);
         memcpy(entry.value, data, size);
@@ -206,6 +221,25 @@ SymbolArray get_exported_symbols(Module* module, Allocator* a) {
         push_u64(module->entries.data[i].key, &syms);
     };
     return syms;
+}
+
+PtrArray get_exported_instances(Module* module, Allocator* a) {
+    PtrArray instances = mk_ptr_array(module->entries.len, a);
+    for (size_t i = 0; i < module->entries.len; i++) {
+        ModuleEntryInternal m_entry = module->entries.data[i].val;
+        if (m_entry.type.sort == TTraitInstance) {
+            InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
+            *entry = (InstanceSrc) {
+                .id = m_entry.type.instance.instance_of,
+                .args = m_entry.type.instance.args,
+                .src_sym = module->entries.data[i].key,
+                .src = module,
+            };
+
+            push_ptr(entry, &instances);
+        }
+    };
+    return instances;
 }
 
 Package* get_package(Module* module) {

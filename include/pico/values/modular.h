@@ -3,6 +3,7 @@
 
 #include "platform/memory/allocator.h"
 #include "data/result.h"
+
 #include "assembler/assembler.h"
 
 #include "pico/data/sym_sarr_amap.h"
@@ -17,11 +18,18 @@
 
 typedef struct Package Package;
 typedef struct Module  Module;
-typedef struct ModuleEntry {
+typedef struct {
     void* value;
     PiType type;
     SymSArrAMap* backlinks;
 } ModuleEntry;
+
+typedef struct {
+    uint64_t id;
+    PtrArray args;
+    Symbol src_sym;
+    Module* src;
+} InstanceSrc;
 
 // Package Interface
 Package* mk_package(Symbol name, Allocator* a);
@@ -38,6 +46,8 @@ Result add_fn_def(Module* module, Symbol name, PiType type, Assembler* fn, SymSA
 
 ModuleEntry* get_def(Symbol sym, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);
+PtrArray get_exported_instances(Module* module, Allocator* a);
+
 String* get_name(Module* module);
 Package* get_package(Module* module);
 Module* get_parent(Module* module);

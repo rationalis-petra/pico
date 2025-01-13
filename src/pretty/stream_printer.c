@@ -20,7 +20,7 @@ void print_sep_doc(PtrArray arr, void* vos) {
     for (size_t i = 0; i < arr.len; i++) {
         Document* doc = (Document*)arr.data[i];
         write_doc(doc, os);
-        write_impl(' ', os);
+        if (i + 1 < arr.len) write_impl(' ', os);
     }
 }
 
@@ -29,7 +29,7 @@ void print_vsep_doc(PtrArray arr, void* vos) {
     for (size_t i = 0; i < arr.len; i++) {
         Document* doc = (Document*)arr.data[i];
         write_doc(doc, os);
-        write_impl('\n', os);
+        if (i + 1 < arr.len) write_impl('\n', os);
     }
 }
 

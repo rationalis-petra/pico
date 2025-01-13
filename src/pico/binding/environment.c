@@ -7,11 +7,16 @@
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
     SymPtrAMap symbol_origins;
+
+    // Map ids to arrays of implementations - each element of the  
+    //  'implementation set' points to the relevant module.
+    SymPtrAMap instances;
 };
 
 Environment* env_from_module(Module* module, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     env->symbol_origins = mk_sym_ptr_amap(128, a);
+    env->instances = mk_sym_ptr_amap(128, a);
 
     // TODO (PERF): this is quite expensive every REPL iteration... possibly 
     // cache results?
@@ -39,11 +44,33 @@ Environment* env_from_module(Module* module, Allocator* a) {
         case ImportPathAll: {
             // Find the package
             Module* importee = get_module(clause.name, package);
-            SymbolArray arr = get_exported_symbols(importee, a);
-            for (size_t i = 0; i < arr.len; i++ ) {
-                sym_ptr_insert(arr.data[i], importee, &(env->symbol_origins));
+            SymbolArray syms = get_exported_symbols(importee, a);
+            for (size_t i = 0; i < syms.len; i++ ) {
+                sym_ptr_insert(syms.data[i], importee, &env->symbol_origins);
             }
-            sdelete_u64_array(arr);
+            sdelete_u64_array(syms);
+
+            // Get all implicits
+            PtrArray instances = get_exported_instances(importee, a);
+            for (size_t i = 0; i < instances.len; i++ ) {
+                InstanceSrc* instance = instances.data[i];
+                PtrArray* p = (PtrArray*)sym_ptr_lookup(instance->id, env->instances);
+                if (!p) {
+                    p = mem_alloc(sizeof(PtrArray), a);
+                    *p = mk_ptr_array(8, a);
+                    // TODO: we know this isn't in the instances; could perhaps
+                    // speed up the process?
+                    sym_ptr_insert(instance->id, p, &env->instances);
+                }
+
+                // Add this instance to the array
+                push_ptr(instance, p);
+            }
+
+            // We do not delete instance entries are they are now in
+            // the environment's instances - just delete the array.
+            sdelete_ptr_array(instances);
+
             break;
         }
         default:
@@ -60,7 +87,29 @@ Environment* env_from_module(Module* module, Allocator* a) {
     }
     sdelete_u64_array(arr);
 
+    // Get all implicits
+    PtrArray instances = get_exported_instances(module, a);
+    for (size_t i = 0; i < instances.len; i++ ) {
+        InstanceSrc* instance = instances.data[i];
+        PtrArray* p = (PtrArray*)sym_ptr_lookup(instance->id, env->instances);
+        if (!p) {
+            p = mem_alloc(sizeof(PtrArray), a);
+            *p = mk_ptr_array(8, a);
+            // TODO: we know this isn't in the instances; could perhaps
+            // speed up the process?
+            sym_ptr_insert(instance->id, p, &env->instances);
+        }
+
+        // Add this instance to the array
+        push_ptr(instance, p);
+    }
+
     return env;
+}
+
+void delete_env(Environment* env, Allocator* a) {
+    sdelete_sym_ptr_amap(env->symbol_origins);
+    mem_free(env, a);
 }
 
 EnvEntry env_lookup(Symbol sym, Environment* env) {
@@ -81,7 +130,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     return result;
 }
 
-void delete_env(Environment* env, Allocator* a) {
-    sdelete_sym_ptr_amap(env->symbol_origins);
-    mem_free(env, a);
+PtrArray* env_implicit_lookup(uint64_t id, Environment* env) {
+    PtrArray** implicits = (PtrArray**)sym_ptr_lookup(id, env->instances);
+    return implicits ? *implicits : NULL;
 }

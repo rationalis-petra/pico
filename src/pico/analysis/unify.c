@@ -55,11 +55,17 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
     } else if (lhs->sort == TProc && rhs->sort == TProc) {
-        if (lhs->proc.args.len != rhs->proc.args.len) {
+        if (lhs->proc.args.len != rhs->proc.args.len
+            || lhs->proc.implicits.len != rhs->proc.implicits.len) {
             return (Result) {
                 .type = Err,
                 .error_message = mk_string("Unification failed: two different procedures of differing types", a)
             };
+        }
+
+        for (size_t i = 0; i < lhs->proc.implicits.len; i++) {
+            Result out = unify(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], a);
+            if (out.type == Err) return out;
         }
 
         // Unify each argumet
@@ -131,6 +137,14 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
             };
+    } else if (lhs->sort == TConstraint && rhs->sort == TConstraint) {
+        if (lhs->constraint.nargs == rhs->constraint.nargs)
+            return (Result) {.type = Ok};
+        else 
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Cannot Unify two constraints of unequal nags", a),
+            };
     } else if (lhs->sort == TVar && rhs->sort == TVar) {
         // check they are the same var
         if (lhs->var != rhs->var) {
@@ -179,6 +193,10 @@ bool has_unification_vars_p(PiType type) {
     case TPrim:
         return false;
     case TProc: {
+        for (size_t i = 0; i < type.proc.implicits.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.proc.implicits.data[i]))
+                return true;
+        }
         for (size_t i = 0; i < type.proc.args.len; i++) {
             if (has_unification_vars_p(*(PiType*)type.proc.args.data[i]))
                 return true;
@@ -214,6 +232,21 @@ bool has_unification_vars_p(PiType type) {
     case TDistinct: {
         return has_unification_vars_p(*type.distinct.type);
     }
+    case TTrait: {
+        return has_unification_vars_p(*type.distinct.type);
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type.instance.args.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.args.data[i]))
+                return true;
+        }
+
+        for (size_t i = 0; i < type.instance.fields.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.fields.data[i].val))
+                return true;
+        }
+        return false;
+    }
     case TVar: return false;
     
     case TAll: {
@@ -224,6 +257,7 @@ bool has_unification_vars_p(PiType type) {
     }
 
     case TKind: return false;
+    case TConstraint: return false;
 
     // Special sort: unification variable
     case TUVar:
@@ -253,6 +287,9 @@ void squash_type(PiType* type) {
     case TPrim:
         break;
     case TProc: {
+        for (size_t i = 0; i < type->proc.implicits.len; i++) {
+            squash_type((PiType*)(type->proc.implicits.data[i]));
+        }
         for (size_t i = 0; i < type->proc.args.len; i++) {
             squash_type((PiType*)(type->proc.args.data[i]));
         }
@@ -293,8 +330,26 @@ void squash_type(PiType* type) {
         squash_type(type->distinct.type);
         break;
     }
+    case TTrait: {
+        // TODO (INVESTIGATE BUG): do we need to sqyash implicits also?
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            squash_type((type->trait.fields.data + i)->val);
+        }
+        break;
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < type->instance.args.len; i++) {
+            squash_type(type->instance.args.data[i]);
+        }
+
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            squash_type(type->instance.fields.data[i].val);
+        }
+        break;
+    }
 
     case TKind: break;
+    case TConstraint: break;
     // Special sort: unification variable
     case TUVar: {
         PiType* subst = type->uvar->subst;

@@ -5,6 +5,7 @@
 #include "data/string.h"
 
 #include "pretty/standard_types.h"
+#include "pretty/string_printer.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 
@@ -32,6 +33,9 @@ void delete_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
+        for (size_t i = 0; i < t.proc.implicits.len; i++)
+            delete_pi_type_p(t.proc.implicits.data[i], a);
+        sdelete_ptr_array(t.proc.implicits);
         for (size_t i = 0; i < t.proc.args.len; i++)
             delete_pi_type_p(t.proc.args.data[i], a);
         sdelete_ptr_array(t.proc.args);
@@ -65,6 +69,23 @@ void delete_pi_type(PiType t, Allocator* a) {
                 delete_pi_type_p(t.distinct.args->data[i], a);
             sdelete_ptr_array(*t.distinct.args);
         }
+        break;
+    }
+    case TTrait: {
+        sdelete_u64_array(t.trait.vars);
+        for (size_t i = 0; i < t.trait.fields.len; i++)
+            delete_pi_type_p(t.trait.fields.data[i].val, a);
+        sdelete_sym_ptr_amap(t.trait.fields);
+        break;
+    }
+    case TTraitInstance: {
+        for (size_t i = 0; i < t.instance.args.len; i++)
+            delete_pi_type_p(t.instance.args.data[i], a);
+        sdelete_ptr_array(t.instance.args);
+
+        for (size_t i = 0; i < t.instance.fields.len; i++)
+            delete_pi_type_p(t.instance.fields.data[i].val, a);
+        sdelete_sym_ptr_amap(t.instance.fields);
         break;
     }
 
@@ -104,6 +125,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     case TPrim: break;
 
     case TKind: break;
+    case TConstraint: break;
 
     default:
         panic(mv_string("In delete_pi_type: unrecognized sort."));
@@ -138,6 +160,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
+        out.proc.implicits = copy_ptr_array(t.proc.implicits,  (TyCopier)copy_pi_type_p, a);
         out.proc.args = copy_ptr_array(t.proc.args,  (TyCopier)copy_pi_type_p, a);
         break;
     case TStruct:
@@ -152,6 +175,16 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TDynamic:
         out.dynamic = copy_pi_type_p(t.dynamic, a);
+        break;
+    case TTrait:
+        out.trait.id = t.trait.id;
+        out.trait.vars = scopy_u64_array(t.trait.vars, a);
+        out.trait.fields = copy_sym_ptr_amap(t.trait.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
+        break;
+    case TTraitInstance:
+        out.instance.instance_of = t.instance.instance_of;
+        out.instance.args = copy_ptr_array(t.instance.args,  (TyCopier)copy_pi_type_p, a);
+        out.instance.fields = copy_sym_ptr_amap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
         break;
     case TResumeMark:
         break;
@@ -198,6 +231,9 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TKind:
         out.kind = t.kind;
+        break;
+    case TConstraint:
+        out.constraint = t.constraint;
         break;
     }
 
@@ -348,6 +384,23 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
+    case TTraitInstance: {
+        void* data = *(void**)val;
+        PtrArray nodes = mk_ptr_array(5 + type->instance.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("(instance <TYPE>"), a), &nodes);
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            SymPtrCell cell = type->instance.fields.data[i];
+            PtrArray lcl_nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &lcl_nodes);
+            push_ptr(pretty_pi_value(data, (PiType*)cell.val, a), &lcl_nodes);
+
+            data += pi_size_of(*(PiType*)cell.val);
+            push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(lcl_nodes, a), a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -388,13 +441,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = pretty_pi_value(val, type->distinct.type, a);
         break;
     }
-    case TKind:  {
+    case TKind:
+    case TConstraint: {
         PiType** ptype = (PiType**) val;
         out = pretty_type(*ptype, a);
         break;
     }
     default:
-        out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
+        out = mk_str_doc(mv_string("Error printing value: it's type has unrecognised sort."), a);
         break;
     }
     return out;
@@ -404,8 +458,16 @@ Document* pretty_type(PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        PtrArray nodes = mk_ptr_array(3, a);
+        PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
+        if (type->proc.implicits.len != 0) {
+            PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
+            for (size_t i = 0; i < type->proc.implicits.len; i++) {
+                push_ptr(pretty_type(type->proc.implicits.data[i], a), &arg_nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
+        }
+
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(pretty_type(type->proc.args.data[i], a), &arg_nodes);
@@ -534,7 +596,51 @@ Document* pretty_type(PiType* type, Allocator* a) {
         push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
         push_ptr(pretty_type(type->distinct.type, a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
+        break;
+    }
+    case TTrait:  {
+        PtrArray nodes = mk_ptr_array(2 + type->trait.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("Trait" ), a), &nodes);
+
+        PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
+        for (size_t i = 0; i < type->trait.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->trait.vars.data[i]), a), &vars);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
+
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
+            PtrArray fd_nodes = mk_ptr_array(2, a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a);
+            Document* arg = pretty_type(type->trait.fields.data[i].val, a);
+
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+
+            push_ptr(fd_doc, &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TTraitInstance: {
+        PtrArray nodes = mk_ptr_array(2 + type->instance.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("Instance" ), a), &nodes);
+        push_ptr(pretty_u64(type->instance.instance_of, a), &nodes);
+
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            PtrArray fd_nodes = mk_ptr_array(2, a);
+            Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
+            Document* arg = pretty_type(type->instance.fields.data[i].val, a);
+
+            push_ptr(fname, &fd_nodes);
+            push_ptr(arg,   &fd_nodes);
+            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+
+            push_ptr(fd_doc, &nodes);
+        }
+
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TVar: {
@@ -580,6 +686,21 @@ Document* pretty_type(PiType* type, Allocator* a) {
         }
         break;
     }
+    case TConstraint: {
+        size_t nargs = type->constraint.nargs;
+        if (nargs == 0) {
+            out = mk_str_doc(mv_string("Constraint"), a);
+        } else {
+            PtrArray nodes = mk_ptr_array(nargs + 2, a);
+            push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
+            for (size_t i = 0; i < nargs; i++) {
+                push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
+            }
+            push_ptr(mk_str_doc(mv_string("] Constraint"), a), &nodes);
+            out = mv_sep_doc(nodes, a);
+        }
+        break;
+    }
     default:
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
         break;
@@ -587,75 +708,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
     return out;
 }
 
-
-PiType* pi_type_subst_i(PiType* type, SymPtrAssoc binds, SymbolArray* shadow, Allocator* a) {
-    // Replace all (free) type variables in type with the variable given by binds
-    PiType* out = mem_alloc(sizeof(PiType), a);
-    switch (type->sort) {
-    case TPrim: {
-        *out = *type;
-        return out;
-    }
-        
-    case TProc: {
-        PtrArray args = mk_ptr_array(type->proc.args.len, a);
-        for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(pi_type_subst_i(type->proc.args.data[i], binds, shadow, a), &args);
-        }
-        *out = (PiType) {
-            .sort = TProc,
-            .proc.args = args,
-            .proc.ret = pi_type_subst_i(type->proc.ret, binds, shadow, a),
-        };
-        return out;
-    }
-    case TStruct: {
-        panic(mv_string("pi_type subst: struct not implemented"));
-    }
-    case TEnum: {
-        panic(mv_string("pi_type subst: enum not implemented"));
-    }
-    // Quantified Types
-    case TVar: {
-        if (find_u64(type->var, *shadow) == shadow->len) {
-            PiType** result = (PiType**)sym_ptr_alookup(type->var, binds);
-            *out = result ? **result : *type;
-        }
-        return out;
-    }
-    case TAll: {
-        panic(mv_string("pi_type subst: all not implemented"));
-    }
-    case TExists: {
-        panic(mv_string("pi_type subst: exists not implemented"));
-    }
-    // Used by Sytem-Fω (type constructors)
-    case TCApp: {
-        panic(mv_string("pi_type subst: app not implemented"));
-    }
-    case TFam: {
-        panic(mv_string("pi_type subst: lam not implemented"));
-    }
-    // Kinds (higher kinds not supported)
-    case TKind: {
-        panic(mv_string("pi_type subst: kind not implemented"));
-    }
-    // Used only during unification
-    case TUVar: {
-        panic(mv_string("pi_type subst: uvar not implemented"));
-    }
-    case TUVarDefaulted: {
-        panic(mv_string("pi_type subst: uvar-defaulted not implemented"));
-    }
-    default:
-        panic(mv_string("Unrecognized sort of type provided to pi_type_susbt_i"));
-    }
-}
-
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a) {
-    SymbolArray shadow = mk_u64_array(16, a);
-    return pi_type_subst_i(type, binds, &shadow, a);
-}
 
 size_t pi_mono_size_of(PiType type) {
     return pi_size_of(type);
@@ -692,7 +744,7 @@ size_t pi_size_of(PiType type) {
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             // Note: Data is padded to be 8-byte aligned!
-            // TODO (TAGS: FEAT): Make generic on padding size?
+            // TODO (FEAT): Make generic on padding size?
             size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
             size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
             total += field_size + padding;
@@ -706,7 +758,7 @@ size_t pi_size_of(PiType type) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
                 // Note: Data is padded to be 8-byte aligned!
-                // TODO (TAGS: FEAT): Make generic on padding size?
+                // TODO (FEAT): Make generic on padding size?
                 size_t field_size = pi_size_of(*(PiType*)types.data[i]);
                 size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
                 total += field_size + padding;
@@ -728,6 +780,12 @@ size_t pi_size_of(PiType type) {
     case TDistinct: {
         return pi_size_of(*type.distinct.type);
     }
+    case TTrait:
+        panic(mv_string("pi_size_of received invalid type: Trait."));
+        break;
+    case TTraitInstance:
+        return ADDRESS_SIZE;
+        break;
     case TAll: {
         return sizeof(void*);
     }
@@ -735,6 +793,7 @@ size_t pi_size_of(PiType type) {
         panic(mv_string("pi_size_of received invalid type: Family."));
     }
     case TKind: 
+    case TConstraint: 
         return sizeof(void*);
     case TUVar:
         panic(mv_string("pi_size_of received invalid type: UVar."));
@@ -778,10 +837,13 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 static int id_counter = 0;
 uint64_t distinct_id() {return id_counter++;}
 
-void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
+void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
+        for (size_t i = 0; i < body->proc.implicits.len; i++) {
+            type_app_subst(body->proc.implicits.data[i], subst, a);
+        }
         for (size_t i = 0; i < body->proc.args.len; i++) {
             type_app_subst(body->proc.args.data[i], subst, a);
         }
@@ -810,14 +872,31 @@ void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
     case TDynamic:
         type_app_subst(body->dynamic, subst, a);
         break;
+    case TDistinct:
+        panic(mv_string("not implemetned type-app for distinct"));
+        break;
+    case TTrait:
+        for (size_t i = 0; i < body->trait.fields.len; i++) {
+            type_app_subst(body->trait.fields.data[i].val, subst, a);
+        }
+        break;
+    case TTraitInstance: // note: not a "real" type in the theory
+        for (size_t i = 0; i < body->instance.args.len; i++) {
+            type_app_subst(body->instance.args.data[i], subst, a);
+        }
+        for (size_t i = 0; i < body->instance.fields.len; i++) {
+            type_app_subst(body->instance.fields.data[i].val, subst, a);
+        }
+        break;
 
     // Quantified Types
     case TVar: {
-        PiType** val = (PiType**)sym_ptr_lookup(body->var, subst);
+        PiType** val = (PiType**)sym_ptr_alookup(body->var, subst);
         if (val) {*body = **val;}
         break;
     }
     case TAll:
+        // Note: when implementing, consider shadowing
         panic(mv_string("Not implemetned type-app for All"));
         break;
     case TExists:
@@ -829,19 +908,53 @@ void type_app_subst(PiType* body, SymPtrAMap subst, Allocator* a) {
         panic(mv_string("Not implemetned type-app for App"));
         break;
     case TFam:
+        // Note: when implementing, consider shadowing
         panic(mv_string("Not implemetned type-app for Fam"));
         break;
 
     // Kinds (higher kinds not supported)
     case TKind: break;
-    default:
-        panic(mv_string("not implemetned type-app for this type of unknown sort!"));
+    default: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), a), &nodes);
+        push_ptr(pretty_type(body, a), &nodes);
+        Document* message = mk_sep_doc(nodes, a);
+        panic(doc_to_str(message, a));
         break;
+    }
     }
 }
 
 PiType* type_app (PiType family, PtrArray args, Allocator* a) {
-    if (family.sort == TDistinct) {
+    if (family.sort == TTrait) {
+        if (family.trait.vars.len != args.len) {
+            panic(mv_string("Invalid type_app!"));
+        }
+        
+        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
+        for (size_t i = 0; i < args.len; i++) {
+            Symbol var = family.trait.vars.data[i];
+            PiType* tipe = args.data[i];
+            sym_ptr_bind(var, tipe, &subst);
+        }
+
+        SymPtrAMap new_fields = mk_sym_ptr_amap(family.trait.fields.len, a);
+        for (size_t i = 0; i < family.trait.fields.len; i++) {
+            SymPtrCell cell = family.trait.fields.data[i];
+            PiType* new_type = copy_pi_type_p(cell.val, a);
+            type_app_subst (new_type, subst, a);
+            sym_ptr_insert(cell.key, new_type, &new_fields);
+        }
+
+        PiType* out_ty = mem_alloc(sizeof(PiType), a);
+        *out_ty = (PiType) {
+            .sort = TTraitInstance,
+            .instance.instance_of = family.trait.id,
+            .instance.args = args, // TODO (INVESTIGATE): is the non-copying of args a bug?
+            .instance.fields = new_fields,
+        };
+        return out_ty;
+    } else if (family.sort == TDistinct) {
         PiType* new_type = mem_alloc(sizeof(PiType), a);
         *new_type = family;
         new_type->distinct.type = type_app(*family.distinct.type, args, a);
@@ -850,16 +963,84 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
-        SymPtrAMap subst = mk_sym_ptr_amap(args.len, a);;
+        SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
             Symbol var = family.binder.vars.data[i];
             PiType* tipe = args.data[i];
-            sym_ptr_insert(var, tipe, &subst);
+            sym_ptr_bind(var, tipe, &subst);
         }
 
         PiType* new_type = copy_pi_type_p(family.binder.body, a);
         type_app_subst (new_type, subst, a);
         return new_type;
+    }
+}
+
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a) {
+    PiType* new_type = copy_pi_type_p(type, a);
+    type_app_subst(new_type, binds, a);
+    return new_type;
+}
+
+bool pi_type_eql(PiType* lhs, PiType* rhs) {
+    if (lhs->sort != rhs->sort) return false;
+
+    switch (lhs->sort) {
+    case TPrim:
+        return lhs->prim == rhs->prim;
+        break;
+    case TProc:
+        if (lhs->proc.implicits.len != rhs->proc.implicits.len) return false;
+        for (size_t i = 0; i < lhs->proc.args.len; i++) {
+            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+        }
+
+        if (lhs->proc.args.len != rhs->proc.args.len) return false;
+        for (size_t i = 0; i < lhs->proc.args.len; i++) {
+            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+        }
+        return pi_type_eql(lhs->proc.ret, rhs->proc.ret);
+        break;
+    case TStruct:
+        panic(mv_string("pi_type_eql not implemented for structs"));
+    case TEnum:
+        panic(mv_string("pi_type_eql not implemented for enums"));
+    case TReset:
+        panic(mv_string("pi_type_eql not implemented for resets"));
+    case TResumeMark:
+        panic(mv_string("pi_type_eql not implemented for resume marks"));
+    case TDynamic:
+        panic(mv_string("pi_type_eql not implemented for dynamics"));
+
+    // 'Special'
+    case TDistinct:
+        panic(mv_string("pi_type_eql not implemented for distinct types"));
+    case TTrait:
+        panic(mv_string("pi_type_eql not implemented for trait types"));
+    case TTraitInstance: // note: not a "real" type in the theory
+        panic(mv_string("pi_type_eql not implemented for trait instance types"));
+
+    // Quantified Types
+    case TVar: // note: not a "real" type in the theory
+        panic(mv_string("pi_type_eql not implemented for type vars"));
+    case TAll:
+        panic(mv_string("pi_type_eql not implemented for all types"));
+    case TExists:
+        panic(mv_string("pi_type_eql not implemented for existential types"));
+
+    // Used by Sytem-Fω (type constructors)
+    case TCApp:
+        panic(mv_string("pi_type_eql not implemented for type applications"));
+    case TFam:
+        panic(mv_string("pi_type_eql not implemented for type families"));
+
+    // Kinds (higher kinds not supported)
+    case TKind:
+        panic(mv_string("pi_type_eql not implemented for kinds"));
+    case TConstraint:
+        panic(mv_string("pi_type_eql not implemented for constraints"));
+    default:
+        panic(mv_string("pi_type_eql provided invalid sort!"));
     }
 }
 
@@ -891,7 +1072,12 @@ PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
     *ret = va_arg(args, PiType);
     va_end(args);
 
-    return (PiType) {.sort = TProc, .proc.args = ty_args, .proc.ret = ret};
+    return (PiType) {
+        .sort = TProc,
+        .proc.implicits = mk_ptr_array(0, a),
+        .proc.args = ty_args,
+        .proc.ret = ret
+    };
 }
 
 PiType mk_struct_type(Allocator* a, size_t nfields, ...) {

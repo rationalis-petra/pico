@@ -12,6 +12,7 @@
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
 void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
+void instantiate_implicits(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, Allocator* a, ErrorPoint* point) {
@@ -32,12 +33,14 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, ErrorPoint* point
         }
         type_var(top->def.bind, check_against, t_env);
         type_check_expr(term, *check_against, t_env, gen, a, point);
+        instantiate_implicits(term, t_env, a, point);
         pop_type(t_env);
         break;
     }
     case TLExpr: {
         Syntax* term = top->expr;
         type_infer_expr(term, t_env, gen, a, point);
+        instantiate_implicits(term, t_env, a, point);
         break;
     }
     }
@@ -138,8 +141,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // give each arg a unification variable type. 
         PiType* proc_ty = mem_alloc(sizeof(PiType), a);
         proc_ty->sort = TProc;
+        proc_ty->proc.implicits = mk_ptr_array(untyped->procedure.implicits.len, a);
         proc_ty->proc.args = mk_ptr_array(untyped->procedure.args.len, a);
         untyped->ptype = proc_ty;
+
+        for (size_t i = 0; i < untyped->procedure.implicits.len; i++) {
+            SymPtrACell arg = untyped->procedure.implicits.data[i];
+            PiType* aty;
+            if (arg.val) {
+                eval_type(arg.val, env, a, point);
+                aty = ((Syntax*)arg.val)->type_val;
+                if (aty->sort != TTraitInstance) {
+                    throw_error(point, mv_string("Instance procedure argument does not have instance type."));
+                }
+            } else  {
+                aty = mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
+            push_ptr(aty, &proc_ty->proc.implicits);
+        }
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
             SymPtrACell arg = untyped->procedure.args.data[i];
@@ -155,7 +175,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
 
         type_infer_i(untyped->procedure.body, env, gen, a, point); 
-        pop_types(env, untyped->procedure.args.len);
+        pop_types(env, untyped->procedure.args.len + untyped->procedure.implicits.len);
         proc_ty->proc.ret = untyped->procedure.body->ptype;
         break;
     }
@@ -207,7 +227,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                              (PiType*)fn_type.proc.args.data[i],
                              env, gen, a, point);
             }
+
             untyped->ptype = fn_type.proc.ret;
+
+        } else if (fn_type.sort == TAll) {
+            SynArray types = mk_ptr_array(fn_type.binder.vars.len, a);
+            for (size_t i = 0; i < fn_type.binder.vars.len; i++) {
+                Syntax* syn = mem_alloc(sizeof(Syntax), a);
+                *syn = (Syntax) {.type = SCheckedType, .type_val = mk_uvar(gen, a),};
+                push_ptr(syn, &types);
+            }
+
+            SynAllApp new_app = (SynAllApp) {
+                .function = untyped->application.function,
+                .types = types,
+                .implicits = untyped->application.implicits,
+                .args = untyped->application.args
+            };
+            untyped->type = SAllApplication;
+            untyped->all_application = new_app;
+            type_infer_i(untyped, env, gen, a, point);
 
         } else if (fn_type.sort == TKind) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
@@ -415,22 +454,88 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
-        PiType struct_type = *untyped->projector.val->ptype;
-        if (struct_type.sort != TStruct) {
-            throw_error(point, mv_string("Projection only works on structs."));
+        PiType source_type = *untyped->projector.val->ptype;
+        if (source_type.sort == TStruct) {
+            // search for field
+            PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.structure.fields.len; i++) {
+                if (source_type.structure.fields.data[i].key == untyped->projector.field) {
+                    ret_ty = source_type.structure.fields.data[i].val;
+                }
+            }
+            if (ret_ty == NULL) {
+                throw_error(point, mv_string("Field not found in struct!"));
+            }
+            untyped->ptype = ret_ty;
+
+        } else if (source_type.sort == TTraitInstance) {
+            // search for field
+            PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.instance.fields.len; i++) {
+                if (source_type.instance.fields.data[i].key == untyped->projector.field) {
+                    ret_ty = source_type.instance.fields.data[i].val;
+                }
+            }
+            if (ret_ty == NULL) {
+                throw_error(point, mv_string("Field not found in instance!"));
+            }
+            untyped->ptype = ret_ty;
+
+        } else {
+            throw_error(point, mv_string("Projection only works on structs and traits."));
+        }
+        break;
+    }
+    case SInstance: {
+        // Output type
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        untyped->ptype = ty;
+
+        PiType* constraint_ty = mem_alloc(sizeof(PiType), a);
+        *constraint_ty = (PiType) {.sort = TConstraint, .constraint.nargs = 0};
+
+        PiType* ty_ty = mem_alloc(sizeof(PiType), a);
+        *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
+
+        for (size_t i = 0; i < untyped->instance.params.len; i++) {
+            Symbol arg = untyped->instance.params.data[i];
+            type_var(arg, ty_ty, env);
         }
 
-        // search for field
-        PiType* ret_ty = NULL;
-        for (size_t i = 0; i < struct_type.structure.fields.len; i++) {
-            if (struct_type.structure.fields.data[i].key == untyped->projector.field) {
-                ret_ty = struct_type.structure.fields.data[i].val;
+        for (size_t i = 0; i < untyped->instance.implicits.len; i++) {
+            SymPtrACell arg = untyped->instance.implicits.data[i];
+            PiType* aty;
+            if (arg.val) {
+                eval_type(arg.val, env, a, point);
+                aty = ((Syntax*)arg.val)->type_val;
+            } else  {
+                aty = mk_uvar(gen, a);
+            }
+            type_var(arg.key, aty, env);
+        }
+
+        eval_type(untyped->instance.constraint, env, a, point);
+        *ty = *untyped->instance.constraint->type_val;
+
+        if (ty->sort != TTraitInstance) {
+            throw_error(point, mv_string("Instance type invalid"));
+        }
+
+        if (untyped->instance.fields.len != ty->trait.fields.len) {
+            throw_error(point, mv_string("Instance must have exactly n fields."));
+        }
+
+        for (size_t i = 0; i < ty->instance.fields.len; i++) {
+            Syntax** field_syn = (Syntax**)sym_ptr_lookup(ty->instance.fields.data[i].key, untyped->instance.fields);
+            if (field_syn) {
+                PiType* field_ty = ty->instance.fields.data[i].val;
+                type_check_i(*field_syn, field_ty, env, gen, a, point);
+            } else {
+                throw_error(point, mv_string("Trait instance is missing a field"));
             }
         }
-        if (ret_ty == NULL) {
-            throw_error(point, mv_string("Projection only works on structs."));
-        }
-        untyped->ptype = ret_ty;
+
+        pop_types(env, untyped->instance.params.len + untyped->instance.implicits.len);
         break;
     }
     case SDynamic: {
@@ -740,6 +845,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         break;
     }
+    case STraitType: {
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TConstraint, .constraint.nargs = untyped->trait.vars.len};
+        untyped->ptype = ty;
+
+        PiType* aty = mem_alloc(sizeof(PiType), a);
+        *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped->trait.vars.len; i++) {
+            Symbol arg = untyped->trait.vars.data[i];
+            type_var(arg, aty, env);
+        }
+
+        for (size_t i = 0; i < untyped->trait.fields.len; i++) {
+            Syntax* s = untyped->trait.fields.data[i].val;
+            type_check_i(s, aty, env, gen, a, point);
+        }
+        pop_types(env, untyped->bind_type.bindings.len);
+        break;
+    }
     case SOpaqueType: {
         type_infer_i(untyped->distinct_type, env, gen, a, point);
         untyped->ptype= untyped->distinct_type->ptype;
@@ -761,21 +885,27 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SLitBool:
     case SLitString:
     case SVariable:
+    case SAbsVariable:
         break;
     case SProcedure: {
         // squash body
+        // TODO (FUTURE BUG): Need to squash types of annotated arguments!
         squash_types(typed->procedure.body, a, point);
         break;
     }
     case SAll: {
-        // TODO (TAGS: FUTURE BUG): need to squash args when HKTs are allowed 
+        // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
         squash_types(typed->all.body, a, point);
         break;
     }
     case SApplication: {
         squash_types(typed->application.function, a, point);
         
-        for (size_t i = 0; i < typed->procedure.args.len; i++) {
+        for (size_t i = 0; i < typed->application.implicits.len; i++) {
+            squash_types(typed->application.implicits.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->application.args.len; i++) {
             squash_types(typed->application.args.data[i], a, point);
         }
         break;
@@ -785,6 +915,10 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
 
         for (size_t i = 0; i < typed->all_application.types.len; i++) {
             squash_types(typed->all_application.types.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
+            squash_types(typed->all_application.implicits.data[i], a, point);
         }
         
         for (size_t i = 0; i < typed->all_application.args.len; i++) {
@@ -814,7 +948,6 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     }
     case SStructure: {
-        // Loop for each element in the 
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
             squash_types(syn, a, point);
@@ -823,6 +956,19 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     }
     case SProjector:
         squash_types(typed->projector.val, a, point);
+        break;
+    case SInstance:
+        squash_types(typed->instance.constraint, a, point);
+
+        for (size_t i = 0; i < typed->instance.implicits.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
+
+        for (size_t i = 0; i < typed->instance.fields.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
         break;
     case SDynamic:
         squash_types(typed->dynamic, a, point);
@@ -942,6 +1088,11 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SOpaqueType:
         squash_types(typed->opaque_type, a, point);
+        break;
+    case STraitType:
+        for (size_t i = 0; i < typed->trait.fields.len; i++) {
+            squash_types(typed->trait.fields.data[i].val, a, point);
+        }
         break;
     case SCheckedType:
         squash_type(typed->type_val);
@@ -1094,16 +1245,18 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     }
     case SApplication: {
         eval_type(untyped->application.function, env, a, point);
-        if (untyped->application.function->ptype->sort != TKind) {
-            panic(mv_string("Type application expects kind"));
+        if (untyped->application.function->ptype->sort == TKind ||
+            untyped->application.function->ptype->sort == TConstraint) {
+            PtrArray args = mk_ptr_array(untyped->application.args.len, a);
+            for (size_t i = 0; i < untyped->application.args.len; i++) {
+                Syntax* arg = untyped->application.args.data[i];
+                eval_type(arg, env, a, point);
+                push_ptr(arg->type_val, &args);
+            }
+            untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
+        } else {
+            panic(mv_string("Type application expects kind or constraint"));
         }
-        PtrArray args = mk_ptr_array(untyped->application.args.len, a);
-        for (size_t i = 0; i < untyped->application.args.len; i++) {
-            Syntax* arg = untyped->application.args.data[i];
-            eval_type(arg, env, a, point);
-            push_ptr(arg->type_val, &args);
-        }
-        untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
         break;
     }
     case SCheckedType: break; // Can leave blank
@@ -1118,4 +1271,272 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
         .kind.nargs = 0,
     };
     untyped->ptype = kind;
+}
+
+void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* point) {
+    switch (syn->type) {
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
+    case SLitString:
+    case SLitBool:
+    case SVariable:
+    case SAbsVariable:
+        break;
+
+    // Terms & term formers
+    case SProcedure: {
+        for (size_t i = 0; i < syn->procedure.implicits.len; i++) {
+            SymPtrACell arg = syn->procedure.implicits.data[i];
+            type_var(arg.key, arg.val, env);
+        }
+        for (size_t i = 0; i < syn->procedure.args.len; i++) {
+            SymPtrACell arg = syn->procedure.args.data[i];
+            type_var(arg.key, arg.val, env);
+        }
+        instantiate_implicits(syn->procedure.body, env, a, point);
+        pop_types(env, syn->procedure.args.len + syn->procedure.implicits.len);
+        break;
+    }
+    case SAll: {
+        for (size_t i = 0; i < syn->all.args.len; i++) {
+            Symbol arg = syn->all.args.data[i];
+
+            // TODO INVESTIGATE: could this cause issues??
+            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+
+            type_qvar(arg, arg_ty, env);
+        }
+        instantiate_implicits(syn->all.body, env, a, point);
+        pop_types(env, syn->all.args.len);
+        break;
+    }
+    case SApplication: {
+        instantiate_implicits(syn->application.function, env, a, point);
+        for (size_t i = 0; i < syn->application.args.len; i++) {
+            instantiate_implicits(syn->application.args.data[i], env, a, point);
+        }
+
+        if (syn->application.implicits.len != 0) {
+            throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
+        }
+        PiType fn_type = *syn->ptype;
+        for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
+            PiType* arg_ty = fn_type.proc.implicits.data[i];
+            if (arg_ty->sort != TTraitInstance) {
+                throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+            }
+
+            InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
+            switch (e.type) {
+            case IEAbsSymbol: {
+                Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
+                *new_impl = (Syntax) {
+                    .type = SAbsVariable,
+                    .abvar = e.abvar,
+                    .ptype = arg_ty,
+                };
+                push_ptr(new_impl, &syn->application.implicits);
+                break;
+            }
+            case IENotFound:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+            case IEAmbiguous:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+            default:
+                panic(mv_string("Invalid instance entry type!"));
+            }
+        }
+        break;
+    }
+    case SAllApplication: {
+        instantiate_implicits(syn->all_application.function, env, a, point);
+        for (size_t i = 0; i < syn->all_application.args.len; i++) {
+            instantiate_implicits(syn->all_application.args.data[i], env, a, point);
+        }
+
+        if (syn->all_application.implicits.len != 0) {
+            throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
+        }
+
+        PiType all_type = *syn->all_application.function->ptype;
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
+        for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+            Syntax* type = syn->all_application.types.data[i];
+            sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+        }
+        
+        // Bind the vars in the all type to specific types!
+        PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+
+        // Early exit if we don't need to do any instantiation.
+        if (proc_type->sort != TProc) return;
+
+        for (size_t i = 0; i < proc_type->proc.implicits.len; i++) {
+            PiType* arg_ty = proc_type->proc.implicits.data[i];
+            if (arg_ty->sort != TTraitInstance) {
+                throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+            }
+
+            InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
+            switch (e.type) {
+            case IEAbsSymbol: {
+                Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
+                *new_impl = (Syntax) {
+                    .type = SAbsVariable,
+                    .abvar = e.abvar,
+                    .ptype = arg_ty,
+                };
+                push_ptr(new_impl, &syn->all_application.implicits);
+                break;
+            }
+            case IENotFound:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+            case IEAmbiguous:
+                throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+            default:
+                panic(mv_string("Invalid instance entry type!"));
+            }
+        }
+        break;
+    }
+    case SConstructor: break;
+    case SVariant: {
+        for (size_t i = 0; i < syn->variant.args.len; i++) {
+            instantiate_implicits(syn->variant.args.data[i], env, a, point);
+        }
+        break;
+    }
+    case SMatch: {
+        instantiate_implicits(syn->match.val, env, a, point);
+
+        for (size_t i = 0; i < syn->match.clauses.len; i++) {
+            SynClause* clause = syn->match.clauses.data[i];
+
+            // TODO BUG: bind types from clause
+            instantiate_implicits(clause->body, env, a, point);
+        }
+        break;
+    }
+    case SStructure: {
+        for (size_t i = 0; i < syn->structure.fields.len; i++) {
+            instantiate_implicits(syn->structure.fields.data[i].val, env, a, point);
+        }
+        break;
+    }
+    case SProjector: {
+        instantiate_implicits(syn->projector.val, env, a, point);
+        break;
+    }
+    case SInstance: {
+        PiType* ty_ty = mem_alloc(sizeof(PiType), a);
+        *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
+
+        for (size_t i = 0; i < syn->instance.params.len; i++) {
+            Symbol arg = syn->instance.params.data[i];
+            type_var(arg, ty_ty, env);
+        }
+
+        for (size_t i = 0; i < syn->instance.implicits.len; i++) {
+            SymPtrACell arg = syn->instance.implicits.data[i];
+            type_var(arg.key, arg.val, env);
+        }
+
+        for (size_t i = 0; i < syn->ptype->instance.fields.len; i++) {
+            Syntax** field_syn = (Syntax**)sym_ptr_lookup(syn->ptype->instance.fields.data[i].key, syn->instance.fields);
+            if (field_syn) {
+                instantiate_implicits(*field_syn, env, a, point);
+            } else {
+                throw_error(point, mv_string("Trait instance is missing a field"));
+            }
+        }
+
+        pop_types(env, syn->instance.params.len + syn->instance.implicits.len);
+        break;
+    }
+    case SDynamic:
+        instantiate_implicits(syn->dynamic, env, a, point);
+        break;
+    case SDynamicUse:
+        instantiate_implicits(syn->use, env, a, point);
+        break;
+
+    // Control Flow & Binding
+    case SDynamicLet:
+        for (size_t i = 0; i < syn->dyn_let_expr.bindings.len; i++) {
+            DynBinding* b = syn->dyn_let_expr.bindings.data[i];
+            instantiate_implicits(b->var, env, a, point);
+            instantiate_implicits(b->expr, env, a, point);
+        }
+        instantiate_implicits(syn->dyn_let_expr.body, env, a, point);
+        break;
+    case SLet:
+        // TODO BUG: update environment 
+        for (size_t i = 0; i < syn->let_expr.bindings.len; i++) {
+            instantiate_implicits(syn->let_expr.bindings.data[i].val, env, a, point);
+        }
+        instantiate_implicits(syn->let_expr.body, env, a, point);
+        break;
+    case SIf:
+        instantiate_implicits(syn->if_expr.condition, env, a, point);
+        instantiate_implicits(syn->if_expr.true_branch, env, a, point);
+        instantiate_implicits(syn->if_expr.false_branch, env, a, point);
+        break;
+    case SLabels:
+        panic(mv_string("instantiate implicits not implemented for labels"));
+    case SGoTo:
+        break;
+    case SSequence:
+        for (size_t i = 0; i < syn->sequence.elements.len; i++) {
+            instantiate_implicits(syn->sequence.elements.data[i], env, a, point);
+        }
+        break;
+    case SWithReset:
+        // TODO BUG: update environment 
+        instantiate_implicits(syn->with_reset.expr, env, a, point);
+        instantiate_implicits(syn->with_reset.handler, env, a, point);
+        break;
+    case SResetTo:
+        instantiate_implicits(syn->reset_to.point, env, a, point);
+        instantiate_implicits(syn->reset_to.arg, env, a, point);
+        break;
+
+    // Special
+    case SIs:
+        instantiate_implicits(syn->is.val, env, a, point);
+        instantiate_implicits(syn->is.type, env, a, point);
+        break;
+    case SInTo:
+        instantiate_implicits(syn->into.val, env, a, point);
+        instantiate_implicits(syn->into.type, env, a, point);
+        break;
+    case SOutOf:
+        instantiate_implicits(syn->out_of.val, env, a, point);
+        instantiate_implicits(syn->out_of.type, env, a, point);
+        break;
+    case SDynAlloc:
+        instantiate_implicits(syn->size, env, a, point);
+        break;
+    case SModule:
+        panic(mv_string("instantiate implicits not implemented for module"));
+
+    // Types & Type formers
+    case SProcType:
+    case SStructType:
+    case SEnumType:
+    case SResetType:
+    case SDynamicType:
+    case SDistinctType:
+    case SOpaqueType:
+    case STraitType:
+    case SAllType:
+    case SExistsType:
+    case STypeFamily:
+    case SCheckedType:
+        // TODO: check that it is OK to do nothing? (no implicits in types, right?)
+        break;
+
+    case SAnnotation:
+        panic(mv_string("instantiate implicits not implemented for a annotation"));
+    }
 }

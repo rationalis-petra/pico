@@ -5,6 +5,7 @@
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/values/modular.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -30,6 +31,7 @@ typedef enum {
     SLitString,
     SLitBool,
     SVariable,
+    SAbsVariable,
 
     // Terms & term formers
     SProcedure,
@@ -41,6 +43,7 @@ typedef enum {
     SMatch,
     SStructure,
     SProjector,
+    SInstance,
     SDynamic,
     SDynamicUse,
 
@@ -69,6 +72,7 @@ typedef enum {
     SDynamicType,
     SDistinctType,
     SOpaqueType,
+    STraitType,
     SAllType,
     SExistsType,
     STypeFamily,
@@ -90,7 +94,13 @@ typedef struct {
 } SynIntegralLiteral;
 
 typedef struct {
+    size_t index;
+    void* value;
+} AbsVariable;
+
+typedef struct {
     SymPtrAssoc args;
+    SymPtrAssoc implicits;
     Syntax* body;
 } SynProcedure;
 
@@ -101,12 +111,14 @@ typedef struct {
 
 typedef struct {
     Syntax* function;
+    SynArray implicits;
     SynArray args;
 } SynApp;
 
 typedef struct {
     Syntax* function;
     SynArray types;
+    SynArray implicits;
     SynArray args;
 } SynAllApp;
 
@@ -145,6 +157,13 @@ typedef struct {
     Symbol field;
     Syntax* val;
 } SynProjector;
+
+typedef struct {
+    SymbolArray params;
+    SymPtrAssoc implicits;
+    Syntax* constraint;
+    SymSynAMap fields;
+} SynInstance;
 
 typedef struct {
     Syntax* entry;
@@ -204,6 +223,11 @@ typedef struct {
     Syntax* false_branch;
 } SynIf;
 
+typedef struct {
+    SymbolArray vars;
+    SymPtrAMap fields;
+} SynTrait;
+
 //------------------------------------------------------------------------------
 // Special
 //------------------------------------------------------------------------------
@@ -255,6 +279,7 @@ struct Syntax {
         bool boolean;
         String string;
 
+        AbsVariable abvar;
         Symbol variable;
 
         SynProcedure procedure;
@@ -268,6 +293,7 @@ struct Syntax {
         SynProjector projector;
         Syntax* dynamic;
         Syntax* use;
+        SynInstance instance;
 
         SynDynLet dyn_let_expr;
         SynLet let_expr;
@@ -291,13 +317,11 @@ struct Syntax {
         SynBind bind_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
+        SynTrait trait;
         PiType* type_val;
     };
     PiType* ptype;
 };
-
-
-
 
 /* Other instances */
 Document* pretty_syntax(Syntax* syntax, Allocator* a);

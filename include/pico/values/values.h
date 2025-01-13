@@ -48,12 +48,13 @@ typedef enum TermFormer {
     FMatch,
     FStructure,
     FProjector,
+    FInstance,
     FDynamic,
     FDynamicUse,
 
     // Term Formers: Control flow + binding
-    FLet,
     FDynamicLet,
+    FLet,
     FIf,
     FLabels,
     FGoTo,
@@ -76,6 +77,7 @@ typedef enum TermFormer {
     FDynamicType,
     FDistinctType,
     FOpaqueType,
+    FTraitType,
     FAllType,
     FFamily,
 } TermFormer;

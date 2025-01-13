@@ -184,7 +184,7 @@ void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler*
     }
 }
 
-void* mk_proc_ty(size_t len, void* data, void* ret) {
+void* mk_proc_ty(size_t len, void** data, void* ret) {
     Allocator* a = get_std_tmp_allocator();
 
     PiType* ty = mem_alloc(sizeof(PiType), a);
@@ -541,4 +541,61 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
 #endif 
     build_unary_op(ass, Push, reg(RAX), a, point);
+}
+
+
+void* mk_trait_ty(size_t sym_len, Symbol* syms, size_t field_len, void* data) {
+    Allocator* a = get_std_tmp_allocator();
+
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TTrait,
+        .trait.id = distinct_id(),
+
+        .trait.vars.data = syms,
+        .trait.vars.len = sym_len,
+        .trait.vars.size = sym_len,
+        .trait.vars.gpa = a,
+
+        .trait.fields.data = data,
+        .trait.fields.len = field_len,
+        .trait.fields.capacity = field_len,
+        .trait.fields.gpa = a,
+    };
+    return ty;
+}
+
+void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Note: this allocation is fine for definitions as types get copied,
+    // probably not fine if we have a proc which returns a family!
+    // in that case we maybe want this in a data-segment?
+    void* sym_data = mem_alloc(syms.len * sizeof(Symbol), a);
+    memcpy(sym_data, syms.data, syms.len * sizeof(Symbol));
+
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI), imm64(syms.len), a, point);
+    build_binary_op(ass, Mov, reg(RSI), imm64((uint64_t)sym_data), a, point);
+    build_binary_op(ass, Mov, reg(RDX), nfields, a, point);
+    build_binary_op(ass, Mov, reg(RCX), data, a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX), imm64(syms.len), a, point);
+    build_binary_op(ass, Mov, reg(RDX), imm64((uint64_t)sym_data), a, point);
+    build_binary_op(ass, Mov, reg(R8), nfields, a, point);
+    build_binary_op(ass, Mov, reg(R9), data, a, point);
+
+    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&mk_trait_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#endif 
+
+    if (dest.type != Register && dest.reg != RAX) {
+        build_binary_op(ass, Mov, dest, reg(RAX), a, point);
+    }
 }

@@ -29,9 +29,9 @@ typedef struct {
 } IterOpts;
 
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, IterOpts opts) {
-    // TODO (TAGS: UB BUG INVESTIGATE): Possibly need to add volatile qualifier to arena?
-    // however, we are not expecting the arena to be mutated, so...
-    // Create an arena allocator to use in this iteration.
+    // Note: we need to be aware of the arena and error point, as both are used
+    // by code in the 'true' branches of the nonlocal exits, and may be stored
+    // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
 
     clear_assembler(ass);
@@ -70,7 +70,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     Document* doc;
     if (opts.debug_print) {
         doc = pretty_rawtree(res.data.result, &arena);
-        write_string(mv_string("Pretty Printing Raw Syntax\n"), cout);
+        write_string(mv_string("Pretty printing raw syntax\n"), cout);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
     }
@@ -82,7 +82,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     TopLevel abs = abstract(res.data.result, env, &arena, &point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Resovled Syntax:\n"), cout);
+        write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
         doc = pretty_toplevel(&abs, &arena);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);

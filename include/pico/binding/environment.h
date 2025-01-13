@@ -28,6 +28,6 @@ Environment* env_from_module(Module* module, Allocator* a);
 void delete_env(Environment* env, Allocator* a);
 
 EnvEntry env_lookup(Symbol sym, Environment* env);
-
+PtrArray* env_implicit_lookup(uint64_t id, Environment* env);
 
 #endif

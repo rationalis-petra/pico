@@ -247,6 +247,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynamicUse:
         out = mk_str_doc(mv_string("::use"), a);
         break;
+    case FInstance:
+        out = mk_str_doc(mv_string("::instance"), a);
+        break;
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
@@ -310,6 +313,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FOpaqueType:
         out = mk_str_doc(mv_string("::OpaqueType"), a);
+        break;
+    case FTraitType:
+        out = mk_str_doc(mv_string("::TraitType"), a);
         break;
     case FAllType:
         out = mk_str_doc(mv_string("::AllType"), a);

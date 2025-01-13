@@ -37,8 +37,10 @@ typedef enum {
     TResumeMark,
     TDynamic,
 
-    // Distinct is kinda special?
+    // 'Special'
     TDistinct,
+    TTrait,
+    TTraitInstance, // note: not a "real" type in the theory
 
     // Quantified Types
     TVar,
@@ -49,9 +51,9 @@ typedef enum {
     TCApp,
     TFam,
 
-
     // Kinds (higher kinds not supported)
     TKind,
+    TConstraint,
 
     // Used only during unification
     TUVar,
@@ -60,6 +62,7 @@ typedef enum {
 
 typedef struct {
     PtrArray args;
+    PtrArray implicits;
     PiType* ret;
 } ProcType;
 
@@ -75,6 +78,18 @@ typedef struct {
     PiType* in;
     PiType* out;
 } ResetType;
+
+typedef struct {
+    uint64_t id;
+    SymbolArray vars;
+    SymPtrAMap fields; 
+} TraitType; 
+
+typedef struct {
+    uint64_t instance_of;
+    PtrArray args; 
+    SymPtrAMap fields; 
+} TraitInstance; 
 
 typedef struct {
     PtrArray args;
@@ -109,6 +124,9 @@ typedef struct {
     size_t nargs;
 } PiKind;
 
+typedef struct {
+    size_t nargs;
+} PiConstraint;
 
 struct PiType {
     PiType_t sort; 
@@ -116,34 +134,42 @@ struct PiType {
         PrimType prim;
         ProcType proc;
         StructType structure;
-        ResetType reset;
         EnumType enumeration;
+        ResetType reset;
         PiType* dynamic;
+
+        TraitType trait;
+        TraitInstance instance;
+
+        DistinctType distinct;
+        DistinctTypeApp distinct_app;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
         uint64_t var;
         TAppType app;
         TypeBinder binder;
 
-        DistinctType distinct;
-        DistinctTypeApp distinct_app;
-
         PiKind kind;
+        PiConstraint constraint;
 
         // For typechecking/inference
         UVarType* uvar;
     };
 };
 
+// Transform and Analyse
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 
 Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
 
+bool pi_type_eql(PiType* lhs, PiType* rhs);
+
 size_t pi_size_of(PiType t);
 size_t pi_mono_size_of(PiType t);
 size_t runtime_size_of(PiType* t, void* data);
+
 
 // Resource Management
 void delete_pi_type(PiType t, Allocator* a);
