@@ -40,8 +40,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // RSP → Return address
 
     // Prelude: copy return address to RBP+8
-    build_unary_op(ass, Pop, reg(R9), a, point);
-    build_binary_op(ass, Mov, rref8(RBP, 8), reg(R9), a, point);
+    build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RBP, 8, sz_64), reg(R9, sz_64), a, point);
 
     address_start_poly(types, vars, env, a);
 
@@ -64,8 +64,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // 6. return
 
     // 1. Stash old RBP & return address
-    build_unary_op(ass, Push, rref8(RBP, 8), a, point); 
-    build_unary_op(ass, Push, rref8(RBP, 0), a, point); 
+    build_unary_op(ass, Push, rref8(RBP, 8, sz_64), a, point); 
+    build_unary_op(ass, Push, rref8(RBP, 0, sz_64), a, point); 
 
     // 2. Move output value to start of types. We do this via a poly stack move,
     // which needs three pieces of info: 
@@ -75,31 +75,31 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     // 2.2 : The destination address. This is offset + RBP, with offset calculated as:
     //              OLD RBP+RET ADDR | accounts for types       | account for vars
     size_t offset = 2 * ADDRESS_SIZE + ADDRESS_SIZE * types.len + ADDRESS_SIZE * vars.len;
-    build_binary_op(ass, Mov, reg(R9), reg(RBP), a, point);
-    build_binary_op(ass, Add, reg(R9), imm32(offset), a, point);
-    build_binary_op(ass, Sub, reg(R9), reg(RAX), a, point);
+    build_binary_op(ass, Mov, reg(R9, sz_64), reg(RBP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(R9, sz_64), imm32(offset), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
 
     // 2.3: The source address: this is just RSP + 2*ADDRESS_SIZE, as we pushed
     //      the old RBP + Return address 
-    build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
-    build_binary_op(ass, Add, reg(RDX), imm8(2 * ADDRESS_SIZE), a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RDX, sz_64), imm8(2 * ADDRESS_SIZE), a, point);
 
     // Note: we push R9 (the new head of stack) so it can be used
-    build_unary_op(ass, Push, reg(R9), a, point); 
+    build_unary_op(ass, Push, reg(R9, sz_64), a, point); 
     
-    generate_poly_move(reg(R9), reg(RDX), reg(RAX), ass, a, point);
+    generate_poly_move(reg(R9, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
 
     // 3. Pop old RBP and return address
     //    Note that these are currently BELOW the top of the stack!
-    build_unary_op(ass, Pop, reg(RDX), a, point);
-    build_unary_op(ass, Pop, reg(RBP), a, point);
-    build_unary_op(ass, Pop, reg(RCX), a, point);
+    build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RBP, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
     // 4. Move RSP to end of value & restore old RBP
-    build_binary_op(ass, Mov, reg(RSP), reg(RDX), a, point);
+    build_binary_op(ass, Mov, reg(RSP, sz_64), reg(RDX, sz_64), a, point);
 
     // 5. push return address
-    build_unary_op(ass, Push, reg(RCX), a, point); 
+    build_unary_op(ass, Push, reg(RCX, sz_64), a, point); 
     build_nullary_op(ass, Ret, a, point);
 
     address_end_poly(env, a);
@@ -130,22 +130,22 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         AddressEntry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocalDirect:
-            build_unary_op(ass, Push, rref8(RBP, e.stack_offset), a, point);
+            build_unary_op(ass, Push, rref8(RBP, e.stack_offset, sz_64), a, point);
             break;
         case ALocalIndirect:
             // First, we need the size of the variable & allocate space for it on the stack
             generate_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_binary_op(ass, Sub, reg(RSP), reg(RAX), a, point);
+            build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
 
             // Then, find the location of the variable on the stack 
             // *(RBP + stack offset) = offset2
             // RBP + offset2 = dest (stored here in R9)
-            build_binary_op(ass, Mov, reg(R9), rref8(RBP, e.stack_offset), a, point);
-            build_binary_op(ass, Add, reg(R9), reg(RBP), a, point); // 
+            build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
+            build_binary_op(ass, Add, reg(R9, sz_64), reg(RBP, sz_64), a, point); // 
             //build_binary_op(ass, Mov, reg(R9), rref8(R9, 0), a, point);
             //build_binary_op(ass, Add, reg(R9), reg(RBP), a, point);
 
-            generate_poly_move(reg(RSP), reg(R9), reg(RAX), ass, a, point);
+            generate_poly_move(reg(RSP, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
             break;
         case ATypeVar:
             throw_error(point, mv_string("Codegen not implemented for ATypeVar"));
@@ -154,27 +154,26 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
             if (syn.ptype->sort == TProc) {
-                AsmResult out = build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)e.value), a, point);
+                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
-                out = build_unary_op(ass, Push, reg(R9), a, point);
+                out = build_unary_op(ass, Push, reg(R9, sz_64), a, point);
             } else if (syn.ptype->sort == TPrim) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9), rref8(RCX, 0), a, point);
-                build_unary_op(ass, Push, reg(R9), a, point);
+                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RCX, 0, sz_64), a, point);
+                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
             } else if (syn.ptype->sort == TKind) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
             } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
-                // This is a global variable, and therefore has a known
-                // monomorphic type
-                size_t value_size = pi_mono_size_of(*syn.ptype);
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX), imm64((uint64_t)e.value), a, point);
+                // This is a global variable, and therefore has a known monomorphic type
+                size_t value_size = pi_size_of(*syn.ptype);
+                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                out = build_binary_op(ass, Sub, reg(RSP), imm32(value_size), a, point);
+                out = build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
 
                 // copy
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
@@ -217,8 +216,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         
         // Regular Function Call
         // Pop the function into RCX; call the function
-        build_unary_op(ass, Pop, reg(RCX), a, point);
-        build_unary_op(ass, Call, reg(RCX), a, point);
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
         break;
     }
     case SAllApplication: {
@@ -361,22 +360,22 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
                 generate_size_of(RAX, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
-                build_binary_op(ass, Add, rref8(RSP, 0), reg(RAX), a, point);
+                build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
             }
             // Generate the size of the output.
             generate_size_of(RAX, syn.ptype, env, ass, a, point);
 
             // Pop the index and instance ptr from the stack
-            build_unary_op(ass, Pop, reg(RCX), a, point);
-            build_unary_op(ass, Pop, reg(RSI), a, point);
+            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
             // Generate the adderss of the field.
-            build_binary_op(ass, Add, reg(RSI), reg(RCX), a, point);
+            build_binary_op(ass, Add, reg(RSI, sz_64), reg(RCX, sz_64), a, point);
 
             // Reserve space on the stack
-            build_binary_op(ass, Sub, reg(RSP), reg(RAX), a, point);
+            build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
 
-            generate_poly_move(reg(RSP), reg(RSI), reg(RAX), ass, a, point);
+            generate_poly_move(reg(RSP, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
         }
         break;
     }
@@ -612,8 +611,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         */
     }
     case SCheckedType: {
-        build_binary_op(ass, Mov, reg(R9), imm64((uint64_t)syn.type_val), a, point);
-        build_unary_op(ass, Push, reg(R9), a, point);
+        build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
+        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
         break;
     }
     default: {
@@ -627,13 +626,13 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
     case TPrim:
     case TProc:
     case TTraitInstance:
-        build_binary_op(ass, Mov, reg(dest), imm32(pi_size_of(*type)), a, point);
+        build_binary_op(ass, Mov, reg(dest, sz_64), imm32(pi_size_of(*type)), a, point);
         break;
     case TVar: {
         AddressEntry e = address_env_lookup(type->var, env);
         switch (e.type) {
         case ALocalDirect:
-            build_binary_op(ass, Mov, reg(dest), rref8(RBP, e.stack_offset), a, point);
+            build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
             break;
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local indirect."));
@@ -671,9 +670,9 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    build_binary_op(ass, Mov, reg(RDI), dest, a, point);
-    build_binary_op(ass, Mov, reg(RSI), src, a, point);
-    build_binary_op(ass, Mov, reg(RDX), size, a, point);
+    build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
+    build_binary_op(ass, Mov, reg(RSI, sz_64), src, a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), size, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
@@ -686,8 +685,8 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 #endif
 
     // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX), a, point);
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);

@@ -11,6 +11,7 @@
 // This gives the following sizes
 #define REGISTER_SIZE 8
 #define ADDRESS_SIZE 8
+#define ADDRESS_ALIGN 8
 #define ADDRESSABLE_BITS 1
 
 #if defined(_WIN32) || defined(WIN32) || defined(__CYGWIN__)

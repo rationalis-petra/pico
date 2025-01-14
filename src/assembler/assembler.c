@@ -75,46 +75,47 @@ Document* pretty_assembler(Assembler* assembler, Allocator* a) {
     return mv_sep_doc(nodes, a);
 }
 
-Location reg(Regname reg) {
+Location reg(Regname reg, LocationSize sz) {
     return (Location) {
-      .type = Register,
-      .sz = sz_64,
+      .type = Dest_Register,
+      .sz = sz,
       .reg = reg,
     };
 }
 
-Location ref(Regname name) {
+Location ref(Regname name, LocationSize sz) {
     return (Location) {
-      .type = Deref,
+      .type = Dest_Deref,
       .reg = name,
+      .sz = sz,
       .disp_sz = 0,
     };
 }
 
-Location rref8(Regname name, int8_t offset) {
+Location rref8(Regname name, int8_t offset, LocationSize sz) {
     return (Location) {
-        .type = Deref,
-        .sz = sz_64,
+        .type = Dest_Deref,
+        .sz = sz,
         .reg = name,
         .disp_sz = 1,
         .disp_8 = offset,
     };
 }
 
-Location rref32(Regname name, int32_t offset) {
+Location rref32(Regname name, int32_t offset, LocationSize sz) {
     return (Location) {
-        .type = Deref,
-        .sz = sz_64,
+        .type = Dest_Deref,
+        .sz = sz,
         .reg = name,
         .disp_sz = 4,
         .disp_32 = offset,
     };
 }
 
-Location sib(Regname base, Regname index, uint8_t scale) {
+Location sib(Regname base, Regname index, uint8_t scale, LocationSize sz) {
     return (Location) {
-        .type = Deref,
-        .sz = sz_64,
+        .type = Dest_Deref,
+        .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
@@ -122,10 +123,10 @@ Location sib(Regname base, Regname index, uint8_t scale) {
     };
 }
 
-Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement) {
+Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement, LocationSize sz) {
     return (Location) {
-        .type = Deref,
-        .sz = sz_64,
+        .type = Dest_Deref,
+        .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
@@ -136,10 +137,10 @@ Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement) {
     };
 }
 
-Location sib_32(Regname base, Regname index, uint8_t scale, int32_t displacement) {
+Location sib_32(Regname base, LocationSize sz, Regname index, uint8_t scale, int32_t displacement) {
     return (Location) {
-        .type = Deref,
-        .sz = sz_64,
+        .type = Dest_Deref,
+        .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
@@ -151,14 +152,14 @@ Location sib_32(Regname base, Regname index, uint8_t scale, int32_t displacement
 
 Location imm8(int8_t immediate) {
     return (Location) {
-      .type = Immediate,
+      .type = Dest_Immediate,
       .sz = sz_8,
       .immediate_8 = immediate,
     };
 }
 Location imm16(int16_t immediate) {
     return (Location) {
-      .type = Immediate,
+      .type = Dest_Immediate,
       .sz = sz_16,
       .immediate_16 = immediate,
     };
@@ -166,7 +167,7 @@ Location imm16(int16_t immediate) {
 
 Location imm32(int32_t immediate) {
     return (Location) {
-       .type = Immediate,
+       .type = Dest_Immediate,
        .sz = sz_32,
        .immediate_32 = immediate,
     };
@@ -174,7 +175,7 @@ Location imm32(int32_t immediate) {
 
 Location imm64(int64_t immediate) {
     return (Location) {
-      .type = Immediate,
+      .type = Dest_Immediate,
       .sz = sz_64,
       .immediate_64 = immediate,
     };
@@ -213,7 +214,7 @@ void build_binary_table() {
     }
 
     // r/m64, imm8-64
-    binary_table[bindex(Register, sz_64, Immediate, sz_8)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -222,7 +223,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Register, sz_64, Immediate, sz_32)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -231,7 +232,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Deref, sz_64, Immediate, sz_8)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -240,7 +241,7 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = true,
     };
-    binary_table[bindex(Deref, sz_64, Immediate, sz_32)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -251,7 +252,7 @@ void build_binary_table() {
     };
 
     // r/m64, r64
-    binary_table[bindex(Register, sz_64, Register, sz_64)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -260,7 +261,7 @@ void build_binary_table() {
         .order = MR,
         .has_opcode_ext = false,
     };
-    binary_table[bindex(Deref, sz_64, Register, sz_64)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Deref, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -272,7 +273,7 @@ void build_binary_table() {
 
 
     // r64, r/m64
-    binary_table[bindex(Register, sz_64, Register, sz_64)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -281,7 +282,7 @@ void build_binary_table() {
         .order = RM,
         .has_opcode_ext = false,
     };
-    binary_table[bindex(Register, sz_64, Deref, sz_64)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Deref, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -292,7 +293,7 @@ void build_binary_table() {
     };
 
     // r64, imm64
-    binary_table[bindex(Register, sz_64, Immediate, sz_64)] = (BinaryTableEntry){
+    binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_64)] = (BinaryTableEntry){
         .valid = true,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
@@ -311,144 +312,144 @@ void build_binary_opcode_table() {
 
     // Add
     // r/m64, imm8 & imm64
-    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x0;
-    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x0;
-    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x0;
-    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x0;
 
     // r/m64, r64
-    binary_opcode_table[Add][bindex(Register, sz_64, Register, sz_64)][0] = 0x01;
-    binary_opcode_table[Add][bindex(Deref, sz_64, Register, sz_64)][0] = 0x01;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x01;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x01;
 
     // r64, r/m64
-    binary_opcode_table[Add][bindex(Register, sz_64, Register, sz_64)][0] = 0x03;
-    binary_opcode_table[Add][bindex(Register, sz_64, Deref, sz_64)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x03;
 
     // Sub
     // r/m64, imm8 & imm64
-    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x05;
-    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x05;
-    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x05;
-    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x05;
 
     // r/m64, r64
-    binary_opcode_table[Sub][bindex(Register, sz_64, Register, sz_64)][0] = 0x29;
-    binary_opcode_table[Sub][bindex(Deref, sz_64, Register, sz_64)][0] = 0x29;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x29;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x29;
 
     // r64, r/m64
-    binary_opcode_table[Sub][bindex(Register, sz_64, Register, sz_64)][0] = 0x2B;
-    binary_opcode_table[Sub][bindex(Register, sz_64, Deref, sz_64)][0] = 0x2B;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x2B;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x2B;
 
     // Cmp
     // r/m64, imm8 & imm64
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x07;
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x07;
-    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x07;
-    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x07;
 
     // r/m64, r64
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Register, sz_64)][0] = 0x39;
-    binary_opcode_table[Cmp][bindex(Deref, sz_64, Register, sz_64)][0] = 0x39;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x39;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x39;
 
     // r64, r/m64
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Register, sz_64)][0] = 0x3B;
-    binary_opcode_table[Cmp][bindex(Register, sz_64, Deref, sz_64)][0] = 0x3B;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x3B;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x3B;
 
     // ------------------
     //  Logic
     // ------------------
     // And
     // r/m64, imm8 & imm64
-    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x04;
-    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x04;
-    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x04;
-    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x04;
 
     // r/m64, r64
-    binary_opcode_table[And][bindex(Register, sz_64, Register, sz_64)][0] = 0x21;
-    binary_opcode_table[And][bindex(Deref, sz_64, Register, sz_64)][0] = 0x21;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x21;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x21;
 
     // r64, r/m64
-    binary_opcode_table[And][bindex(Register, sz_64, Register, sz_64)][0] = 0x23;
-    binary_opcode_table[And][bindex(Register, sz_64, Deref, sz_64)][0] = 0x23;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x23;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x23;
 
     // Or
     // r/m64, imm8 & imm64
-    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x01;
-    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x01;
-    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x01;
-    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x01;
 
     // r/m64, r64
-    binary_opcode_table[Or][bindex(Register, sz_64, Register, sz_64)][0] = 0x09;
-    binary_opcode_table[Or][bindex(Deref, sz_64, Register, sz_64)][0] = 0x09;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x09;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x09;
 
     // r64, r/m64
-    binary_opcode_table[Or][bindex(Register, sz_64, Register, sz_64)][0] = 0x0B;
-    binary_opcode_table[Or][bindex(Register, sz_64, Deref, sz_64)][0] = 0x0B;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0B;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0B;
 
     // ------------------
     //  Bit Manipulation
     // ------------------
     // Shift Left
     // r/m64, imm8 
-    binary_opcode_table[LShift][bindex(Register, sz_64, Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x04;
-    binary_opcode_table[LShift][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
 
     // Shift Right
     // r/m64, imm8
-    binary_opcode_table[RShift][bindex(Register, sz_64, Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Register, sz_64, Immediate, sz_8)][1] = 0x05;
-    binary_opcode_table[RShift][bindex(Deref, sz_64, Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Deref, sz_64, Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
+    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
+    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
 
     // ------------------
     //  Memory
     // ------------------
     //Mov,   // p 769.
     // r64, imm64
-    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_64)][0] = 0xB8;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_64)][0] = 0xB8;
     // r/m64, imm32
-    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Register, sz_64, Immediate, sz_32)][1] = 0x00;
-    binary_opcode_table[Mov][bindex(Deref, sz_64, Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Deref, sz_64, Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x00;
 
     // r/m64, r64
-    binary_opcode_table[Mov][bindex(Register, sz_64, Register, sz_64)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Deref, sz_64, Register, sz_64)][0] = 0x89;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x89;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x89;
 
     // r64, r/m64
-    binary_opcode_table[Mov][bindex(Register, sz_64, Register, sz_64)][0] = 0x8B;
-    binary_opcode_table[Mov][bindex(Register, sz_64, Deref, sz_64)][0] = 0x8B;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x8B;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x8B;
 
     //Lea,   // p 705.
     // Lea is much more limited in how it works - operand 1 is always a register
-    //      and operand 2 is a "Deref"
+    //      and operand 2 is a "Dest_Deref"
     // r64, r/m64
-    binary_opcode_table[LEA][bindex(Register, sz_64, Deref, sz_64)][0] = 0x8D;
+    binary_opcode_table[LEA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x8D;
 }
 
 uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
@@ -518,7 +519,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         // Step 3: R/M encoding (most complex)
         // Store the R/M location
         switch (rm_loc.type) {
-        case Register:
+        case Dest_Register:
             if (rm_loc.reg == RIP) {
                 throw_error(point, mv_string("Using RIP as a register is invalid"));
             }
@@ -528,7 +529,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
             break;
             
-        case Deref:
+        case Dest_Deref:
             if (rm_loc.disp_sz == 0)  {
                 modrm_byte |= modrm_mod(0b00);
             }
@@ -613,7 +614,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
                 rex_byte |= rex_rm_ext((rm_loc.reg & 0b1000) >> 3); 
             }
             break;
-        case Immediate:
+        case Dest_Immediate:
             throw_error(point, mv_string("Internal error in build_binary_op: rm_loc is immediate."));
             break;
         }
@@ -622,7 +623,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         // Store the Reg location
         // TODO (INVESTIGATE): what if reg_loc is not register? (seems inserting
         //    throw results in spurious errors)
-        if (reg_loc.type == Register) {
+        if (reg_loc.type == Dest_Register) {
             rex_byte |= rex_reg_ext((reg_loc.reg & 0b1000) >> 3); 
             modrm_byte |= modrm_reg(reg_loc.reg & 0b111);
         }
@@ -727,32 +728,32 @@ void build_unary_table() {
     }
 
     // r/m64
-    unary_table[uindex(Register, sz_64)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Register, sz_64)] = (UnaryTableEntry){
         .valid = true,
         .use_modrm_byte = true,
         .num_immediate_bytes = 0,
         .order = M,
     };
-    unary_table[uindex(Deref, sz_64)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Deref, sz_64)] = (UnaryTableEntry){
         .valid = true,
         .use_modrm_byte = true,
         .num_immediate_bytes = 0,
         .order = M,
     };
 
-    unary_table[uindex(Immediate, sz_8)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_8)] = (UnaryTableEntry){
         .valid = true,
         .use_modrm_byte = false,
         .num_immediate_bytes = 1,
         .order = I,
     };
-    unary_table[uindex(Immediate, sz_16)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_16)] = (UnaryTableEntry){
         .valid = true,
         .use_modrm_byte = false,
         .num_immediate_bytes = 2,
         .order = I,
     };
-    unary_table[uindex(Immediate, sz_32)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_32)] = (UnaryTableEntry){
         .valid = true,
         .use_modrm_byte = false,
         .num_immediate_bytes = 4,
@@ -772,29 +773,29 @@ void build_unary_opcode_table() {
 
     // Call
     // r/m64 only! 
-    unary_opcode_table[Call][uindex(Register, sz_64)] =
+    unary_opcode_table[Call][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2};
-    unary_opcode_table[Call][uindex(Deref, sz_64)] =
+    unary_opcode_table[Call][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2};
 
     // Push
     // r/m 64, imm8,32
-    unary_opcode_table[Push][uindex(Register, sz_64)] =
+    unary_opcode_table[Push][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6};
-    unary_opcode_table[Push][uindex(Deref, sz_64)] =
+    unary_opcode_table[Push][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6};
 
-    unary_opcode_table[Push][uindex(Immediate, sz_8)] =
+    unary_opcode_table[Push][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x6A,};
     // 16-bit pushes get extended to 32??
     /* unary_opcode_table[Push][uindex(Immediate, sz_16)] = */
     /*     (UnaryOpEntry) {.opcode = 0x68, .opcode_modrm = 0x6, .init_rex_byte = 0x0}; */
-    unary_opcode_table[Push][uindex(Immediate, sz_32)] =
+    unary_opcode_table[Push][uindex(Dest_Immediate, sz_32)] =
         (UnaryOpEntry) {.opcode = 0x68,};
 
-    unary_opcode_table[Pop][uindex(Register, sz_64)] =
+    unary_opcode_table[Pop][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0x8F,};
-    unary_opcode_table[Pop][uindex(Deref, sz_64)] =
+    unary_opcode_table[Pop][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0x8F,};
 
 
@@ -802,68 +803,68 @@ void build_unary_opcode_table() {
     //  Jumps
     // ------------------
     // jumps are imm/8, and imm/32 (64-bit mode doesn't support 16-bit jumps)
-    unary_opcode_table[JE][uindex(Immediate, sz_8)] =
+    unary_opcode_table[JE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x74,};
-    unary_opcode_table[JE][uindex(Immediate, sz_32)] =
+    unary_opcode_table[JE][uindex(Dest_Immediate, sz_32)] =
         (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x84,};
 
-    unary_opcode_table[JNE][uindex(Immediate, sz_8)] =
+    unary_opcode_table[JNE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x75,};
-    unary_opcode_table[JNE][uindex(Immediate, sz_32)] =
+    unary_opcode_table[JNE][uindex(Dest_Immediate, sz_32)] =
         (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x85,};
 
-    unary_opcode_table[JMP][uindex(Immediate, sz_8)] =
+    unary_opcode_table[JMP][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0xEB,};
-    unary_opcode_table[JMP][uindex(Immediate, sz_32)] =
+    unary_opcode_table[JMP][uindex(Dest_Immediate, sz_32)] =
         (UnaryOpEntry) {.opcode = 0xE9, };
 
-    unary_opcode_table[JMP][uindex(Register, sz_64)] =
+    unary_opcode_table[JMP][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,};
-    unary_opcode_table[JMP][uindex(Deref, sz_64)] =
+    unary_opcode_table[JMP][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,};
 
     // ------------------------
     //  Set Byte based on flag 
     // ------------------------
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
-    unary_opcode_table[SetE][uindex(Register, sz_64)] =
+    unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
     // TODO (BUG): when sz/8 becomes available for Deref, enable this!
     /* unary_opcode_table[SetE][uindex(Deref, sz_64)] = */
     /*     (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,}; */
 
-    unary_opcode_table[SetL][uindex(Register, sz_64)] =
+    unary_opcode_table[SetL][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9C,};
-    unary_opcode_table[SetG][uindex(Register, sz_64)] =
+    unary_opcode_table[SetG][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9F,};
 
     // ------------------
     //  Arithmetic
     // ------------------
 
-    unary_opcode_table[Mul][uindex(Register, sz_64)] =
+    unary_opcode_table[Mul][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/};
-    unary_opcode_table[Mul][uindex(Deref, sz_64)] =
+    unary_opcode_table[Mul][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/};
 
-    unary_opcode_table[Div][uindex(Register, sz_64)] =
+    unary_opcode_table[Div][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/};
-    unary_opcode_table[Div][uindex(Deref, sz_64)] =
+    unary_opcode_table[Div][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/};
 
-    unary_opcode_table[IMul][uindex(Register, sz_64)] =
+    unary_opcode_table[IMul][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/};
-    unary_opcode_table[Mul][uindex(Deref, sz_64)] =
+    unary_opcode_table[Mul][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/};
 
-    unary_opcode_table[IDiv][uindex(Register, sz_64)] =
+    unary_opcode_table[IDiv][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/};
-    unary_opcode_table[IDiv][uindex(Deref, sz_64)] =
+    unary_opcode_table[IDiv][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/};
 }
 
 AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point) {
-    if (loc.type == Register && loc.reg == RIP) {
+    if (loc.type == Dest_Register && loc.reg == RIP) {
         throw_error(point, mv_string("RIP-relative addressing not supported for unary operations!"));
     }
 
@@ -907,7 +908,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         // Step 3: R/M encoding (most complex)
         // Store the R/M location
         switch (loc.type) {
-        case Register:
+        case Dest_Register:
             // simplest : mod = 11, rm = register 
             modrm_byte |= modrm_mod(0b11);
             modrm_byte |= modrm_rm(loc.reg);
@@ -920,7 +921,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
             }
             break;
             
-        case Deref:
+        case Dest_Deref:
             // If the register portion is R9-R15, we need to add REX!
             if (loc.reg & 0b1000) {
                 //rex_byte |= 0b01001000; // REX.W
@@ -983,7 +984,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
                 rex_byte |= rex_rm_ext((loc.reg & 0b1000) >> 3); 
             }
             break;
-        case Immediate:
+        case Dest_Immediate:
             throw_error(point, mv_string("Internal error in unary_binary_op: r/m loc is immediate."));
             break;
         }
