@@ -676,10 +676,10 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(ass, Mov, reg(RCX), dest, a, point);
-    build_binary_op(ass, Mov, reg(RDX), src, a, point);
-    build_binary_op(ass, Mov, reg(R8), size, a, point);
-    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+    build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
+    build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -689,6 +689,6 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 }

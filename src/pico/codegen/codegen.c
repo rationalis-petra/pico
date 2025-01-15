@@ -665,9 +665,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(ass, Mov, reg(RCX), imm32(val_size), a, point);
-        build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
-        build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
@@ -677,7 +677,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif
         // Pop value off stack
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
@@ -697,8 +697,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx
-        build_unary_op(ass, Pop, reg(RCX), a, point);
-        build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
@@ -708,7 +708,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
