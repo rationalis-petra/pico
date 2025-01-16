@@ -39,7 +39,7 @@
    * Nonvolatile: RBX, RSP, RBP, R12, R13, R14, R16
    * Volatile: RAX, RCX, RDX, RSI, RDI, R8, R9, R10, R11
    */
-  #define ABI SYSTEM_V_64
+#define ABI SYSTEM_V_64
 #else 
   #error "Callign convention: only recongized families are Windows and Unix"
 #endif

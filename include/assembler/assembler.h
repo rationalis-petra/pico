@@ -46,6 +46,13 @@ typedef enum {
     LEA,
 
     // ------------------
+    //  Conditional Moves
+    // ------------------
+    CMovE,
+    CMovL,
+    CMovG,
+
+    // ------------------
     //  Meta
     // ------------------
     Binary_Op_Count,
@@ -91,6 +98,7 @@ typedef enum {
 
 typedef enum {
     Ret,
+    Nullary_Op_Count,
 } NullaryOp;
 
 typedef enum {
@@ -181,5 +189,15 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
 AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point);
 
 void asm_init();
+
+// Utility & Pretty
+Document* pretty_register(Regname reg, LocationSize sz, Allocator* a);
+Document* pretty_location(Location loc, Allocator* a);
+Document* pretty_binary_op(BinaryOp op, Allocator* a);
+Document* pretty_unary_op(UnaryOp op, Allocator* a);
+Document* pretty_nullary_op(NullaryOp op, Allocator* a);
+
+Document* pretty_binary_instruction(BinaryOp op, Location dest, Location src, Allocator* a);
+Document* pretty_unary_instruction(UnaryOp op, Location loc, Allocator* a);
 
 #endif

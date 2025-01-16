@@ -111,7 +111,7 @@ void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
     // puts (bytes = rdi)
-    build_binary_op (ass, Mov, reg(RDI, sz_64), rref8(RSP, sz_64, 16), a, point);
+    build_binary_op (ass, Mov, reg(RDI, sz_64), rref8(RSP, 16, sz_64), a, point);
 
 #elif ABI == WIN_64
     // puts (bytes = rcx)
@@ -154,9 +154,9 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // load_module_c_fun (struct on stack)
     // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, sz_64, 24), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
     // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, sz_64, 24), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
 
 #elif ABI == WIN_64
     // load_module_c_fun: push struct
@@ -209,9 +209,9 @@ void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
     // pass in platform/memory/on stack(?)
     build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, sz_64, 24), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
     // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, sz_64, 24), a, point);
+    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
 
 #elif ABI == WIN_64
     // load_module_c_fun: push struct
@@ -267,21 +267,21 @@ uint64_t stdlib_size_of(PiType* t) {
 
 void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // size-of: PiType* -> uint64_t
-#if OS_FAMILY == UNIX
-    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, sz_64, 8), a, point);
-#elif OS_FAMILY == WINDOWS
-    build_binary_op(ass, Mov, reg(RCX), rref8(RSP, 8), a, point);
-    build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, 8, sz_64), a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, 8, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
-#error "build_size_of_fn does not support this OS!"
+#error "build_size_of_fn does not support this ABI!"
 #endif
 
     // call pi_size_of
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stdlib_size_of), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
-#if OS_FAMILY == WINDOWS
-    build_binary_op(ass, Add, reg(RSP), imm32(32), a, point);
+#if OS_FAMILY == WIN_64
+    build_binary_op(ass, Add, reg(RSP, ), imm32(32), a, point);
 #endif 
 
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -322,15 +322,15 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // also note that size = RBP + 0x10
     // Store the return address in RBP + 8
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-    build_binary_op(ass, Mov, rref8(RBP, sz_64, 8), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RBP, 8, sz_64), reg(R9, sz_64), a, point);
 
     // Store Dest address (located @ RBP - 8)
-    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RBP, sz_64, -8), a, point);
+    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RBP, -8, sz_64), a, point);
 
     // SRC address = RSP 
 
     // Store size in R9
-    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, sz_64, 4*ADDRESS_SIZE), a, point); 
+    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 4*ADDRESS_SIZE, sz_64), a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
@@ -358,14 +358,14 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #endif
 
     // Store return address in R9
-    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, sz_64, 8), a, point);
+    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 8, sz_64), a, point);
 
     // set RSP = current RBP + 5*ADDRESS
     build_binary_op(ass, Mov, reg(RSP, sz_64), reg(RBP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RSP, sz_64), imm8(5*ADDRESS_SIZE), a, point);
 
     // Restore the old RBP
-    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, sz_64, 0), a, point);
+    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
 
     // push return address
     build_unary_op(ass, Push, reg(R9, sz_64), a, point);
@@ -414,8 +414,33 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // 4. Set RBP = [RBP]
     // 5. Push return address
 
-    // Store size in R9
-    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, sz_64, 3*ADDRESS_SIZE), a, point); 
+    // Store size in R8, stack size in R9
+    build_binary_op(ass, Mov, reg(R8, sz_64), rref8(RBP, 3*ADDRESS_SIZE, sz_64), a, point); 
+
+    build_binary_op(ass, Mov, reg(R9, sz_64), reg(R8, sz_64), a, point); 
+
+    /* size_t rem = size % 8; */
+    /* size_t pad = rem == 0 ? 0 : 8 - rem; */
+    /* return size + pad; */
+
+    // We accomplish modulo with IDiv, which stores the remainder (modulo) in RDX 
+
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(R8, sz_64), a, point); 
+    build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(0), a, point); 
+    build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(8), a, point); 
+    build_unary_op(ass, IDiv, reg(RCX, sz_64), a, point); 
+
+    // At this point, RDX = Rem, R8 = size, we store 8 - rem in R9 & 0 in R10
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(8), a, point); 
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RDX, sz_64), a, point); 
+    build_binary_op(ass, Mov, reg(R10, sz_64), imm32(0), a, point); 
+
+    // Now, compare rem (RDX) with 0, and conditional move
+    build_binary_op(ass, Cmp, reg(RDX, sz_64), imm32(0), a, point); 
+    build_binary_op(ass, CMovE, reg(R9, sz_64), reg(R10, sz_64), a, point); 
+
+    // Finally, add size (R8) to padding (R9)
+    build_binary_op(ass, Add, reg(R9, sz_64), reg(R8, sz_64), a, point); 
 
     // Stash return address in RAX
     build_unary_op(ass, Pop, reg(RAX, sz_64), a, point); 
@@ -423,12 +448,12 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Stash load src address
     build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
-    // Set RSP = RBP + 4 Addresses - Size (note that at this point, RSP = RBP
+    // Set RSP = RBP + 4 Addresses - Stack Size (note that at this point, RSP = RBP)
     build_binary_op(ass, Add, reg(RSP, sz_64), imm8(4*ADDRESS_SIZE), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
 
     // Set RBP = [RBP]
-    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, sz_64, 0), a, point);
+    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
 
     // Make sure return address is available when we Ret
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point); 
@@ -438,8 +463,8 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RDI, sz_64), imm8(ADDRESS_SIZE), a, point);
 
-    //build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R9, sz_64), a, point);
+    // build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R8, sz_64), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
@@ -447,7 +472,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, reg(RCX, sz_64), imm8(ADDRESS_SIZE), a, point);
 
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(R8, sz_64), reg(R9, sz_64), a, point);
+    // build_binary_op(ass, Mov, reg(R8, sz_64), reg(R8, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"

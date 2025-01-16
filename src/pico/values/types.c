@@ -708,6 +708,20 @@ Document* pretty_type(PiType* type, Allocator* a) {
     return out;
 }
 
+size_t pi_size_align(size_t size, size_t align) {
+    size_t rem = size % align;
+    size_t pad = rem == 0 ? 0 : align - rem;
+    return size + pad;
+}
+
+size_t pi_stack_round(size_t in) {
+    return pi_size_align(in, 8);
+}
+
+size_t pi_stack_size_of(PiType type) {
+    return pi_stack_round(pi_size_of(type));
+}
+
 size_t pi_size_of(PiType type) {
     switch (type.sort) {
     case TPrim:
@@ -718,12 +732,16 @@ size_t pi_size_of(PiType type) {
             return sizeof(uint8_t);
         case Address:
         case Int_64:
+        case UInt_64:
             return sizeof(int64_t);
         case Int_32:
+        case UInt_32:
             return sizeof(int32_t);
         case Int_16:
+        case UInt_16:
             return sizeof(int16_t);
         case Int_8:
+        case UInt_8:
             return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer);

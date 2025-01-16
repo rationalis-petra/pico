@@ -1320,7 +1320,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         if (syn->application.implicits.len != 0) {
             throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
         }
-        PiType fn_type = *syn->ptype;
+        PiType fn_type = *syn->application.function->ptype;
         for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
             PiType* arg_ty = fn_type.proc.implicits.data[i];
             if (arg_ty->sort != TTraitInstance) {

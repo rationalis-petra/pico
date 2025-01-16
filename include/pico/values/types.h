@@ -167,6 +167,10 @@ bool pi_type_eql(PiType* lhs, PiType* rhs);
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
 
+size_t pi_size_align(size_t size, size_t align);
+size_t pi_stack_round(size_t in);
+size_t pi_stack_size_of(PiType type);
+
 // Resource Management
 void delete_pi_type(PiType t, Allocator* a);
 void delete_pi_type_p(PiType* t, Allocator* a);

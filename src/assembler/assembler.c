@@ -3,6 +3,7 @@
 
 #include "data/binary.h"
 #include "data/array.h"
+#include "platform/signals.h"
 
 #include "assembler/assembler.h"
 #include "pretty/document.h"
@@ -450,6 +451,30 @@ void build_binary_opcode_table() {
     //      and operand 2 is a "Dest_Deref"
     // r64, r/m64
     binary_opcode_table[LEA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x8D;
+
+
+    // -------------------
+    //  Conditional Moves
+    // -------------------
+    // CMoves, p 285.
+    // r64, r/m64
+    // 0F 43
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x43;
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x43;
+
+    // 0F 4C
+    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4C;
+    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4C;
+
+    // 0F 4F
+    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4F;
+    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4F;
 }
 
 uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
@@ -470,7 +495,10 @@ uint8_t rex_reg_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
-        throw_error(point, mv_string("Invalid binary table entry."));
+        PtrArray nodes = mk_ptr_array(8, err_allocator);
+        push_ptr(mk_str_doc(mv_string("Invalid binary table entry for: "), err_allocator), &nodes);
+        push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
     }
 
     uint8_t rex_byte = be.init_rex_byte;
@@ -798,7 +826,6 @@ void build_unary_opcode_table() {
     unary_opcode_table[Pop][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0x8F,};
 
-
     // ------------------
     //  Jumps
     // ------------------
@@ -871,11 +898,9 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     UnaryTableEntry ue = unary_table[uindex(loc.type, loc.sz)];
     if (!ue.valid) {
         Allocator* a = err_allocator;
-        Document* dmsg = mk_str_doc(mv_string("Invalid unary table entry for op: "), a);
-        Document* dop = pretty_u64(op, a);
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(dmsg, &nodes);
-        push_ptr(dop, &nodes);
+        push_ptr(mk_str_doc(mv_string("Invalid unary table entry for op: "), a), &nodes);
+        push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
         throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
     }
     UnaryOpEntry uoe = unary_opcode_table[op][uindex(loc.type, loc.sz)];
@@ -895,7 +920,11 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
 
     // Step1: Opcode
     if (opcode_byte == 0x90) {
-        throw_error(point, mv_string("Invalid unary opcode"));
+        Allocator* a = err_allocator;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Invalid unary opcode table entry for op: "), a), &nodes);
+        push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
     }
     if (uoe.opcode_modrm != 0x9) {
         modrm_byte |= modrm_reg(uoe.opcode_modrm);
@@ -1042,6 +1071,14 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
     case Ret:
         opcode = 0xC3;
         break;
+    default: {
+        PtrArray nodes = mk_ptr_array(4, err_allocator);
+        push_ptr(mk_str_doc(mv_string("Unrecognized unary instruction:"), err_allocator), &nodes);
+        push_ptr(pretty_nullary_op(op, err_allocator), &nodes);
+        push_ptr(mk_str_doc(mv_string("/"), err_allocator), &nodes);
+        push_ptr(pretty_i32(op, err_allocator), &nodes);
+        panic(doc_to_str(mv_sep_doc(nodes, err_allocator), err_allocator));
+    }
     }
     U8Array* instructions = &assembler->instructions;
     push_u8(opcode, instructions);
@@ -1057,4 +1094,130 @@ void asm_init() {
 
     build_binary_table();
     build_binary_opcode_table();
+}
+
+// Utility & Pretty
+Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
+    char* names[17][4] = {
+        {"AL", "AX", "EAX", "RAX"},
+        {"BL", "BX", "EBX", "RBX"},
+        {"CL", "CX", "ECX", "RCX"},
+        {"DL", "DX", "EDX", "RDX"},
+        {"AH", "SP", "ESP", "RSP"},
+        {"CH", "BP", "EBP", "RBP"},
+        {"DH", "SI", "ESI", "RSI"},
+        {"BH", "DI", "EDI", "RDI"},
+
+        {"R8b", "R8w", "R8d", "R8"},
+        {"R9b", "R9w", "R9d", "R9"},
+        {"R10b", "R10w", "R10d", "R10"},
+        {"R11b", "R11w", "R11d", "R11"},
+        {"R12b", "R12w", "R12d", "R12"},
+        {"R13b", "R13w", "R13d", "R13"},
+        {"R14b", "R14w", "R14d", "R14"},
+        {"R15b", "R15w", "R15d", "R15"},
+
+        /* // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2 */
+        // Note that I believe the non-64 bit 'IP' are invalid
+        {"RIP", "EIP", "IP", "IPL"},
+    };
+
+    // TODO BUG bounds check here.
+    return mk_str_doc(mv_string(names[reg][sz]), a);
+};
+
+Document* pretty_location(Location loc, Allocator* a) {
+    switch(loc.type) {
+
+    case Dest_Register:
+        return pretty_register(loc.reg, loc.sz, a);
+
+    case Dest_Deref: {
+        PtrArray nodes = mk_ptr_array(6, a);
+        push_ptr(pretty_register(loc.reg, loc.sz, a), &nodes);
+        
+        if (loc.is_scale) {
+            push_ptr(mk_str_doc(mv_string(" + "), a), &nodes);
+            push_ptr(pretty_i8(loc.scale, a), &nodes);
+            push_ptr(pretty_register(loc.index, loc.sz, a), &nodes);
+        }
+
+        push_ptr(mk_str_doc(mv_string(" + "), a), &nodes);
+
+        switch (loc.disp_sz) {
+        case 0:
+            break;
+        case 1:
+            push_ptr(pretty_i8(loc.disp_8, a), &nodes);
+            break;
+        case 4:
+            push_ptr(pretty_i8(loc.disp_32, a), &nodes);
+            break;
+        default: 
+            panic(mv_string("Invalid displacement size to pretty_location."));
+        }
+
+        return mk_paren_doc("[", "]", mv_cat_doc(nodes, a), a);
+    }
+
+    case Dest_Immediate: {
+        switch (loc.sz) {
+        case sz_8:
+            return pretty_i8(loc.immediate_8, a);
+        case sz_16:
+            return pretty_i64(loc.immediate_16, a);
+        case sz_32:
+            return pretty_i64(loc.immediate_32, a);
+        case sz_64:
+            return pretty_i64(loc.immediate_64, a);
+            // TODO: handle default
+        }
+        panic(mv_string("Invalid immediate size size to pretty_location."));
+    }
+
+    default:
+        panic(mv_string("pretty_location: Invalid location type"));
+    }
+}
+
+Document* pretty_binary_op(BinaryOp op, Allocator* a) {
+    char* names[Binary_Op_Count] = {
+        "Add", "Sub", "Cmp", "And", "Or", "LShift", "RShift", "Mov", "LEA",
+    };
+    // TODO BUG bounds check here.
+    return mk_str_doc(mv_string(names[op]), a);
+}
+
+Document* pretty_unary_op(UnaryOp op, Allocator* a) {
+    char* names[Unary_Op_Count] = {
+        "Call", "Push", "Pop", "JE", "JNE", "JMP", "SetE", "SetL", "SetG", "Mul", "Div", "IMul", "IDiv",
+    };
+    // TODO BUG bounds check here.
+    return mk_str_doc(mv_string(names[op]), a);
+}
+
+Document* pretty_nullary_op(NullaryOp op, Allocator* a) {
+    char* names[Nullary_Op_Count] = {
+        "Ret", 
+    };
+    // TODO BUG bounds check here.
+    return mk_str_doc(mv_string(names[op]), a);
+}
+
+Document* pretty_binary_instruction(BinaryOp op, Location dest, Location src, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(5, a);
+    push_ptr(pretty_binary_op(op, a), &nodes);
+    push_ptr(mk_str_doc(mv_string(" "), a), &nodes);
+    push_ptr(pretty_location(dest, a), &nodes);
+    push_ptr(mk_str_doc(mv_string(", "), a), &nodes);
+    push_ptr(pretty_location(src, a), &nodes);
+    return mv_cat_doc(nodes, a);
+}
+
+Document* pretty_unary_instruction(UnaryOp op, Location loc, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(3, a);
+    push_ptr(pretty_unary_op(op, a), &nodes);
+    push_ptr(mk_str_doc(mv_string(" "), a), &nodes);
+    push_ptr(pretty_location(loc, a), &nodes);
+    return mv_cat_doc(nodes, a);
 }
