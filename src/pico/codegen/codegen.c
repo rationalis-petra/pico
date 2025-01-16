@@ -565,7 +565,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SProjector: {
         // First, allocate space on the stack for the value
-        size_t out_sz = pi_size_of(*syn.ptype);
+        size_t out_sz = pi_stack_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(out_sz), a, point);
         address_stack_grow(env, out_sz);
 
