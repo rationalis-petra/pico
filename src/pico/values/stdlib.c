@@ -72,9 +72,9 @@ PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
 
 void build_binary_fun(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(R9, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, op, reg(RAX, sz), reg(R9, sz), a, point);
+    build_binary_op (ass, op, reg(RAX, sz), reg(RDX, sz), a, point);
     build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
     build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op (ass, Ret, a, point);

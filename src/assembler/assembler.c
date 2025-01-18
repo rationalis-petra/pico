@@ -190,11 +190,17 @@ typedef enum EncOrder {
 } EncOrder;
 
 typedef struct {
+    // Validity
     bool valid;
+    // Prefixes
+    bool use_size_override_prefix;
     bool use_rex_byte;
     uint8_t init_rex_byte;
+
+    // Body of the instruction
     bool use_modrm_byte;
     uint8_t num_immediate_bytes;
+
     EncOrder order;
 
     bool has_opcode_ext;
@@ -217,6 +223,7 @@ void build_binary_table() {
     // r/m64, imm8-64
     binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -226,6 +233,7 @@ void build_binary_table() {
     };
     binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -235,6 +243,7 @@ void build_binary_table() {
     };
     binary_table[bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -244,6 +253,7 @@ void build_binary_table() {
     };
     binary_table[bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -255,6 +265,7 @@ void build_binary_table() {
     // r/m64, r64
     binary_table[bindex(Dest_Register, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -264,6 +275,7 @@ void build_binary_table() {
     };
     binary_table[bindex(Dest_Deref, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -276,6 +288,7 @@ void build_binary_table() {
     // r64, r/m64
     binary_table[bindex(Dest_Register, sz_64, Dest_Register, sz_64)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -285,6 +298,7 @@ void build_binary_table() {
     };
     binary_table[bindex(Dest_Register, sz_64, Dest_Deref, sz_64)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = true,
@@ -296,6 +310,7 @@ void build_binary_table() {
     // r64, imm64
     binary_table[bindex(Dest_Register, sz_64, Dest_Immediate, sz_64)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01001000, // REX.W
         .use_modrm_byte = false,
@@ -307,7 +322,9 @@ void build_binary_table() {
     // r32, r32
     binary_table[bindex(Dest_Register, sz_32, Dest_Register, sz_32)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = false,
+        .use_size_override_prefix = false,
         .init_rex_byte = 0b01000000, // REX
         .use_modrm_byte = true,
         .num_immediate_bytes = 0,
@@ -318,6 +335,7 @@ void build_binary_table() {
     // r16, r16
     binary_table[bindex(Dest_Register, sz_16, Dest_Register, sz_16)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = true,
         .use_rex_byte = false,
         .init_rex_byte = 0b01000000, // REX
         .use_modrm_byte = true,
@@ -329,6 +347,7 @@ void build_binary_table() {
     // r8, r8
     binary_table[bindex(Dest_Register, sz_8, Dest_Register, sz_8)] = (BinaryTableEntry){
         .valid = true,
+        .use_size_override_prefix = false,
         .use_rex_byte = true,
         .init_rex_byte = 0b01000000, // REX
         .use_modrm_byte = true,
@@ -367,7 +386,7 @@ void build_binary_opcode_table() {
     // r32, r32 | r16, r16 | r8, r8
     binary_opcode_table[Add][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x03;
     binary_opcode_table[Add][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x03;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x02;
 
     // Sub
     // r/m64, imm8 & imm64
@@ -714,6 +733,9 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     // Step 5: write bytes
     AsmResult out = {.backlink = 0};
     U8Array* instructions = &assembler->instructions;
+    if (be.use_size_override_prefix)
+        push_u8(0x66, instructions);
+
     if (be.use_rex_byte)
         push_u8(rex_byte, instructions);
 
