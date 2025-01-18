@@ -20,6 +20,7 @@ typedef struct Package Package;
 typedef struct Module  Module;
 typedef struct {
     void* value;
+    bool is_module;
     PiType type;
     SymSArrAMap* backlinks;
 } ModuleEntry;
@@ -43,6 +44,7 @@ void delete_module(Module* module);
 
 Result add_def(Module* module, Symbol name, PiType type, void* data); 
 Result add_fn_def(Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks); 
+Result add_module_def(Module* module, Symbol name, Module* child); 
 
 ModuleEntry* get_def(Symbol sym, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);

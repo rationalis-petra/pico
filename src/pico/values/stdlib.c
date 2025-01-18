@@ -70,13 +70,13 @@ PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
     return mk_proc_type(a, 1, arg, mk_prim_type(ret));
 }
 
-void build_binary_fun(Assembler* ass, BinaryOp op, Allocator* a, ErrorPoint* point) {
+void build_binary_fun(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(R9, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, op, reg(RAX, sz_64), reg(R9, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(R9, sz), a, point);
+    build_unary_op (ass, Pop, reg(RAX, sz), a, point);
+    build_binary_op (ass, op, reg(RAX, sz), reg(R9, sz), a, point);
+    build_unary_op (ass, Push, reg(RAX, sz), a, point);
+    build_unary_op (ass, Push, reg(RCX, sz), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
 
@@ -816,49 +816,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("U8"));
     add_def(module, sym, type, &type_data);
 
-    // ------------------------------------------------------------------------
-    // Operators & Functions
-    // ------------------------------------------------------------------------
-
-    build_binary_fun(ass, Add, a, &point);
-    type = mk_binop_type(a, Int_64, Int_64, Int_64);
-    sym = string_to_symbol(mv_string("+"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-
-    build_binary_fun(ass, Sub, a, &point);
-    sym = string_to_symbol(mv_string("-"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-
-    build_special_binary_fun(ass, IMul, a, &point);
-    sym = string_to_symbol(mv_string("*"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-
-    build_special_binary_fun(ass, IDiv, a, &point);
-    sym = string_to_symbol(mv_string("/"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
-
-    build_comp_fun(ass, SetL, a, &point);
-    type = mk_binop_type(a, Int_64, Int_64, Bool);
-    sym = string_to_symbol(mv_string("<"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-
-    build_comp_fun(ass, SetG, a, &point);
-    sym = string_to_symbol(mv_string(">"));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-
-    build_comp_fun(ass, SetE, a, &point);
-    sym = string_to_symbol(mv_string("="));
-    add_fn_def(module, sym, type, ass, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
-
     type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
     build_size_of_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("size-of"));
@@ -881,6 +838,107 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     delete_pi_type(type, a);
 
     add_module(string_to_symbol(mv_string("core")), module, base);
+}
+
+void add_primitive_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, get_package(num), NULL, a);
+    delete_module_header(header);
+    Symbol sym;
+
+    PiType type;
+    //PiType type_val;
+    //PiType* type_data = &type_val;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
+    PrimType prims[2][4] = {
+        {UInt_8, UInt_16, UInt_32, UInt_64},
+        {Int_8, Int_16, Int_32, Int_64},
+    };
+    PrimType prim = prims[is_signed][sz];
+
+    build_binary_fun(ass, Add, sz, a, &point);
+    type = mk_binop_type(a, prim, prim, prim);
+    sym = string_to_symbol(mv_string("+i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_binary_fun(ass, Sub, sz, a, &point);
+    sym = string_to_symbol(mv_string("-i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fun(ass, IMul, a, &point);
+    sym = string_to_symbol(mv_string("*i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fun(ass, IDiv, a, &point);
+    sym = string_to_symbol(mv_string("/i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    build_comp_fun(ass, SetL, a, &point);
+    type = mk_binop_type(a, Int_64, Int_64, Bool);
+    sym = string_to_symbol(mv_string("<i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_comp_fun(ass, SetG, a, &point);
+    sym = string_to_symbol(mv_string(">i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+
+    build_comp_fun(ass, SetE, a, &point);
+    sym = string_to_symbol(mv_string("=i64"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    Result r = add_module_def(num, string_to_symbol(name), module);
+    if (r.type == Err) panic(r.error_message);
+}
+
+void add_num_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
+
+    add_primitive_module(mv_string("u8"), sz_8, true, ass, module, a);
+    add_primitive_module(mv_string("u16"), sz_16, true, ass, module, a);
+    add_primitive_module(mv_string("u32"), sz_32, true, ass, module, a);
+    add_primitive_module(mv_string("u64"), sz_64, true, ass, module, a);
+
+    add_primitive_module(mv_string("i8"), sz_8, true, ass, module, a);
+    add_primitive_module(mv_string("i16"), sz_16, true, ass, module, a);
+    add_primitive_module(mv_string("i32"), sz_32, true, ass, module, a);
+    add_primitive_module(mv_string("i64"), sz_64, true, ass, module, a);
 }
 
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
@@ -1022,6 +1080,7 @@ void add_user_module(Package* base, Allocator* a) {
 Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator) {
     Package* base = mk_package(string_to_symbol(mv_string("base")), a);
     add_core_module(ass, base, a);
+    //add_num_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
     add_user_module(base, a);
 

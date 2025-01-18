@@ -133,7 +133,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         } else {
             String* sym = symbol_to_string(untyped->variable);
             String msg = string_cat(mv_string("Couldn't find type of variable: "), *sym, a);
-            throw_error(point, string_cat(msg, *sym, a));
+            throw_error(point, msg);
         }
         break;
     }

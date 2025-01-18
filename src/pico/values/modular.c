@@ -22,6 +22,7 @@
 
 typedef struct {
     void* value;
+    bool is_module;
     PiType type;
     SymSArrAMap* backlinks;
 } ModuleEntryInternal;
@@ -106,17 +107,23 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 
 // Helper
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
-    if (entry.type.sort == TProc || entry.type.sort == TAll) {
-        mem_free(entry.value, &module->executable_allocator);
-    } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
-        delete_pi_type_p(entry.value, module->allocator);
-    } else if (entry.type.sort == TTraitInstance) {
-        mem_free(*(void**)entry.value, module->allocator);
-        mem_free(entry.value, module->allocator);
+    if (entry.is_module) {
+        if (entry.type.sort == TProc || entry.type.sort == TAll) {
+            mem_free(entry.value, &module->executable_allocator);
+        } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
+            delete_pi_type_p(entry.value, module->allocator);
+        } else if (entry.type.sort == TTraitInstance) {
+            mem_free(*(void**)entry.value, module->allocator);
+            mem_free(entry.value, module->allocator);
+        } else {
+            mem_free(entry.value, module->allocator);
+        }
+        delete_pi_type(entry.type, module->allocator);
     } else {
-        mem_free(entry.value, module->allocator);
+        delete_module(entry.value);
     }
-    delete_pi_type(entry.type, module->allocator);
+    
+
     if (entry.backlinks) {
         delete_sym_sarr_amap(*entry.backlinks,
                              delete_symbol,
@@ -205,6 +212,29 @@ Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymS
     entry_insert(name, entry, &(module->entries));
 
     return (Result) {.type = Ok};
+}
+
+Result add_module_def(Module* module, Symbol name, Module* child) {
+    ModuleEntryInternal entry = (ModuleEntryInternal) {
+        .value = child,
+        .is_module = true,
+    };
+
+    //entry.type = copy_pi_type(type, module->allocator);
+    entry.backlinks = NULL;
+
+    // Free a previous definition (if it exists!)
+    // TODO BUG UB: possibly throw here?
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    if (old_entry) delete_module_entry(*old_entry, module);
+
+    entry_insert(name, entry, &module->entries);
+
+    return (Result) {.type = Ok};
+
+    Result out;
+    out.type = Ok;
+    return out;
 }
 
 ModuleEntry* get_def(Symbol sym, Module* module) {
