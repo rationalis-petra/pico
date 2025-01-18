@@ -70,7 +70,7 @@ PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
     return mk_proc_type(a, 1, arg, mk_prim_type(ret));
 }
 
-void build_binary_fun(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
@@ -80,22 +80,35 @@ void build_binary_fun(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a
     build_nullary_op (ass, Ret, a, point);
 }
 
-void build_special_binary_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
+void build_special_binary_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(R9, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(RDI, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, Mov, reg(RDX, sz_64), imm32(0), a, point);
-    build_unary_op (ass, op, reg(R9, sz_64), a, point);
+
+    switch (sz) {
+    case sz_64:
+    case sz_32:
+        build_binary_op (ass, Mov, reg(RDX, sz), imm32(0), a, point);
+        break;
+    case sz_16:
+        build_binary_op (ass, Mov, reg(RDX, sz), imm16(0), a, point);
+        break;
+    case sz_8:
+        build_binary_op (ass, Mov, reg(RDX, sz), imm8(0), a, point);
+        break;
+    }
+    build_unary_op (ass, op, reg(RDI, sz), a, point);
+
     build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
     build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
 
-void build_comp_fun(Assembler* ass, UnaryOp op, Allocator* a, ErrorPoint* point) {
+void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(R9, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, Cmp, reg(RAX, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op (ass, Cmp, reg(RAX, sz), reg(RDX, sz), a, point);
     build_unary_op (ass, op, reg(RAX, sz_64), a, point);
     build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
     build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
@@ -587,6 +600,10 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
+void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_nullary_op(ass, Ret, a, point);
+}
+
 void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -836,6 +853,20 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
+    type = mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(UInt_64));
+    build_nop_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("address-to-num"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
+    build_nop_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("num-to-address"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
     add_module(string_to_symbol(mv_string("core")), module, base);
 }
 
@@ -870,40 +901,40 @@ void add_primitive_module(String name, LocationSize sz, bool is_signed, Assemble
     };
     PrimType prim = prims[is_signed][sz];
 
-    build_binary_fun(ass, Add, sz, a, &point);
+    build_binary_fn(ass, Add, sz, a, &point);
     type = mk_binop_type(a, prim, prim, prim);
     sym = string_to_symbol(mv_string("+"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_binary_fun(ass, Sub, sz, a, &point);
+    build_binary_fn(ass, Sub, sz, a, &point);
     sym = string_to_symbol(mv_string("-"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fun(ass, IMul, a, &point);
+    build_special_binary_fn(ass, is_signed ? IMul : Mul, sz, a, &point);
     sym = string_to_symbol(mv_string("*"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fun(ass, IDiv, a, &point);
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, sz, a, &point);
     sym = string_to_symbol(mv_string("/"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    build_comp_fun(ass, SetL, a, &point);
-    type = mk_binop_type(a, Int_64, Int_64, Bool);
+    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
+    type = mk_binop_type(a, prim, prim, Bool);
     sym = string_to_symbol(mv_string("<"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_comp_fun(ass, SetG, a, &point);
+    build_comp_fn(ass, is_signed ? SetG : SetA, sz, a, &point);
     sym = string_to_symbol(mv_string(">"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
-    build_comp_fun(ass, SetE, a, &point);
+    build_comp_fn(ass, SetE, sz, a, &point);
     sym = string_to_symbol(mv_string("="));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
@@ -929,10 +960,10 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    add_primitive_module(mv_string("u8"), sz_8, true, ass, module, a);
-    add_primitive_module(mv_string("u16"), sz_16, true, ass, module, a);
-    add_primitive_module(mv_string("u32"), sz_32, true, ass, module, a);
-    add_primitive_module(mv_string("u64"), sz_64, true, ass, module, a);
+    add_primitive_module(mv_string("u8"), sz_8, false, ass, module, a);
+    add_primitive_module(mv_string("u16"), sz_16, false, ass, module, a);
+    add_primitive_module(mv_string("u32"), sz_32, false, ass, module, a);
+    add_primitive_module(mv_string("u64"), sz_64, false, ass, module, a);
 
     add_primitive_module(mv_string("i8"), sz_8, true, ass, module, a);
     add_primitive_module(mv_string("i16"), sz_16, true, ass, module, a);

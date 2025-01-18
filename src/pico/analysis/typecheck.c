@@ -471,6 +471,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                     .abvar.index = 0,
                     .abvar.value = e->value,
                 };
+            } else {
+                throw_error(point, mv_string("Field not found in module!"));
             }
         } else {
             type_infer_i(untyped->projector.val, env, gen, a, point);

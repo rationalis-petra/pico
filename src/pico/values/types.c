@@ -257,7 +257,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             break;
         }
         case Bool:  {
-            uint64_t* uival = (uint64_t*) val;
+            uint8_t* uival = (uint8_t*) val;
             if (*uival == 0) {
                 out = mk_str_doc(mv_string(":false"), a);
             } else {

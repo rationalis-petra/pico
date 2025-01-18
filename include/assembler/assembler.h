@@ -79,8 +79,10 @@ typedef enum {
     //  Set Byte based on flag 
     // ------------------------
     SetE,
-    SetL,
-    SetG,
+    SetB, // Set below   (unsigned)
+    SetA, // Set above   (unsigned)
+    SetL, // Set lesser  (signed)
+    SetG, // Set greater (signed)
 
     // ------------------
     //  Arithmetic
