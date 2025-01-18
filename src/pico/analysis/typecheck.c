@@ -53,6 +53,7 @@ void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point);
 void squash_types(Syntax* untyped, Allocator* a, ErrorPoint* point);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
+Module* try_get_module(Syntax* syn, TypeEnv* env);
 
 // -----------------------------------------------------------------------------
 // Interface
@@ -125,6 +126,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
         if (te.type != TENotFound) {
+            if (te.is_module) {
+                throw_error(point, mv_string("Unexpected module."));
+            }
+
             untyped->ptype = te.ptype;
             if (te.value) {
                 untyped->type = SCheckedType;
@@ -295,6 +300,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         
         // Bind the vars in the all type to specific types!
         PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+        if (proc_type->proc.args.len != untyped->all_application.args.len) {
+            throw_error(point, mk_string("To many args to procedure in all-application", a));
+        }
 
         for (size_t i = 0; i < proc_type->proc.args.len; i++) {
             type_check_i(untyped->all_application.args.data[i],
@@ -453,36 +461,49 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SProjector: {
-        type_infer_i(untyped->projector.val, env, gen, a, point);
-        PiType source_type = *untyped->projector.val->ptype;
-        if (source_type.sort == TStruct) {
-            // search for field
-            PiType* ret_ty = NULL;
-            for (size_t i = 0; i < source_type.structure.fields.len; i++) {
-                if (source_type.structure.fields.data[i].key == untyped->projector.field) {
-                    ret_ty = source_type.structure.fields.data[i].val;
-                }
+        Module* m = try_get_module(untyped->projector.val, env);
+        if (m) {
+            ModuleEntry* e = get_def(untyped->projector.field, m);
+            if (e) {
+                *untyped = (Syntax) {
+                    .ptype = &e->type,
+                    .type = SAbsVariable,
+                    .abvar.index = 0,
+                    .abvar.value = e->value,
+                };
             }
-            if (ret_ty == NULL) {
-                throw_error(point, mv_string("Field not found in struct!"));
-            }
-            untyped->ptype = ret_ty;
-
-        } else if (source_type.sort == TTraitInstance) {
-            // search for field
-            PiType* ret_ty = NULL;
-            for (size_t i = 0; i < source_type.instance.fields.len; i++) {
-                if (source_type.instance.fields.data[i].key == untyped->projector.field) {
-                    ret_ty = source_type.instance.fields.data[i].val;
-                }
-            }
-            if (ret_ty == NULL) {
-                throw_error(point, mv_string("Field not found in instance!"));
-            }
-            untyped->ptype = ret_ty;
-
         } else {
-            throw_error(point, mv_string("Projection only works on structs and traits."));
+            type_infer_i(untyped->projector.val, env, gen, a, point);
+            PiType source_type = *untyped->projector.val->ptype;
+            if (source_type.sort == TStruct) {
+                // search for field
+                PiType* ret_ty = NULL;
+                for (size_t i = 0; i < source_type.structure.fields.len; i++) {
+                    if (source_type.structure.fields.data[i].key == untyped->projector.field) {
+                        ret_ty = source_type.structure.fields.data[i].val;
+                    }
+                }
+                if (ret_ty == NULL) {
+                    throw_error(point, mv_string("Field not found in struct!"));
+                }
+                untyped->ptype = ret_ty;
+
+            } else if (source_type.sort == TTraitInstance) {
+                // search for field
+                PiType* ret_ty = NULL;
+                for (size_t i = 0; i < source_type.instance.fields.len; i++) {
+                    if (source_type.instance.fields.data[i].key == untyped->projector.field) {
+                        ret_ty = source_type.instance.fields.data[i].val;
+                    }
+                }
+                if (ret_ty == NULL) {
+                    throw_error(point, mv_string("Field not found in instance!"));
+                }
+                untyped->ptype = ret_ty;
+
+            } else {
+                throw_error(point, mv_string("Projection only works on structs and traits."));
+            }
         }
         break;
     }
@@ -878,401 +899,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
 }
 
-void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
-    switch (typed->type) {
-    case SLitUntypedIntegral:
-    case SLitTypedIntegral:
-    case SLitBool:
-    case SLitString:
-    case SVariable:
-    case SAbsVariable:
-        break;
-    case SProcedure: {
-        // squash body
-        // TODO (FUTURE BUG): Need to squash types of annotated arguments!
-        squash_types(typed->procedure.body, a, point);
-        break;
-    }
-    case SAll: {
-        // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
-        squash_types(typed->all.body, a, point);
-        break;
-    }
-    case SApplication: {
-        squash_types(typed->application.function, a, point);
-        
-        for (size_t i = 0; i < typed->application.implicits.len; i++) {
-            squash_types(typed->application.implicits.data[i], a, point);
-        }
-
-        for (size_t i = 0; i < typed->application.args.len; i++) {
-            squash_types(typed->application.args.data[i], a, point);
-        }
-        break;
-    }
-    case SAllApplication: {
-        squash_types(typed->application.function, a, point);
-
-        for (size_t i = 0; i < typed->all_application.types.len; i++) {
-            squash_types(typed->all_application.types.data[i], a, point);
-        }
-
-        for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
-            squash_types(typed->all_application.implicits.data[i], a, point);
-        }
-        
-        for (size_t i = 0; i < typed->all_application.args.len; i++) {
-            squash_types(typed->all_application.args.data[i], a, point);
-        }
-        break;
-    }
-    case SConstructor: {
-        squash_types(typed->variant.enum_type, a, point);
-        break;
-    }
-    case SVariant: {
-        squash_types(typed->variant.enum_type, a, point);
-        
-        for (size_t i = 0; i < typed->variant.args.len; i++) {
-            squash_types(typed->variant.args.data[i], a, point);
-        }
-        break;
-    }
-    case SMatch: {
-        squash_types(typed->match.val, a, point);
-
-        for (size_t i = 0; i < typed->match.clauses.len; i++) {
-            SynClause* clause = (SynClause*)typed->match.clauses.data[i];
-            squash_types(clause->body, a, point);
-        }
-        break;
-    }
-    case SStructure: {
-        for (size_t i = 0; i < typed->structure.fields.len; i++) {
-            Syntax* syn = typed->structure.fields.data[i].val;
-            squash_types(syn, a, point);
-        }
-        break;
-    }
-    case SProjector:
-        squash_types(typed->projector.val, a, point);
-        break;
-    case SInstance:
-        squash_types(typed->instance.constraint, a, point);
-
-        for (size_t i = 0; i < typed->instance.implicits.len; i++) {
-            Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, a, point);
-        }
-
-        for (size_t i = 0; i < typed->instance.fields.len; i++) {
-            Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, a, point);
-        }
-        break;
-    case SDynamic:
-        squash_types(typed->dynamic, a, point);
-        break;
-    case SDynamicUse:
-        squash_types(typed->use, a, point);
-        break;
-    case SDynamicLet:
-        for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
-            DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
-            squash_types(dbind->var, a, point);
-            squash_types(dbind->expr, a, point);
-        }
-        squash_types(typed->dyn_let_expr.body, a, point);
-        break;
-    case SLet:
-        for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
-            squash_types(typed->let_expr.bindings.data[i].val, a, point);
-        }
-        squash_types(typed->let_expr.body, a, point);
-        break;
-    case SIf: {
-        squash_types(typed->if_expr.condition, a, point);
-        squash_types(typed->if_expr.true_branch, a, point);
-        squash_types(typed->if_expr.false_branch, a, point);
-        break;
-    }
-    case SLabels:
-        squash_types(typed->labels.entry, a, point);
-        for (size_t i = 0; i < typed->labels.terms.len; i++) {
-            squash_types(typed->labels.terms.data[i].val, a, point);
-        }
-        break;
-    case SGoTo:
-        break;
-    case SWithReset:
-        squash_types(typed->with_reset.expr, a, point);
-        squash_types(typed->with_reset.handler, a, point);
-
-        if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
-            squash_type(typed->with_reset.in_arg_ty);
-        } else {
-            throw_error(point, mv_string("reset argument type not instantiated"));
-        }
-        if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
-            squash_type(typed->with_reset.cont_arg_ty);
-        } else {
-            throw_error(point, mv_string("resume argument type not instantiated"));
-        }
-        break;
-    case SResetTo:
-        squash_types(typed->reset_to.point, a, point);
-        squash_types(typed->reset_to.arg, a, point);
-        break;
-    case SSequence:
-        for (size_t i = 0; i < typed->sequence.elements.len; i++) {
-            SeqElt* elt = typed->sequence.elements.data[i];
-            squash_types(elt->expr, a, point);
-        }
-        break;
-    case SIs:
-        squash_type(typed->is.type->type_val);
-        squash_types(typed->is.val, a, point);
-        break;
-    case SInTo:
-        squash_type(typed->into.type->type_val);
-        squash_types(typed->into.val, a, point);
-        break;
-    case SOutOf:
-        squash_type(typed->out_of.type->type_val);
-        squash_types(typed->out_of.val, a, point);
-        break;
-    case SDynAlloc:
-        squash_types(typed->size, a, point);
-        break;
-    case SProcType: {
-        for (size_t i = 0; i < typed->proc_type.args.len; i++) {
-            squash_types(typed->proc_type.args.data[i], a, point);
-        }
-
-        squash_types(typed->proc_type.return_type, a, point);
-        break;
-    }
-    case SStructType: {
-        for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
-            squash_types(typed->struct_type.fields.data[i].val, a, point);
-        }
-        break;
-    }
-    case SEnumType: {
-        for (size_t i = 0; i < typed->enum_type.variants.len; i++) {
-            PtrArray* args = typed->enum_type.variants.data[i].val;
-
-            for (size_t j = 0; j < args->len; j++) {
-                squash_types(args->data[j], a, point);
-            }
-        }
-        break;
-    }
-    case SResetType: {
-        squash_types(typed->reset_type.in, a, point);
-        squash_types(typed->reset_type.out, a, point);
-        break;
-    }
-    case SDynamicType: {
-        squash_types(typed->dynamic_type, a, point);
-        break;
-    }
-    case SAllType:
-        squash_types(typed->bind_type.body, a, point);
-        break;
-    case STypeFamily:
-        squash_types(typed->bind_type.body, a, point);
-        break;
-    case SDistinctType:
-        squash_types(typed->distinct_type, a, point);
-        break;
-    case SOpaqueType:
-        squash_types(typed->opaque_type, a, point);
-        break;
-    case STraitType:
-        for (size_t i = 0; i < typed->trait.fields.len; i++) {
-            squash_types(typed->trait.fields.data[i].val, a, point);
-        }
-        break;
-    case SCheckedType:
-        squash_type(typed->type_val);
-        break;
-    default:
-        panic(mv_string("Internal Error: invalid syntactic form provided to (squash_types)"));
-        break;
-    }
-
-    if (!has_unification_vars_p(*typed->ptype)) {
-        squash_type(typed->ptype);
-    }
-    else {
-        squash_type(typed->ptype);
-        Document* doc = pretty_type(typed->ptype, a);
-        String str = doc_to_str(doc, a);
-        throw_error(point,
-            string_cat(
-                       string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
-                                  str, a),
-                       string_cat(mv_string("\nType:\n"),
-                                  doc_to_str(pretty_type(typed->ptype, a), a),
-                                  a),
-                       a));
-    }
-}
-
-void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
-    switch (untyped->type) {
-    case SVariable: {
-        TypeEntry e = type_env_lookup(untyped->variable, env);
-        if (e.type == TENotFound) {
-            String msg = mv_string("Variable not found: ");
-            String sym = *symbol_to_string(untyped->variable);
-            throw_error(point, string_cat(msg, sym, a));
-        }
-
-        if (e.value) {
-            untyped->type = SCheckedType;
-            untyped->ptype = e.ptype;
-            untyped->type_val = e.value;
-        } else {
-            String var = *symbol_to_string(untyped->variable);
-            throw_error(point, string_cat(mv_string("Variable expected to be type, was not: "), var, a));
-        }
-        break;
-    }
-
-    // Types & Type formers
-    case SProcType: {
-        PtrArray args = mk_ptr_array(untyped->proc_type.args.len, a);
-        for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
-            Syntax* syn = untyped->proc_type.args.data[i];
-            eval_type(syn, env, a, point);
-            push_ptr(syn->type_val, &args);
-        }
-        Syntax* ret = untyped->proc_type.return_type;
-        eval_type(untyped->proc_type.return_type, env, a, point);
-        PiType* ret_ty = ret->type_val;
-
-        PiType* out_type = mem_alloc(sizeof(PiType), a);
-        *out_type = (PiType) {
-            .sort = TProc,
-            .proc.ret = ret_ty,
-            .proc.args = args,
-        };
-        untyped->type_val = out_type;
-        break;
-    }
-    case SStructType: {
-        SymPtrAMap fields = mk_sym_ptr_amap(untyped->struct_type.fields.len, a);
-        for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
-            Syntax* syn = untyped->struct_type.fields.data[i].val;
-            eval_type(syn, env, a, point);
-            sym_ptr_insert(untyped->struct_type.fields.data[i].key, syn->type_val, &fields);
-        }
-
-        PiType* out_type = mem_alloc(sizeof(PiType), a);
-        *out_type = (PiType) {
-            .sort = TStruct,
-            .structure.fields = fields,
-        };
-        untyped->type_val = out_type;
-        break;
-    }
-    case SEnumType: {
-        SymPtrAMap variants = mk_sym_ptr_amap(untyped->enum_type.variants.len, a);
-        for (size_t i = 0; i < untyped->enum_type.variants.len; i++) {
-            PtrArray* args = untyped->enum_type.variants.data[i].val;
-
-            PtrArray* ty_args = mem_alloc(sizeof(PtrArray), a);
-            *ty_args = mk_ptr_array(args->len, a);
-
-            for (size_t j = 0; j < args->len; j++) {
-                Syntax* syn = args->data[j];
-                eval_type(syn, env, a, point);
-                push_ptr(syn->type_val, ty_args);
-            }
-            
-            sym_ptr_insert(untyped->enum_type.variants.data[i].key, ty_args, &variants);
-        }
-
-        PiType* out_type = mem_alloc(sizeof(PiType), a);
-        *out_type = (PiType) {
-            .sort = TEnum,
-            .enumeration.variants = variants,
-        };
-        untyped->type_val = out_type;
-        break;
-    }
-    case SResetType: {
-        eval_type(untyped->reset_type.in, env, a, point);
-        PiType* in = untyped->reset_type.in->type_val;
-
-        eval_type(untyped->reset_type.out, env, a, point);
-        PiType* out = untyped->reset_type.out->type_val;
-        
-        PiType* out_type = mem_alloc(sizeof(PiType), a);
-        *out_type = (PiType) {
-            .sort = TReset,
-            .reset.in = in,
-            .reset.out = out,
-        };
-        untyped->type_val = out_type;
-        break;
-    }
-    case SDynamicType: {
-        eval_type(untyped->dynamic_type, env, a, point);
-        PiType* dyn = untyped->dynamic_type->type_val;
-
-        PiType* out_type = mem_alloc(sizeof(PiType), a);
-        *out_type = (PiType) {
-            .sort = TDynamic,
-            .dynamic = dyn,
-        };
-        untyped->type_val = out_type;
-        break;
-    }
-    case SAllType: {
-        panic(mv_string("eval_type not implemented for All"));
-        break;
-    }
-    case SExistsType: {
-        panic(mv_string("eval_type not implemented for Exists"));
-        break;
-    }
-    case STypeFamily: {
-        panic(mv_string("eval_type not implemented for Family"));
-        break;
-    }
-    case SApplication: {
-        eval_type(untyped->application.function, env, a, point);
-        if (untyped->application.function->ptype->sort == TKind ||
-            untyped->application.function->ptype->sort == TConstraint) {
-            PtrArray args = mk_ptr_array(untyped->application.args.len, a);
-            for (size_t i = 0; i < untyped->application.args.len; i++) {
-                Syntax* arg = untyped->application.args.data[i];
-                eval_type(arg, env, a, point);
-                push_ptr(arg->type_val, &args);
-            }
-            untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
-        } else {
-            panic(mv_string("Type application expects kind or constraint"));
-        }
-        break;
-    }
-    case SCheckedType: break; // Can leave blank
-    default:
-        throw_error(point, mv_string("Expected a type former - got a term former"));
-    };
-
-    untyped->type = SCheckedType;
-    PiType* kind = mem_alloc(sizeof(PiType), a);
-    *kind = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
-    untyped->ptype = kind;
-}
-
 void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* point) {
     switch (syn->type) {
     case SLitUntypedIntegral:
@@ -1539,4 +1165,417 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     case SAnnotation:
         panic(mv_string("instantiate implicits not implemented for a annotation"));
     }
+}
+
+void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
+    switch (typed->type) {
+    case SLitUntypedIntegral:
+    case SLitTypedIntegral:
+    case SLitBool:
+    case SLitString:
+    case SVariable:
+    case SAbsVariable:
+        break;
+    case SProcedure: {
+        // squash body
+        // TODO (FUTURE BUG): Need to squash types of annotated arguments!
+        squash_types(typed->procedure.body, a, point);
+        break;
+    }
+    case SAll: {
+        // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
+        squash_types(typed->all.body, a, point);
+        break;
+    }
+    case SApplication: {
+        squash_types(typed->application.function, a, point);
+        
+        for (size_t i = 0; i < typed->application.implicits.len; i++) {
+            squash_types(typed->application.implicits.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->application.args.len; i++) {
+            squash_types(typed->application.args.data[i], a, point);
+        }
+        break;
+    }
+    case SAllApplication: {
+        squash_types(typed->application.function, a, point);
+
+        for (size_t i = 0; i < typed->all_application.types.len; i++) {
+            squash_types(typed->all_application.types.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
+            squash_types(typed->all_application.implicits.data[i], a, point);
+        }
+        
+        for (size_t i = 0; i < typed->all_application.args.len; i++) {
+            squash_types(typed->all_application.args.data[i], a, point);
+        }
+        break;
+    }
+    case SConstructor: {
+        squash_types(typed->variant.enum_type, a, point);
+        break;
+    }
+    case SVariant: {
+        squash_types(typed->variant.enum_type, a, point);
+        
+        for (size_t i = 0; i < typed->variant.args.len; i++) {
+            squash_types(typed->variant.args.data[i], a, point);
+        }
+        break;
+    }
+    case SMatch: {
+        squash_types(typed->match.val, a, point);
+
+        for (size_t i = 0; i < typed->match.clauses.len; i++) {
+            SynClause* clause = (SynClause*)typed->match.clauses.data[i];
+            squash_types(clause->body, a, point);
+        }
+        break;
+    }
+    case SStructure: {
+        for (size_t i = 0; i < typed->structure.fields.len; i++) {
+            Syntax* syn = typed->structure.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
+        break;
+    }
+    case SProjector:
+        squash_types(typed->projector.val, a, point);
+        break;
+    case SInstance:
+        squash_types(typed->instance.constraint, a, point);
+
+        for (size_t i = 0; i < typed->instance.implicits.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
+
+        for (size_t i = 0; i < typed->instance.fields.len; i++) {
+            Syntax* syn = typed->instance.fields.data[i].val;
+            squash_types(syn, a, point);
+        }
+        break;
+    case SDynamic:
+        squash_types(typed->dynamic, a, point);
+        break;
+    case SDynamicUse:
+        squash_types(typed->use, a, point);
+        break;
+    case SDynamicLet:
+        for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
+            DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
+            squash_types(dbind->var, a, point);
+            squash_types(dbind->expr, a, point);
+        }
+        squash_types(typed->dyn_let_expr.body, a, point);
+        break;
+    case SLet:
+        for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
+            squash_types(typed->let_expr.bindings.data[i].val, a, point);
+        }
+        squash_types(typed->let_expr.body, a, point);
+        break;
+    case SIf: {
+        squash_types(typed->if_expr.condition, a, point);
+        squash_types(typed->if_expr.true_branch, a, point);
+        squash_types(typed->if_expr.false_branch, a, point);
+        break;
+    }
+    case SLabels:
+        squash_types(typed->labels.entry, a, point);
+        for (size_t i = 0; i < typed->labels.terms.len; i++) {
+            squash_types(typed->labels.terms.data[i].val, a, point);
+        }
+        break;
+    case SGoTo:
+        break;
+    case SWithReset:
+        squash_types(typed->with_reset.expr, a, point);
+        squash_types(typed->with_reset.handler, a, point);
+
+        if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
+            squash_type(typed->with_reset.in_arg_ty);
+        } else {
+            throw_error(point, mv_string("reset argument type not instantiated"));
+        }
+        if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
+            squash_type(typed->with_reset.cont_arg_ty);
+        } else {
+            throw_error(point, mv_string("resume argument type not instantiated"));
+        }
+        break;
+    case SResetTo:
+        squash_types(typed->reset_to.point, a, point);
+        squash_types(typed->reset_to.arg, a, point);
+        break;
+    case SSequence:
+        for (size_t i = 0; i < typed->sequence.elements.len; i++) {
+            SeqElt* elt = typed->sequence.elements.data[i];
+            squash_types(elt->expr, a, point);
+        }
+        break;
+    case SIs:
+        squash_type(typed->is.type->type_val);
+        squash_types(typed->is.val, a, point);
+        break;
+    case SInTo:
+        squash_type(typed->into.type->type_val);
+        squash_types(typed->into.val, a, point);
+        break;
+    case SOutOf:
+        squash_type(typed->out_of.type->type_val);
+        squash_types(typed->out_of.val, a, point);
+        break;
+    case SDynAlloc:
+        squash_types(typed->size, a, point);
+        break;
+    case SProcType: {
+        for (size_t i = 0; i < typed->proc_type.args.len; i++) {
+            squash_types(typed->proc_type.args.data[i], a, point);
+        }
+
+        squash_types(typed->proc_type.return_type, a, point);
+        break;
+    }
+    case SStructType: {
+        for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
+            squash_types(typed->struct_type.fields.data[i].val, a, point);
+        }
+        break;
+    }
+    case SEnumType: {
+        for (size_t i = 0; i < typed->enum_type.variants.len; i++) {
+            PtrArray* args = typed->enum_type.variants.data[i].val;
+
+            for (size_t j = 0; j < args->len; j++) {
+                squash_types(args->data[j], a, point);
+            }
+        }
+        break;
+    }
+    case SResetType: {
+        squash_types(typed->reset_type.in, a, point);
+        squash_types(typed->reset_type.out, a, point);
+        break;
+    }
+    case SDynamicType: {
+        squash_types(typed->dynamic_type, a, point);
+        break;
+    }
+    case SAllType:
+        squash_types(typed->bind_type.body, a, point);
+        break;
+    case STypeFamily:
+        squash_types(typed->bind_type.body, a, point);
+        break;
+    case SDistinctType:
+        squash_types(typed->distinct_type, a, point);
+        break;
+    case SOpaqueType:
+        squash_types(typed->opaque_type, a, point);
+        break;
+    case STraitType:
+        for (size_t i = 0; i < typed->trait.fields.len; i++) {
+            squash_types(typed->trait.fields.data[i].val, a, point);
+        }
+        break;
+    case SCheckedType:
+        squash_type(typed->type_val);
+        break;
+    default:
+        panic(mv_string("Internal Error: invalid syntactic form provided to (squash_types)"));
+        break;
+    }
+
+    if (!has_unification_vars_p(*typed->ptype)) {
+        squash_type(typed->ptype);
+    }
+    else {
+        squash_type(typed->ptype);
+        Document* doc = pretty_type(typed->ptype, a);
+        String str = doc_to_str(doc, a);
+        throw_error(point,
+            string_cat(
+                       string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
+                                  str, a),
+                       string_cat(mv_string("\nType:\n"),
+                                  doc_to_str(pretty_type(typed->ptype, a), a),
+                                  a),
+                       a));
+    }
+}
+
+void eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point) {
+    switch (untyped->type) {
+    case SVariable: {
+        TypeEntry e = type_env_lookup(untyped->variable, env);
+        if (e.type == TENotFound) {
+            String msg = mv_string("Variable not found: ");
+            String sym = *symbol_to_string(untyped->variable);
+            throw_error(point, string_cat(msg, sym, a));
+        }
+
+        if (e.value && !e.is_module) {
+            untyped->type = SCheckedType;
+            untyped->ptype = e.ptype;
+            untyped->type_val = e.value;
+        } else {
+            String var = *symbol_to_string(untyped->variable);
+            throw_error(point, string_cat(mv_string("Variable expected to be type, was not: "), var, a));
+        }
+        break;
+    }
+
+    // Types & Type formers
+    case SProcType: {
+        PtrArray args = mk_ptr_array(untyped->proc_type.args.len, a);
+        for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
+            Syntax* syn = untyped->proc_type.args.data[i];
+            eval_type(syn, env, a, point);
+            push_ptr(syn->type_val, &args);
+        }
+        Syntax* ret = untyped->proc_type.return_type;
+        eval_type(untyped->proc_type.return_type, env, a, point);
+        PiType* ret_ty = ret->type_val;
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TProc,
+            .proc.ret = ret_ty,
+            .proc.args = args,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SStructType: {
+        SymPtrAMap fields = mk_sym_ptr_amap(untyped->struct_type.fields.len, a);
+        for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
+            Syntax* syn = untyped->struct_type.fields.data[i].val;
+            eval_type(syn, env, a, point);
+            sym_ptr_insert(untyped->struct_type.fields.data[i].key, syn->type_val, &fields);
+        }
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TStruct,
+            .structure.fields = fields,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SEnumType: {
+        SymPtrAMap variants = mk_sym_ptr_amap(untyped->enum_type.variants.len, a);
+        for (size_t i = 0; i < untyped->enum_type.variants.len; i++) {
+            PtrArray* args = untyped->enum_type.variants.data[i].val;
+
+            PtrArray* ty_args = mem_alloc(sizeof(PtrArray), a);
+            *ty_args = mk_ptr_array(args->len, a);
+
+            for (size_t j = 0; j < args->len; j++) {
+                Syntax* syn = args->data[j];
+                eval_type(syn, env, a, point);
+                push_ptr(syn->type_val, ty_args);
+            }
+            
+            sym_ptr_insert(untyped->enum_type.variants.data[i].key, ty_args, &variants);
+        }
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TEnum,
+            .enumeration.variants = variants,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SResetType: {
+        eval_type(untyped->reset_type.in, env, a, point);
+        PiType* in = untyped->reset_type.in->type_val;
+
+        eval_type(untyped->reset_type.out, env, a, point);
+        PiType* out = untyped->reset_type.out->type_val;
+        
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TReset,
+            .reset.in = in,
+            .reset.out = out,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SDynamicType: {
+        eval_type(untyped->dynamic_type, env, a, point);
+        PiType* dyn = untyped->dynamic_type->type_val;
+
+        PiType* out_type = mem_alloc(sizeof(PiType), a);
+        *out_type = (PiType) {
+            .sort = TDynamic,
+            .dynamic = dyn,
+        };
+        untyped->type_val = out_type;
+        break;
+    }
+    case SAllType: {
+        panic(mv_string("eval_type not implemented for All"));
+        break;
+    }
+    case SExistsType: {
+        panic(mv_string("eval_type not implemented for Exists"));
+        break;
+    }
+    case STypeFamily: {
+        panic(mv_string("eval_type not implemented for Family"));
+        break;
+    }
+    case SApplication: {
+        eval_type(untyped->application.function, env, a, point);
+        if (untyped->application.function->ptype->sort == TKind ||
+            untyped->application.function->ptype->sort == TConstraint) {
+            PtrArray args = mk_ptr_array(untyped->application.args.len, a);
+            for (size_t i = 0; i < untyped->application.args.len; i++) {
+                Syntax* arg = untyped->application.args.data[i];
+                eval_type(arg, env, a, point);
+                push_ptr(arg->type_val, &args);
+            }
+            untyped->type_val = type_app(*untyped->application.function->type_val, args, a);
+        } else {
+            panic(mv_string("Type application expects kind or constraint"));
+        }
+        break;
+    }
+    case SCheckedType: break; // Can leave blank
+    default:
+        throw_error(point, mv_string("Expected a type former - got a term former"));
+    };
+
+    untyped->type = SCheckedType;
+    PiType* kind = mem_alloc(sizeof(PiType), a);
+    *kind = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
+    untyped->ptype = kind;
+}
+
+Module* try_get_module(Syntax* syn, TypeEnv* env) {
+    switch (syn->type) {
+    case SVariable: {
+        TypeEntry te = type_env_lookup(syn->variable, env);
+        if (te.type != TENotFound && te.is_module) {
+            return te.module;
+        }
+        break;
+    }
+    case SProjector: {
+        panic(mv_string("TODO: implement try_get_module for sprojector"));
+    }
+    default:
+        return NULL;
+    }
+    return NULL;
 }

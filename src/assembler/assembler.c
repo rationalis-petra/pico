@@ -303,6 +303,39 @@ void build_binary_table() {
         .order = OI,
         .has_opcode_ext = false,
     };
+
+    // r32, r32
+    binary_table[bindex(Dest_Register, sz_32, Dest_Register, sz_32)] = (BinaryTableEntry){
+        .valid = true,
+        .use_rex_byte = false,
+        .init_rex_byte = 0b01000000, // REX
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+
+    // r16, r16
+    binary_table[bindex(Dest_Register, sz_16, Dest_Register, sz_16)] = (BinaryTableEntry){
+        .valid = true,
+        .use_rex_byte = false,
+        .init_rex_byte = 0b01000000, // REX
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+
+    // r8, r8
+    binary_table[bindex(Dest_Register, sz_8, Dest_Register, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01000000, // REX
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
 }
 
 void build_binary_opcode_table() {
@@ -317,6 +350,7 @@ void build_binary_opcode_table() {
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x0;
+
     binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
     binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
     binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
@@ -329,6 +363,11 @@ void build_binary_opcode_table() {
     // r64, r/m64
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x03;
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x03;
+
+    // r32, r32 | r16, r16 | r8, r8
+    binary_opcode_table[Add][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x03;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x03;
 
     // Sub
     // r/m64, imm8 & imm64
@@ -348,6 +387,11 @@ void build_binary_opcode_table() {
     // r64, r/m64
     binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x2B;
     binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x2B;
+
+    // r32, r32 | r16, r16 | r8, r8
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x2B;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x2B;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x2A;
 
     // Cmp
     // r/m64, imm8 & imm64
@@ -517,7 +561,10 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     // Step1: Opcode
     opcode_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][0];
     if (opcode_byte == 0x90) {
-        throw_error(point, mv_string("Invalid binary opcode"));
+        PtrArray nodes = mk_ptr_array(8, err_allocator);
+        push_ptr(mk_str_doc(mv_string("Invalid binary opcode table entry for: "), err_allocator), &nodes);
+        push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
     }
     if (be.has_opcode_ext) {
         uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]; 

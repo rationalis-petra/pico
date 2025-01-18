@@ -72,11 +72,11 @@ PiType mk_unary_op_type(Allocator* a, PiType arg, PrimType ret) {
 
 void build_binary_fun(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(R9, sz), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz), a, point);
+    build_unary_op (ass, Pop, reg(R9, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
     build_binary_op (ass, op, reg(RAX, sz), reg(R9, sz), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz), a, point);
+    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
 
@@ -587,7 +587,6 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
-
 void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -873,39 +872,39 @@ void add_primitive_module(String name, LocationSize sz, bool is_signed, Assemble
 
     build_binary_fun(ass, Add, sz, a, &point);
     type = mk_binop_type(a, prim, prim, prim);
-    sym = string_to_symbol(mv_string("+i64"));
+    sym = string_to_symbol(mv_string("+"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_binary_fun(ass, Sub, sz, a, &point);
-    sym = string_to_symbol(mv_string("-i64"));
+    sym = string_to_symbol(mv_string("-"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_special_binary_fun(ass, IMul, a, &point);
-    sym = string_to_symbol(mv_string("*i64"));
+    sym = string_to_symbol(mv_string("*"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_special_binary_fun(ass, IDiv, a, &point);
-    sym = string_to_symbol(mv_string("/i64"));
+    sym = string_to_symbol(mv_string("/"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
     build_comp_fun(ass, SetL, a, &point);
     type = mk_binop_type(a, Int_64, Int_64, Bool);
-    sym = string_to_symbol(mv_string("<i64"));
+    sym = string_to_symbol(mv_string("<"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_comp_fun(ass, SetG, a, &point);
-    sym = string_to_symbol(mv_string(">i64"));
+    sym = string_to_symbol(mv_string(">"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
 
     build_comp_fun(ass, SetE, a, &point);
-    sym = string_to_symbol(mv_string("=i64"));
+    sym = string_to_symbol(mv_string("="));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
@@ -939,6 +938,8 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     add_primitive_module(mv_string("i16"), sz_16, true, ass, module, a);
     add_primitive_module(mv_string("i32"), sz_32, true, ass, module, a);
     add_primitive_module(mv_string("i64"), sz_64, true, ass, module, a);
+
+    add_module(string_to_symbol(mv_string("num")), module, base);
 }
 
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
@@ -1049,10 +1050,15 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
 }
 
 void add_user_module(Package* base, Allocator* a) {
-    Imports imports = (Imports) {.clauses = mk_import_clause_array(2, a),};
+    Imports imports = (Imports) {.clauses = mk_import_clause_array(3, a),};
     push_import_clause((ImportClause) {
             .type = ImportPathAll,
             .name = string_to_symbol(mv_string("core")),
+        },
+        &imports.clauses);
+    push_import_clause((ImportClause) {
+            .type = ImportPathAll,
+            .name = string_to_symbol(mv_string("num")),
         },
         &imports.clauses);
     push_import_clause((ImportClause) {
@@ -1080,7 +1086,7 @@ void add_user_module(Package* base, Allocator* a) {
 Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator) {
     Package* base = mk_package(string_to_symbol(mv_string("base")), a);
     add_core_module(ass, base, a);
-    //add_num_module(ass, base, a);
+    add_num_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
     add_user_module(base, a);
 

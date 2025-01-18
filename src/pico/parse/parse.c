@@ -126,85 +126,96 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
 }
 
 ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
+    /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
+     * These may be 'true' atoms such as num, + or foo. Strings separated by '.'
+     * and ':' are also considered by the parser as 'atoms' as these elements are not separated
+     * by spaces and bind tightly.
+     * 
+     * The general approach is as follows:
+     */
     uint32_t codepoint;
     StreamResult result;
     ParseResult out;
-    U32Array arr = mk_u32_array(10, a);
+    U32Array arr = mk_u32_array(16, a);
 
-    PtrArray terms = mk_ptr_array(2, a);
-    RawTree* rhs = NULL;
+    PtrArray terms = mk_ptr_array(8, a);
+
+    // Accumulate a list of symbols, so, for example, 
+    // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
 
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
             push_u32(codepoint, &arr);
-        } else if (codepoint == '.') {
+        } else if (codepoint == '.' || codepoint == ':') {
             next(is, &codepoint);
-            out = parse_main(is, parse_state, a);
-            if (out.type != ParseSuccess)
-                return out;
+
+            // Store symbol
+            RawTree* val = mem_alloc(sizeof(RawTree), a);
+            String str = string_from_UTF_32(arr, a);
+            *val = (RawTree) {
+                .type = RawAtom,
+                .hint = HNone,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(str),
+            };
+            push_ptr(val, &terms);
+            arr.len = 0; // reset array
+
             RawTree* op = mem_alloc(sizeof(RawTree), a);
             *op = (RawTree) {
                 .type = RawAtom,
                 .hint = HNone,
                 .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(mv_string(".")),
+                .atom.symbol = codepoint == '.'
+                  ? string_to_symbol(mv_string("."))
+                  : string_to_symbol(mv_string(":")),
             };
             push_ptr(op, &terms);
-
-            rhs = mem_alloc(sizeof(RawTree), a);
-            *rhs = out.data.result;
-            break;
-        } else if (codepoint == ':') {
-            next(is, &codepoint);
-            out = parse_atom(is, parse_state, a);
-            if (out.type != ParseSuccess)
-                return out;
-            RawTree* op = mem_alloc(sizeof(RawTree), a);
-            *op = (RawTree) {
-                .type = RawAtom,
-                .hint = HNone,
-                .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(mv_string(":")),
-            };
-            push_ptr(op, &terms);
-
-            rhs = mem_alloc(sizeof(RawTree), a);
-            *rhs = out.data.result;
-            break;
         } else {
+            RawTree* val = mem_alloc(sizeof(RawTree), a);
+            String str = string_from_UTF_32(arr, a);
+            *val = (RawTree) {
+                .type = RawAtom,
+                .hint = HNone,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(str),
+            };
+            push_ptr(val, &terms);
+
+            // We are done; break out of loop
             break;
         }
     }
+
     if (result != StreamSuccess) {
-        out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
-    }
-    else {
-        String str = string_from_UTF_32(arr, a);
-        Symbol sym_result = string_to_symbol(str);
+        out = (ParseResult) {
+            .type = ParseFail,
+            .data.range.start = *parse_state,
+            .data.range.end = *parse_state,
+        };
+    } else {
+        // Now that the list has been accumulated, 'unroll' the list appropriately, 
+        // meaning that (num : i64 . +) becomes (. + (: num i64))
+        RawTree* current = terms.data[0];
+        for (size_t i = 1; terms.len - i != 0; i += 2) {
+            PtrArray children = mk_ptr_array(3, a);
+            push_ptr(terms.data[i], &children);
+            push_ptr(terms.data[i+1], &children);
+            push_ptr(current, &children);
 
-        if (terms.len == 0) {
-            out.type = ParseSuccess;
-            out.data.result.type = RawAtom;
-            out.data.result.atom.type = ASymbol;
-            out.data.result.atom.symbol = sym_result;
-        } else {
-            RawTree* lhs = mem_alloc(sizeof(RawTree), a);
-            *lhs = (RawTree) {
-                .type = RawAtom,
+            current = mem_alloc(sizeof(RawTree), a);
+            *current = (RawTree) {
+                .type = RawList,
                 .hint = HNone,
-                .atom.type = ASymbol,
-                .atom.symbol = sym_result,
+                .nodes = children,
             };
-            push_ptr(rhs, &terms);
-            push_ptr(lhs, &terms);
+        };
 
-            out.type = ParseSuccess;
-            out.data.result.type = RawList;
-            out.data.result.nodes = terms;
-        }
+        out = (ParseResult) {
+            .type = ParseSuccess,
+            .data.result = *current,
+        };
     }
     return out;
 }
