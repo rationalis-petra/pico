@@ -202,7 +202,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
             size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.implicits.data[i]);
-            args_size += pi_stack_round(arg_size);
+            args_size += pi_stack_align(arg_size);
             sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
         }
 
@@ -304,7 +304,19 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // > arguments (in order)
 
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
-            build_unary_op(ass, Push, imm32(pi_size_of(*((Syntax*)syn.all_application.types.data[i])->type_val)), a, point);
+            // The 'type' looks as follows:
+            // | 16 bits | 16 bits     | 32 bits |
+            // | align   | stack align | size    |
+            size_t align = pi_align_of(*((Syntax*)syn.all_application.types.data[i])->type_val);
+            size_t size = pi_size_of(*((Syntax*)syn.all_application.types.data[i])->type_val);
+            size_t stack_sz = pi_stack_align(size);
+            // TODO BUG LOGIC Check that stack_sz < max_uint_28
+            uint64_t result = (align << 56) | (size << 28) | stack_sz;
+
+
+            build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(ADDRESS_SIZE), a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(result), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
         }
 
         // Calculation of offsets:
@@ -592,7 +604,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             address_stack_shrink(env, src_sz);
         } else {
             // Pop the pointer to the instance from the stack - store in RSI
-            address_stack_shrink(env, src_sz);
+            address_stack_shrink(env, pi_stack_align(src_sz));
             build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
             // Now, calculate offset for field 
@@ -600,6 +612,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
                 if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
                     break;
+                offset = pi_size_align(offset, pi_align_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val));
                 offset += pi_size_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val);
             }
             build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
@@ -619,6 +632,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         size_t immediate_sz = 0;
         for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
+            immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)syn.ptype->instance.fields.data[i].val));
             immediate_sz += pi_size_of(*(PiType*)syn.ptype->instance.fields.data[i].val);
         }
         build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(immediate_sz), a, point);
@@ -631,23 +645,38 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, ADDRESS_SIZE);
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
 
-        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
+        // TODO (BUG): generate code that doesn't assume fields are in same order   
 
+        // Alignment
+        size_t index_offset = 0;
+        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
             // Generate field
             Syntax* val = syn.instance.fields.data[i].val;
             generate(*val, env, ass, links, a, point);
 
+            // The offset tells us how far up the stack we look to find the instance ptr
             size_t offset = pi_size_of(*val->ptype);
+
             // Retrieve index (ptr) 
-            // TODO (BUG) Check offset is < int8_t max.
-            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, offset, sz_64), a, point);
+            // TODO (BUG): Check offset is < int8_t max.
+            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(offset), sz_64), a, point);
+
+            // Align RCX
+            size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*val->ptype));
+            if (index_offset != aligned_offset) {
+                size_t align = aligned_offset - index_offset;
+                build_binary_op(ass, Add, reg(RCX, sz_64), imm32(align), a, point);
+            }
 
             generate_monomorphic_copy(RCX, RSP, offset, ass, a, point);
 
+            // We need to increment the current field index to be able ot access
+            // the next
             build_binary_op(ass, Add, reg(RCX, sz_64), imm32(offset), a, point);
+            index_offset += offset;
 
             // Pop value from stack
-            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(offset), a, point);
+            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(offset)), a, point);
             address_stack_shrink(env, offset);
 
             // Override index with new value
@@ -1374,7 +1403,7 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
     };
 
     // TODO: chekc if doing pi_stack_round is ok?
-    for (size_t i = 0; i < pi_stack_round(size) / 8; i++) {
+    for (size_t i = 0; i < pi_stack_align(size) / 8; i++) {
         build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), a, point);
         build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), a, point);
     }

@@ -43,7 +43,7 @@ void clear_assembler(Assembler* assembler) {
                                             
 Assembler* mk_assembler(Allocator* a) {
     Assembler* out = (Assembler*)mem_alloc(sizeof(Assembler), a);
-    out->instructions = mk_u8_array(1024, a);
+    out->instructions = mk_u8_array(4096, a);
     out->gpa = a;
     return out;
 }
@@ -208,7 +208,7 @@ typedef struct {
 
 static BinaryTableEntry binary_table[256];
 
-static uint8_t binary_opcode_table[Binary_Op_Count][256][2];
+static uint8_t binary_opcode_table[Binary_Op_Count][256][4];
 
 uint8_t bindex(Dest_t dest_ty, LocationSize dest_sz, Dest_t src_ty, LocationSize src_sz) {
     return dest_ty | (dest_sz << 2) | (src_ty << 4) | (src_sz << 6) ;
@@ -319,8 +319,28 @@ void build_binary_table() {
         .has_opcode_ext = false,
     };
 
-    // r32, r32
+    // m32, r32
+    binary_table[bindex(Dest_Deref, sz_32, Dest_Register, sz_32)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = MR,
+        .has_opcode_ext = false,
+    };
+
+    // r32, r/m32
     binary_table[bindex(Dest_Register, sz_32, Dest_Register, sz_32)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+    binary_table[bindex(Dest_Register, sz_32, Dest_Deref, sz_32)] = (BinaryTableEntry){
         .valid = true,
         .use_size_override_prefix = false,
         .use_rex_byte = false,
@@ -341,8 +361,27 @@ void build_binary_table() {
         .has_opcode_ext = false,
     };
 
-    // r16, r16
+    // m16, r16
+    binary_table[bindex(Dest_Deref, sz_16, Dest_Register, sz_16)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = true,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = MR,
+        .has_opcode_ext = false,
+    };
+    // r16, r/m16
     binary_table[bindex(Dest_Register, sz_16, Dest_Register, sz_16)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = true,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+    binary_table[bindex(Dest_Register, sz_16, Dest_Deref, sz_16)] = (BinaryTableEntry){
         .valid = true,
         .use_size_override_prefix = true,
         .use_rex_byte = false,
@@ -363,7 +402,19 @@ void build_binary_table() {
         .has_opcode_ext = false,
     };
 
-    // r8, r8
+    // m8, r8
+    binary_table[bindex(Dest_Deref, sz_8, Dest_Register, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01000000, // REX
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = MR,
+        .has_opcode_ext = false,
+    };
+
+    // r8, r/m8
     binary_table[bindex(Dest_Register, sz_8, Dest_Register, sz_8)] = (BinaryTableEntry){
         .valid = true,
         .use_size_override_prefix = false,
@@ -374,6 +425,17 @@ void build_binary_table() {
         .order = RM,
         .has_opcode_ext = false,
     };
+    binary_table[bindex(Dest_Register, sz_8, Dest_Deref, sz_8)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = true,
+        .init_rex_byte = 0b01000000, // REX
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+
     // r8, imm8
     binary_table[bindex(Dest_Register, sz_8, Dest_Immediate, sz_8)] = (BinaryTableEntry){
         .valid = true,
@@ -391,20 +453,22 @@ void build_binary_table() {
 void build_binary_opcode_table() {
     for (size_t i = 0; i < 256 * Binary_Op_Count; i++) {
         binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][0] = 0x90;
-        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][1] = 0x09;
+        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][1] = 0x90;
+        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][2] = 0x90;
+        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][3] = 0x09;
     }
 
     // Add
     // r/m64, imm8 & imm64
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x0;
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x0;
 
     binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x0;
     binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x0;
+    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x0;
 
     // r/m64, r64
     binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x01;
@@ -422,13 +486,13 @@ void build_binary_opcode_table() {
     // Sub
     // r/m64, imm8 & imm64
     binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
     binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x05;
     binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
     binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x05;
+    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x05;
 
     // r/m64, r64
     binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x29;
@@ -446,13 +510,13 @@ void build_binary_opcode_table() {
     // Cmp
     // r/m64, imm8 & imm64
     binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x07;
     binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x07;
     binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x07;
     binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x07;
+    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x07;
 
     // r/m64, r64
     binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x39;
@@ -473,13 +537,13 @@ void build_binary_opcode_table() {
     // And
     // r/m64, imm8 & imm64
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x04;
     binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
     binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x04;
+    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x04;
 
     // r/m64, r64
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x21;
@@ -492,13 +556,13 @@ void build_binary_opcode_table() {
     // Or
     // r/m64, imm8 & imm64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x01;
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
     binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x01;
     binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x01;
+    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
 
     // r/m64, r64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x09;
@@ -514,16 +578,16 @@ void build_binary_opcode_table() {
     // Shift Left
     // r/m64, imm8 
     binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
     binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x04;
+    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
 
     // Shift Right
     // r/m64, imm8
     binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
     binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][1] = 0x05;
+    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
 
     // ------------------
     //  Memory
@@ -533,9 +597,9 @@ void build_binary_opcode_table() {
     binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_64)][0] = 0xB8;
     // r/m64, imm32
     binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x00;
     binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x00;
 
     // r/m64, r64 then r64, r/m64
     binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x89;
@@ -550,9 +614,9 @@ void build_binary_opcode_table() {
     binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Deref, sz_32)][0] = 0x8B;
     // r/m32, imm32
     binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Immediate, sz_32)][3] = 0x00;
     binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)][3] = 0x00;
 
     // r/m16, r16 then  r16, r/m16
     binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x89;
@@ -561,9 +625,9 @@ void build_binary_opcode_table() {
     binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Deref, sz_16)][0] = 0x8B;
     // r/m16, imm16
     binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Immediate, sz_16)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Immediate, sz_16)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Immediate, sz_16)][3] = 0x00;
     binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Immediate, sz_16)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Immediate, sz_16)][1] = 0x00;
+    binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Immediate, sz_16)][3] = 0x00;
 
     // r/m8, r8 thhen r8, r/m8 then r/m8, imm8
     binary_opcode_table[Mov][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x88;
@@ -585,11 +649,11 @@ void build_binary_opcode_table() {
     // -------------------
     // CMoves, p 285.
     // r64, r/m64
-    // 0F 43
+    // 0F 44
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x43;
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x44;
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x43;
+    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x44;
 
     // 0F 4C
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
@@ -648,10 +712,13 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
     }
     if (be.has_opcode_ext) {
-        uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]; 
+        uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][3]; 
         modrm_byte |= modrm_reg(ext_byte);
         if (ext_byte == 0x09) {
-            throw_error(point, mv_string("Invalid binary opcode extension"));
+            PtrArray nodes = mk_ptr_array(8, err_allocator);
+            push_ptr(mk_str_doc(mv_string("Invalid binary opcode extension entry for: "), err_allocator), &nodes);
+            push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
+            throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
         }
     }
 
@@ -803,6 +870,14 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
 
     // opcode
     push_u8(opcode_byte, instructions);
+
+    // 2nd opcode byte (optional)
+    if (0x90 != binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]) {
+        push_u8(binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1], instructions);
+    }
+    if (0x90 != binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][2]) {
+        push_u8(binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][2], instructions);
+    }
 
     if (be.use_modrm_byte)
         push_u8(modrm_byte, instructions);

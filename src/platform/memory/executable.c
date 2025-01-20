@@ -136,13 +136,17 @@ void* alloc_medium(size_t size, exec_context* ctx) {
 }
 
 void* alloc_large(size_t size, exec_context* ctx) {
-    LargeBlock* new = mem_alloc(sizeof(MediumBlock), ctx->metadata_allocator);
+    LargeBlock* new = mem_alloc(sizeof(LargeBlock), ctx->metadata_allocator);
     new->block_memory = alloc_ex_mem(size);
     new->next = NULL;
-    ctx->large_blocks_end = new;
 
     LargeBlock* blk = ctx->large_blocks_end;
     if (blk) blk->next = new;
+    ctx->large_blocks_end = new;
+
+    if (!ctx->large_blocks) {
+        ctx->large_blocks = new;
+    }
 
     return new->block_memory.data;
 }

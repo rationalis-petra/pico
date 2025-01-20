@@ -714,12 +714,12 @@ size_t pi_size_align(size_t size, size_t align) {
     return size + pad;
 }
 
-size_t pi_stack_round(size_t in) {
+size_t pi_stack_align(size_t in) {
     return pi_size_align(in, 8);
 }
 
 size_t pi_stack_size_of(PiType type) {
-    return pi_stack_round(pi_size_of(type));
+    return pi_stack_align(pi_size_of(type));
 }
 
 size_t pi_size_of(PiType type) {

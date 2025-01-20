@@ -92,8 +92,11 @@ Environment* env_from_module(Module* module, Allocator* a) {
     PtrArray instances = get_exported_instances(module, a);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
-        PtrArray* p = (PtrArray*)sym_ptr_lookup(instance->id, env->instances);
-        if (!p) {
+        PtrArray** res = (PtrArray**)sym_ptr_lookup(instance->id, env->instances);
+        PtrArray* p;
+        if (res) {
+            p = *res;
+        } else {
             p = mem_alloc(sizeof(PtrArray), a);
             *p = mk_ptr_array(8, a);
             // TODO: we know this isn't in the instances; could perhaps
