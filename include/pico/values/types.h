@@ -159,17 +159,17 @@ struct PiType {
 
 // Transform and Analyse
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
-
 Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
-
 bool pi_type_eql(PiType* lhs, PiType* rhs);
 
-size_t pi_size_of(PiType t);
-size_t pi_mono_size_of(PiType t);
-size_t runtime_size_of(PiType* t, void* data);
+size_t pi_size_of(PiType type);
+size_t pi_align_of(PiType type);
 
+size_t pi_size_align(size_t size, size_t align);
+size_t pi_stack_align(size_t in);
+size_t pi_stack_size_of(PiType type);
 
 // Resource Management
 void delete_pi_type(PiType t, Allocator* a);

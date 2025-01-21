@@ -2,7 +2,6 @@
 #include <string.h> // for memcpy
 
 #include "platform/machine_info.h"
-#include "platform/memory/arena.h"
 
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
@@ -56,7 +55,6 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             break;
         }
         case TTraitInstance: {
-            // TODO: instances need to be copied (handlein add_def?)
             void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
             add_def(module, top.def.bind, *top.def.value->ptype, val);
             break;
@@ -84,14 +82,14 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     if (rsize != 0) {
-        build_binary_op(ass, Mov, reg(RDI), imm64((int64_t)value), a, point);
-        build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
-        build_binary_op(ass, Mov, reg(RDX), imm64((int64_t)rsize), a, point);
+        build_binary_op(ass, Mov, reg(RDI, sz_64), imm64((int64_t)value), a, point);
+        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm64((int64_t)rsize), a, point);
 
-        build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)&memcpy), a, point);
-        build_unary_op(ass, Call, reg(RCX), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((int64_t)&memcpy), a, point);
+        build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
         // pop value from stack
-        build_binary_op(ass, Add, reg(RSP), imm32(rsize), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize)), a, point);
     }
     build_nullary_op(ass, Ret, a, point);
 
@@ -99,15 +97,15 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
     if (rsize != 0) {
-        build_binary_op(ass, Mov, reg(RCX), imm64((int64_t)value), a, point);
-        build_binary_op(ass, Mov, reg(RDX), reg(RSP), a, point);
-        build_binary_op(ass, Mov, reg(R8), imm64((int64_t)rsize), a, point);
-        build_binary_op(ass, Sub, reg(RSP), imm32(32), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((int64_t)value), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(R8, sz_64), imm64((int64_t)rsize), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 
-        build_binary_op(ass, Mov, reg(RAX), imm64((int64_t)&memcpy), a, point);
-        build_unary_op(ass, Call, reg(RAX), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((int64_t)&memcpy), a, point);
+        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
         // pop value from stack
-        build_binary_op(ass, Add, reg(RSP), imm32(rsize + 32), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_round(rsize) + 32), a, point);
     }
     build_nullary_op(ass, Ret, a, point);
 #else

@@ -60,32 +60,32 @@ void free_ex_mem(ex_mem mem) {
 // -----------------------------------------------------------------------------
 
 // Medium blocks
-typedef struct small_block {
+typedef struct SmallBlock {
     ex_mem block_memory;
     size_t num_chunks;
     U8Array free_slots;
-} small_block;
+} SmallBlock;
 static const size_t small_chunk_size = 8;
 
-typedef struct medium_block {
+typedef struct MediumBlock {
     ex_mem block_memory;
-    struct medium_block* next;
-} medium_block;
+    struct MediumBlock* next;
+} MediumBlock;
 
-typedef struct large_block {
+typedef struct LargeBlock {
     ex_mem block_memory;
-    struct large_block* next;
-} large_block;
+    struct LargeBlock* next;
+} LargeBlock;
 
 typedef struct exec_context {
     // Blocks
     PtrArray small_blocks;
 
-    medium_block* medium_blocks;
-    medium_block* medium_blocks_end;
+    MediumBlock* medium_blocks;
+    MediumBlock* medium_blocks_end;
 
-    large_block* large_blocks;
-    large_block* large_blocks_end;
+    LargeBlock* large_blocks;
+    LargeBlock* large_blocks_end;
 
     size_t blocksize;
     
@@ -97,7 +97,7 @@ typedef struct exec_context {
 
 void* alloc_small(exec_context* ctx) {
     for (size_t block_idx = 0; block_idx < ctx->small_blocks.len; block_idx++) {
-        small_block b = *(small_block*)ctx->small_blocks.data[block_idx];
+        SmallBlock b = *(SmallBlock*)ctx->small_blocks.data[block_idx];
         for (size_t i = 0; i < b.num_chunks; i++) {
             if (b.free_slots.data[i]) {
                 b.free_slots.data[i] = false;
@@ -106,9 +106,10 @@ void* alloc_small(exec_context* ctx) {
         }
     }
     // there was no free slot
-    small_block* sb = (small_block*)mem_alloc(sizeof(small_block), ctx->metadata_allocator);
+    SmallBlock* sb = (SmallBlock*)mem_alloc(sizeof(SmallBlock), ctx->metadata_allocator);
     sb->block_memory = alloc_ex_mem(ctx->blocksize);
-    sb->block_memory.size = ctx->blocksize / 8;
+    sb->block_memory.size = ctx->blocksize;
+    sb->num_chunks = ctx->blocksize / 8;
     sb->free_slots = mk_u8_array(sb->num_chunks, ctx->metadata_allocator);
     for (size_t i = 0; i < sb->num_chunks; i++) {
         push_u8(0, &sb->free_slots);
@@ -119,11 +120,11 @@ void* alloc_small(exec_context* ctx) {
 }
 
 void* alloc_medium(size_t size, exec_context* ctx) {
-    medium_block* new = mem_alloc(sizeof(medium_block), ctx->metadata_allocator);
+    MediumBlock* new = mem_alloc(sizeof(MediumBlock), ctx->metadata_allocator);
     new->block_memory = alloc_ex_mem(size);
     new->next = NULL;
 
-    medium_block* blk = ctx->medium_blocks_end;
+    MediumBlock* blk = ctx->medium_blocks_end;
     if (blk) blk->next = new;
     ctx->medium_blocks_end = new;
 
@@ -135,13 +136,17 @@ void* alloc_medium(size_t size, exec_context* ctx) {
 }
 
 void* alloc_large(size_t size, exec_context* ctx) {
-    large_block* new = mem_alloc(sizeof(medium_block), ctx->metadata_allocator);
+    LargeBlock* new = mem_alloc(sizeof(LargeBlock), ctx->metadata_allocator);
     new->block_memory = alloc_ex_mem(size);
     new->next = NULL;
+
+    LargeBlock* blk = ctx->large_blocks_end;
+    if (blk) blk->next = new;
     ctx->large_blocks_end = new;
 
-    large_block* blk = ctx->large_blocks_end;
-    if (blk) blk->next = new;
+    if (!ctx->large_blocks) {
+        ctx->large_blocks = new;
+    }
 
     return new->block_memory.data;
 }
@@ -165,7 +170,7 @@ void* exec_realloc(void* ptr, size_t new_size, void* ctx) {
 
 bool free_small(void* ptr, exec_context* ctx) {
     for (size_t i = 0; i < ctx->small_blocks.len; i++) {
-        small_block block = *(small_block*)(ctx->small_blocks.data[i]);
+        SmallBlock block = *(SmallBlock*)(ctx->small_blocks.data[i]);
         const void* data = block.block_memory.data;
         size_t offset = 0;
         // check for each element of to_free
@@ -180,9 +185,9 @@ bool free_small(void* ptr, exec_context* ctx) {
     return false;
 }
 bool free_medium(void* ptr, exec_context* ctx) {
-    medium_block* blk_prev = NULL;
-    medium_block** blk_ptr = &ctx->medium_blocks;
-    medium_block* blk = ctx->medium_blocks;
+    MediumBlock* blk_prev = NULL;
+    MediumBlock** blk_ptr = &ctx->medium_blocks;
+    MediumBlock* blk = ctx->medium_blocks;
     while (blk != NULL) {
         if (ptr == blk) {
             *blk_ptr = blk->next;
@@ -202,9 +207,9 @@ bool free_medium(void* ptr, exec_context* ctx) {
 }
 
 bool free_large(void* ptr, exec_context* ctx) {
-    large_block* blk_prev = NULL;
-    large_block** blk_ptr = &ctx->large_blocks;
-    large_block* blk = ctx->large_blocks;
+    LargeBlock* blk_prev = NULL;
+    LargeBlock** blk_ptr = &ctx->large_blocks;
+    LargeBlock* blk = ctx->large_blocks;
     while (blk != NULL) {
         if (ptr == blk) {
             *blk_ptr = blk->next;
@@ -256,22 +261,23 @@ void release_executable_allocator(Allocator a) {
     Allocator* mda = ctx->metadata_allocator;
 
     for (size_t i = 0; i < ctx->small_blocks.len; i++) {
-        small_block* b = (small_block*) ctx->small_blocks.data[i];
+        SmallBlock* b = (SmallBlock*) ctx->small_blocks.data[i];
         free_ex_mem(b->block_memory);
+        sdelete_u8_array(b->free_slots);
         mem_free(b, mda);
     }
     sdelete_ptr_array(ctx->small_blocks);
 
-    medium_block* mb = ctx->medium_blocks;
+    MediumBlock* mb = ctx->medium_blocks;
     while (mb) {
-        medium_block* next = mb->next;
+        MediumBlock* next = mb->next;
         mem_free(mb, mda);
         mb = next;
     }
 
-    large_block* lb = ctx->large_blocks;
+    LargeBlock* lb = ctx->large_blocks;
     while (lb) {
-        large_block* next = lb->next;
+        LargeBlock* next = lb->next;
         mem_free(lb, mda);
         lb = next;
     }

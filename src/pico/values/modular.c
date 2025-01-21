@@ -22,6 +22,7 @@
 
 typedef struct {
     void* value;
+    bool is_module;
     PiType type;
     SymSArrAMap* backlinks;
 } ModuleEntryInternal;
@@ -106,17 +107,22 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 
 // Helper
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
-    if (entry.type.sort == TProc || entry.type.sort == TAll) {
-        mem_free(entry.value, &module->executable_allocator);
-    } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
-        delete_pi_type_p(entry.value, module->allocator);
-    } else if (entry.type.sort == TTraitInstance) {
-        mem_free(*(void**)entry.value, module->allocator);
-        mem_free(entry.value, module->allocator);
+    if (entry.is_module) {
+        delete_module(entry.value);
     } else {
-        mem_free(entry.value, module->allocator);
+        if (entry.type.sort == TProc || entry.type.sort == TAll) {
+            mem_free(entry.value, &module->executable_allocator);
+        } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
+            delete_pi_type_p(entry.value, module->allocator);
+        } else if (entry.type.sort == TTraitInstance) {
+            mem_free(*(void**)entry.value, module->allocator);
+            mem_free(entry.value, module->allocator);
+        } else {
+            mem_free(entry.value, module->allocator);
+        }
+        delete_pi_type(entry.type, module->allocator);
     }
-    delete_pi_type(entry.type, module->allocator);
+
     if (entry.backlinks) {
         delete_sym_sarr_amap(*entry.backlinks,
                              delete_symbol,
@@ -140,6 +146,7 @@ void delete_module(Module* module) {
 
 Result add_def (Module* module, Symbol name, PiType type, void* data) {
     ModuleEntryInternal entry;
+    entry.is_module = false;
     size_t size = pi_size_of(type);
 
     if (type.sort == TKind || type.sort == TConstraint) {
@@ -148,6 +155,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     } else if (type.sort == TTraitInstance){
         size_t total = 0;
         for (size_t i = 0; i < type.instance.fields.len; i++) {
+            total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
             total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
         }
         void* new_memory = mem_alloc(total, module->allocator);
@@ -203,6 +211,23 @@ Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymS
     if (old_entry) delete_module_entry(*old_entry, module);
 
     entry_insert(name, entry, &(module->entries));
+
+    return (Result) {.type = Ok};
+}
+
+Result add_module_def(Module* module, Symbol name, Module* child) {
+    ModuleEntryInternal entry = (ModuleEntryInternal) {
+        .value = child,
+        .is_module = true,
+        .backlinks = NULL,
+    };
+
+    // Free a previous definition (if it exists!)
+    // TODO BUG UB: possibly throw here?
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    if (old_entry) delete_module_entry(*old_entry, module);
+
+    entry_insert(name, entry, &module->entries);
 
     return (Result) {.type = Ok};
 }

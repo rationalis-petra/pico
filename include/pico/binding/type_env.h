@@ -15,8 +15,12 @@ typedef enum {
 
 typedef struct {
     TypeEntry_t type;
+    bool is_module;
     PiType* ptype;
-    PiType* value;
+    union {
+        PiType* value;
+        Module* module;
+    };
 } TypeEntry;
 
 typedef enum {

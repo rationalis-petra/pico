@@ -392,7 +392,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             // Get the tag gname of the variant
             RawTree* msym = (RawTree*)raw.nodes.data[1];
             if (msym->type != RawAtom && msym->atom.type != ASymbol) {
-                throw_error(point, mv_string("Second argument to projection term former should be symbol"));
+                throw_error(point, mv_string("First argument to projection term former should be symbol"));
             };
 
             //res.type = Ok;

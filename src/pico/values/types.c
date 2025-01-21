@@ -257,7 +257,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             break;
         }
         case Bool:  {
-            uint64_t* uival = (uint64_t*) val;
+            uint8_t* uival = (uint8_t*) val;
             if (*uival == 0) {
                 out = mk_str_doc(mv_string(":false"), a);
             } else {
@@ -302,12 +302,12 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         case UInt_16: {
             uint16_t* uival = (uint16_t*) val;
-            out =  pretty_i16(*uival, a);
+            out =  pretty_u16(*uival, a);
             break;
         }
         case UInt_8: {
             uint8_t* uival = (uint8_t*) val;
-            out =  pretty_i8(*uival, a);
+            out =  pretty_u8(*uival, a);
             break;
         }
         case TFormer:  {
@@ -708,9 +708,18 @@ Document* pretty_type(PiType* type, Allocator* a) {
     return out;
 }
 
+size_t pi_size_align(size_t size, size_t align) {
+    size_t rem = size % align;
+    size_t pad = rem == 0 ? 0 : align - rem;
+    return size + pad;
+}
 
-size_t pi_mono_size_of(PiType type) {
-    return pi_size_of(type);
+size_t pi_stack_align(size_t in) {
+    return pi_size_align(in, 8);
+}
+
+size_t pi_stack_size_of(PiType type) {
+    return pi_stack_align(pi_size_of(type));
 }
 
 size_t pi_size_of(PiType type) {
@@ -719,25 +728,27 @@ size_t pi_size_of(PiType type) {
         switch (type.prim) {
         case Unit:
             return 0;
-        /*
         case Bool:
             return sizeof(uint8_t);
         case Address:
         case Int_64:
+        case UInt_64:
             return sizeof(int64_t);
         case Int_32:
+        case UInt_32:
             return sizeof(int32_t);
         case Int_16:
+        case UInt_16:
             return sizeof(int16_t);
         case Int_8:
+        case UInt_8:
             return sizeof(int8_t);
         case TFormer:
-            return sizeof(TermFormer); // sizeof(pi_term_former_t);
-        */
+            return sizeof(TermFormer);
         default:
-            return sizeof(uint64_t);
+            panic(mv_string("pi-size-of: unrecognized primitive."));
         }
-        return sizeof(uint64_t);
+        break;
     case TProc:
         return sizeof(uint64_t);
     case TStruct: {
@@ -803,6 +814,94 @@ size_t pi_size_of(PiType type) {
         panic(mv_string("pi_size_of received invalid type."));
     }
 }
+
+size_t pi_align_of(PiType type) {
+    switch (type.sort) {
+    case TPrim:
+        switch (type.prim) {
+        case Unit:
+            return 0;
+        case Bool:
+            return sizeof(uint8_t);
+        case Address:
+        case Int_64:
+        case UInt_64:
+            return sizeof(int64_t);
+        case Int_32:
+        case UInt_32:
+            return sizeof(int32_t);
+        case Int_16:
+        case UInt_16:
+            return sizeof(int16_t);
+        case Int_8:
+        case UInt_8:
+            return sizeof(int8_t);
+        case TFormer:
+            return sizeof(TermFormer);
+        default:
+            panic(mv_string("pi_align_of received invalid primitive"));
+        }
+        return sizeof(uint64_t);
+    case TProc:
+        return sizeof(uint64_t);
+    case TStruct: {
+        size_t align = 0; 
+        for (size_t i = 0; i < type.structure.fields.len; i++) {
+            size_t field_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
+            // align = max(align, field_align)
+            align = align > field_align ? align : field_align;
+        }
+        return align;
+    }
+    case TEnum: {
+        size_t align = 0; 
+        for (size_t i = 0; i < type.enumeration.variants.len; i++) {
+            PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
+            for (size_t i = 0; i < types.len; i++) {
+                // Note: Data is padded to be 8-byte aligned!
+                // TODO (FEAT): Make generic on padding size?
+                size_t field_align = pi_align_of(*(PiType*)types.data[i]);
+                // accumulate max
+                // size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
+                align += field_align > align ? field_align : align;
+            }
+        }
+        // Note: this will set it to max, we should shrink the tag size (maybe 16 bits? variable bits?)
+        return 8 > align ? 8 : align;
+    }
+
+    case TReset: {
+    case TResumeMark: 
+    case TDynamic:
+        return ADDRESS_ALIGN;
+    }
+    case TDistinct: {
+        return pi_align_of(*type.distinct.type);
+    }
+    case TTrait:
+        panic(mv_string("pi_align_of received invalid type: Trait."));
+        break;
+    case TTraitInstance:
+        return ADDRESS_ALIGN;
+        break;
+    case TAll: {
+        return sizeof(void*);
+    }
+    case TFam: {
+        panic(mv_string("pi_align_of received invalid type: Family."));
+    }
+    case TKind: 
+    case TConstraint: 
+        return sizeof(void*);
+    case TUVar:
+        panic(mv_string("pi_align_of received invalid type: UVar."));
+    case TUVarDefaulted:
+        panic(mv_string("pi_align_of received invalid type: UVar with Default."));
+    default:
+        panic(mv_string("pi_align_of received invalid type."));
+    }
+}
+
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 

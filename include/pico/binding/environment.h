@@ -20,6 +20,7 @@ typedef struct EnvCapture EnvCapture;
 
 typedef struct EnvEntry {
     Result_t success;
+    bool is_module;
     PiType* type;
     void* value;
 } EnvEntry;

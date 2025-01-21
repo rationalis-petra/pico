@@ -38,10 +38,12 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     if (lresult != NULL) {
         out.type = TELocal;
         if (lresult->sort == LQVar) {
+            out.is_module = false;
             out.ptype = NULL;
             out.value = lresult->type;
             return out;
         } else if (lresult -> sort == LVar) {
+            out.is_module = false;
             out.ptype = lresult->type;
             out.value = NULL;
             return out;
@@ -54,8 +56,13 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.type = TENotFound;
     } else {
         out.type = TEGlobal;
+        out.is_module = e.is_module;
         out.ptype = e.type;
-        out.value = (e.type->sort == TKind || e.type->sort == TConstraint) ? e.value : NULL;
+        if (!e.is_module) {
+            out.value = (e.type->sort == TKind || e.type->sort == TConstraint) ? e.value : NULL;
+        } else {
+            out.module = e.value;
+        }
     }
 
     return out;
@@ -83,6 +90,10 @@ InstanceEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
 
             ModuleEntry* m_entry = get_def(src->src_sym, src->src);
             if (!m_entry) panic(mv_string("Module entry is null!"));
+
+            if (m_entry->is_module) {
+                panic(mv_string("env_lookup cannot yet handle modules"));
+            }
 
             out = (InstanceEntry) {
                 .type = IEAbsSymbol,
