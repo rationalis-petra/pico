@@ -661,7 +661,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     // TODO: we use int64_t as it has the requisite size (8 bytes)
     // for pico values: currently don't support non-64 bit values 
-    int64_t former;
+    TermFormer former;
     //TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;

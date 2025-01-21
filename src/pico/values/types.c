@@ -302,12 +302,12 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         case UInt_16: {
             uint16_t* uival = (uint16_t*) val;
-            out =  pretty_i16(*uival, a);
+            out =  pretty_u16(*uival, a);
             break;
         }
         case UInt_8: {
             uint8_t* uival = (uint8_t*) val;
-            out =  pretty_i8(*uival, a);
+            out =  pretty_u8(*uival, a);
             break;
         }
         case TFormer:  {
