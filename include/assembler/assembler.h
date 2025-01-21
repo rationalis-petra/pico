@@ -36,8 +36,8 @@ typedef enum {
     // ------------------
     //  Bit Manipulation
     // ------------------
-    LShift,
-    RShift,
+    SHL, // Left shift
+    SHR, // Right shift
 
     // ------------------
     //  Memory

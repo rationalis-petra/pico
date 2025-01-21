@@ -133,15 +133,14 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         AddressEntry e = address_env_lookup(syn.variable, env);
         switch (e.type) {
         case ALocalDirect:
-            // TODO (BUG): this won't work for values > 64 bits wide!
-            build_unary_op(ass, Push, rref8(RBP, e.stack_offset, sz_64), a, point);
+            // TODO (UB BUG): this won't work for values > 64 bits wide!
+            throw_error(point, mv_string("Codegen not implemented for Local Direct variables"));
             break;
         case ALocalIndirect:
             // First, we need the size of the variable & allocate space for it on the stack
             // ------------------------------
             // Store stack size in R8
-            generate_stack_size_of(R8, syn.ptype, env, ass, a, point);
-
+            generate_stack_size_of(R9, syn.ptype, env, ass, a, point);
 
             // Subtract stack size
             build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
@@ -244,18 +243,23 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
             // Now, calculate offset for field 
             build_unary_op(ass, Push, imm8(0), a, point);
             for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
-                generate_align_of(R8, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
-                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
-                generate_align_to(R8, R9, ass, a, point);
-                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
+                if (i != 0) {
+                    // Align to the new field; can skip if size = 0;
+                    generate_align_of(R8, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
+                    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
+                    generate_align_to(R9, R8, ass, a, point);
+                    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+                }
+
                 if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
                 generate_size_of(RAX, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
                 build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
             }
+
             // Generate the size of the output.
-            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
             // Pop the index and instance ptr from the stack
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -310,7 +314,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
         switch (e.type) {
         case ALocalDirect:
             build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
-            build_binary_op(ass, RShift, reg(dest, sz_64), imm32(28), a, point);
+            build_binary_op(ass, SHR, reg(dest, sz_64), imm8(28), a, point);
             build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFFFFFFF), a, point);
             break;
         case ALocalIndirect:
@@ -358,8 +362,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
         switch (e.type) {
         case ALocalDirect:
             build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
-            build_binary_op(ass, RShift, reg(dest, sz_64), imm32(56), a, point);
-            build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFF), a, point);
+            build_binary_op(ass, SHR, reg(dest, sz_64), imm8(56), a, point);
             break;
         case ALocalIndirect:
             panic(mv_string("cannot generate code for local indirect."));
@@ -451,7 +454,7 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
     // We accomplish modulo with IDiv, which stores the remainder (modulo) in RDX 
     build_binary_op(ass, Mov, reg(RAX, sz_64), reg(sz_reg, sz_64), a, point); 
     build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(0), a, point); 
-    build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(align), a, point); 
+    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(align, sz_64), a, point); 
     build_unary_op(ass, IDiv, reg(RCX, sz_64), a, point); 
 
     // Now, rem is in RDX
@@ -464,10 +467,10 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
     // Nowd to the compare (rem == 0) and CMove (asignment base on compare), so
     // the result (pad) is in RDX
     build_binary_op(ass, Cmp, reg(RDX, sz_64), imm32(0), a, point); 
-    build_binary_op(ass, CMovE, reg(RDX, sz_64), reg(RCX, sz_64), a, point); 
+    build_binary_op(ass, CMovE, reg(RAX, sz_64), reg(RCX, sz_64), a, point); 
 
     // Finally, add size (sz_reg) to padding (RDX)
-    build_binary_op(ass, Add, reg(sz_reg, sz_64), reg(RDX, sz_64), a, point); 
+    build_binary_op(ass, Add, reg(sz_reg, sz_64), reg(RAX, sz_64), a, point); 
 
     //build_binary_op(ass, Mov, reg(sz_reg, sz_64), reg(R9, sz_64), a, point); 
 }

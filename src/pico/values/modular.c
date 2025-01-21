@@ -155,6 +155,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     } else if (type.sort == TTraitInstance){
         size_t total = 0;
         for (size_t i = 0; i < type.instance.fields.len; i++) {
+            total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
             total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
         }
         void* new_memory = mem_alloc(total, module->allocator);

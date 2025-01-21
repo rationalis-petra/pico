@@ -610,9 +610,9 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             // Now, calculate offset for field 
             size_t offset = 0;
             for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
+                offset = pi_size_align(offset, pi_align_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val));
                 if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
                     break;
-                offset = pi_size_align(offset, pi_align_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val));
                 offset += pi_size_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val);
             }
             build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
@@ -637,7 +637,6 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
         build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(immediate_sz), a, point);
         generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
-        // build_binary_op(ass, Add, reg(RAX), imm32(immediate_sz), a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
 
         // Grow by address size to account for the fact that the for loop
@@ -655,7 +654,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             generate(*val, env, ass, links, a, point);
 
             // The offset tells us how far up the stack we look to find the instance ptr
-            size_t offset = pi_size_of(*val->ptype);
+            size_t offset = pi_stack_size_of(*val->ptype);
 
             // Retrieve index (ptr) 
             // TODO (BUG): Check offset is < int8_t max.

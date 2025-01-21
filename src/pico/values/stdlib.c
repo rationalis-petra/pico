@@ -304,6 +304,36 @@ void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
+uint64_t stdlib_align_of(PiType* t) {
+    return pi_align_of(*t);
+}
+
+void build_align_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // size-of: PiType* -> uint64_t
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, 8, sz_64), a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, 8, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#else 
+#error "build_size_of_fn does not support this ABI!"
+#endif
+
+    // call pi_size_of
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stdlib_align_of), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if OS_FAMILY == WIN_64
+    build_binary_op(ass, Add, reg(RSP, ), imm32(32), a, point);
+#endif 
+
+    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(8), a, point);
+    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+    build_nullary_op(ass, Ret, a, point);
+}
+
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
 
@@ -835,6 +865,13 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
     build_size_of_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("size-of"));
+    add_fn_def(module, sym, type, ass, NULL);
+    clear_assembler(ass);
+    delete_pi_type(type, a);
+
+    type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
+    build_align_of_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("align-of"));
     add_fn_def(module, sym, type, ass, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);

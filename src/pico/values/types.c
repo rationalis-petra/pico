@@ -825,12 +825,16 @@ size_t pi_align_of(PiType type) {
             return sizeof(uint8_t);
         case Address:
         case Int_64:
+        case UInt_64:
             return sizeof(int64_t);
         case Int_32:
+        case UInt_32:
             return sizeof(int32_t);
         case Int_16:
+        case UInt_16:
             return sizeof(int16_t);
         case Int_8:
+        case UInt_8:
             return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer);

@@ -577,17 +577,17 @@ void build_binary_opcode_table() {
     // ------------------
     // Shift Left
     // r/m64, imm8 
-    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
-    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[LShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
+    binary_opcode_table[SHL][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[SHL][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
+    binary_opcode_table[SHL][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[SHL][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
 
     // Shift Right
     // r/m64, imm8
-    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
-    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xD3;
-    binary_opcode_table[RShift][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
+    binary_opcode_table[SHR][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[SHR][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
+    binary_opcode_table[SHR][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
+    binary_opcode_table[SHR][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
 
     // ------------------
     //  Memory
@@ -1497,7 +1497,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "And", "Or", "LShift", "RShift",
+        "Add", "Sub", "Cmp", "And", "Or", "SHL", "SHR",
         "Mov", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.

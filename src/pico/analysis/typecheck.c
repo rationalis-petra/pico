@@ -301,7 +301,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // Bind the vars in the all type to specific types!
         PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
         if (proc_type->proc.args.len != untyped->all_application.args.len) {
-            throw_error(point, mk_string("To many args to procedure in all-application", a));
+            const char* msg = proc_type->proc.args.len < untyped->all_application.args.len
+                ? "Too many args to procedure in all-application"
+                : "Too few args to procedure in all-application";
+            throw_error(point, mk_string(msg, a));
         }
 
         for (size_t i = 0; i < proc_type->proc.args.len; i++) {
