@@ -365,6 +365,7 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // also note that size = RBP + 0x10
     // Store the return address in RBP + 8
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
+
     build_binary_op(ass, Mov, rref8(RBP, 8, sz_64), reg(R9, sz_64), a, point);
 
     // Store Dest address (located @ RBP - 8)
@@ -374,6 +375,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     // Store size in R9
     build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 4*ADDRESS_SIZE, sz_64), a, point); 
+    build_binary_op(ass, SHR, reg(R9, sz_64), imm8(28), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm32(0xFFFFFFF), a, point);
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
@@ -459,31 +462,12 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     // Store size in R8, stack size in R9
     build_binary_op(ass, Mov, reg(R8, sz_64), rref8(RBP, 3*ADDRESS_SIZE, sz_64), a, point); 
-
     build_binary_op(ass, Mov, reg(R9, sz_64), reg(R8, sz_64), a, point); 
 
-    /* size_t rem = size % 8; */
-    /* size_t pad = rem == 0 ? 0 : 8 - rem; */
-    /* return size + pad; */
+    build_binary_op(ass, And, reg(R9, sz_64), imm32(0xFFFFFFF), a, point);
 
-    // We accomplish modulo with IDiv, which stores the remainder (modulo) in RDX 
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(R8, sz_64), a, point); 
-    build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(0), a, point); 
-    build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(8), a, point); 
-    build_unary_op(ass, IDiv, reg(RCX, sz_64), a, point); 
-
-    // At this point, RDX = Rem, R8 = size, we store 8 - rem in R9 & 0 in R10
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(8), a, point); 
-    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RDX, sz_64), a, point); 
-    build_binary_op(ass, Mov, reg(R10, sz_64), imm32(0), a, point); 
-
-    // Now, compare rem (RDX) with 0, and conditional move
-    build_binary_op(ass, Cmp, reg(RDX, sz_64), imm32(0), a, point); 
-    build_binary_op(ass, CMovE, reg(R9, sz_64), reg(R10, sz_64), a, point); 
-
-    // Finally, add size (R8) to padding (R9)
-    build_binary_op(ass, Add, reg(R9, sz_64), reg(R8, sz_64), a, point); 
+    build_binary_op(ass, SHR, reg(R8, sz_64), imm8(28), a, point);
+    build_binary_op(ass, And, reg(R8, sz_64), imm32(0xFFFFFFF), a, point);
 
     // Stash return address in RAX
     build_unary_op(ass, Pop, reg(RAX, sz_64), a, point); 
