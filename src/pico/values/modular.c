@@ -183,6 +183,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
 
 Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks) {
     ModuleEntryInternal entry;
+    entry.is_module = false;
     U8Array instrs = get_instructions(fn);
     size_t size = instrs.len;
 

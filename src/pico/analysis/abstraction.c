@@ -356,6 +356,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FTransformer: {
+        if (raw.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed transformer expression: expects at least 1 arg."));
+        }
+        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        Syntax* transformer = abstract_expr_i(*body, env, a, point);
+
+        *res = (Syntax) {
+            .type = STransformer,
+            .transformer = transformer,
+        };
+        break;
+    }
     case FApplication: {
         res = mk_application(raw, env, a, point);
         break;

@@ -18,6 +18,9 @@ void set_current_package(Package* current);
 void set_std_istream(IStream* current);
 void set_std_ostream(OStream* current);
 
+PiType* get_atom_type();
+PiType* get_syntax_type();
+
 Allocator* get_std_tmp_allocator();
 Allocator* set_std_tmp_allocator(Allocator* al);
 

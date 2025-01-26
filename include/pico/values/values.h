@@ -43,6 +43,7 @@ typedef enum TermFormer {
     // Term Formers: value construction/destruction
     FProcedure,
     FAll,
+    FTransformer,
     FApplication,
     FVariant,
     FMatch,

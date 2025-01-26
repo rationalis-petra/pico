@@ -11,7 +11,7 @@
 #include "app/module_load.h"
 
 //------------------------------------------------------------------------------
-// Implementatino of C API 
+// Implementation of C API 
 //------------------------------------------------------------------------------
 
 static jump_buf* m_buf;
@@ -30,6 +30,11 @@ Module* set_std_current_module(Module* md) {
     Module* old = *mdle;
     *mdle = md;
     return old;
+}
+
+static PiType* syntax_type;
+PiType* get_syntax_type() {
+    return syntax_type;
 }
 
 static Package* current_package;
@@ -293,8 +298,8 @@ void build_size_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stdlib_size_of), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
-#if OS_FAMILY == WIN_64
-    build_binary_op(ass, Add, reg(RSP, ), imm32(32), a, point);
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif 
 
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -323,8 +328,8 @@ void build_align_of_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stdlib_align_of), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
-#if OS_FAMILY == WIN_64
-    build_binary_op(ass, Add, reg(RSP, ), imm32(32), a, point);
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif 
 
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -669,6 +674,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("all"));
     add_def(module, sym, type, &former);
 
+    former = FTransformer;
+    sym = string_to_symbol(mv_string("transformer"));
+    add_def(module, sym, type, &former);
+
     former = FApplication;
     sym = string_to_symbol(mv_string("$"));
     add_def(module, sym, type, &former);
@@ -845,6 +854,34 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     type_val = mk_prim_type(UInt_8);
     sym = string_to_symbol(mv_string("U8"));
     add_def(module, sym, type, &type_data);
+
+    // Syntax Type : components and definition 
+    {
+        PiType atom_type = mk_enum_type(a, 4,
+                                        "bool", 1, mk_prim_type(Bool),
+                                        "integral", 1, mk_prim_type(Int_64),
+                                        "symbol", 1,  mk_prim_type(Int_64),
+                                        "string", 1, mk_string_type(a));
+        type_data = &atom_type;
+        sym = string_to_symbol(mv_string("Atom"));
+        add_def(module, sym, type, &type_data);
+
+        PiType hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
+        type_data = &hint_type;
+        sym = string_to_symbol(mv_string("Hint"));
+        add_def(module, sym, type, &type_data);
+
+        type_val = mk_enum_type(a, 2,
+                                "atom", 1, atom_type,
+                                "node", 2, hint_type, mk_prim_type(Address));
+
+        type_data = &type_val;
+        sym = string_to_symbol(mv_string("Syntax"));
+        add_def(module, sym, type, &type_data);
+        delete_pi_type(type_val, a);
+        ModuleEntry* e = get_def(sym, module);
+        syntax_type = e->value;
+    }
 
     type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
     build_size_of_fn(ass, a, &point);

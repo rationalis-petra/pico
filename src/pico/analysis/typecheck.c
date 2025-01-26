@@ -206,6 +206,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         all_ty->binder.body = untyped->all.body->ptype;
         break;
     }
+    case STransformer: {
+        // Transformer inner type: 
+        // proc [Array Syntax] Syntax
+        // where syntax = ...
+        // 
+        PiType* syntax = get_syntax_type();
+
+        PiType* transformer_proc = mem_alloc(sizeof(PiType), a);
+        *transformer_proc = mk_proc_type(a, 1, *syntax, *syntax);
+
+        type_check_i(untyped->transformer, transformer_proc, env, gen, a, point);
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType) {
+            .sort = TPrim,
+            .prim = TTransformer,
+        };
+        untyped->ptype = t;
+        break;
+    }
     case SApplication: {
         type_infer_i(untyped->application.function, env, gen, a, point);
         PiType fn_type = *untyped->application.function->ptype;
@@ -942,6 +961,10 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         pop_types(env, syn->all.args.len);
         break;
     }
+    case STransformer: {
+        instantiate_implicits(syn->transformer, env, a, point);
+        break;
+    }
     case SApplication: {
         instantiate_implicits(syn->application.function, env, a, point);
         for (size_t i = 0; i < syn->application.args.len; i++) {
@@ -1190,6 +1213,10 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SAll: {
         // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
         squash_types(typed->all.body, a, point);
+        break;
+    }
+    case STransformer: { 
+        squash_types(typed->transformer, a, point);
         break;
     }
     case SApplication: {

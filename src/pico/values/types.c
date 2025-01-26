@@ -27,6 +27,7 @@ void delete_enum_variant_p(PtrArray* t, Allocator* a) {
     for (size_t i = 0; i < t->len; i++)
         delete_pi_type_p(t->data[i], a);
     sdelete_ptr_array(*t);
+    mem_free(t, a);
 }
 
 void delete_pi_type(PiType t, Allocator* a) {
@@ -457,6 +458,49 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
 Document* pretty_type(PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
+    case TPrim:
+        switch (type->prim) {
+        case Int_64: 
+            out = mv_str_doc(mk_string("I64", a), a);
+            break;
+        case Int_32: 
+            out = mv_str_doc(mk_string("I32", a), a);
+            break;
+        case Int_16: 
+            out = mv_str_doc(mk_string("I16", a), a);
+            break;
+        case Int_8: 
+            out = mv_str_doc(mk_string("I8", a), a);
+            break;
+        case UInt_64: 
+            out = mv_str_doc(mk_string("U64", a), a);
+            break;
+        case UInt_32: 
+            out = mv_str_doc(mk_string("U32", a), a);
+            break;
+        case UInt_16: 
+            out = mv_str_doc(mk_string("U16", a), a);
+            break;
+        case UInt_8: 
+            out = mv_str_doc(mk_string("U8", a), a);
+            break;
+        case Unit: 
+            out = mv_str_doc(mk_string("Unit", a), a);
+            break;
+        case Bool: 
+            out = mv_str_doc(mk_string("Bool", a), a);
+            break;
+        case Address: 
+            out = mv_str_doc(mk_string("Address", a), a);
+            break;
+        case TFormer: 
+            out = mv_str_doc(mk_string("Former", a), a);
+            break;
+        case TTransformer: 
+            out = mv_str_doc(mk_string("Transformer", a), a);
+            break;
+        }
+        break;
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
@@ -482,46 +526,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     case TUVarDefaulted:
         out = mv_str_doc(mk_string("No Print UVar Defaulted!", a), a);
-        break;
-    case TPrim:
-        switch (type->prim) {
-        case Unit: 
-            out = mv_str_doc(mk_string("Unit", a), a);
-            break;
-        case Bool: 
-            out = mv_str_doc(mk_string("Bool", a), a);
-            break;
-        case Address: 
-            out = mv_str_doc(mk_string("Address", a), a);
-            break;
-        case Int_64: 
-            out = mv_str_doc(mk_string("I64", a), a);
-            break;
-        case Int_32: 
-            out = mv_str_doc(mk_string("I32", a), a);
-            break;
-        case Int_16: 
-            out = mv_str_doc(mk_string("I16", a), a);
-            break;
-        case Int_8: 
-            out = mv_str_doc(mk_string("I8", a), a);
-            break;
-        case UInt_64: 
-            out = mv_str_doc(mk_string("U64", a), a);
-            break;
-        case UInt_32: 
-            out = mv_str_doc(mk_string("U32", a), a);
-            break;
-        case UInt_16: 
-            out = mv_str_doc(mk_string("U16", a), a);
-            break;
-        case UInt_8: 
-            out = mv_str_doc(mk_string("U8", a), a);
-            break;
-        case TFormer: 
-            out = mv_str_doc(mk_string("Former", a), a);
-            break;
-        }
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
@@ -745,6 +749,8 @@ size_t pi_size_of(PiType type) {
             return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer);
+        case TTransformer:
+            return ADDRESS_SIZE;
         default:
             panic(mv_string("pi-size-of: unrecognized primitive."));
         }
@@ -754,11 +760,9 @@ size_t pi_size_of(PiType type) {
     case TStruct: {
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            // Note: Data is padded to be 8-byte aligned!
-            // TODO (FEAT): Make generic on padding size?
+            total = pi_size_align(total, pi_align_of(*(PiType*)type.structure.fields.data[i].val));
             size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
-            size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
-            total += field_size + padding;
+            total += field_size;
         }
         return total;
     }
@@ -768,11 +772,9 @@ size_t pi_size_of(PiType type) {
             size_t total = 0;
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
-                // Note: Data is padded to be 8-byte aligned!
-                // TODO (FEAT): Make generic on padding size?
+                total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
                 size_t field_size = pi_size_of(*(PiType*)types.data[i]);
-                size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
-                total += field_size + padding;
+                total += field_size;
             }
 
             if (total > max) {
@@ -1194,6 +1196,34 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...) {
     va_end(args);
 
     return (PiType) {.sort = TStruct, .structure.fields = fields,};
+}
+
+// Sample usage: mk_enum_type(a, 3,
+//   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
+//   "Singleton", 1, mk_prim_type(Int_64),
+//   "None", 0)
+PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
+    va_list args;
+    va_start(args, nfields);
+    
+    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        int nargs = va_arg(args, int);
+        PtrArray variant_args = mk_ptr_array(nargs, a);
+        for (int j = 0; j < nargs; j++) {
+            PiType* arg = mem_alloc(sizeof(PiType), a);
+            *arg = va_arg(args, PiType);
+            push_ptr(arg, &variant_args);
+        }
+        PtrArray* heap_variant_args = mem_alloc(sizeof(PtrArray), a);
+        *heap_variant_args = variant_args;
+        sym_ptr_insert(name, heap_variant_args, &fields);
+
+    }
+    va_end(args);
+
+    return (PiType) {.sort = TEnum, .structure.fields = fields,};
 }
 
 PiType mk_string_type(Allocator* a) {

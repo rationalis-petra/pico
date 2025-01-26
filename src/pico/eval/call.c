@@ -105,7 +105,7 @@ void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* poin
         build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((int64_t)&memcpy), a, point);
         build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
         // pop value from stack
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_round(rsize) + 32), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize) + 32), a, point);
     }
     build_nullary_op(ass, Ret, a, point);
 #else

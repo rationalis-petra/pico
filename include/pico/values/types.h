@@ -12,20 +12,21 @@ typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
 typedef enum {
-    Unit = 0b0000,
-    Bool = 0b0001,
-    Address = 0b0010,
-    TFormer = 0b0011,
+    Int_8  = 0b000,
+    Int_16 = 0b001,
+    Int_32 = 0b010,
+    Int_64 = 0b011,
 
-    Int_8  = 0b0100,
-    Int_16 = 0b0101,
-    Int_32 = 0b0110,
-    Int_64 = 0b0111,
+    UInt_8  = 0b100,
+    UInt_16 = 0b101,
+    UInt_32 = 0b110,
+    UInt_64 = 0b111,
 
-    UInt_8  = 0b1100,
-    UInt_16 = 0b1101,
-    UInt_32 = 0b1110,
-    UInt_64 = 0b1111,
+    Unit,
+    Bool,
+    Address,
+    TFormer,
+    TTransformer,
 } PrimType;
 
 typedef enum {
@@ -193,6 +194,13 @@ PiType mk_prim_type(PrimType t);
 PiType mk_dynamic_type(Allocator* a, PiType t);
 PiType mk_proc_type(Allocator* a, size_t nargs, ...);
 PiType mk_struct_type(Allocator* a, size_t nfields, ...);
+
+// Sample usage: mk_enum_type(a, 3,
+//   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
+//   "Singleton", 1, mk_prim_type(Int_64),
+//   "None", 0)
+PiType mk_enum_type(Allocator* a, size_t nfields, ...);
+
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]

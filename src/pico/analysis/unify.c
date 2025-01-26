@@ -1,8 +1,13 @@
 #include "platform/signals.h"
+#include "pretty/string_printer.h"
+
 #include "pico/analysis/unify.h"
 
 PiType* trace_uvar(PiType* uvar);
+
+// Unify two types such they are equal. Assumes they have the same sort
 Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a);
+
 Result assert_maybe_integral(PiType* type);
 
 Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
@@ -14,6 +19,11 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     rhs = trace_uvar(rhs);
 
     Result out;
+    // Shortcut: if lhs == rhs, then the types are identical and no work needs
+    // to be done.
+    if (lhs == rhs) {
+        return (Result) {.type = Ok};
+    }
 
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
@@ -36,30 +46,45 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     else if (rhs->sort == lhs->sort)
         out = unify_eq(lhs, rhs, a);
     else {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), a), &nodes);
+        push_ptr(pretty_type(lhs, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+        push_ptr(pretty_type(rhs, a), &nodes);
+
         out = (Result) {
             .type = Err,
-            .error_message = mv_string("Unification failed: given two types of differen sort"),
+            .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
         };
     }
     return out;
 }
 
 Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
-    if (lhs->sort == TPrim && rhs->sort == TPrim) {
+    switch (lhs->sort) {
+    case TPrim: {
         if (lhs->prim == rhs->prim) {
             return (Result) {.type = Ok};
         } else {
+            PtrArray nodes = mk_ptr_array(8, a);
+            push_ptr(mk_str_doc(mv_string("Unification failed: could not unify unequal primitives"), a), &nodes);
+            push_ptr(pretty_type(lhs, a), &nodes);
+            push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+            push_ptr(pretty_type(rhs, a), &nodes);
+
             return (Result) {
                 .type = Err,
-                .error_message = mk_string("Unification failed: could not unify two unqueal primitives", a),
+                .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
             };
         }
-    } else if (lhs->sort == TProc && rhs->sort == TProc) {
+        break;
+    }
+    case TProc: {
         if (lhs->proc.args.len != rhs->proc.args.len
             || lhs->proc.implicits.len != rhs->proc.implicits.len) {
             return (Result) {
                 .type = Err,
-                .error_message = mk_string("Unification failed: two different procedures of differing types", a)
+                .error_message = mk_string("Unification failed: provided two different procedures with differing number of arguments or implicits.", a)
             };
         }
 
@@ -77,7 +102,9 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         // Unify the return values
         return unify(lhs->proc.ret, rhs->proc.ret, a);
         
-    } else if (lhs->sort == TStruct && rhs->sort == TStruct) {
+        break;
+    }
+    case TStruct: {
         if (lhs->structure.fields.len != rhs->structure.fields.len) {
             return (Result) {
                 .type = Err,
@@ -89,26 +116,72 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             Symbol lhs_sym = lhs->structure.fields.data[i].key;
             PiType* lhs_ty = lhs->structure.fields.data[i].val;
 
-            PiType** rhs_ty = (PiType**)sym_ptr_lookup(lhs_sym, rhs->structure.fields);
-            if (rhs_ty) {
-                Result out = unify(*rhs_ty, lhs_ty, a);
-                if (out.type == Err) return out;
-            } else {
+            Symbol rhs_sym = rhs->structure.fields.data[i].key;
+            PiType* rhs_ty = rhs->structure.fields.data[i].val;
+
+            if (rhs_sym != lhs_sym) {
                 return (Result) {
                     .type = Err,
-                    .error_message = mk_string("Unification failed: RHS structure missing a field from the LHS.", a)
+                    .error_message = mk_string("Unification failed: RHS and LHS structures must have matching field-names.", a)
                 };
+            }
+
+            Result out = unify(lhs_ty, rhs_ty, a);
+            if (out.type == Err) return out;
+        }
+
+        return (Result) {.type = Ok,};
+        break;
+    }
+    case TEnum: {
+        if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) {
+            return (Result) {
+                .type = Err,
+                .error_message = mk_string("Unification failed: two different enums with differing number of variants.", a)
+            };
+        }
+
+        for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
+            Symbol lhs_sym = lhs->structure.fields.data[i].key;
+            PtrArray lhs_args = *(PtrArray*) lhs->structure.fields.data[i].val;
+
+            Symbol rhs_sym = lhs->structure.fields.data[i].key;
+            PtrArray rhs_args = *(PtrArray*) lhs->structure.fields.data[i].val;
+
+            if (rhs_sym != lhs_sym) {
+                return (Result) {
+                    .type = Err,
+                    .error_message = mk_string("Unification failed: RHS and LHS enums must have matching variant-names.", a)
+                };
+            }
+
+            if (lhs_args.len != rhs_args.len) {
+                return (Result) {
+                    .type = Err,
+                    .error_message = mk_string("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
+                };
+            }
+
+            for (size_t i = 0; i < lhs_args.len; i++) {
+                Result out = unify(lhs_args.data[i], rhs_args.data[i], a);
+                if (out.type == Err) return out;
             }
         }
 
         return (Result) {.type = Ok,};
-    } else if (lhs->sort == TReset && rhs->sort == TReset) {
+        break;
+    }
+    case TReset: {
         Result out = unify(lhs->reset.in, rhs->reset.in, a);
         if (out.type == Err) return out;
         return unify(lhs->reset.out, rhs->reset.out, a);
-    } else if (lhs->sort == TDynamic && rhs->sort == TDynamic) {
+        break;
+    }
+    case TDynamic: {
         return unify(lhs->dynamic, rhs->dynamic, a);
-    } else if (lhs->sort == TDistinct && rhs->sort == TDistinct) {
+        break;
+    }
+    case TDistinct: {
         if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
             return (Result) {
                 .type = Err,
@@ -129,15 +202,18 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         }
 
         return unify(lhs->distinct.type, rhs->distinct.type, a);
-    } else if (lhs->sort == TKind && rhs->sort == TKind) {
-        if (lhs->kind.nargs == rhs->kind.nargs)
-            return (Result) {.type = Ok};
-        else 
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
-            };
-    } else if (lhs->sort == TConstraint && rhs->sort == TConstraint) {
+        break;
+    } case TKind: {
+          if (lhs->kind.nargs == rhs->kind.nargs)
+              return (Result) {.type = Ok};
+          else 
+              return (Result) {
+                  .type = Err,
+                  .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
+              };
+          break;
+      }
+    case TConstraint: {
         if (lhs->constraint.nargs == rhs->constraint.nargs)
             return (Result) {.type = Ok};
         else 
@@ -145,7 +221,9 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify two constraints of unequal nags", a),
             };
-    } else if (lhs->sort == TVar && rhs->sort == TVar) {
+        break;
+    }
+    case TVar: {
         // check they are the same var
         if (lhs->var != rhs->var) {
             return (Result) {
@@ -154,16 +232,16 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             };
         }
         return (Result) {.type = Ok} ;
-    } else if (lhs->sort == rhs->sort) {
-        return (Result) {
-            .type = Err,
-            .error_message = mk_string("Unification not implemented for this type yet!", a),
-        };
-    } else {
-        return (Result) {
-            .type = Err,
-            .error_message = mk_string("Unification failed: types have different forms", a),
-        };
+        break;
+    }
+    default:  {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mk_str_doc(mv_string("Unification failed: invalid types"), a), &nodes);
+        push_ptr(pretty_type(lhs, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
+        push_ptr(pretty_type(rhs, a), &nodes);
+        panic(doc_to_str(mv_sep_doc(nodes, a), a));
+    } 
     }
 }
 

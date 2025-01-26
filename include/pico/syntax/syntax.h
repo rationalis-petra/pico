@@ -36,6 +36,7 @@ typedef enum {
     // Terms & term formers
     SProcedure,
     SAll,
+    STransformer,
     SApplication,
     SAllApplication,
     SConstructor,
@@ -284,6 +285,7 @@ struct Syntax {
 
         SynProcedure procedure;
         SynAll all;
+        Syntax* transformer;
         SynApp application;
         SynAllApp all_application;
         SynConstructor constructor;
