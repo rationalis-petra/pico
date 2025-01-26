@@ -206,8 +206,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         all_ty->binder.body = untyped->all.body->ptype;
         break;
     }
-    case STransformer: {
-        // Transformer inner type: 
+    case SMacro: {
+        // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
         // 
@@ -220,7 +220,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {
             .sort = TPrim,
-            .prim = TTransformer,
+            .prim = TMacro,
         };
         untyped->ptype = t;
         break;
@@ -961,7 +961,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         pop_types(env, syn->all.args.len);
         break;
     }
-    case STransformer: {
+    case SMacro: {
         instantiate_implicits(syn->transformer, env, a, point);
         break;
     }
@@ -1215,7 +1215,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->all.body, a, point);
         break;
     }
-    case STransformer: { 
+    case SMacro: { 
         squash_types(typed->transformer, a, point);
         break;
     }

@@ -674,8 +674,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("all"));
     add_def(module, sym, type, &former);
 
-    former = FTransformer;
-    sym = string_to_symbol(mv_string("transformer"));
+    former = FMacro;
+    sym = string_to_symbol(mv_string("macro"));
     add_def(module, sym, type, &former);
 
     former = FApplication;

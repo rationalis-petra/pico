@@ -356,7 +356,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
-    case FTransformer: {
+    case FMacro: {
         if (raw.nodes.len <= 2) {
             throw_error(point, mv_string("Malformed transformer expression: expects at least 1 arg."));
         }
@@ -364,7 +364,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* transformer = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
-            .type = STransformer,
+            .type = SMacro,
             .transformer = transformer,
         };
         break;

@@ -26,7 +26,7 @@ typedef enum {
     Bool,
     Address,
     TFormer,
-    TTransformer,
+    TMacro,
 } PrimType;
 
 typedef enum {

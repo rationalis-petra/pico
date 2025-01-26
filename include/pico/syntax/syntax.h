@@ -36,7 +36,7 @@ typedef enum {
     // Terms & term formers
     SProcedure,
     SAll,
-    STransformer,
+    SMacro,
     SApplication,
     SAllApplication,
     SConstructor,

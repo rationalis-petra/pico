@@ -245,7 +245,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        out = mk_str_doc(mv_string("#<proc>"), a);
+        void** addr = (void**) val;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
+        push_ptr(pretty_ptr(*addr, a), &nodes);
+        out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
     case TUVar:
@@ -314,6 +318,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
+            break;
+        }
+        case TMacro:  {
+            void** addr = (void**) val;
+            PtrArray nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(mv_string("macro"), a), &nodes);
+            push_ptr(pretty_ptr(*addr, a), &nodes);
+            out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
             break;
         }
         default: {
@@ -496,8 +508,8 @@ Document* pretty_type(PiType* type, Allocator* a) {
         case TFormer: 
             out = mv_str_doc(mk_string("Former", a), a);
             break;
-        case TTransformer: 
-            out = mv_str_doc(mk_string("Transformer", a), a);
+        case TMacro: 
+            out = mv_str_doc(mk_string("Macro", a), a);
             break;
         }
         break;
@@ -749,7 +761,7 @@ size_t pi_size_of(PiType type) {
             return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer);
-        case TTransformer:
+        case TMacro:
             return ADDRESS_SIZE;
         default:
             panic(mv_string("pi-size-of: unrecognized primitive."));

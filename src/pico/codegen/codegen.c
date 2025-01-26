@@ -241,7 +241,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         generate_polymorphic(syn.all.args, *syn.all.body, env, ass, links, a, point);
         break;
     }
-    case STransformer: {
+    case SMacro: {
         generate(*syn.transformer, env, ass, links, a, point);
         break;
     }

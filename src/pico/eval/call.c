@@ -15,7 +15,14 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
         size_t sz = pi_size_of(indistinct_type);
 
-        if (indistinct_type.sort == TPrim
+        if (indistinct_type.sort == TProc ||
+            (indistinct_type.sort == TPrim && indistinct_type.prim == TMacro)) {
+            res.type = ERValue;
+            res.val.type = top.expr->ptype;
+            res.val.val = get_instructions(ass).data;
+        }
+        else if (indistinct_type.sort == TPrim
+            || indistinct_type.sort == TProc
             || indistinct_type.sort == TStruct
             || indistinct_type.sort == TEnum
             || indistinct_type.sort == TDynamic
