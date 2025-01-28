@@ -28,13 +28,19 @@ typedef struct {
     bool interactive;
 } IterOpts;
 
-bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module* module, IterOpts opts) {
+bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
 
-    clear_assembler(ass);
+    Target gen_target = {
+        .target = mk_assembler(exec),
+        .code_aux = mk_assembler(exec),
+        .data_aux = mem_alloc(sizeof(U8Array), &arena)
+    };
+    *gen_target.data_aux = mk_u8_array(128, &arena);
+
     Environment* env = env_from_module(module, &arena);
 
     jump_buf exit_point;
@@ -107,12 +113,19 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // Code Generation
     // -------------------------------------------------------------------------
 
-    GenResult gen_res = generate_toplevel(abs, env, ass, &arena, &point);
+    LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Binary\n"), cout);
-        doc = pretty_assembler(ass, &arena);
+        write_string(mv_string("Pretty Printing Binary:\n"), cout);
+        write_string(mv_string("Execute Assembly:\n"), cout);
+        doc = pretty_assembler(gen_target.target, &arena);
         write_doc(doc, cout);
+        write_string(mv_string("Code Segment:\n"), cout);
+        doc = pretty_assembler(gen_target.target, &arena);
+        write_doc(doc, cout);
+        write_string(mv_string("Data Segment not yet printed!\n"), cout);
+        /* doc = pretty_assembler(gen_target.target, &arena); */
+        /* write_doc(doc, cout); */
         write_string(mv_string("\n"), cout);
     }
 
@@ -120,7 +133,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
     // Evaluation
     // -------------------------------------------------------------------------
 
-    EvalResult call_res = pico_run_toplevel(abs, ass, &(gen_res.backlinks), module, &arena, &point);
+    EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
     }
@@ -132,16 +145,22 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Assembler* ass, Module
         write_string(mv_string("\n"), cout);
     }
 
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
     return true;
 
  on_error:
     write_string(point.error_message, cout);
     write_string(mv_string("\n"), cout);
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
     return true;
 
  on_exit:
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
     return false;
 }
@@ -185,7 +204,7 @@ int main(int argc, char** argv) {
             .debug_print = command.repl.debug_print,
             .interactive = true,
         };
-        while (repl_iter(cin, cout, stdalloc, ass, module, opts));
+        while (repl_iter(cin, cout, stdalloc, &exalloc, module, opts));
         break;
     }
     case CScript: {
@@ -195,7 +214,7 @@ int main(int argc, char** argv) {
         };
 
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
-        while (repl_iter(fin, cout, stdalloc, ass, module, opts));
+        while (repl_iter(fin, cout, stdalloc, &exalloc, module, opts));
         delete_istream(fin, stdalloc);
 
         break;
@@ -207,7 +226,7 @@ int main(int argc, char** argv) {
         };
 
         IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
-        while (repl_iter(sin, cout, stdalloc, ass, module, opts));
+        while (repl_iter(sin, cout, stdalloc, &exalloc, module, opts));
         delete_istream(sin, stdalloc);
         break;
     }

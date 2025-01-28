@@ -1,5 +1,6 @@
 #include <string.h>
 #include "platform/machine_info.h"
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 
 #include "data/array.h"
@@ -24,6 +25,13 @@ typedef struct {
     void* value;
     bool is_module;
     PiType type;
+
+    U8Array* code_segment;
+    U8Array* data_segment;
+    // TODO (UB) if a value (e.g. proc) from a module is evaluated, it will give
+    // an address. If the original definition is then deleted, the address will
+    // now be dangling. This is an issue if the address has been stored somewhere! 
+    // This may end up needing to be exposed to the user?
     SymSArrAMap* backlinks;
 } ModuleEntryInternal;
 
@@ -110,9 +118,7 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
     } else {
-        if (entry.type.sort == TProc || entry.type.sort == TAll) {
-            mem_free(entry.value, &module->executable_allocator);
-        } else if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
+        if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
             delete_pi_type_p(entry.value, module->allocator);
         } else if (entry.type.sort == TTraitInstance) {
             mem_free(*(void**)entry.value, module->allocator);
@@ -129,6 +135,14 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
                              sdelete_size_array);
         mem_free(entry.backlinks, module->allocator);
     }
+    if (entry.code_segment) {
+        sdelete_u8_array(*entry.code_segment);
+        mem_free(entry.code_segment, module->allocator);
+    }
+    if (entry.data_segment) {
+        sdelete_u8_array(*entry.data_segment);
+        mem_free(entry.data_segment, module->allocator);
+    }
 }
 
 void delete_module(Module* module) {
@@ -144,7 +158,41 @@ void delete_module(Module* module) {
     mem_free(module, module->allocator);
 }
 
-Result add_def (Module* module, Symbol name, PiType type, void* data) {
+
+Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links) {
+    Segments out;
+    if (in_segments.data.len != 0) {
+        out.data = scopy_u8_array(in_segments.data, module->allocator);
+    } else {
+        out.data = in_segments.data;
+    }
+
+    if (in_segments.code.len != 0) {
+        out.code = scopy_u8_array(in_segments.code, &module->executable_allocator);
+    } else {
+        out.code = in_segments.code;
+    }
+
+    // Overrite all links to data with new addresses
+    if (in_segments.data.len != 0 && links) {
+        for (size_t i = 0; i < links->ed_links.len; i++) {
+            
+        }
+        for (size_t i = 0; i < links->cd_links.len; i++) {
+        }
+    }
+
+    // Overrite all links to code with new addresses
+    if (in_segments.code.len != 0 && links) {
+        for (size_t i = 0; i < links->ec_links.len; i++) {
+        }
+        for (size_t i = 0; i < links->cc_links.len; i++) {
+        }
+    }
+    return out;
+}
+
+Result add_def (Module* module, Symbol name, PiType type, void* data, Segments segments, LinkData* links) {
     ModuleEntryInternal entry;
     entry.is_module = false;
     size_t size = pi_size_of(type);
@@ -152,7 +200,7 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
-    } else if (type.sort == TTraitInstance){
+    } else if (type.sort == TTraitInstance) {
         size_t total = 0;
         for (size_t i = 0; i < type.instance.fields.len; i++) {
             total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
@@ -166,7 +214,37 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     } else {
         entry.value = mem_alloc(size, module->allocator);
         memcpy(entry.value, data, size);
+
+        if (segments.code.len != 0) {
+            entry.code_segment = mem_alloc(sizeof(U8Array), module->allocator);
+            *entry.code_segment = segments.code;
+        } else {
+            entry.code_segment = NULL;
+        }
+        if (segments.data.len != 0) {
+            entry.data_segment = mem_alloc(sizeof(U8Array), module->allocator);
+            *entry.data_segment = segments.data;
+        } else {
+            entry.data_segment = NULL;
+        }
     }
+
+    if (links) {
+        entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
+        *(entry.backlinks) = copy_sym_sarr_amap(links->external_links,
+                                                copy_symbol,
+                                                scopy_size_array,
+                                                module->allocator);
+
+        // swap out self-references
+        SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
+        sym_ptr_insert(name, entry.value, &self_ref);
+        update_function(entry.value, self_ref, links->external_links);
+        sdelete_sym_ptr_amap(self_ref);
+    } else {
+        entry.backlinks = NULL;
+    }
+
     entry.type = copy_pi_type(type, module->allocator);
     entry.backlinks = NULL;
 
@@ -179,41 +257,6 @@ Result add_def (Module* module, Symbol name, PiType type, void* data) {
     Result out;
     out.type = Ok;
     return out;
-}
-
-Result add_fn_def (Module* module, Symbol name, PiType type, Assembler* fn, SymSArrAMap* backlinks) {
-    ModuleEntryInternal entry;
-    entry.is_module = false;
-    U8Array instrs = get_instructions(fn);
-    size_t size = instrs.len;
-
-    // copy the function definition into the module's executable memory
-    entry.value = mem_alloc(size, &module->executable_allocator);
-    memcpy(entry.value, instrs.data, size);
-    entry.type = copy_pi_type(type, module->allocator);
-    if (backlinks) {
-        entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
-        *(entry.backlinks) = copy_sym_sarr_amap(*backlinks,
-                                                copy_symbol,
-                                                scopy_size_array,
-                                                module->allocator);
-
-        // swap out self-references
-        SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
-        sym_ptr_insert(name, entry.value, &self_ref);
-        update_function(entry.value, self_ref, *backlinks);
-        sdelete_sym_ptr_amap(self_ref);
-    } else {
-        entry.backlinks = NULL;
-    }
-
-    // Free a previous definition (if it exists!)
-    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
-    if (old_entry) delete_module_entry(*old_entry, module);
-
-    entry_insert(name, entry, &(module->entries));
-
-    return (Result) {.type = Ok};
 }
 
 Result add_module_def(Module* module, Symbol name, Module* child) {

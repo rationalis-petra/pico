@@ -6,8 +6,9 @@
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 #include "pico/values/stdlib.h"
+#include "pico/codegen/codegen.h"
 
-EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a, ErrorPoint* point) {
+EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point) {
     EvalResult res;
     switch (top.type) {
     case TLExpr: {
@@ -15,26 +16,9 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
         while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
         size_t sz = pi_size_of(indistinct_type);
 
-        if (indistinct_type.sort == TProc ||
-            (indistinct_type.sort == TPrim && indistinct_type.prim == TMacro)) {
-            res.type = ERValue;
-            res.val.type = top.expr->ptype;
-            res.val.val = get_instructions(ass).data;
-        }
-        else if (indistinct_type.sort == TPrim
-            || indistinct_type.sort == TProc
-            || indistinct_type.sort == TStruct
-            || indistinct_type.sort == TEnum
-            || indistinct_type.sort == TDynamic
-            || indistinct_type.sort == TKind
-            || indistinct_type.sort == TConstraint) {
-            res.type = ERValue;
-            res.val.type = top.expr->ptype;
-            res.val.val = pico_run_expr(ass, sz, a, point);
-        }
-        else  {
-            throw_error(point, mv_string("Cannot evaluate values of this type."));
-        }
+        res.type = ERValue;
+        res.val.type = top.expr->ptype;
+        res.val.val = pico_run_expr(target, sz, a, point);
         break;
     }
     case TLDef: {
@@ -46,30 +30,14 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
             .def.name = top.def.bind,
             .def.type = top.def.value->ptype,
         };
-        switch (indistinct_type.sort) {
-        case TAll:
-        case TProc:
-            add_fn_def(module, top.def.bind, *top.def.value->ptype, ass, backlinks);
-            break;
-        case TPrim:
-        case TEnum:
-        case TStruct:
-        case TDynamic:
-        case TKind:
-        case TConstraint: {
-            void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
-            add_def(module, top.def.bind, *top.def.value->ptype, val);
-            break;
-        }
-        case TTraitInstance: {
-            void* val = pico_run_expr(ass, pi_size_of(*top.def.value->ptype), a, point);
-            add_def(module, top.def.bind, *top.def.value->ptype, val);
-            break;
-        }
-        default:
-            throw_error(point, mv_string("Unrecognized type to define."));
-            break;
-        }
+
+        void* val = pico_run_expr(target, pi_size_of(*top.def.value->ptype), a, point);
+
+        Segments def_segments = (Segments) {
+            .code = get_instructions(target.code_aux),
+            .data = *target.data_aux,
+        };
+        add_def(module, top.def.bind, *top.def.value->ptype, val, def_segments, &links);
     }
     }
 
@@ -77,7 +45,8 @@ EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlink
 }
 
 // Note: destructively modifies Assembler! probaly want a better solution in the future
-void* pico_run_expr(Assembler* ass, size_t rsize, Allocator* a, ErrorPoint* point) {
+void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
+    Assembler* ass = target.target;
     /* result generated; */
     /* generated.type = Ok; */
     void* value = mem_alloc(rsize, a);

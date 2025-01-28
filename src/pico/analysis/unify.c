@@ -249,7 +249,7 @@ Result assert_maybe_integral(PiType* type) {
     // Use a while loop to trace through uvars
     while (type) {
         // If it is a primtive, check it is integral type
-        if (type->sort == TPrim && (type->prim & 0b0100)) {
+        if (type->sort == TPrim && (type->prim < 0b1000)) {
             return (Result) {.type = Ok};
         } else if (type->sort == TUVar || type->sort == TUVarDefaulted) {
             // continue on to next iteration

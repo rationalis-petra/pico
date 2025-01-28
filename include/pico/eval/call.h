@@ -7,6 +7,7 @@
 #include "pretty/document.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/modular.h"
+#include "pico/codegen/codegen.h" // TOOD (ORGANISATION): Move link data out of codegen.h  
 
 
 // Utilities for calling Pico functions from C (adapt to the different calling convention)
@@ -34,9 +35,11 @@ typedef struct EvalResult {
     };
 } EvalResult;
 
-EvalResult pico_run_toplevel(TopLevel top, Assembler* ass, SymSArrAMap* backlinks, Module* module, Allocator* a, ErrorPoint* point);
+Target prep_target(Target target);
 
-void* pico_run_expr(Assembler* ass, size_t size, Allocator* a, ErrorPoint* point);
+EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point);
+
+void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
 
 Document* pretty_res(EvalResult res, Allocator* a);
 

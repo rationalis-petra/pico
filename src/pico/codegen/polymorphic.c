@@ -10,14 +10,15 @@
 #include "pico/binding/address_env.h"
 
 // Implementation details
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
-void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+    Assembler* ass = target.target;
     SymbolArray vars;
     Syntax body;
     if (syn.type == SProcedure) {
@@ -48,7 +49,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
 
     address_start_poly(types, vars, env, a);
 
-    generate_polymorphic_i(body, env, ass, links, a, point);
+    generate_polymorphic_i(body, env, target, links, a, point);
 
     // Codegen function postlude:
     // Stack now looks like:
@@ -108,7 +109,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Assemb
     address_end_poly(env, a);
 }
 
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+    Assembler* ass = target.target;
     switch (syn.type) {
     case SLitUntypedIntegral: {
         panic(mv_string("Cannot generate polymorphic code for untyped integral."));
@@ -212,15 +214,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         // Generate the arguments
         for (size_t i = 0; i < syn.application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.application.implicits.data[i];
-            generate_polymorphic_i(*arg, env, ass, links, a, point);
+            generate_polymorphic_i(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
-            generate_polymorphic_i(*arg, env, ass, links, a, point);
+            generate_polymorphic_i(*arg, env, target, links, a, point);
         }
 
         // This will push a function pointer onto the stack
-        generate_polymorphic_i(*syn.application.function, env, ass, links, a, point);
+        generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
         
         // Regular Function Call
         // Pop the function into RCX; call the function
@@ -238,7 +240,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Assembler* ass, LinkDat
         if (syn.projector.val->ptype->sort == TStruct) {
             panic(mv_string("Projector not implemented for structures in polymorphic function"));
         } else {
-            generate_polymorphic_i(*syn.projector.val, env, ass, links, a, point);
+            generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
 
             // Now, calculate offset for field 
             build_unary_op(ass, Push, imm8(0), a, point);
