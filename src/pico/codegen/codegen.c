@@ -19,9 +19,9 @@
  */
 
 int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
-    long int diff = lhs.origin_offset - rhs.origin_offset;
+    long int diff = lhs.source_offset - rhs.source_offset;
     if (diff) return diff;
-    return lhs.data_index - rhs.data_index;
+    return lhs.dest_offset - rhs.dest_offset;
 }
 
 ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
@@ -67,9 +67,9 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_links = mk_sym_sarr_amap(8, a),
-            .ec_links = mk_link_meta_array(0, a),
-            .ed_links = mk_link_meta_array(0, a),
-            .cc_links = mk_link_meta_array(32, a),
+            .ec_links = mk_link_meta_array(8, a),
+            .ed_links = mk_link_meta_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
@@ -106,7 +106,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (immediate.memsize > UINT32_MAX) 
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)immediate.bytes), a, point);
+        // Push the u8
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+
+        // Backlink the data & copy the bytes into the data-segment.
+        backlink_data(target, out.backlink, links);
+        add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
+
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
@@ -141,18 +147,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
-            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind) {
-                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)e.value), a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-
             // Primitives, Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
-            } else if (indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
+                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RCX, 0, sz_64), a, point);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);

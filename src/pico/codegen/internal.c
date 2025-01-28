@@ -1,3 +1,4 @@
+#include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 
 #include "platform/machine_info.h"
@@ -24,6 +25,34 @@ void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocat
 
     // Step 2: insert offset into array
     push_size(offset, sarr);
+}
+
+void backlink_code(Target target, size_t offset, InternalLinkData* links) {
+    U8Array assembly = get_instructions(target.code_aux);
+    
+    LinkMetaData link = (LinkMetaData) {
+        .source_offset = offset,
+        .dest_offset = assembly.len,
+    };
+
+    if (target.target == target.code_aux) {
+        push_link_meta(link, &links->links.cc_links);
+    } else {
+        push_link_meta(link, &links->links.ec_links);
+    }
+}
+
+void backlink_data(Target target, size_t offset, InternalLinkData* links) {
+    LinkMetaData link = (LinkMetaData) {
+        .source_offset = offset,
+        .dest_offset = target.data_aux->len,
+    };
+
+    if (target.target == target.code_aux) {
+        push_link_meta(link, &links->links.cd_links);
+    } else {
+        push_link_meta(link, &links->links.ed_links);
+    }
 }
 
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {

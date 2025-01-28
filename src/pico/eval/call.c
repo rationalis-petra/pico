@@ -22,8 +22,6 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         break;
     }
     case TLDef: {
-        PiType indistinct_type = *top.def.value->ptype;
-        while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
         // copy into module
         res = (EvalResult) {
             .type = ERDef,
@@ -31,12 +29,13 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
             .def.type = top.def.value->ptype,
         };
 
-        void* val = pico_run_expr(target, pi_size_of(*top.def.value->ptype), a, point);
-
         Segments def_segments = (Segments) {
             .code = get_instructions(target.code_aux),
             .data = *target.data_aux,
         };
+
+        def_segments = prep_target(module, def_segments, target.target, &links);
+        void* val = pico_run_expr(target, pi_size_of(*top.def.value->ptype), a, point);
         add_def(module, top.def.bind, *top.def.value->ptype, val, def_segments, &links);
     }
     }

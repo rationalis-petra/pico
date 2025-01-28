@@ -1,6 +1,5 @@
 #include <string.h>
 #include "platform/machine_info.h"
-#include "platform/signals.h"
 #include "platform/memory/executable.h"
 
 #include "data/array.h"
@@ -175,18 +174,31 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
 
     // Overrite all links to data with new addresses
     if (in_segments.data.len != 0 && links) {
+        U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ed_links.len; i++) {
-            
+            LinkMetaData link = links->ed_links.data[i];
+            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            *address_ptr= out.data.data + link.dest_offset;
         }
         for (size_t i = 0; i < links->cd_links.len; i++) {
+            LinkMetaData link = links->cd_links.data[i];
+            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            *address_ptr= out.data.data + link.dest_offset;
         }
     }
 
     // Overrite all links to code with new addresses
     if (in_segments.code.len != 0 && links) {
+        U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ec_links.len; i++) {
+            LinkMetaData link = links->ec_links.data[i];
+            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            *address_ptr= out.code.data + link.dest_offset;
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
+            LinkMetaData link = links->cc_links.data[i];
+            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            *address_ptr= out.code.data + link.dest_offset;
         }
     }
     return out;
@@ -246,7 +258,6 @@ Result add_def (Module* module, Symbol name, PiType type, void* data, Segments s
     }
 
     entry.type = copy_pi_type(type, module->allocator);
-    entry.backlinks = NULL;
 
     // Free a previous definition (if it exists!)
     ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);

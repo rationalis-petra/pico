@@ -70,8 +70,8 @@ typedef struct {
  */
 
 typedef struct {
-    size_t origin_offset;
-    size_t data_index;
+    size_t source_offset;
+    size_t dest_offset;
 } LinkMetaData;
 
 ARRAY_HEADER(LinkMetaData, link_meta, LinkMeta)
