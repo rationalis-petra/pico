@@ -36,10 +36,10 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(32, a),
+            .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(32, a),
             .cd_links = mk_link_meta_array(8, a),
-            .dc_links = mk_link_meta_array(0, a),
-            .dd_links = mk_link_meta_array(0, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
@@ -67,10 +67,10 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(0, a),
+            .ed_links = mk_link_meta_array(0, a),
             .cc_links = mk_link_meta_array(32, a),
             .cd_links = mk_link_meta_array(8, a),
-            .dc_links = mk_link_meta_array(0, a),
-            .dd_links = mk_link_meta_array(0, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };

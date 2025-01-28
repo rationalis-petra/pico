@@ -35,8 +35,6 @@ typedef struct EvalResult {
     };
 } EvalResult;
 
-Target prep_target(Target target);
-
 EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point);
 
 void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
