@@ -91,6 +91,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
 
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
+    void* offset_memory_space = mem_alloc(1024, a);
 
     Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
 
@@ -99,11 +100,15 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "push %%rbp       \n"
         "push %%r15       \n"
         "push %%r14       \n"
-        "mov %3, %%r14    \n"
+        "push %%r13       \n"
         "mov %2, %%r15    \n"
+        "mov %3, %%r14    \n"
+        "mov %4, %%r13    \n"
         "mov %%rsp, %%rbp \n"
-        "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+        "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP? Possibly to account
+                              // for value on stack?
         "call *%1         \n"
+        "pop %%r13        \n"
         "pop %%r14        \n"
         "pop %%r15        \n"
         "pop %%rbp        \n"
@@ -111,7 +116,8 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
 
         : "r" (instructions.data)
         , "r" (dvars)
-        , "r"(dynamic_memory_space)) ;
+        , "r" (dynamic_memory_space)
+        , "r" (offset_memory_space)) ;
 
     set_std_tmp_allocator(old_tmp_alloc);
     mem_free(dynamic_memory_space, a);

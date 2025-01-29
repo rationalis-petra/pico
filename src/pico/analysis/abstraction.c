@@ -1,12 +1,14 @@
-#include "pico/analysis/abstraction.h"
+#include "platform/machine_info.h"
 
 #include "platform/signals.h"
 #include "data/result.h"
 #include "data/string.h"
 #include "pico/values/values.h"
+#include "pico/values/stdlib.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
+#include "pico/analysis/abstraction.h"
 
 // Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
@@ -1031,10 +1033,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynamicType: {
-        if (raw.nodes.len != 2) {
-            throw_error(point, mv_string("Dynamic type former expects exactly 1 arguments!"));
+        if (raw.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed Dynamic Type expression: expects at least 1 arg."));
         }
-        Syntax* dyn_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[1], env, a, point);
+        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        Syntax* dyn_ty = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
             .type = SDynamicType,
@@ -1043,10 +1046,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDistinctType: {
-        if (raw.nodes.len != 2) {
-            throw_error(point, mv_string("Malformed distinct expression."));
+        if (raw.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed Distinct Type expression: expects at least 1 arg."));
         }
-        Syntax* distinct = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        Syntax* distinct = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
             .type = SDistinctType,
@@ -1055,10 +1059,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FOpaqueType: {
-        if (raw.nodes.len != 2) {
-            throw_error(point, mv_string("Malformed opaque expression."));
+        if (raw.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed Opaque Type expression: expects at least 1 arg."));
         }
-        Syntax* opaque = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        Syntax* opaque = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
             .type = SOpaqueType,
@@ -1236,6 +1241,34 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
             case SGlobal:
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     return mk_term(*((TermFormer*)entry.value), raw, env, a, point);
+                } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
+                    // Call the function (uses Pico ABI)
+                    void* dvars = get_dynamic_memory();
+                    void* dynamic_memory_space = mem_alloc(4096, a);
+
+                    Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
+
+                    int64_t out;
+                    __asm__ __volatile__(
+                                         "push %%rbp       \n"
+                                         "push %%r15       \n"
+                                         "push %%r14       \n"
+                                         "mov %3, %%r14    \n"
+                                         "mov %2, %%r15    \n"
+                                         "mov %%rsp, %%rbp \n"
+                                         "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+                                         "call *%1         \n"
+                                         "pop %%r14        \n"
+                                         "pop %%r15        \n"
+                                         "pop %%rbp        \n"
+                                         : "=r" (out)
+
+                                         : "r" (entry.value)
+                                           , "r" (dvars)
+                                           , "r"(dynamic_memory_space)) ;
+
+                    set_std_tmp_allocator(old_tmp_alloc);
+                    mem_free(dynamic_memory_space, a);
                 } else {
                     return mk_application(raw, env, a, point);
                 }

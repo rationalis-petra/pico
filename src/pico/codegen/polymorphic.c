@@ -163,7 +163,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case AGlobal:
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
-            if (syn.ptype->sort == TProc) {
+            if (syn.ptype->sort == TProc || syn.ptype->sort == TAll) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
@@ -185,11 +185,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 // Allocate space on the stack for composite type (struct/enum)
                 out = build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
 
-                // copy
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
 
             } else {
-                throw_error(point, mv_string("Codegen: Global has unsupported sort: must be Primitive or Proc"));
+                throw_error(point, mv_string("Codegen/Polymorphic: Global has unsupported sort"));
             }
             break;
         case ANotFound: {
@@ -231,7 +230,111 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SAllApplication: {
-        throw_error(point, mv_string("Internal error: cannot generate all application inside polymorphic code"));
+        // Polymorphic Funcall
+        // Step1: reserve space for types. 
+        // Recall the setup
+        // > Types
+        // > Argument Offsets
+        // > Old RBP
+        // > 64-bit space
+        // > arguments (in order)
+
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            // The 'type' looks as follows:
+            // | 16 bits | 16 bits     | 32 bits |
+            // | align   | stack align | size    |
+            generate_align_of(R8, ((Syntax*)syn.all_application.types.data[i])->type_val, env, ass, a, point);
+            build_binary_op(ass, SHL, reg(R8, sz_64), imm8(56), a, point);
+            build_unary_op(ass, Push, reg(R8, sz_64), a, point);
+
+            // TODO BUG LOGIC Check that R8 < max_uint_28
+            generate_size_of(R8, ((Syntax*)syn.all_application.types.data[i])->type_val, env, ass, a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_64), reg(R8, sz_64), a, point);
+            build_binary_op(ass, SHL, reg(R8, sz_64), imm8(28), a, point);
+            build_binary_op(ass, Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
+
+            /* uint64_t result = (align << 56) | (size << 28) | stack_sz; */
+            // Now, we use the 'div' instruction with RDX = 0; RAX = size.
+            // Remainder stored in RDX
+            build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(0), a, point);
+            build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(8), a, point);
+            build_unary_op(ass, Div, reg(RCX, sz_64), a, point);
+
+            // We need now to if rem == 0 then 0 else 8 - rem 
+            // store 8 - rem in RCX (8 is already in rcx from above)
+            build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RDX, sz_64), a, point);
+            build_binary_op(ass, Cmp, reg(RDX, sz_64), imm8(0), a, point);
+            
+            build_binary_op(ass, CMovE, reg(RCX, sz_64), reg(RCX, sz_64), a, point);
+
+            build_binary_op(ass, Or, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+        }
+
+        // Calculation of offsets:
+        // • Remaining offset starts 0
+        // Increment by the (stack) size of each argument, push thisoffset
+        build_unary_op(ass, Push, imm32(0), a, point);
+        
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            generate_stack_size_of(RAX, ((Syntax*)syn.all_application.implicits.data[i])->ptype, env, ass, a, point);
+
+            // Pop current offset, subtract stack size, push new offset 2x 
+            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+
+            // generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        }
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+            generate_stack_size_of(RAX, ((Syntax*)syn.all_application.args.data[i])->ptype, env, ass, a, point);
+
+            // Pop current offset, subtract stack size, push new offset 2x 
+            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+
+            // generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        }
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Mov, rref8(R13, 0, sz_64), reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(R13, sz_64), imm32(8), a, point);
+
+
+        // size_t args_size = offset - ADDRESS_SIZE;
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), a, point);
+        build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
+
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
+            generate_polymorphic_i(*arg, env, target, links, a, point);
+
+        }
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+            Syntax* arg = (Syntax*) syn.all_application.args.data[i];
+            generate_polymorphic_i(*arg, env, target, links, a, point);
+        }
+
+        // This will push a function pointer onto the stack
+        generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
+
+        // Now, calculate what RBP should be 
+        // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
+        //     = RSP - offset
+        build_binary_op(ass, Mov, reg(RBP, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(8), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(R13, 0, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RBP, sz_64), reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RBP, sz_64), imm32(ADDRESS_SIZE), a, point);
+        
+        // Regular Function Call
+        // Pop the function into RCX; call the function
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
+        break;
+            
     }
     case SStructure: {
         throw_error(point, mv_string("Not implemented: structure in forall."));
@@ -293,6 +396,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SIf: {
         throw_error(point, mv_string("Not implemented: if in forall."));
     }
+    case SIs:
+        generate_polymorphic_i(*syn.is.val, env, target, links, a, point);
+        break;
+    case SInTo:
+        generate_polymorphic_i(*syn.into.val, env, target, links, a, point);
+        break;
+    case SOutOf:
+        generate_polymorphic_i(*syn.out_of.val, env, target, links, a, point);
+        break;
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
@@ -429,6 +541,10 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
             break;
         }
         }
+        break;
+    }
+    case TDistinct: {
+        generate_stack_size_of(dest, type->distinct.type, env, ass, a, point);
         break;
     }
     default: {

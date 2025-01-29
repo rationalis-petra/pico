@@ -36,7 +36,7 @@
    * ------------------
    * Argument Registers: RDI, RSI, RDX, RCX, R8, R9
    * 
-   * Nonvolatile: RBX, RSP, RBP, R12, R13, R14, R16
+   * Nonvolatile: RBX, RSP, RBP, R12, R13, R14, R15
    * Volatile: RAX, RCX, RDX, RSI, RDI, R8, R9, R10, R11
    */
 #define ABI SYSTEM_V_64

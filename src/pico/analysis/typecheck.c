@@ -1428,16 +1428,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     }
     else {
         squash_type(typed->ptype);
-        Document* doc = pretty_type(typed->ptype, a);
-        String str = doc_to_str(doc, a);
-        throw_error(point,
-            string_cat(
-                       string_cat(mv_string("Typechecking error: not all unification vars were instantiated. Term:\n"), 
-                                  str, a),
-                       string_cat(mv_string("\nType:\n"),
-                                  doc_to_str(pretty_type(typed->ptype, a), a),
-                                  a),
-                       a));
+
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), a), &nodes);
+        push_ptr(pretty_syntax(typed, a), &nodes);
+        push_ptr(mk_str_doc(mv_string("Type:"), a), &nodes);
+        push_ptr(pretty_type(typed->ptype, a), &nodes);
+
+        throw_error(point, doc_to_str(mv_vsep_doc(nodes, a), a));
     }
 }
 

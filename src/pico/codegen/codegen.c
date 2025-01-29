@@ -254,6 +254,18 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SAll: {
+        void* all_address = get_instructions(target.code_aux).data;
+        all_address += get_instructions(target.code_aux).len;
+
+        // Generate procedure value (push the address onto the stack)
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        // Now, change the target and the assembler, such that code is now
+        // generated in the 'code segment'. Then, generate the function body
+        ass = target.code_aux;
+        target.target = target.code_aux;
+
         generate_polymorphic(syn.all.args, *syn.all.body, env, target, links, a, point);
         break;
     }

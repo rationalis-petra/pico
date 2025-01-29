@@ -207,6 +207,8 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
 Result add_def (Module* module, Symbol name, PiType type, void* data, Segments segments, LinkData* links) {
     ModuleEntryInternal entry;
     entry.is_module = false;
+    entry.data_segment = NULL;
+    entry.code_segment = NULL;
     size_t size = pi_size_of(type);
 
     if (type.sort == TKind || type.sort == TConstraint) {
@@ -230,14 +232,10 @@ Result add_def (Module* module, Symbol name, PiType type, void* data, Segments s
         if (segments.code.len != 0) {
             entry.code_segment = mem_alloc(sizeof(U8Array), module->allocator);
             *entry.code_segment = segments.code;
-        } else {
-            entry.code_segment = NULL;
         }
         if (segments.data.len != 0) {
             entry.data_segment = mem_alloc(sizeof(U8Array), module->allocator);
             *entry.data_segment = segments.data;
-        } else {
-            entry.data_segment = NULL;
         }
     }
 
@@ -275,6 +273,8 @@ Result add_module_def(Module* module, Symbol name, Module* child) {
         .value = child,
         .is_module = true,
         .backlinks = NULL,
+        .code_segment = NULL,
+        .data_segment = NULL,
     };
 
     // Free a previous definition (if it exists!)
