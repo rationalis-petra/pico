@@ -988,7 +988,12 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         type_app_subst(body->dynamic, subst, a);
         break;
     case TDistinct:
-        panic(mv_string("not implemetned type-app for distinct"));
+        type_app_subst(body->distinct.type, subst, a);
+        if (body->distinct.args) {
+            for (size_t i = 0; i < body->distinct.args->len; i++) {
+                type_app_subst(body->distinct.args->data[i], subst, a);
+            }
+        }
         break;
     case TTrait:
         for (size_t i = 0; i < body->trait.fields.len; i++) {

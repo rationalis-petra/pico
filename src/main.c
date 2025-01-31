@@ -120,13 +120,11 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         write_string(mv_string("Execute Assembly:\n"), cout);
         doc = pretty_assembler(gen_target.target, &arena);
         write_doc(doc, cout);
-        write_string(mv_string("Code Segment:\n"), cout);
-        doc = pretty_assembler(gen_target.target, &arena);
+        write_string(mv_string("\nCode Segment:\n"), cout);
+        doc = pretty_assembler(gen_target.code_aux, &arena);
         write_doc(doc, cout);
-        write_string(mv_string("Data Segment not yet printed!\n"), cout);
-        /* doc = pretty_assembler(gen_target.target, &arena); */
-        /* write_doc(doc, cout); */
-        write_string(mv_string("\n"), cout);
+        write_string(mv_string("\nData Segment:\n"), cout);
+        write_string(string_from_ASCII(*gen_target.data_aux, &arena), cout);
     }
 
     // -------------------------------------------------------------------------

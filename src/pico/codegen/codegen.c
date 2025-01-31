@@ -168,8 +168,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
                                         *symbol_to_string(syn.variable),
-                                        mv_string("' has unsupported sort")
-                                        ));
+                                        mv_string("' has unsupported sort")));
             }
             break;
         }
@@ -1206,6 +1205,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(R14, sz_64), reg(RAX, sz_64), a, point);
 
         break;
+    case SSizeOf: {
+        size_t sz = pi_size_of(*syn.size->type_val);
+        build_unary_op(ass, Push, imm32(sz), a, point);
+        break;
+    }
+    case SAlignOf: {
+        size_t sz = pi_align_of(*syn.size->type_val);
+        build_unary_op(ass, Push, imm32(sz), a, point);
+        break;
+    }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);

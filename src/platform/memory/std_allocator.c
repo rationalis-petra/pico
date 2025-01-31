@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 
 
@@ -8,11 +9,19 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 void* std_malloc(size_t memsize, void* ctx) {
-    return malloc(memsize);
+    void* val = malloc(memsize);
+    if (!val) {
+        panic(mv_string("malloc failed!"));
+    }
+    return val;
 }
 
 void* std_realloc(void* location, size_t memsize, void* ctx) {
-    return realloc(location, memsize);
+    void* val = realloc(location, memsize);
+    if (!val) {
+        panic(mv_string("malloc failed!"));
+    }
+    return val;
 }
 
 void std_free(void* location, void* ctx) {

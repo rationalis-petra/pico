@@ -63,6 +63,8 @@ typedef enum {
     SInTo,
     SOutOf,
     SDynAlloc,
+    SSizeOf,
+    SAlignOf,
     SModule,
 
     // Types & Type formers

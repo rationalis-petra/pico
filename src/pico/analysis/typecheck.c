@@ -306,33 +306,43 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
 
         if (all_type.binder.body->sort != TProc) {
-            throw_error(point, mk_string("Currently, can only typecheck application of all-proc, not arbitrary forall!", a));
-        }
+            // Check that all type args are actually types!
+            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
+            for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+                Syntax* type = untyped->all_application.types.data[i];
+                eval_type(type, env, a, point);
+                sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+            }
+            
+            PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, a);
+            untyped->ptype = ret_type;
+        } else {
 
-        // Check that all type args are actually types!
-        SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
-        for (size_t i = 0; i < all_type.binder.vars.len; i++) {
-            Syntax* type = untyped->all_application.types.data[i];
-            eval_type(type, env, a, point);
-            sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
-        }
+            // Check that all type args are actually types!
+            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
+            for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+                Syntax* type = untyped->all_application.types.data[i];
+                eval_type(type, env, a, point);
+                sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+            }
         
-        // Bind the vars in the all type to specific types!
-        PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
-        if (proc_type->proc.args.len != untyped->all_application.args.len) {
-            const char* msg = proc_type->proc.args.len < untyped->all_application.args.len
-                ? "Too many args to procedure in all-application"
-                : "Too few args to procedure in all-application";
-            throw_error(point, mk_string(msg, a));
-        }
+            // Bind the vars in the all type to specific types!
+            PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+            if (proc_type->proc.args.len != untyped->all_application.args.len) {
+                const char* msg = proc_type->proc.args.len < untyped->all_application.args.len
+                    ? "Too many args to procedure in all-application"
+                    : "Too few args to procedure in all-application";
+                throw_error(point, mk_string(msg, a));
+            }
 
-        for (size_t i = 0; i < proc_type->proc.args.len; i++) {
-            type_check_i(untyped->all_application.args.data[i],
-                         (PiType*)proc_type->proc.args.data[i],
-                         env, gen, a, point);
-        }
+            for (size_t i = 0; i < proc_type->proc.args.len; i++) {
+                type_check_i(untyped->all_application.args.data[i],
+                             (PiType*)proc_type->proc.args.data[i],
+                             env, gen, a, point);
+            }
 
-        untyped->ptype = proc_type->proc.ret;
+            untyped->ptype = proc_type->proc.ret;
+        }
         break;
     }
     case SConstructor: {
@@ -786,10 +796,24 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
-        type_check_i(untyped->is.val, t, env, gen, a, point);
+        type_check_i(untyped->size, t, env, gen, a, point);
 
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = Address};
+        untyped->ptype = out; 
+        break;
+    }
+    case SSizeOf: {
+        eval_type(untyped->size, env, a, point);
+        PiType* out = mem_alloc(sizeof(PiType), a);
+        *out = (PiType){.sort = TPrim, .prim = UInt_64};
+        untyped->ptype = out; 
+        break;
+    }
+    case SAlignOf: {
+        eval_type(untyped->size, env, a, point);
+        PiType* out = mem_alloc(sizeof(PiType), a);
+        *out = (PiType){.sort = TPrim, .prim = UInt_64};
         untyped->ptype = out; 
         break;
     }
@@ -1169,6 +1193,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         instantiate_implicits(syn->out_of.type, env, a, point);
         break;
     case SDynAlloc:
+    case SSizeOf:
+    case SAlignOf:
         instantiate_implicits(syn->size, env, a, point);
         break;
     case SModule:
@@ -1363,6 +1389,8 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->out_of.val, a, point);
         break;
     case SDynAlloc:
+    case SSizeOf:
+    case SAlignOf:
         squash_types(typed->size, a, point);
         break;
     case SProcType: {

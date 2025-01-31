@@ -922,6 +922,32 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         break;
     }
+    case FSizeOf: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Term former 'size-of' expects precisely 1 argument!"));
+        }
+
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SSizeOf,
+            .size = term,
+        };
+        break;
+    }
+    case FAlignOf: {
+        if (raw.nodes.len != 2) {
+            throw_error(point, mv_string("Term former 'align-of' expects precisely 1 argument!"));
+        }
+
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        
+        *res = (Syntax) {
+            .type = SAlignOf,
+            .size = term,
+        };
+        break;
+    }
     case FProcType: {
         if (raw.nodes.len != 3) {
             throw_error(point, mv_string("Wrong number of terms to proc type former."));

@@ -69,6 +69,8 @@ typedef enum TermFormer {
     FInTo,
     FOutOf,
     FDynAlloc,
+    FSizeOf,
+    FAlignOf,
 
     // Type formers
     FProcType,

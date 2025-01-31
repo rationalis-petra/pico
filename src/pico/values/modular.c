@@ -214,20 +214,22 @@ Result add_def (Module* module, Symbol name, PiType type, void* data, Segments s
     if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
         entry.value = copy_pi_type_p(t_val, module->allocator);
-    } else if (type.sort == TTraitInstance) {
-        size_t total = 0;
-        for (size_t i = 0; i < type.instance.fields.len; i++) {
-            total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
-            total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
-        }
-        void* new_memory = mem_alloc(total, module->allocator);
-        memcpy(new_memory, *(void**)data, total);
-
-        entry.value = mem_alloc(size, module->allocator);
-        memcpy(entry.value, &new_memory, ADDRESS_SIZE);
     } else {
-        entry.value = mem_alloc(size, module->allocator);
-        memcpy(entry.value, data, size);
+        if (type.sort == TTraitInstance) {
+            size_t total = 0;
+            for (size_t i = 0; i < type.instance.fields.len; i++) {
+                total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
+                total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
+            }
+            void* new_memory = mem_alloc(total, module->allocator);
+            memcpy(new_memory, *(void**)data, total);
+
+            entry.value = mem_alloc(size, module->allocator);
+            memcpy(entry.value, &new_memory, ADDRESS_SIZE);
+        } else {
+            entry.value = mem_alloc(size, module->allocator);
+            memcpy(entry.value, data, size);
+        }
 
         if (segments.code.len != 0) {
             entry.code_segment = mem_alloc(sizeof(U8Array), module->allocator);

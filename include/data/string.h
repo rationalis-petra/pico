@@ -18,6 +18,7 @@ void delete_string(String str, Allocator* a);
 String copy_string(const String str, Allocator* a);
 
 String string_from_UTF_32(U32Array arr, Allocator* a);
+String string_from_ASCII(U8Array arr, Allocator* a);
 
 int string_cmp(const String lhs, const String rhs);
 String string_cat(const String lhs, const String rhs, Allocator* a);

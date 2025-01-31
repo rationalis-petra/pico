@@ -160,37 +160,35 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case ATypeVar:
             throw_error(point, mv_string("Codegen not implemented for ATypeVar"));
             break;
-        case AGlobal:
+        case AGlobal: {
+            PiType indistinct_type = *syn.ptype;
+            while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
+
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
-            if (syn.ptype->sort == TProc || syn.ptype->sort == TAll) {
-                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)e.value), a, point);
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
+                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-
-                out = build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-            } else if (syn.ptype->sort == TPrim) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RCX, 0, sz_64), a, point);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-            } else if (syn.ptype->sort == TKind) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
-            } else if (syn.ptype->sort == TStruct || syn.ptype->sort == TEnum) {
-                // This is a global variable, and therefore has a known monomorphic type
+            } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                out = build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
+                build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
 
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
-
             } else {
-                throw_error(point, mv_string("Codegen/Polymorphic: Global has unsupported sort"));
+                throw_error(point,
+                            string_ncat(a, 3,
+                                        mv_string("Codegen: Global var '"),
+                                        *symbol_to_string(syn.variable),
+                                        mv_string("' has unsupported sort")));
             }
             break;
+        }
         case ANotFound: {
             String* sym = symbol_to_string(syn.variable);
             String msg = mv_string("Couldn't find variable during codegen: ");
@@ -405,6 +403,19 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SOutOf:
         generate_polymorphic_i(*syn.out_of.val, env, target, links, a, point);
         break;
+    case SDynAlloc: {
+        throw_error(point, mv_string("Not implemented: dynamic allocation in polymorphic code."));
+    }
+    case SSizeOf: {
+        generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        break;
+    }
+    case SAlignOf: {
+        generate_align_of(RAX, syn.size->type_val, env, ass, a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        break;
+    }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);

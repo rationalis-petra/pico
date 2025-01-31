@@ -115,13 +115,6 @@ typedef struct {
 } DistinctType;
 
 typedef struct {
-    PiType* body;
-    uint64_t id;
-    PtrArray* args;
-    void* source_module;
-} DistinctTypeApp;
-
-typedef struct {
     size_t nargs;
 } PiKind;
 
@@ -143,7 +136,6 @@ struct PiType {
         TraitInstance instance;
 
         DistinctType distinct;
-        DistinctTypeApp distinct_app;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
         uint64_t var;

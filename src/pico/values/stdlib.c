@@ -763,6 +763,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FSizeOf;
+    sym = string_to_symbol(mv_string("size-of"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FAlignOf;
+    sym = string_to_symbol(mv_string("align-of"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former, null_segments, NULL);
@@ -890,24 +898,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
     Segments prepped;
-
-    type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
-    build_size_of_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("size-of"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
-
-    type = mk_unary_op_type(a, (PiType){.sort = TKind, .kind = {.nargs = 0}}, UInt_64);
-    build_align_of_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("align-of"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
 
     type = build_store_fn_ty(a);
     build_store_fn(ass, a, &point);
