@@ -263,9 +263,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RDX, sz_64), a, point);
             build_binary_op(ass, Cmp, reg(RDX, sz_64), imm8(0), a, point);
             
-            build_binary_op(ass, CMovE, reg(RCX, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(ass, CMovE, reg(RCX, sz_64), reg(RDX, sz_64), a, point);
 
-            build_binary_op(ass, Or, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+            // Add this to the original size and binary-or it into the type.
+            build_binary_op(ass, Add, reg(R8, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(ass, Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
         }
 
         // Calculation of offsets:
