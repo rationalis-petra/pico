@@ -562,6 +562,7 @@ void* mk_opaque_ty(PiType* body) {
         .distinct.type = body,
         .distinct.id = distinct_id(),
         .distinct.source_module = current,
+        .distinct.args = NULL,
     };
     return ty;
 }

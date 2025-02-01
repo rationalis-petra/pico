@@ -185,21 +185,23 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
         pico_run_toplevel(abs, target, links, current, &arena, &point);
     }
 
-    return;
-
  on_exit:
-    clear_assembler(target.target);
-    clear_assembler(target.code_aux);
+    delete_assembler(target.target);
+    delete_assembler(target.code_aux);
     sdelete_u8_array(*target.data_aux);
+    mem_free(target.data_aux, a);
     release_arena_allocator(arena);
+    release_executable_allocator(exec);
     return;
 
  on_error:
     write_string(point.error_message, serr);
     write_string(mv_string("\n"), serr);
-    clear_assembler(target.target);
-    clear_assembler(target.code_aux);
+    delete_assembler(target.target);
+    delete_assembler(target.code_aux);
     sdelete_u8_array(*target.data_aux);
+    mem_free(target.data_aux, a);
     release_arena_allocator(arena);
+    release_executable_allocator(exec);
     return;
 }

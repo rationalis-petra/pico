@@ -184,6 +184,7 @@ bool free_small(void* ptr, exec_context* ctx) {
     }
     return false;
 }
+
 bool free_medium(void* ptr, exec_context* ctx) {
     MediumBlock* blk_prev = NULL;
     MediumBlock** blk_ptr = &ctx->medium_blocks;

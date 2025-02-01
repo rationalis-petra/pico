@@ -69,6 +69,7 @@ void delete_pi_type(PiType t, Allocator* a) {
             for (size_t i = 0; i < t.distinct.args->len; i++)
                 delete_pi_type_p(t.distinct.args->data[i], a);
             sdelete_ptr_array(*t.distinct.args);
+            mem_free(t.distinct.args, a);
         }
         break;
     }
@@ -1075,9 +1076,14 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
         };
         return out_ty;
     } else if (family.sort == TDistinct) {
+        // TODO (BUG LOGIC): check kind of family?
         PiType* new_type = mem_alloc(sizeof(PiType), a);
         *new_type = family;
         new_type->distinct.type = type_app(*family.distinct.type, args, a);
+        new_type->distinct.id = family.distinct.id;
+        new_type->distinct.source_module = family.distinct.source_module;
+        new_type->distinct.args = mem_alloc(sizeof(PtrArray), a);
+        *new_type->distinct.args = args;
         return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
