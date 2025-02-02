@@ -939,7 +939,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);
-    sdelete_u8_array(fn_segments.code);
+    // Note: we do NOT delete the 'fn_segments.code' because it is the
+    // assembler, and needs to be used later!
     sdelete_u8_array(fn_segments.data);
 }
 
