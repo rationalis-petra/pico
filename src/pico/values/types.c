@@ -1083,7 +1083,9 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
         new_type->distinct.id = family.distinct.id;
         new_type->distinct.source_module = family.distinct.source_module;
         new_type->distinct.args = mem_alloc(sizeof(PtrArray), a);
-        *new_type->distinct.args = args;
+
+        typedef void* (*TyCopier)(void*, Allocator*);
+        *new_type->distinct.args = copy_ptr_array(args,  (TyCopier)copy_pi_type_p, a);
         return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
