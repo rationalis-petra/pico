@@ -362,8 +362,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             offset += pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
             build_unary_op(ass, Push, imm32(-offset), a, point);
         }
-        //size_t args_size = offset - ADDRESS_SIZE;
+
+        // Reserve for return address
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), a, point);
+        // Store "Old" RBP (RBP to restore)
         build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
 
         address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len

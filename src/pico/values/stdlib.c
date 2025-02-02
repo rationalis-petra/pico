@@ -903,7 +903,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     build_store_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("store"));
     fn_segments.code = get_instructions(ass);
-    add_def(module, sym, type, &prepped.code.data, fn_segments, NULL);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type(type, a);
 
