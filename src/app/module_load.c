@@ -23,11 +23,11 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     };
     *target.data_aux = mk_u8_array(256, a);
 
-    ErrorPoint point;
-    if (catch_error(point)) goto on_error;
-
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
+
+    ErrorPoint point;
+    if (catch_error(point)) goto on_error;
 
     // Step 1: Parse Module header, get the result (ph_res)
     // TODO (BUG) header & module (below) will be uninitialized if parse fails.

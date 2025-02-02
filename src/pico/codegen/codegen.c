@@ -195,7 +195,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         proc_address += get_instructions(target.code_aux).len;
 
         // Generate procedure value (push the address onto the stack)
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+        backlink_code(target, out.backlink, links);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
         // Now, change the target and the assembler, such that code is now
@@ -257,7 +258,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         all_address += get_instructions(target.code_aux).len;
 
         // Generate procedure value (push the address onto the stack)
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
+        backlink_code(target, out.backlink, links);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
         // Now, change the target and the assembler, such that code is now

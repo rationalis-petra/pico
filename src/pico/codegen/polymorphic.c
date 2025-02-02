@@ -88,7 +88,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RDX, sz_64), imm8(2 * ADDRESS_SIZE), a, point);
 
-    // Note: we push R9 (the new head of stack) so it can be used
+    // Note: We push R9 (the new head of stack) so it can be used
     build_unary_op(ass, Push, reg(R9, sz_64), a, point); 
     
     generate_poly_move(reg(R9, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
