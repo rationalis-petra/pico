@@ -37,6 +37,11 @@ PiType* get_syntax_type() {
     return syntax_type;
 }
 
+static PiType* array_type;
+PiType* get_array_type() {
+    return array_type;
+}
+
 static Package* current_package;
 void set_current_package(Package* current) { current_package = current; }
 
@@ -894,6 +899,62 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         delete_pi_type(type_val, a);
         ModuleEntry* e = get_def(sym, module);
         syntax_type = e->value;
+
+        // Ptr Type
+        U64Array vars = mk_u64_array(1, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        PiType ptr_type = mk_distinct_type(a, mk_type_family(a, vars, mk_prim_type(Address)));
+        type_data = &ptr_type;
+        sym = string_to_symbol(mv_string("Ptr"));
+        type.kind.nargs = 1;
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        // Allocator Type 
+        PiType alloc_type = mk_struct_type(a, 3,
+                                           "alloc", mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address)),
+                                           "realloc", mk_proc_type(a, 2, mk_prim_type(Address), mk_prim_type(UInt_64), mk_prim_type(Address)),
+                                           "free", mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(Unit)));
+        type_data = &alloc_type;
+        sym = string_to_symbol(mv_string("Allocator"));
+        type.kind.nargs = 0;
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        // (Ptr Alloc)
+        PiType* alloc_ptr = mem_alloc(sizeof(PiType), a);
+        *alloc_ptr = alloc_type;
+        PtrArray* al_app = mem_alloc(sizeof(PtrArray), a);
+        *al_app = mk_ptr_array(1, a);
+        push_ptr(alloc_ptr, al_app);
+
+        PiType alloc_ptr_type = (PiType) {
+            .sort = TDistinct,
+            .distinct.type = copy_pi_type_p(ptr_type.distinct.type->binder.body, a),
+            .distinct.id = ptr_type.distinct.id,
+            .distinct.source_module = ptr_type.distinct.source_module,
+            .distinct.args = al_app,
+        };
+        delete_pi_type(ptr_type, a);
+        
+        // Array Type 
+        // Make a ptr
+        vars = mk_u64_array(1, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        type.kind.nargs = 1;
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_struct_type(a, 3,
+                                                                     "data", mk_prim_type(Address),
+                                                                     "len", mk_prim_type(UInt_64),
+                                                                     "gpa", alloc_ptr_type)));
+        type_data = &type_val;
+        sym = string_to_symbol(mv_string("Array"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type(type_val, a);
+
+        e = get_def(sym, module);
+        array_type = e->value;
+
+        type.kind.nargs = 0;
     }
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};

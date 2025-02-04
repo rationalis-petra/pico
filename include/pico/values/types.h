@@ -184,7 +184,11 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 PiType mk_prim_type(PrimType t);
 PiType mk_dynamic_type(Allocator* a, PiType t);
+
+// Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType mk_proc_type(Allocator* a, size_t nargs, ...);
+
+// Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 PiType mk_struct_type(Allocator* a, size_t nfields, ...);
 
 // Sample usage: mk_enum_type(a, 3,
@@ -193,6 +197,11 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...);
 //   "None", 0)
 PiType mk_enum_type(Allocator* a, size_t nfields, ...);
 
+// Sample usage: mk_distinct_type(a, mk_prim_type(Address))
+PiType mk_distinct_type(Allocator* a, PiType inner);
+
+// Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
+PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]

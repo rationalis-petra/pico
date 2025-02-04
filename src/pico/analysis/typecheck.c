@@ -212,9 +212,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // where syntax = ...
         // 
         PiType* syntax = get_syntax_type();
+        PiType* array = get_array_type();
+        PtrArray syn_arr = mk_ptr_array(1, a);
+        push_ptr(syntax, &syn_arr);
+        PiType* syntax_array = type_app(*array, syn_arr, a);
 
         PiType* transformer_proc = mem_alloc(sizeof(PiType), a);
-        *transformer_proc = mk_proc_type(a, 1, *syntax, *syntax);
+        *transformer_proc = mk_proc_type(a, 1, *syntax_array, *syntax);
 
         type_check_i(untyped->transformer, transformer_proc, env, gen, a, point);
         PiType* t = mem_alloc(sizeof(PiType), a);

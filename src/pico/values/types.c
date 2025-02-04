@@ -605,6 +605,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         } else {
             push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
         }
+        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
             for (size_t i = 0; i < type->distinct.args->len; i++) {
@@ -612,7 +613,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
             }
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
-        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
         push_ptr(pretty_type(type->distinct.type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
@@ -1251,6 +1251,28 @@ PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
     va_end(args);
 
     return (PiType) {.sort = TEnum, .structure.fields = fields,};
+}
+
+PiType mk_distinct_type(Allocator* a, PiType inner) {
+    PiType out = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = mem_alloc(sizeof(PiType), a),
+        .distinct.id = distinct_id(),
+        .distinct.source_module = NULL,
+        .distinct.args = NULL,
+    };
+    *out.distinct.type = inner;
+    return out;
+}
+
+PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body) {
+    PiType out = (PiType) {
+        .sort = TFam,
+        .binder.vars = vars,
+        .binder.body = mem_alloc(sizeof(PiType), a),
+    };
+    *out.binder.body = body;
+    return out;
 }
 
 PiType mk_string_type(Allocator* a) {
