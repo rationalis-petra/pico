@@ -43,6 +43,7 @@ typedef enum TermFormer {
     // Term Formers: value construction/destruction
     FProcedure,
     FAll,
+    FMacro,
     FApplication,
     FVariant,
     FMatch,
@@ -68,6 +69,8 @@ typedef enum TermFormer {
     FInTo,
     FOutOf,
     FDynAlloc,
+    FSizeOf,
+    FAlignOf,
 
     // Type formers
     FProcType,

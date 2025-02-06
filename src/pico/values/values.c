@@ -229,6 +229,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FAll:
         out = mk_str_doc(mv_string("::all"), a);
         break;
+    case FMacro:
+        out = mk_str_doc(mv_string("::macro"), a);
+        break;
     case FVariant:
         out = mk_str_doc(mv_string("::variant"), a);
         break;

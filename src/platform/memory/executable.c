@@ -184,12 +184,13 @@ bool free_small(void* ptr, exec_context* ctx) {
     }
     return false;
 }
+
 bool free_medium(void* ptr, exec_context* ctx) {
     MediumBlock* blk_prev = NULL;
     MediumBlock** blk_ptr = &ctx->medium_blocks;
     MediumBlock* blk = ctx->medium_blocks;
     while (blk != NULL) {
-        if (ptr == blk) {
+        if (ptr == blk->block_memory.data) {
             *blk_ptr = blk->next;
             free_ex_mem(blk->block_memory);
             mem_free(blk, ctx->metadata_allocator);
@@ -211,7 +212,7 @@ bool free_large(void* ptr, exec_context* ctx) {
     LargeBlock** blk_ptr = &ctx->large_blocks;
     LargeBlock* blk = ctx->large_blocks;
     while (blk != NULL) {
-        if (ptr == blk) {
+        if (ptr == blk->block_memory.data) {
             *blk_ptr = blk->next;
             free_ex_mem(blk->block_memory);
             mem_free(blk, ctx->metadata_allocator);

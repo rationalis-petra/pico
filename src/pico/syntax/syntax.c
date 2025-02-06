@@ -108,9 +108,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SAllApplication: {
         Document* head = pretty_syntax(syntax->all_application.function, a);
-        bool print_types = syntax->all_application.types.len == 0;
-        PtrArray nodes = mk_ptr_array((print_types ? 5 : 3) + syntax->all_application.types.len + syntax->all_application.args.len, a);
-        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
+        bool print_types = syntax->all_application.types.len != 0;
+        PtrArray nodes = mk_ptr_array((print_types ? 3 : 1) + syntax->all_application.types.len + syntax->all_application.args.len, a);
         push_ptr(head, &nodes);
 
         if (print_types) push_ptr(mk_str_doc(mv_string("{"), a), &nodes);
@@ -124,8 +123,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             Document* node = pretty_syntax(syntax->all_application.args.data[i], a);
             push_ptr(node, &nodes);
         }
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SConstructor: {
@@ -323,49 +321,37 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SIf: {
-        PtrArray nodes = mk_ptr_array(6, a);
-        push_ptr(mk_str_doc(mv_string("(if"), a), &nodes);
+        PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes);
         push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes);
         push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(if ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
 
     case SIs: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(is "), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
         push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(is ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SInTo: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(into "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        out = mk_paren_doc("(into ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SOutOf: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(out-of "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        out = mk_paren_doc("(out-of ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SDynAlloc: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("(dyn-alloc "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->size, a), &nodes);
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mk_paren_doc("(dyn-alloc ", ")", pretty_syntax(syntax->size, a), a);
         break;
     }
     case SModule: {

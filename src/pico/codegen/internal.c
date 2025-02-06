@@ -1,3 +1,4 @@
+#include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 
 #include "platform/machine_info.h"
@@ -12,21 +13,49 @@ int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
 
 ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
 
-void backlink_global(Symbol sym, size_t offset, LinkData* links, Allocator* a) {
+void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
-    SizeArray* sarr = sym_sarr_lookup(sym, links->backlinks);
+    SizeArray* sarr = sym_sarr_lookup(sym, links->links.external_links);
 
     if (!sarr) {
         // Create & Insert
-        sym_sarr_insert(sym, mk_size_array(4, a), &links->backlinks);
-        sarr = sym_sarr_lookup(sym, links->backlinks);
+        sym_sarr_insert(sym, mk_size_array(4, a), &links->links.external_links);
+        sarr = sym_sarr_lookup(sym, links->links.external_links);
     }
 
     // Step 2: insert offset into array
     push_size(offset, sarr);
 }
 
-void backlink_goto(Symbol sym, size_t offset, LinkData* links, Allocator* a) {
+void backlink_code(Target target, size_t offset, InternalLinkData* links) {
+    U8Array assembly = get_instructions(target.code_aux);
+    
+    LinkMetaData link = (LinkMetaData) {
+        .source_offset = offset,
+        .dest_offset = assembly.len,
+    };
+
+    if (target.target == target.code_aux) {
+        push_link_meta(link, &links->links.cc_links);
+    } else {
+        push_link_meta(link, &links->links.ec_links);
+    }
+}
+
+void backlink_data(Target target, size_t offset, InternalLinkData* links) {
+    LinkMetaData link = (LinkMetaData) {
+        .source_offset = offset,
+        .dest_offset = target.data_aux->len,
+    };
+
+    if (target.target == target.code_aux) {
+        push_link_meta(link, &links->links.cd_links);
+    } else {
+        push_link_meta(link, &links->links.ed_links);
+    }
+}
+
+void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
     SizeArray* sarr = sym_sarr_lookup(sym, links->gotolinks);
 
@@ -533,6 +562,7 @@ void* mk_opaque_ty(PiType* body) {
         .distinct.type = body,
         .distinct.id = distinct_id(),
         .distinct.source_module = current,
+        .distinct.args = NULL,
     };
     return ty;
 }

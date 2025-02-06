@@ -12,20 +12,21 @@ typedef struct PiType PiType;
 typedef struct UVarGenerator UVarGenerator;
 
 typedef enum {
-    Unit = 0b0000,
-    Bool = 0b0001,
-    Address = 0b0010,
-    TFormer = 0b0011,
+    Int_8  = 0b000,
+    Int_16 = 0b001,
+    Int_32 = 0b010,
+    Int_64 = 0b011,
 
-    Int_8  = 0b0100,
-    Int_16 = 0b0101,
-    Int_32 = 0b0110,
-    Int_64 = 0b0111,
+    UInt_8  = 0b100,
+    UInt_16 = 0b101,
+    UInt_32 = 0b110,
+    UInt_64 = 0b111,
 
-    UInt_8  = 0b1100,
-    UInt_16 = 0b1101,
-    UInt_32 = 0b1110,
-    UInt_64 = 0b1111,
+    Unit,
+    Bool,
+    Address,
+    TFormer,
+    TMacro,
 } PrimType;
 
 typedef enum {
@@ -114,13 +115,6 @@ typedef struct {
 } DistinctType;
 
 typedef struct {
-    PiType* body;
-    uint64_t id;
-    PtrArray* args;
-    void* source_module;
-} DistinctTypeApp;
-
-typedef struct {
     size_t nargs;
 } PiKind;
 
@@ -142,7 +136,6 @@ struct PiType {
         TraitInstance instance;
 
         DistinctType distinct;
-        DistinctTypeApp distinct_app;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
         uint64_t var;
@@ -191,8 +184,24 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 PiType mk_prim_type(PrimType t);
 PiType mk_dynamic_type(Allocator* a, PiType t);
+
+// Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType mk_proc_type(Allocator* a, size_t nargs, ...);
+
+// Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 PiType mk_struct_type(Allocator* a, size_t nfields, ...);
+
+// Sample usage: mk_enum_type(a, 3,
+//   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
+//   "Singleton", 1, mk_prim_type(Int_64),
+//   "None", 0)
+PiType mk_enum_type(Allocator* a, size_t nfields, ...);
+
+// Sample usage: mk_distinct_type(a, mk_prim_type(Address))
+PiType mk_distinct_type(Allocator* a, PiType inner);
+
+// Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
+PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]

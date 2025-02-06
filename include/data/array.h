@@ -8,6 +8,7 @@
 ARRAY_HEADER(void*, ptr, Ptr)
 
 ARRAY_HEADER(uint8_t, u8, U8)
+void add_u8_chunk(uint8_t* chunk, size_t memsize, U8Array* array);
 
 ARRAY_HEADER(uint32_t, u32, U32)
 

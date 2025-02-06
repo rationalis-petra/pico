@@ -6,9 +6,9 @@
 
 #define ARRAY_HEADER(type, fprefix, tprefix)                            \
     typedef struct tprefix##Array {                                     \
-        size_t size;                                                    \
-        size_t len;                                                     \
         type* data;                                                     \
+        size_t len;                                                     \
+        size_t size;                                                    \
         Allocator* gpa;                                                 \
     } tprefix##Array;                                                   \
                                                                         \

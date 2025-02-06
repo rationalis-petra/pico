@@ -10,7 +10,7 @@
 /* This file describes the concrete syntax tree of pico. It is manipulated directly by L1 macros.
  */
 
-typedef enum {
+typedef enum : uint64_t {
     ABool,
     AIntegral,
     ASymbol,
@@ -27,14 +27,7 @@ typedef struct {
     };
 } Atom;
 
-AMAP_HEADER(Symbol, Atom, sym_atom, SymAtom)
-
-typedef enum {
-    RawList,
-    RawAtom,
-} RawTree_t;
-
-typedef enum {
+typedef enum : uint64_t {
     HNone,
     HExpression,
     HSpecial,
@@ -42,11 +35,23 @@ typedef enum {
 } SyntaxHint;
 
 typedef struct {
-    RawTree_t type;
     SyntaxHint hint;
+    PtrArray nodes;
+} Branch;
+
+AMAP_HEADER(Symbol, Atom, sym_atom, SymAtom)
+
+typedef enum : uint64_t {
+    RawAtom,
+    RawBranch,
+} RawTree_t;
+
+
+typedef struct {
+    RawTree_t type;
     union {
         Atom atom;
-        PtrArray nodes;
+        Branch branch;
     };
 } RawTree;
 

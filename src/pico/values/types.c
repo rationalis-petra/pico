@@ -27,6 +27,7 @@ void delete_enum_variant_p(PtrArray* t, Allocator* a) {
     for (size_t i = 0; i < t->len; i++)
         delete_pi_type_p(t->data[i], a);
     sdelete_ptr_array(*t);
+    mem_free(t, a);
 }
 
 void delete_pi_type(PiType t, Allocator* a) {
@@ -68,6 +69,7 @@ void delete_pi_type(PiType t, Allocator* a) {
             for (size_t i = 0; i < t.distinct.args->len; i++)
                 delete_pi_type_p(t.distinct.args->data[i], a);
             sdelete_ptr_array(*t.distinct.args);
+            mem_free(t.distinct.args, a);
         }
         break;
     }
@@ -192,8 +194,10 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.distinct.type = copy_pi_type_p(t.distinct.type, a);
         out.distinct.id = t.distinct.id;
         out.distinct.source_module = t.distinct.source_module;
-        out.distinct.args = mem_alloc(sizeof(PtrArray), a);
-        *out.distinct.args = copy_ptr_array(*t.distinct.args,  (TyCopier)copy_pi_type_p, a);
+        if (t.distinct.args) {
+            out.distinct.args = mem_alloc(sizeof(PtrArray), a);
+            *out.distinct.args = copy_ptr_array(*t.distinct.args,  (TyCopier)copy_pi_type_p, a);
+        }
         break;
     case TVar:
         out.var = t.var;
@@ -244,7 +248,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TProc: {
-        out = mk_str_doc(mv_string("#<proc>"), a);
+        void** addr = (void**) val;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
+        push_ptr(pretty_ptr(*addr, a), &nodes);
+        out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
     case TUVar:
@@ -313,6 +321,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
+            break;
+        }
+        case TMacro:  {
+            void** addr = (void**) val;
+            PtrArray nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(mv_string("macro"), a), &nodes);
+            push_ptr(pretty_ptr(*addr, a), &nodes);
+            out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
             break;
         }
         default: {
@@ -457,6 +473,49 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
 Document* pretty_type(PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
+    case TPrim:
+        switch (type->prim) {
+        case Int_64: 
+            out = mv_str_doc(mk_string("I64", a), a);
+            break;
+        case Int_32: 
+            out = mv_str_doc(mk_string("I32", a), a);
+            break;
+        case Int_16: 
+            out = mv_str_doc(mk_string("I16", a), a);
+            break;
+        case Int_8: 
+            out = mv_str_doc(mk_string("I8", a), a);
+            break;
+        case UInt_64: 
+            out = mv_str_doc(mk_string("U64", a), a);
+            break;
+        case UInt_32: 
+            out = mv_str_doc(mk_string("U32", a), a);
+            break;
+        case UInt_16: 
+            out = mv_str_doc(mk_string("U16", a), a);
+            break;
+        case UInt_8: 
+            out = mv_str_doc(mk_string("U8", a), a);
+            break;
+        case Unit: 
+            out = mv_str_doc(mk_string("Unit", a), a);
+            break;
+        case Bool: 
+            out = mv_str_doc(mk_string("Bool", a), a);
+            break;
+        case Address: 
+            out = mv_str_doc(mk_string("Address", a), a);
+            break;
+        case TFormer: 
+            out = mv_str_doc(mk_string("Former", a), a);
+            break;
+        case TMacro: 
+            out = mv_str_doc(mk_string("Macro", a), a);
+            break;
+        }
+        break;
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
@@ -482,46 +541,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     case TUVarDefaulted:
         out = mv_str_doc(mk_string("No Print UVar Defaulted!", a), a);
-        break;
-    case TPrim:
-        switch (type->prim) {
-        case Unit: 
-            out = mv_str_doc(mk_string("Unit", a), a);
-            break;
-        case Bool: 
-            out = mv_str_doc(mk_string("Bool", a), a);
-            break;
-        case Address: 
-            out = mv_str_doc(mk_string("Address", a), a);
-            break;
-        case Int_64: 
-            out = mv_str_doc(mk_string("I64", a), a);
-            break;
-        case Int_32: 
-            out = mv_str_doc(mk_string("I32", a), a);
-            break;
-        case Int_16: 
-            out = mv_str_doc(mk_string("I16", a), a);
-            break;
-        case Int_8: 
-            out = mv_str_doc(mk_string("I8", a), a);
-            break;
-        case UInt_64: 
-            out = mv_str_doc(mk_string("U64", a), a);
-            break;
-        case UInt_32: 
-            out = mv_str_doc(mk_string("U32", a), a);
-            break;
-        case UInt_16: 
-            out = mv_str_doc(mk_string("U16", a), a);
-            break;
-        case UInt_8: 
-            out = mv_str_doc(mk_string("U8", a), a);
-            break;
-        case TFormer: 
-            out = mv_str_doc(mk_string("Former", a), a);
-            break;
-        }
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
@@ -586,6 +605,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         } else {
             push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
         }
+        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
             for (size_t i = 0; i < type->distinct.args->len; i++) {
@@ -593,7 +613,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
             }
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
-        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
         push_ptr(pretty_type(type->distinct.type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
@@ -745,6 +764,8 @@ size_t pi_size_of(PiType type) {
             return sizeof(int8_t);
         case TFormer:
             return sizeof(TermFormer);
+        case TMacro:
+            return ADDRESS_SIZE;
         default:
             panic(mv_string("pi-size-of: unrecognized primitive."));
         }
@@ -754,11 +775,9 @@ size_t pi_size_of(PiType type) {
     case TStruct: {
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            // Note: Data is padded to be 8-byte aligned!
-            // TODO (FEAT): Make generic on padding size?
+            total = pi_size_align(total, pi_align_of(*(PiType*)type.structure.fields.data[i].val));
             size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
-            size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
-            total += field_size + padding;
+            total += field_size;
         }
         return total;
     }
@@ -768,11 +787,9 @@ size_t pi_size_of(PiType type) {
             size_t total = 0;
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
-                // Note: Data is padded to be 8-byte aligned!
-                // TODO (FEAT): Make generic on padding size?
+                total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
                 size_t field_size = pi_size_of(*(PiType*)types.data[i]);
-                size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
-                total += field_size + padding;
+                total += field_size;
             }
 
             if (total > max) {
@@ -972,7 +989,12 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         type_app_subst(body->dynamic, subst, a);
         break;
     case TDistinct:
-        panic(mv_string("not implemetned type-app for distinct"));
+        type_app_subst(body->distinct.type, subst, a);
+        if (body->distinct.args) {
+            for (size_t i = 0; i < body->distinct.args->len; i++) {
+                type_app_subst(body->distinct.args->data[i], subst, a);
+            }
+        }
         break;
     case TTrait:
         for (size_t i = 0; i < body->trait.fields.len; i++) {
@@ -1054,9 +1076,16 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
         };
         return out_ty;
     } else if (family.sort == TDistinct) {
+        // TODO (BUG LOGIC): check kind of family?
         PiType* new_type = mem_alloc(sizeof(PiType), a);
         *new_type = family;
         new_type->distinct.type = type_app(*family.distinct.type, args, a);
+        new_type->distinct.id = family.distinct.id;
+        new_type->distinct.source_module = family.distinct.source_module;
+        new_type->distinct.args = mem_alloc(sizeof(PtrArray), a);
+
+        typedef void* (*TyCopier)(void*, Allocator*);
+        *new_type->distinct.args = copy_ptr_array(args,  (TyCopier)copy_pi_type_p, a);
         return new_type;
     } else {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
@@ -1071,6 +1100,7 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
 
         PiType* new_type = copy_pi_type_p(family.binder.body, a);
         type_app_subst (new_type, subst, a);
+        sdelete_sym_ptr_assoc(subst);
         return new_type;
     }
 }
@@ -1194,6 +1224,56 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...) {
     va_end(args);
 
     return (PiType) {.sort = TStruct, .structure.fields = fields,};
+}
+
+// Sample usage: mk_enum_type(a, 3,
+//   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
+//   "Singleton", 1, mk_prim_type(Int_64),
+//   "None", 0)
+PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
+    va_list args;
+    va_start(args, nfields);
+    
+    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        int nargs = va_arg(args, int);
+        PtrArray variant_args = mk_ptr_array(nargs, a);
+        for (int j = 0; j < nargs; j++) {
+            PiType* arg = mem_alloc(sizeof(PiType), a);
+            *arg = va_arg(args, PiType);
+            push_ptr(arg, &variant_args);
+        }
+        PtrArray* heap_variant_args = mem_alloc(sizeof(PtrArray), a);
+        *heap_variant_args = variant_args;
+        sym_ptr_insert(name, heap_variant_args, &fields);
+
+    }
+    va_end(args);
+
+    return (PiType) {.sort = TEnum, .structure.fields = fields,};
+}
+
+PiType mk_distinct_type(Allocator* a, PiType inner) {
+    PiType out = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = mem_alloc(sizeof(PiType), a),
+        .distinct.id = distinct_id(),
+        .distinct.source_module = NULL,
+        .distinct.args = NULL,
+    };
+    *out.distinct.type = inner;
+    return out;
+}
+
+PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body) {
+    PiType out = (PiType) {
+        .sort = TFam,
+        .binder.vars = vars,
+        .binder.body = mem_alloc(sizeof(PiType), a),
+    };
+    *out.binder.body = body;
+    return out;
 }
 
 PiType mk_string_type(Allocator* a) {

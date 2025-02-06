@@ -19,66 +19,69 @@
  */
 
 int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
-    long int diff = lhs.origin_offset - rhs.origin_offset;
+    long int diff = lhs.source_offset - rhs.source_offset;
     if (diff) return diff;
-    return lhs.data_index - rhs.data_index;
+    return lhs.dest_offset - rhs.dest_offset;
 }
 
 ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 
 // Implementation details
-void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point);
+void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
 
-GenResult generate_expr(Syntax* syn, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    AddressEnv* a_env = mk_address_env(env, NULL, a);
-    LinkData links = (LinkData) {
-        .backlinks = mk_sym_sarr_amap(32, a),
-        .gotolinks = mk_sym_sarr_amap(32, a),
-
-        .to_generate = mk_to_gen_array(8, a),
-        .bytes = mk_u8_array(128, a),
-        .data_meta = mk_link_meta_array(8, a),
-        .code_meta = mk_link_meta_array(8, a),
-    };
-    generate(*syn, a_env, ass, &links, a, point);
-    delete_address_env(a_env, a);
-
-    GenResult out;
-    out.backlinks = links.backlinks;
-
-    return out;
-}
-
-GenResult generate_toplevel(TopLevel top, Environment* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    LinkData links = (LinkData) {
-        .backlinks = mk_sym_sarr_amap(32, a),
-        .gotolinks = mk_sym_sarr_amap(32, a),
+LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+    InternalLinkData links = (InternalLinkData) {
+        .links = (LinkData) {
+            .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(32, a),
+            .ed_links = mk_link_meta_array(8, a),
+            .cc_links = mk_link_meta_array(32, a),
+            .cd_links = mk_link_meta_array(8, a),
+        },
+        .gotolinks = mk_sym_sarr_amap(8, a),
     };
 
     switch(top.type) {
     case TLDef: {
         AddressEnv* a_env = mk_address_env(env, &top.def.bind, a);
-        generate(*top.def.value, a_env, ass, &links, a, point);
+        generate(*top.def.value, a_env, target, &links, a, point);
         delete_address_env(a_env, a);
         break;
     }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
-        generate(*top.expr, a_env, ass, &links, a, point);
+        generate(*top.expr, a_env, target, &links, a, point);
         delete_address_env(a_env, a);
         break;
     }
     }
 
-    return (GenResult) {
-        .backlinks = links.backlinks,
-    };
+    return links.links;
 }
 
-void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allocator* a, ErrorPoint* point) {
+LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+    AddressEnv* a_env = mk_address_env(env, NULL, a);
+    InternalLinkData links = (InternalLinkData) {
+        .links = (LinkData) {
+            .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(8, a),
+            .ed_links = mk_link_meta_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
+            .cd_links = mk_link_meta_array(8, a),
+        },
+        .gotolinks = mk_sym_sarr_amap(8, a),
+    };
+    generate(*syn, a_env, target, &links, a, point);
+    delete_address_env(a_env, a);
+
+    return links.links;
+}
+
+void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+    Assembler* ass = target.target;
     switch (syn.type) {
     case SLitUntypedIntegral: 
         panic(mv_string("Cannot generate monomorphic code for untyped integral!"));
@@ -103,7 +106,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         if (immediate.memsize > UINT32_MAX) 
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)immediate.bytes), a, point);
+        // Push the u8
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+
+        // Backlink the data & copy the bytes into the data-segment.
+        backlink_data(target, out.backlink, links);
+        add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
+
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
@@ -138,18 +147,12 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
-            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind) {
-                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)e.value), a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-
             // Primitives, Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
-            } else if (indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
+            if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
+                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RCX, 0, sz_64), a, point);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
@@ -165,8 +168,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
                                         *symbol_to_string(syn.variable),
-                                        mv_string("' has unsupported sort")
-                                        ));
+                                        mv_string("' has unsupported sort")));
             }
             break;
         }
@@ -187,11 +189,21 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
-    case SAll: {
-        generate_polymorphic(syn.all.args, *syn.all.body, env, ass, links, a, point);
-        break;
-    }
     case SProcedure: {
+        // Get the curret address 
+        void* proc_address = get_instructions(target.code_aux).data;
+        proc_address += get_instructions(target.code_aux).len;
+
+        // Generate procedure value (push the address onto the stack)
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+        backlink_code(target, out.backlink, links);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        // Now, change the target and the assembler, such that code is now
+        // generated in the 'code segment'. Then, generate the function body
+        ass = target.code_aux;
+        target.target = target.code_aux;
+
         // Codegen function setup
         build_unary_op(ass, Push, reg(R14, sz_64), a, point);
         build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
@@ -214,7 +226,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
 
         address_start_proc(impl_sizes, arg_sizes, env, a);
-        generate(*syn.procedure.body, env, ass, links, a, point);
+        generate(*syn.procedure.body, env, target, links, a, point);
         address_end_proc(env, a);
 
         // Codegen function teardown:
@@ -241,6 +253,27 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_nullary_op(ass, Ret, a, point);
         break;
     }
+    case SAll: {
+        void* all_address = get_instructions(target.code_aux).data;
+        all_address += get_instructions(target.code_aux).len;
+
+        // Generate procedure value (push the address onto the stack)
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
+        backlink_code(target, out.backlink, links);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        // Now, change the target and the assembler, such that code is now
+        // generated in the 'code segment'. Then, generate the function body
+        ass = target.code_aux;
+        target.target = target.code_aux;
+
+        generate_polymorphic(syn.all.args, *syn.all.body, env, target, links, a, point);
+        break;
+    }
+    case SMacro: {
+        generate(*syn.transformer, env, target, links, a, point);
+        break;
+    }
     case SApplication: {
         // Monomorphic Codegen
         if (syn.application.function->ptype->sort == TProc) {
@@ -248,16 +281,16 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             for (size_t i = 0; i < syn.application.implicits.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.implicits.data[i];
                 args_size += pi_size_of(*arg->ptype);
-                generate(*arg, env, ass, links, a, point);
+                generate(*arg, env, target, links, a, point);
             }
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
                 args_size += pi_size_of(*arg->ptype);
-                generate(*arg, env, ass, links, a, point);
+                generate(*arg, env, target, links, a, point);
             }
 
             // This will push a function pointer onto the stack
-            generate(*syn.application.function, env, ass, links, a, point);
+            generate(*syn.application.function, env, target, links, a, point);
         
             // Regular Function Call
             // Pop the function into RCX; call the function
@@ -275,11 +308,11 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
                 args_size += pi_size_of(*arg->ptype);
-                generate(*arg, env, ass, links, a, point);
+                generate(*arg, env, target, links, a, point);
             }
 
             // push the type onto the stack:
-            generate(*syn.application.function, env, ass, links, a, point);
+            generate(*syn.application.function, env, target, links, a, point);
 
             gen_mk_family_app(syn.application.args.len, ass, a, point);
             // Update for popping all values off the stack (also the function itself)
@@ -331,8 +364,10 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             offset += pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
             build_unary_op(ass, Push, imm32(-offset), a, point);
         }
-        //size_t args_size = offset - ADDRESS_SIZE;
+
+        // Reserve for return address
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), a, point);
+        // Store "Old" RBP (RBP to restore)
         build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
 
         address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
@@ -341,15 +376,15 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            generate(*arg, env, ass, links, a, point);
+            generate(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
-            generate(*arg, env, ass, links, a, point);
+            generate(*arg, env, target, links, a, point);
         }
 
         // This will push a function pointer onto the stack
-        generate(*syn.application.function, env, ass, links, a, point);
+        generate(*syn.application.function, env, target, links, a, point);
 
         // Now, calculate what RBP should be 
         // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
@@ -395,7 +430,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // Generate each argument
         for (size_t i = 0; i < syn.variant.args.len; i++) {
-            generate(*(Syntax*)syn.variant.args.data[i], env, ass, links, a, point);
+            generate(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
         }
 
         // Now, move them into the space allocated in reverse order
@@ -431,7 +466,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t enum_size = pi_size_of(*match_value->ptype);
         size_t out_size = pi_size_of(*syn.ptype);
 
-        generate(*match_value, env, ass, links, a, point);
+        generate(*match_value, env, target, links, a, point);
 
         SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
         PtrArray back_refs = mk_ptr_array(syn.match.clauses.len, a);
@@ -477,7 +512,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             }
             address_bind_enum_vars(arg_sizes, env);
 
-            generate(*clause.body, env, ass, links, a, point);
+            generate(*clause.body, env, target, links, a, point);
 
             // Generate jump to end of false branch to be backlinked later
             AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
@@ -522,7 +557,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // Step 2: evaluate each element/variable binding
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            generate(*(Syntax*)syn.structure.fields.data[i].val, env, ass, links, a, point);
+            generate(*(Syntax*)syn.structure.fields.data[i].val, env, target, links, a, point);
         }
         
         // Step 3: copy each element of the array into it's place on the stack.
@@ -582,7 +617,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         address_stack_grow(env, out_sz);
 
         // Second, generate the structure/instance object
-        generate(*syn.projector.val, env, ass, links, a, point);
+        generate(*syn.projector.val, env, target, links, a, point);
         size_t src_sz = pi_size_of(*syn.projector.val->ptype);
 
         // From this point, behaviour depends on whether we are projecting from
@@ -651,7 +686,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
             // Generate field
             Syntax* val = syn.instance.fields.data[i].val;
-            generate(*val, env, ass, links, a, point);
+            generate(*val, env, target, links, a, point);
 
             // The offset tells us how far up the stack we look to find the instance ptr
             size_t offset = pi_stack_size_of(*val->ptype);
@@ -693,7 +728,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     case SDynamic: {
         // Create a new dynamic variable, i.e. call the C function 
         // mk_dynamic_var(size_t size, void* default_val)
-        generate(*syn.dynamic, env, ass, links, a, point);
+        generate(*syn.dynamic, env, target, links, a, point);
 
         // currently RSP = default_val
         size_t val_size = pi_size_of(*syn.ptype);
@@ -727,7 +762,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     case SDynamicUse: {
-        generate(*syn.use, env, ass, links, a, point);
+        generate(*syn.use, env, target, links, a, point);
 
         // We now have a dynamic variable: get its' value as ptr
 
@@ -767,8 +802,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         for (size_t i = 0; i < syn.dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = syn.dyn_let_expr.bindings.data[i];
             size_t bind_size = pi_size_of(*dbind->expr->ptype);
-            generate(*dbind->var, env, ass, links, a, point);
-            generate(*dbind->expr, env, ass, links, a, point);
+            generate(*dbind->var, env, target, links, a, point);
+            generate(*dbind->expr, env, target, links, a, point);
 
             // Copy the value into the dynamic var
             // Currently, the stack looks like:
@@ -786,7 +821,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         }
 
         // Step 2: generate the body
-        generate(*syn.let_expr.body, env, ass, links, a, point);
+        generate(*syn.let_expr.body, env, target, links, a, point);
         size_t val_size = pi_size_of(*syn.dyn_let_expr.body->ptype);
 
         // Step 3: unwind the bindings
@@ -822,11 +857,11 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t bsize = 0;
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
             Syntax* sy = syn.let_expr.bindings.data[i].val;
-            generate(*sy, env, ass, links, a, point);
+            generate(*sy, env, target, links, a, point);
             address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
             bsize += pi_size_of(*sy->ptype);
         }
-        generate(*syn.let_expr.body, env, ass, links, a, point);
+        generate(*syn.let_expr.body, env, target, links, a, point);
         address_pop_n(syn.let_expr.bindings.len, env);
 
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
@@ -837,7 +872,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
     }
     case SIf: {
         // generate the condition
-        generate(*syn.if_expr.condition, env, ass, links, a, point);
+        generate(*syn.if_expr.condition, env, target, links, a, point);
 
         // Pop the bool into R9; compare with 0
         build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
@@ -854,7 +889,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
-        generate(*syn.if_expr.true_branch, env, ass, links, a, point);
+        generate(*syn.if_expr.true_branch, env, target, links, a, point);
 
         // Generate jump to end of false branch to be backlinked later
         out = build_unary_op(ass, JMP, imm8(0), a, point);
@@ -873,7 +908,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // ---------- FALSE BRANCH ----------
         // Generate code for the false branch
-        generate(*syn.if_expr.false_branch, env, ass, links, a, point);
+        generate(*syn.if_expr.false_branch, env, target, links, a, point);
 
         // calc backlink offset
         end_pos = get_pos(ass);
@@ -897,7 +932,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         address_start_labels(labels, env);
 
-        generate(*syn.labels.entry, env, ass, links, a, point);
+        generate(*syn.labels.entry, env, target, links, a, point);
 
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
@@ -909,7 +944,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             size_t pos = get_pos(ass);
             sym_size_bind(cell.key, pos, &label_points);
 
-            generate(*(Syntax*)cell.val, env, ass, links, a, point);
+            generate(*(Syntax*)cell.val, env, target, links, a, point);
             AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
@@ -1003,7 +1038,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         // Step 3.
         //--------
-        generate(*syn.with_reset.expr,env, ass, links, a, point);
+        generate(*syn.with_reset.expr,env, target, links, a, point);
 
         // Step 4.
         //--------
@@ -1059,7 +1094,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         
         /* Symbol cont_sym; */
         /* Symbol in_sym; */
-        generate(*syn.with_reset.handler, env, ass, links, a, point);
+        generate(*syn.with_reset.handler, env, target, links, a, point);
         address_stack_shrink(env, ADDRESS_SIZE + in_val_size);
         address_pop_n(2, env);
 
@@ -1087,8 +1122,8 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     case SResetTo: {
-        generate(*syn.reset_to.arg, env, ass, links, a, point);
-        generate(*syn.reset_to.point, env, ass, links, a, point);
+        generate(*syn.reset_to.arg, env, target, links, a, point);
+        generate(*syn.reset_to.point, env, target, links, a, point);
         // there should how be a stack with the following:
         // > arg
         // > Ptr to reset-point
@@ -1125,7 +1160,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         size_t last_size = 0;
         for (size_t i = 0; i < syn.sequence.elements.len; i++) {
             SeqElt* elt = syn.sequence.elements.data[i];
-            generate(*elt->expr, env, ass, links, a, point);
+            generate(*elt->expr, env, target, links, a, point);
 
             size_t sz = pi_size_of(*elt->expr->ptype);
             if (elt->is_binding) {
@@ -1154,16 +1189,16 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         break;
     }
     case SIs:
-        generate(*syn.is.val, env, ass, links, a, point);
+        generate(*syn.is.val, env, target, links, a, point);
         break;
     case SInTo:
-        generate(*syn.into.val, env, ass, links, a, point);
+        generate(*syn.into.val, env, target, links, a, point);
         break;
     case SOutOf:
-        generate(*syn.out_of.val, env, ass, links, a, point);
+        generate(*syn.out_of.val, env, target, links, a, point);
         break;
     case SDynAlloc:
-        generate(*syn.size, env, ass, links, a, point);
+        generate(*syn.size, env, target, links, a, point);
 
         // The size to allocate will sit atop the stack; swap it with 
         // the pointer to free stack memory
@@ -1174,6 +1209,16 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         build_binary_op(ass, Add, reg(R14, sz_64), reg(RAX, sz_64), a, point);
 
         break;
+    case SSizeOf: {
+        size_t sz = pi_size_of(*syn.size->type_val);
+        build_unary_op(ass, Push, imm32(sz), a, point);
+        break;
+    }
+    case SAlignOf: {
+        size_t sz = pi_align_of(*syn.size->type_val);
+        build_unary_op(ass, Push, imm32(sz), a, point);
+        break;
+    }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
@@ -1192,7 +1237,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
             address_stack_grow(env, 2*ADDRESS_SIZE);
-            generate(*arg, env, ass, links, a, point);
+            generate(*arg, env, target, links, a, point);
 
             address_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
@@ -1207,7 +1252,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         // Stash RAX
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         address_stack_grow(env, ADDRESS_SIZE);
-        generate(*syn.proc_type.return_type, env, ass, links, a, point);
+        generate(*syn.proc_type.return_type, env, target, links, a, point);
         address_stack_shrink(env, 2*ADDRESS_SIZE);
         build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
         build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
@@ -1232,7 +1277,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
             address_stack_grow(env, 2*ADDRESS_SIZE);
-            generate(*(Syntax*)field.val, env, ass, links, a, point);
+            generate(*(Syntax*)field.val, env, target, links, a, point);
 
             address_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
@@ -1276,7 +1321,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
                 build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
                 address_stack_grow(env, 2*ADDRESS_SIZE);
 
-                generate(*(Syntax*)variant.data[i], env, ass, links, a, point);
+                generate(*(Syntax*)variant.data[i], env, target, links, a, point);
 
                 address_stack_shrink(env, 3*ADDRESS_SIZE);
                 build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
@@ -1308,13 +1353,13 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
 
         break;
     case SResetType:
-        generate(*(Syntax*)syn.reset_type.in, env, ass, links, a, point);
-        generate(*(Syntax*)syn.reset_type.out, env, ass, links, a, point);
+        generate(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
+        generate(*(Syntax*)syn.reset_type.out, env, target, links, a, point);
         gen_mk_reset_ty(ass, a, point);
         address_stack_shrink(env, ADDRESS_SIZE);
         break;
     case SDynamicType:
-        generate(*(Syntax*)syn.dynamic_type, env, ass, links, a, point);
+        generate(*(Syntax*)syn.dynamic_type, env, target, links, a, point);
         gen_mk_dynamic_ty(ass, a, point);
         break;
     case SAllType:
@@ -1322,7 +1367,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate(*(Syntax*)syn.bind_type.body, env, ass, links, a, point);
+        generate(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
         gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
@@ -1334,16 +1379,16 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate(*(Syntax*)syn.bind_type.body, env, ass, links, a, point);
+        generate(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SDistinctType:
-        generate(*(Syntax*)syn.distinct_type, env, ass, links, a, point);
+        generate(*(Syntax*)syn.distinct_type, env, target, links, a, point);
         gen_mk_distinct_ty(ass, a, point);
         break;
     case SOpaqueType:
-        generate(*(Syntax*)syn.opaque_type, env, ass, links, a, point);
+        generate(*(Syntax*)syn.opaque_type, env, target, links, a, point);
         gen_mk_opaque_ty(ass, a, point);
         break;
     case STraitType:
@@ -1366,7 +1411,7 @@ void generate(Syntax syn, AddressEnv* env, Assembler* ass, LinkData* links, Allo
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
             address_stack_grow(env, 2*ADDRESS_SIZE);
-            generate(*(Syntax*)field.val, env, ass, links, a, point);
+            generate(*(Syntax*)field.val, env, target, links, a, point);
 
             address_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);

@@ -32,6 +32,7 @@ TypeEnv* mk_type_env(Environment* env, Allocator* a) {
 }
 
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
+    static PiType kind = {.sort = TKind, .kind.nargs = 0};
     // Search locally
     TypeEntry out;
     Local* lresult = sym_local_alookup(s, env->locals);
@@ -39,7 +40,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
         out.type = TELocal;
         if (lresult->sort == LQVar) {
             out.is_module = false;
-            out.ptype = NULL;
+            out.ptype = &kind;
             out.value = lresult->type;
             return out;
         } else if (lresult -> sort == LVar) {

@@ -54,6 +54,18 @@ String string_from_UTF_32(U32Array arr, Allocator* a) {
     return out;
 }
 
+String string_from_ASCII(U8Array arr, Allocator* a) {
+    // Step1: calcluate byte length (initialize to 1 for NULL-terminator)
+    size_t numbytes = 1 + arr.len;
+    String out;
+    out.memsize = numbytes * sizeof(uint8_t);
+    out.bytes = mem_alloc(out.memsize, a);
+
+    memcpy(out.bytes, arr.data, out.memsize - sizeof(uint8_t));
+    out.bytes[out.memsize - 1] = 0;
+    return out;
+}
+
 int string_cmp(const String lhs, const String rhs) {
     // TODO: this assumed char == uint8_t. Implement thine own
     //       method, instead of relying on strcmp!

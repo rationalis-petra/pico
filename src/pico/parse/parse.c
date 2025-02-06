@@ -1,5 +1,13 @@
 #include "pico/parse/parse.h"
 
+/* High Level overview of the grammar:
+ *
+ * 
+ *
+ *
+ *
+ */
+
 
 // The 'actual' parser funciton
 ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a);
@@ -34,48 +42,127 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t point;
 
     consume_whitespace(is, parse_state);
+    StreamResult result;
+    PtrArray terms = mk_ptr_array(8, a);
+    bool running = true;
 
-    switch (peek(is, &point)) {
-    case StreamSuccess:
-        if (point == '(') {
-            out = parse_list(is, parse_state, ')', HExpression, a);
-        }
-        else if (point == '[') {
-            out = parse_list(is, parse_state, ']', HSpecial, a);
-        }
-        else if (point == '{') {
-            out = parse_list(is, parse_state, '}', HImplicit, a);
-        }
-        else if (point == ':') {
-            out = parse_prefix(':', is, parse_state, a);
-        }
-        else if (point == '.') {
-            out = parse_prefix('.', is, parse_state, a);
-        }
-        else if (point == '"') {
-            out = parse_string(is, parse_state, a);
-        }
-        else if (point == '#') {
-            out = parse_char(is, parse_state);
-        }
-        else if (is_numchar(point) || point == '-') {
-            out = parse_number(is, parse_state, a);
-        }
-        else {
-            out = parse_atom(is, parse_state, a);
-        }
-        break;
+    while (running && ((result = peek(is, &point)) == StreamSuccess)) {
+        switch (peek(is, &point)) {
+        case StreamSuccess:
+            if (point == '(') {
+                out = parse_list(is, parse_state, ')', HExpression, a);
+            }
+            else if (point == '[') {
+                out = parse_list(is, parse_state, ']', HSpecial, a);
+            }
+            else if (point == '{') {
+                out = parse_list(is, parse_state, '}', HImplicit, a);
+            }
+            else if (point == ':') {
+                if (terms.len == 0) {
+                    out = parse_prefix(':', is, parse_state, a);
+                } else {
+                    next(is, &point);
 
-    case StreamEnd: {
-        out.type = ParseNone;
-        break;
-    }
+                    out = (ParseResult) {
+                        .type = ParseSuccess,
+                        .data.result = (RawTree) {
+                            .type = RawAtom,
+                            .atom.type = ASymbol,
+                            .atom.symbol = string_to_symbol(mv_string(":")),
+                        }
+                    };
+                }
+            }
+            else if (point == '.') {
+                if (terms.len == 0) {
+                    out = parse_prefix('.', is, parse_state, a);
+                } else {
+                    next(is, &point);
+
+                    out = (ParseResult) {
+                        .type = ParseSuccess,
+                        .data.result = (RawTree) {
+                            .type = RawAtom,
+                            .atom.type = ASymbol,
+                            .atom.symbol = string_to_symbol(mv_string(".")),
+                        }
+                    };
+                }
+            }
+            else if (point == '"') {
+                out = parse_string(is, parse_state, a);
+            }
+            else if (point == '#') {
+                out = parse_char(is, parse_state);
+            }
+            else if (is_numchar(point) || point == '-') {
+                out = parse_number(is, parse_state, a);
+            }
+            else if (is_whitespace(point)) {
+                out.type = ParseNone;
+                running = false;
+                break;
+            }
+            else if (is_symchar(point)){
+                out = parse_atom(is, parse_state, a);
+            } else {
+                out.type = ParseNone;
+                running = false;
+                break;
+            }
+            break;
+
+        case StreamEnd: {
+            out.type = ParseNone;
+            running = false;
+            break;
+        }
         
-    default: {
-        out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
-    } break;
+        default: {
+            out = (ParseResult) {
+                .type = ParseFail,
+                .data.range.start = *parse_state,
+                .data.range.end = *parse_state,
+            };
+            running = false;
+        } break;
+        }
+
+        if (out.type == ParseSuccess) {
+            RawTree* term = mem_alloc(sizeof(RawTree), a);
+            *term = out.data.result;
+            push_ptr(term, &terms);
+        }
+    }
+
+    if (out.type == ParseSuccess && terms.len == 0) {
+        out.type = ParseNone;
+    } else if (out.type == ParseNone && terms.len == 1) {
+        out.type = ParseSuccess;
+        out.data.result = *(RawTree*)terms.data[0];
+    } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
+        // Now that the list has been accumulated, 'unroll' the list appropriately, 
+        // meaning that (num : i64 . +) becomes (. + (: num i64))
+        RawTree* current = terms.data[0];
+        for (size_t i = 1; terms.len - i != 0; i += 2) {
+            PtrArray children = mk_ptr_array(3, a);
+            push_ptr(terms.data[i], &children);
+            push_ptr(terms.data[i+1], &children);
+            push_ptr(current, &children);
+
+            current = mem_alloc(sizeof(RawTree), a);
+            *current = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HNone,
+                .branch.nodes = children,
+            };
+        };
+
+        out = (ParseResult) {
+            .type = ParseSuccess,
+            .data.result = *current,
+        };
     }
     return out;
 }
@@ -92,6 +179,7 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     next(is, &codepoint);
     consume_whitespace(is, parse_state);
     StreamResult sres;
+
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
         res = parse_main(is, parse_state, a);
 
@@ -115,9 +203,9 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     } else {
         out.type = ParseSuccess;
         out.data.result = (RawTree) {
-            .type = RawList,
-            .hint = hint,
-            .nodes = nodes,
+            .type = RawBranch,
+            .branch.hint = hint,
+            .branch.nodes = nodes,
         };
         // consume closing ')'
         next(is, &codepoint);
@@ -155,7 +243,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             *val = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -165,7 +252,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             RawTree* op = mem_alloc(sizeof(RawTree), a);
             *op = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = codepoint == '.'
                   ? string_to_symbol(mv_string("."))
@@ -177,7 +263,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             *val = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -206,9 +291,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 
             current = mem_alloc(sizeof(RawTree), a);
             *current = (RawTree) {
-                .type = RawList,
-                .hint = HNone,
-                .nodes = children,
+                .type = RawBranch,
+                .branch.hint = HNone,
+                .branch.nodes = children,
             };
         };
 
@@ -324,9 +409,9 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
 
         out.type = ParseSuccess;
         out.data.result = (RawTree) {
-            .type = RawList,
-            .hint = HNone,
-            .nodes = nodes,
+            .type = RawBranch,
+            .branch.hint = HNone,
+            .branch.nodes = nodes,
         };
     }
     
@@ -356,7 +441,6 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     return (ParseResult) {
         .type = ParseSuccess,
         .data.result.type = RawAtom,
-        .data.result.hint = HNone,
         .data.result.atom.type = AString,
         .data.result.atom.string = string_from_UTF_32(arr, a),
     };
@@ -380,7 +464,6 @@ ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     return (ParseResult) {
         .type = ParseSuccess,
         .data.result.type = RawAtom,
-        .data.result.hint = HNone,
         .data.result.atom.type = AIntegral,
         .data.result.atom.int_64 = codepoint,
     };
