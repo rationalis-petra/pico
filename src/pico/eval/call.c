@@ -97,6 +97,8 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
 
     int64_t out;
     __asm__ __volatile__(
+        // NOTE: When updating to push more registers, make sure to also update assembly
+        //       in abstraction.c
         "push %%rbp       \n"
         "push %%r15       \n"
         "push %%r14       \n"
