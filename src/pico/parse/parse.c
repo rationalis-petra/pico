@@ -68,7 +68,6 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
                         .type = ParseSuccess,
                         .data.result = (RawTree) {
                             .type = RawAtom,
-                            .hint = HNone,
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(":")),
                         }
@@ -85,7 +84,6 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
                         .type = ParseSuccess,
                         .data.result = (RawTree) {
                             .type = RawAtom,
-                            .hint = HNone,
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(".")),
                         }
@@ -155,9 +153,9 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
 
             current = mem_alloc(sizeof(RawTree), a);
             *current = (RawTree) {
-                .type = RawList,
-                .hint = HNone,
-                .nodes = children,
+                .type = RawBranch,
+                .branch.hint = HNone,
+                .branch.nodes = children,
             };
         };
 
@@ -205,9 +203,9 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     } else {
         out.type = ParseSuccess;
         out.data.result = (RawTree) {
-            .type = RawList,
-            .hint = hint,
-            .nodes = nodes,
+            .type = RawBranch,
+            .branch.hint = hint,
+            .branch.nodes = nodes,
         };
         // consume closing ')'
         next(is, &codepoint);
@@ -245,7 +243,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             *val = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -255,7 +252,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             RawTree* op = mem_alloc(sizeof(RawTree), a);
             *op = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = codepoint == '.'
                   ? string_to_symbol(mv_string("."))
@@ -267,7 +263,6 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             *val = (RawTree) {
                 .type = RawAtom,
-                .hint = HNone,
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -296,9 +291,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 
             current = mem_alloc(sizeof(RawTree), a);
             *current = (RawTree) {
-                .type = RawList,
-                .hint = HNone,
-                .nodes = children,
+                .type = RawBranch,
+                .branch.hint = HNone,
+                .branch.nodes = children,
             };
         };
 
@@ -414,9 +409,9 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
 
         out.type = ParseSuccess;
         out.data.result = (RawTree) {
-            .type = RawList,
-            .hint = HNone,
-            .nodes = nodes,
+            .type = RawBranch,
+            .branch.hint = HNone,
+            .branch.nodes = nodes,
         };
     }
     
@@ -446,7 +441,6 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     return (ParseResult) {
         .type = ParseSuccess,
         .data.result.type = RawAtom,
-        .data.result.hint = HNone,
         .data.result.atom.type = AString,
         .data.result.atom.string = string_from_UTF_32(arr, a),
     };
@@ -470,7 +464,6 @@ ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     return (ParseResult) {
         .type = ParseSuccess,
         .data.result.type = RawAtom,
-        .data.result.hint = HNone,
         .data.result.atom.type = AIntegral,
         .data.result.atom.int_64 = codepoint,
     };

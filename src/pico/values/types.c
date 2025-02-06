@@ -1100,6 +1100,7 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
 
         PiType* new_type = copy_pi_type_p(family.binder.body, a);
         type_app_subst (new_type, subst, a);
+        sdelete_sym_ptr_assoc(subst);
         return new_type;
     }
 }

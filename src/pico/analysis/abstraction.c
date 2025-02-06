@@ -13,9 +13,11 @@
 // Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
+
 bool eq_symbol(RawTree* raw, Symbol s);
 bool is_symbol(RawTree* raw);
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a);
+
 Imports abstract_imports(RawTree* raw, Allocator* a, ErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, ErrorPoint* point);
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* point);
@@ -38,7 +40,7 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, ErrorPoint* point
 }
 
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
-    if (raw.type != RawList)
+    if (raw.type != RawBranch)
         throw_error(point, mv_string("Expected module header to be list."));
 
     // Expected format:
@@ -46,21 +48,21 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
     //   (import import-clause*)?
     //   (export import-clause*)?)
     size_t idx = 0;
-    if (raw.nodes.len <= idx) 
+    if (raw.branch.nodes.len <= idx) 
         throw_error(point, mv_string("Expecting keyword 'module' in module header. Got nothing!"));
-    if (raw.nodes.len > 4)
+    if (raw.branch.nodes.len > 4)
         throw_error(point, mv_string("Too many parameters in module header."));
 
-    if (!eq_symbol(raw.nodes.data[0], string_to_symbol(mv_string("module"))))
+    if (!eq_symbol(raw.branch.nodes.data[0], string_to_symbol(mv_string("module"))))
         throw_error(point, mv_string("Expecting keyword 'module' in module header."));
 
     idx++;
-    if (raw.nodes.len <= idx) 
+    if (raw.branch.nodes.len <= idx) 
         throw_error(point, mv_string("Expecting parameter 'modulename' in module header. Got nothing!"));
 
-    if (!is_symbol(raw.nodes.data[1]))
+    if (!is_symbol(raw.branch.nodes.data[1]))
         throw_error(point, mv_string("Expecting parameter 'modulename' in module header."));
-    Symbol module_name = ((RawTree*)raw.nodes.data[1])->atom.symbol;
+    Symbol module_name = ((RawTree*)raw.branch.nodes.data[1])->atom.symbol;
 
     // Now, imports/exports
     Imports imports;
@@ -68,61 +70,61 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
     exports.export_all = false;
 
     idx++;
-    if (raw.nodes.len <= idx) {
+    if (raw.branch.nodes.len <= idx) {
         imports.clauses = mk_import_clause_array(0, a);
         exports.clauses = mk_export_clause_array(0, a);
-    } else if (raw.nodes.len <= idx+1){
-        RawTree* clauses_1 = raw.nodes.data[2];
-        if (clauses_1->type != RawList)
+    } else if (raw.branch.nodes.len <= idx+1){
+        RawTree* clauses_1 = raw.branch.nodes.data[2];
+        if (clauses_1->type != RawBranch)
             throw_error(point, mv_string("Expecting import/export list."));
-        if (clauses_1->nodes.len < 1)
+        if (clauses_1->branch.nodes.len < 1)
             throw_error(point, mv_string("Not enough elements in import/export list"));
 
-        if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import")))) {
-            imports.clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+        if (eq_symbol(clauses_1->branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
+            imports.clauses = mk_import_clause_array(clauses_1->branch.nodes.len - 1, a);
             exports.clauses = mk_export_clause_array(0, a);
 
-            for (size_t i = 1; i < clauses_1->nodes.len; i++) {
-                ImportClause clause = abstract_import_clause(clauses_1->nodes.data[i], a, point);
+            for (size_t i = 1; i < clauses_1->branch.nodes.len; i++) {
+                ImportClause clause = abstract_import_clause(clauses_1->branch.nodes.data[i], a, point);
                 push_import_clause(clause, &imports.clauses);
             }
-        } else if (eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("export")))) {
+        } else if (eq_symbol(clauses_1->branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
             imports.clauses = mk_import_clause_array(0, a);
-            exports.clauses = mk_export_clause_array(clauses_1->nodes.len - 1, a);
+            exports.clauses = mk_export_clause_array(clauses_1->branch.nodes.len - 1, a);
 
-            for (size_t i = 1; i < clauses_1->nodes.len; i++) {
-                ExportClause clause = abstract_export_clause(clauses_1->nodes.data[i], a, point);
+            for (size_t i = 1; i < clauses_1->branch.nodes.len; i++) {
+                ExportClause clause = abstract_export_clause(clauses_1->branch.nodes.data[i], a, point);
                 push_export_clause(clause, &exports.clauses);
             }
         } else {
             throw_error(point, mv_string("Expecting import/export list header."));
         }
     } else {
-        RawTree* clauses_1 = raw.nodes.data[2];
-        if (clauses_1->type != RawList)
+        RawTree* clauses_1 = raw.branch.nodes.data[2];
+        if (clauses_1->type != RawBranch)
             throw_error(point, mv_string("Expecting import list."));
-        if (clauses_1->nodes.len < 1)
+        if (clauses_1->branch.nodes.len < 1)
             throw_error(point, mv_string("Not enough elements in import list"));
-        if (!eq_symbol(clauses_1->nodes.data[0], string_to_symbol(mv_string("import"))))
+        if (!eq_symbol(clauses_1->branch.nodes.data[0], string_to_symbol(mv_string("import"))))
             throw_error(point, mv_string("Expecting 'import' at head of import list"));
 
-        imports.clauses = mk_import_clause_array(clauses_1->nodes.len - 1, a);
+        imports.clauses = mk_import_clause_array(clauses_1->branch.nodes.len - 1, a);
 
-        for (size_t i = 1; i < clauses_1->nodes.len; i++) {
+        for (size_t i = 1; i < clauses_1->branch.nodes.len; i++) {
         }
 
-        RawTree* clauses_2 = raw.nodes.data[3];
-        if (clauses_2->type != RawList)
+        RawTree* clauses_2 = raw.branch.nodes.data[3];
+        if (clauses_2->type != RawBranch)
             throw_error(point, mv_string("Expecting export list."));
-        if (clauses_2->nodes.len < 1)
+        if (clauses_2->branch.nodes.len < 1)
             throw_error(point, mv_string("Not enough elements in export list"));
-        if (!eq_symbol(clauses_2->nodes.data[0], string_to_symbol(mv_string("export"))))
+        if (!eq_symbol(clauses_2->branch.nodes.data[0], string_to_symbol(mv_string("export"))))
             throw_error(point, mv_string("Expecting 'export' at head of export list"));
 
-        for (size_t i = 1; i < clauses_2->nodes.len; i++) {
+        for (size_t i = 1; i < clauses_2->branch.nodes.len; i++) {
         }
 
-        exports.clauses = mk_export_clause_array(clauses_2->nodes.len - 1, a);
+        exports.clauses = mk_export_clause_array(clauses_2->branch.nodes.len - 1, a);
     }
 
     ModuleHeader* out = mem_alloc(sizeof(ModuleHeader), a);
@@ -151,12 +153,12 @@ bool is_symbol(RawTree* raw) {
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
     RawTree* out = mem_alloc(sizeof(RawTree), a);
     *out = (RawTree) {
-        .type = RawList,
-        .hint = raw->hint,
-        .nodes.len = raw->nodes.len - drop,
-        .nodes.size = raw->nodes.size - drop,
-        .nodes.data = raw->nodes.data + drop,
-        .nodes.gpa = raw->nodes.gpa,
+        .type = RawBranch,
+        .branch.hint = raw->branch.hint,
+        .branch.nodes.len = raw->branch.nodes.len - drop,
+        .branch.nodes.size = raw->branch.nodes.size - drop,
+        .branch.nodes.data = raw->branch.nodes.data + drop,
+        .branch.nodes.gpa = raw->branch.nodes.gpa,
     };
     return out;
 }
@@ -165,8 +167,8 @@ RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
 //  Helper function for various struct-related, helpers, when handling 
 //  [. fieldname] clauses
 bool get_fieldname(RawTree* raw, Symbol* fieldname) {
-    if (raw->type == RawList && raw->nodes.len == 2) {
-        raw = raw->nodes.data[1];
+    if (raw->type == RawBranch && raw->branch.nodes.len == 2) {
+        raw = raw->branch.nodes.data[1];
         if (is_symbol(raw)) {
             *fieldname = raw->atom.symbol;
             return true;
@@ -182,8 +184,8 @@ bool get_fieldname(RawTree* raw, Symbol* fieldname) {
 // Helper function for labels, when we are expecting [label expr] clauses
 // returns true on success, false on failure
 bool get_label(RawTree* raw, Symbol* fieldname) {
-    if (raw->type == RawList && raw->nodes.len == 2) {
-        raw = raw->nodes.data[0];
+    if (raw->type == RawBranch && raw->branch.nodes.len == 2) {
+        raw = raw->branch.nodes.data[0];
         if (is_symbol(raw)) {
             *fieldname = raw->atom.symbol;
             return true;
@@ -199,10 +201,10 @@ bool get_label(RawTree* raw, Symbol* fieldname) {
 // Helper function for retrieving a symbol list
 // returns true on success, false on failure
 bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
-    if (nodes.type != RawList) { return false; }
+    if (nodes.type != RawBranch) { return false; }
 
-    for (size_t i = 0; i < nodes.nodes.len; i++) {
-        RawTree* node = nodes.nodes.data[i];
+    for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
+        RawTree* node = nodes.branch.nodes.data[i];
         if (node->type != RawAtom || node->atom.type != ASymbol) { return false; }
         push_u64(node->atom.symbol, arr);
     }
@@ -211,15 +213,15 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
 
 Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env, Allocator* a, ErrorPoint* point) {
     Result error_result = {.type = Err, .error_message = mv_string("Malformed proc argument list.")};
-    if (list.type != RawList) { return error_result; }
+    if (list.type != RawBranch) { return error_result; }
 
-    for (size_t i = 0; i < list.nodes.len; i++) {
-        RawTree* annotation = list.nodes.data[i];
+    for (size_t i = 0; i < list.branch.nodes.len; i++) {
+        RawTree* annotation = list.branch.nodes.data[i];
         if (annotation->type == RawAtom) {
             sym_ptr_bind(annotation->atom.symbol, NULL, args);
-        } else if (annotation->type == RawList || annotation->nodes.len == 2) {
-            RawTree* arg = annotation->nodes.data[0];
-            RawTree* raw_type = annotation->nodes.data[1];
+        } else if (annotation->type == RawBranch || annotation->branch.nodes.len == 2) {
+            RawTree* arg = annotation->branch.nodes.data[0];
+            RawTree* raw_type = annotation->branch.nodes.data[1];
             if (arg->type != RawAtom || arg->atom.type != ASymbol) { return error_result; }
             Syntax* type = abstract_expr_i(*raw_type, env, a, point); 
 
@@ -230,7 +232,7 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env
 }
 
 Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point) {
-    Syntax* fn_syn = abstract_expr_i(*(RawTree*)(raw.nodes.data[0]), env, a, point);
+    Syntax* fn_syn = abstract_expr_i(*(RawTree*)(raw.branch.nodes.data[0]), env, a, point);
 
     Syntax* res = mem_alloc(sizeof(Syntax), a);
     if (fn_syn->type == SConstructor) {
@@ -238,34 +240,34 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
             .type = SVariant,
             .variant.enum_type = fn_syn->constructor.enum_type,
             .variant.tagname = fn_syn->constructor.tagname,
-            .variant.args = mk_ptr_array(raw.nodes.len - 1, a),
+            .variant.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
         };
 
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.branch.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->variant.args);
         }
-    } else if (raw.nodes.len > 1
-               && ((RawTree*)raw.nodes.data[1])->type == RawList
-               && ((RawTree*)raw.nodes.data[1])->hint == HImplicit) {
-        RawTree typelist = *(RawTree*)raw.nodes.data[1];
+    } else if (raw.branch.nodes.len > 1
+               && ((RawTree*)raw.branch.nodes.data[1])->type == RawBranch
+               && ((RawTree*)raw.branch.nodes.data[1])->branch.hint == HImplicit) {
+        RawTree typelist = *(RawTree*)raw.branch.nodes.data[1];
 
         *res = (Syntax) {
             .type = SAllApplication,
             .all_application.function = mem_alloc(sizeof(Syntax), a),
-            .all_application.types = mk_ptr_array(typelist.nodes.len, a),
+            .all_application.types = mk_ptr_array(typelist.branch.nodes.len, a),
             .all_application.implicits = mk_ptr_array(0, a),
-            .all_application.args = mk_ptr_array(raw.nodes.len - 2, a),
+            .all_application.args = mk_ptr_array(raw.branch.nodes.len - 2, a),
         };
         res->all_application.function = fn_syn;
 
-        for (size_t i = 0; i < typelist.nodes.len; i++) {
-            Syntax* type = abstract_expr_i(*(RawTree*)(typelist.nodes.data[i]), env, a, point);
+        for (size_t i = 0; i < typelist.branch.nodes.len; i++) {
+            Syntax* type = abstract_expr_i(*(RawTree*)(typelist.branch.nodes.data[i]), env, a, point);
             push_ptr(type, &res->all_application.types);
         }
 
-        for (size_t i = 2; i < raw.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.branch.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->all_application.args);
         }
     } else {
@@ -273,12 +275,12 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
             .type = SApplication,
             .application.function = mem_alloc(sizeof(Syntax), a),
             .application.implicits = mk_ptr_array(0, a),
-            .application.args = mk_ptr_array(raw.nodes.len - 1, a),
+            .application.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
         };
         res->application.function = fn_syn;
 
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.nodes.data[i]), env, a, point);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            Syntax* arg = abstract_expr_i(*(RawTree*)(raw.branch.nodes.data[i]), env, a, point);
             push_ptr(arg, &res->application.args);
         }
     }
@@ -290,7 +292,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
     Syntax* res = mem_alloc(sizeof(Syntax), a);
     switch (former) {
     case FProcedure: {
-        if (raw.nodes.len < 3) {
+        if (raw.branch.nodes.len < 3) {
             throw_error(point, mk_string("Procedure term former requires at least 2 arguments!", a));
         }
 
@@ -298,14 +300,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
 
         size_t args_index = 1;
-        if (((RawTree*)raw.nodes.data[args_index])->hint == HImplicit) {
-            Result args_out = get_annotated_symbol_list(&implicits, *(RawTree*)raw.nodes.data[args_index], env, a, point);
+        if (((RawTree*)raw.branch.nodes.data[args_index])->type == RawBranch
+            && ((RawTree*)raw.branch.nodes.data[args_index])->branch.hint == HImplicit) {
+            Result args_out = get_annotated_symbol_list(&implicits, *(RawTree*)raw.branch.nodes.data[args_index], env, a, point);
             if (args_out.type == Err) throw_error(point, args_out.error_message);
             args_index++;
         }
 
-        if (((RawTree*)raw.nodes.data[args_index])->hint == HSpecial) {
-            Result args_out = get_annotated_symbol_list(&arguments, *(RawTree*)raw.nodes.data[args_index], env, a, point);
+        if (((RawTree*)raw.branch.nodes.data[args_index])->type == RawBranch
+            && ((RawTree*)raw.branch.nodes.data[args_index])->branch.hint == HSpecial) {
+            Result args_out = get_annotated_symbol_list(&arguments, *(RawTree*)raw.branch.nodes.data[args_index], env, a, point);
             if (args_out.type == Err) throw_error(point, args_out.error_message);
             args_index++;
         }
@@ -315,8 +319,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         shadow_vars(to_shadow, env);
 
         RawTree* raw_term;
-        if (raw.nodes.len == args_index + 1) {
-            raw_term = raw.nodes.data[args_index];
+        if (raw.branch.nodes.len == args_index + 1) {
+            raw_term = raw.branch.nodes.data[args_index];
         } else {
             raw_term = raw_slice(&raw, args_index, a);
         }
@@ -332,20 +336,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FAll: {
-        if (raw.nodes.len < 3) {
+        if (raw.branch.nodes.len < 3) {
             throw_error(point, mk_string("all term former requires at least 2 arguments!", a));
         }
 
         SymbolArray arguments = mk_u64_array(2, a);
-        if (!get_symbol_list(&arguments, *(RawTree*)raw.nodes.data[1])) {
+        if (!get_symbol_list(&arguments, *(RawTree*)raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("all term former requires first arguments to be a symbol-list!", a));
         }
 
         shadow_vars(arguments, env);
 
         RawTree* raw_term;
-        if (raw.nodes.len == 3) {
-            raw_term = raw.nodes.data[2];
+        if (raw.branch.nodes.len == 3) {
+            raw_term = raw.branch.nodes.data[2];
         } else {
             raw_term= raw_slice(&raw, 2, a);
         }
@@ -359,10 +363,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FMacro: {
-        if (raw.nodes.len < 2) {
+        if (raw.branch.nodes.len < 2) {
             throw_error(point, mv_string("Malformed macro expression: expects at least 1 arg."));
         }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
         Syntax* transformer = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
@@ -376,10 +380,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FVariant: {
-        if (raw.nodes.len == 2) {
+        if (raw.branch.nodes.len == 2) {
             // Check that we are indeed getting a result
             // Get the tag name of the variant
-            RawTree* msym = (RawTree*)raw.nodes.data[1];
+            RawTree* msym = (RawTree*)raw.branch.nodes.data[1];
             if (msym->type != RawAtom && msym->atom.type != ASymbol) {
                 throw_error(point, mv_string("Argument to variant term former should be symbol"));
             }
@@ -396,16 +400,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
         // : sym Type
 
-        else if (raw.nodes.len != 3) {
+        else if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Variant term former needs two arguments!"));
         } else {
 
             // Get the Type portion of the projector 
-            Syntax* var_type = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+            Syntax* var_type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         
             // Check that we are indeed getting a result
             // Get the tag gname of the variant
-            RawTree* msym = (RawTree*)raw.nodes.data[1];
+            RawTree* msym = (RawTree*)raw.branch.nodes.data[1];
             if (msym->type != RawAtom && msym->atom.type != ASymbol) {
                 throw_error(point, mv_string("First argument to projection term former should be symbol"));
             };
@@ -420,37 +424,37 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FMatch: {
-        Syntax* sval = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* sval = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
-        ClauseArray clauses = mk_ptr_array(raw.nodes.len - 2, a);
+        ClauseArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
         
-        for (size_t i = 2; i < raw.nodes.len; i++) {
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
             // For each clause, we need three things:
             // 1. The tag, corresponding to the enum
             // 2. The variable(s) destructuring the enum
             // 3. The body
             // Get the clause
-            RawTree* raw_clause = (RawTree*)raw.nodes.data[i];
-            if (raw_clause->type != RawList || raw_clause->nodes.len < 2) {
+            RawTree* raw_clause = (RawTree*)raw.branch.nodes.data[i];
+            if (raw_clause->type != RawBranch || raw_clause->branch.nodes.len < 2) {
                 throw_error(point, mv_string("Match Clause has incorrect number of elements!"));
             }
 
             // Get the pattern
-            RawTree* raw_pattern = (RawTree*)raw_clause->nodes.data[0];
-            if (raw_pattern->type != RawList) {
+            RawTree* raw_pattern = (RawTree*)raw_clause->branch.nodes.data[0];
+            if (raw_pattern->type != RawBranch) {
                 throw_error(point, mv_string("Match Pattern should be a list!"));
             }
 
             // The pattern has two parts: the variables & the tag
             // The tag should be in a constructor (i.e. list)
             Symbol clause_tagname; 
-            if (!get_fieldname(raw_pattern->nodes.data[0], &clause_tagname)) {
+            if (!get_fieldname(raw_pattern->branch.nodes.data[0], &clause_tagname)) {
                 throw_error(point, mv_string("Unable to get tagname in pattern."));
             }
 
-            SymbolArray clause_binds = mk_u64_array(raw_pattern->nodes.len - 1, a);
-            for (size_t s = 1; s < raw_pattern->nodes.len; s++) {
-                RawTree* raw_name = raw_pattern->nodes.data[s];
+            SymbolArray clause_binds = mk_u64_array(raw_pattern->branch.nodes.len - 1, a);
+            for (size_t s = 1; s < raw_pattern->branch.nodes.len; s++) {
+                RawTree* raw_name = raw_pattern->branch.nodes.data[s];
                 if (!is_symbol(raw_name)) {
                     throw_error(point, mv_string("Pattern binding was not a symbol!"));
                 }
@@ -458,7 +462,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             }
 
             // Get the term
-            RawTree* raw_term = (raw_clause->nodes.len == 2) ? (RawTree*)raw.nodes.data[2] : raw_slice(&raw, 2, a);
+            RawTree* raw_term = (raw_clause->branch.nodes.len == 2) ? (RawTree*)raw.branch.nodes.data[2] : raw_slice(&raw, 2, a);
             Syntax* clause_body = abstract_expr_i(*raw_term, env, a, point);
 
             SynClause* clause = mem_alloc(sizeof(SynClause), a);
@@ -478,31 +482,31 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FStructure: {
-        if (raw.nodes.len < 2) {
+        if (raw.branch.nodes.len < 2) {
             throw_error(point, mk_string("Structure term former needs a structure type argument", a));
         }
 
         // Get the type of the structure
-        Syntax* stype = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* stype = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
         // Construct a structure
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.nodes.len, a);
-        for (size_t i = 2; i < raw.nodes.len; i++) {
-            RawTree* fdesc = raw.nodes.data[i];
-            if (fdesc->type != RawList) {
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            RawTree* fdesc = raw.branch.nodes.data[i];
+            if (fdesc->type != RawBranch) {
                 throw_error(point, mv_string("Structure expects all field descriptors to be lists."));
             }
             
-            if (fdesc->nodes.len < 2) {
+            if (fdesc->branch.nodes.len < 2) {
                 throw_error(point, mv_string("Structure expects all field descriptors to have at least 2 elements."));
             }
 
             Symbol field;
-            if (!get_fieldname(fdesc->nodes.data[0], &field)) {
+            if (!get_fieldname(fdesc->branch.nodes.data[0], &field)) {
                 throw_error(point, mv_string("Structure has malformed field name."));
             }
 
-            RawTree* val_desc = fdesc->nodes.len == 2 ? fdesc->nodes.data[1] : raw_slice(fdesc, 1, a); 
+            RawTree* val_desc = fdesc->branch.nodes.len == 2 ? fdesc->branch.nodes.data[1] : raw_slice(fdesc, 1, a); 
             Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
 
             sym_ptr_insert(field, syn, &fields);
@@ -516,14 +520,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FProjector: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mk_string("Projection term former needs two arguments!", a));
         }
         // Get the structure portion of the proector 
-        Syntax* structure = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* structure = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         
         // Get the symbol portion of the projector
-        RawTree* msym = (RawTree*)raw.nodes.data[1];
+        RawTree* msym = (RawTree*)raw.branch.nodes.data[1];
         if (msym->type != RawAtom && msym->atom.type != ASymbol) {
             throw_error(point, mv_string("Second argument to projection term former should be symbol"));
         }
@@ -541,9 +545,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* constraint;
 
         size_t start_idx = 1;
-        RawTree* current = raw.nodes.data[start_idx];
+        RawTree* current = raw.branch.nodes.data[start_idx];
 
-        switch (current->hint) {
+        switch (current->type == RawBranch ? current->branch.hint : HNone) {
         case HNone: goto parse_constraint;
         case HExpression: goto parse_constraint;
         case HImplicit: goto parse_implicits;
@@ -557,8 +561,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
           throw_error(point, mv_string("Instance parameter list malformed."));
         }
 
-        current = raw.nodes.data[++start_idx];
-        switch (current->hint) {
+        current = raw.branch.nodes.data[++start_idx];
+        switch (current->type == RawBranch ? current->branch.hint : HNone) {
         case HNone: goto parse_constraint;
         case HExpression: goto parse_constraint;
         case HImplicit: goto parse_implicits;
@@ -570,30 +574,30 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
 
         get_annotated_symbol_list(&implicits, *current, env, a, point);
 
-        current = raw.nodes.data[++start_idx];
+        current = raw.branch.nodes.data[++start_idx];
 
         parse_constraint:
 
         constraint = abstract_expr_i(*current, env, a, point);
         start_idx++;
 
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.nodes.len - start_idx, a);
-        for (size_t i = start_idx; i < raw.nodes.len; i++) {
-            RawTree* fdesc = raw.nodes.data[i];
-            if (fdesc->type != RawList) {
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - start_idx, a);
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
+            RawTree* fdesc = raw.branch.nodes.data[i];
+            if (fdesc->type != RawBranch) {
                 throw_error(point, mv_string("Instance expects all field descriptors to be lists."));
             }
             
-            if (fdesc->nodes.len < 2) {
+            if (fdesc->branch.nodes.len < 2) {
                 throw_error(point, mv_string("Instance expects all field descriptors to have at least 2 elements."));
             }
 
             Symbol field;
-            if (!get_fieldname(fdesc->nodes.data[0], &field)) {
+            if (!get_fieldname(fdesc->branch.nodes.data[0], &field)) {
                 throw_error(point, mv_string("Instance has malformed field name."));
             }
 
-            RawTree* val_desc = fdesc->nodes.len == 2 ? fdesc->nodes.data[1] : raw_slice(fdesc, 1, a); 
+            RawTree* val_desc = fdesc->branch.nodes.len == 2 ? fdesc->branch.nodes.data[1] : raw_slice(fdesc, 1, a); 
             Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
 
             sym_ptr_insert(field, syn, &fields);
@@ -609,10 +613,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynamic: {
-        if (raw.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 2) {
             throw_error(point, mv_string("Malformed dynamic expression: expects at least 1 arg."));
         }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
         Syntax* dynamic = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
@@ -622,10 +626,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynamicUse: {
-        if (raw.nodes.len != 2) {
+        if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Malformed use expression."));
         }
-        Syntax* use = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* use = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
         *res = (Syntax) {
             .type = SDynamicUse,
@@ -634,20 +638,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FLet: {
-        SymSynAMap bindings = mk_sym_ptr_amap(raw.nodes.len - 1, a);
+        SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
         bool is_special = true;
         while (is_special) {
-            RawTree* bind = raw.nodes.data[index];
+            RawTree* bind = raw.branch.nodes.data[index];
             // let [x₁ e₁]
             //     [x₂ e₂]
             //  body
-            is_special = bind->hint == HSpecial;
+            is_special = bind->type == RawBranch && bind->branch.hint == HSpecial;
             if (is_special) {
                 index++;
                 Symbol sym;
-                if (bind->type != RawList || bind->nodes.len != 2) {
+                if (bind->type != RawBranch || bind->branch.nodes.len != 2) {
                     throw_error(point, mv_string("Malformed symbol binding in let-expression"));
                 }
                 if (!get_label(bind, &sym)) {
@@ -655,20 +659,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 }
 
                 shadow_var(sym, env);
-                Syntax* bind_body = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                Syntax* bind_body = abstract_expr_i(*(RawTree*)bind->branch.nodes.data[1], env, a, point);
                 sym_ptr_insert(sym, bind_body, &bindings);
             }
         }
 
-        if (index > raw.nodes.len - 1) {
+        if (index > raw.branch.nodes.len - 1) {
             throw_error(point, mv_string("Let expression has no body!"));
         }
 
-        if (index < raw.nodes.len - 1) {
+        if (index < raw.branch.nodes.len - 1) {
             throw_error(point, mv_string("Let expression multiple bodies!"));
         }
 
-        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[index], env, a, point);
         shadow_pop(bindings.len, env);
 
         *res = (Syntax) {
@@ -679,38 +683,38 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynamicLet: {
-        PtrArray bindings = mk_ptr_array(raw.nodes.len - 1, a);
+        PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
         bool is_special = true;
         while (is_special) {
-            RawTree* bind = raw.nodes.data[index];
+            RawTree* bind = raw.branch.nodes.data[index];
             // let [x₁ e₁]
             //     [x₂ e₂]
             //  body
-            is_special = bind->hint == HSpecial;
+            is_special = bind->type == RawBranch && bind->branch.hint == HSpecial;
             if (is_special) {
                 index++;
                 DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
-                if (bind->type != RawList || bind->nodes.len != 2) {
+                if (bind->type != RawBranch || bind->branch.nodes.len != 2) {
                     throw_error(point, mv_string("Malformed symbol binding in bind-expression"));
                 }
 
-                dbind->var = abstract_expr_i(*(RawTree*)bind->nodes.data[0], env, a, point);
-                dbind->expr = abstract_expr_i(*(RawTree*)bind->nodes.data[1], env, a, point);
+                dbind->var = abstract_expr_i(*(RawTree*)bind->branch.nodes.data[0], env, a, point);
+                dbind->expr = abstract_expr_i(*(RawTree*)bind->branch.nodes.data[1], env, a, point);
                 push_ptr(dbind, &bindings);
             }
         }
 
-        if (index > raw.nodes.len - 1) {
+        if (index > raw.branch.nodes.len - 1) {
             throw_error(point, mv_string("Bind expression has no body!"));
         }
 
-        if (index < raw.nodes.len - 1) {
+        if (index < raw.branch.nodes.len - 1) {
             throw_error(point, mv_string("Bind expression multiple bodies!"));
         }
 
-        Syntax* body = abstract_expr_i(*(RawTree*)raw.nodes.data[index], env, a, point);
+        Syntax* body = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[index], env, a, point);
         shadow_pop(bindings.len, env);
 
         *res = (Syntax) {
@@ -721,12 +725,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FIf: {
-        if (raw.nodes.len != 4) {
+        if (raw.branch.nodes.len != 4) {
             throw_error(point, mv_string("Term former 'if' expects precisely 3 arguments!"));
         }
         SynArray terms = mk_ptr_array(3, a);
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[i], env, a, point);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[i], env, a, point);
             push_ptr(term, &terms);
         }
 
@@ -739,20 +743,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FLabels: {
-        if (raw.nodes.len < 2) {
+        if (raw.branch.nodes.len < 2) {
             throw_error(point, mv_string("Term former 'labels' expects at least 1 argument!"));
         }
 
-        Syntax* entry = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* entry = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
-        SymPtrAssoc terms = mk_sym_ptr_assoc(raw.nodes.len - 2, a);
-        for (size_t i = 2; i < raw.nodes.len; i++) {
+        SymPtrAssoc terms = mk_sym_ptr_assoc(raw.branch.nodes.len - 2, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
             Symbol label;
-            RawTree* label_expr = raw.nodes.data[i];
+            RawTree* label_expr = raw.branch.nodes.data[i];
             if (!get_label(label_expr, &label)) {
                 throw_error(point, mv_string("Each label must be of the form [label expr]"));
             }
-            Syntax* res = abstract_expr_i(*(RawTree*)label_expr->nodes.data[1], env, a, point);
+            Syntax* res = abstract_expr_i(*(RawTree*)label_expr->branch.nodes.data[1], env, a, point);
             sym_ptr_bind(label, res, &terms);
         }
 
@@ -764,10 +768,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FGoTo: {
-        if (raw.nodes.len != 2) {
+        if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
         }
-        RawTree* label = raw.nodes.data[1]; 
+        RawTree* label = raw.branch.nodes.data[1]; 
 
         if (label->type != RawAtom && label->atom.type != ASymbol) {
             throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
@@ -781,13 +785,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
     }
     case FWithReset: {
         // with-reset [lbl] e [l1 l2] e
-        if (raw.nodes.len != 5) {
+        if (raw.branch.nodes.len != 5) {
           throw_error(point, mv_string("Term former 'with-reset' expects exactly 5 arguments!"));
         }
         SymbolArray reset_binds = mk_u64_array(1, a);
         SymbolArray handle_binds = mk_u64_array(2, a);
 
-        if (!get_symbol_list(&reset_binds, *(RawTree*) raw.nodes.data[1]) || reset_binds.len != 1) {
+        if (!get_symbol_list(&reset_binds, *(RawTree*) raw.branch.nodes.data[1]) || reset_binds.len != 1) {
           throw_error(point, mv_string("Term former 'with-reset' 1st argument list malformed."));
         }
 
@@ -796,16 +800,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             throw_error(point, mv_string("Term former 'with-reset' expects exactly 5 arguments!"));
         }
 
-        Syntax* expr = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* expr = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
 
-        if (!get_symbol_list(&handle_binds, *(RawTree*) raw.nodes.data[3]) || handle_binds.len != 3) {
+        if (!get_symbol_list(&handle_binds, *(RawTree*) raw.branch.nodes.data[3]) || handle_binds.len != 3) {
             throw_error(point, mv_string("Handler list malformed!"));
         }
 
         Symbol in_sym = handle_binds.data[1];
         Symbol cont_sym = handle_binds.data[2];
 
-        Syntax* handler = abstract_expr_i(*(RawTree*)raw.nodes.data[4], env, a, point);
+        Syntax* handler = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[4], env, a, point);
 
         *res = (Syntax) {
             .type = SWithReset,
@@ -818,12 +822,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FResetTo: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Term former 'reset-to' expects two arguments!"));
         }
 
-        Syntax* rpoint = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
-        Syntax* rarg = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* rpoint = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* rarg = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         *res = (Syntax) {
             .type = SResetTo,
             .reset_to.point = rpoint,
@@ -832,17 +836,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FSequence: {
-        SynArray elements = mk_ptr_array(raw.nodes.len - 1, a);
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            RawTree* tree = raw.nodes.data[i];
+        SynArray elements = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            RawTree* tree = raw.branch.nodes.data[i];
             SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
-            if (tree->hint == HSpecial) {
-                if (tree->type != RawList
-                    || tree->nodes.len != 3
-                    || !eq_symbol(tree->nodes.data[0], string_to_symbol(mv_string("let!")))) {
+            if (tree->type == RawBranch && tree->branch.hint == HSpecial) {
+                if (tree->type != RawBranch
+                    || tree->branch.nodes.len != 3
+                    || !eq_symbol(tree->branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                     throw_error(point, mv_string("Invalid let! binding in seq"));
                 }
-                RawTree* rsym = tree->nodes.data[1];
+                RawTree* rsym = tree->branch.nodes.data[1];
                 if (rsym->type != RawAtom || rsym->atom.type != ASymbol) {
                     throw_error(point, mv_string("Invalid let! binding in seq"));
                 }
@@ -850,7 +854,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 *elt = (SeqElt) {
                     .is_binding = true,
                     .symbol = rsym->atom.symbol,
-                    .expr = abstract_expr_i(*(RawTree*)tree->nodes.data[2], env, a, point),
+                    .expr = abstract_expr_i(*(RawTree*)tree->branch.nodes.data[2], env, a, point),
                 };
             } else {
                 *elt = (SeqElt) {
@@ -868,12 +872,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FIs: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Term former 'is' expects precisely 2 arguments!"));
         }
 
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
-        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         
         *res = (Syntax) {
             .type = SIs,
@@ -882,12 +886,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FInTo: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Term former 'into' expects precisely 2 arguments!"));
         }
 
-        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         
         *res = (Syntax) {
             .type = SInTo,
@@ -896,12 +900,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FOutOf: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Term former 'out-of' expects precisely 2 arguments!"));
         }
 
-        Syntax* type = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[2], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
         
         *res = (Syntax) {
             .type = SOutOf,
@@ -910,11 +914,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynAlloc: {
-        if (raw.nodes.len != 2) {
+        if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'dynamic-alloc' expects precisely 1 arguments!"));
         }
 
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
         
         *res = (Syntax) {
             .type = SDynAlloc,
@@ -923,11 +927,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FSizeOf: {
-        if (raw.nodes.len != 2) {
+        if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'size-of' expects precisely 1 argument!"));
         }
 
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
         
         *res = (Syntax) {
             .type = SSizeOf,
@@ -936,11 +940,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FAlignOf: {
-        if (raw.nodes.len != 2) {
+        if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'align-of' expects precisely 1 argument!"));
         }
 
-        Syntax* term = abstract_expr_i(*(RawTree*)raw.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
         
         *res = (Syntax) {
             .type = SAlignOf,
@@ -949,25 +953,25 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FProcType: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Wrong number of terms to proc type former."));
         }
 
-        RawTree* raw_args = raw.nodes.data[1];
-        if (raw_args->type != RawList) {
+        RawTree* raw_args = raw.branch.nodes.data[1];
+        if (raw_args->type != RawBranch) {
             throw_error(point, mv_string("Procedure argument list should be list."));
         }
         
-        PtrArray arg_types = mk_ptr_array(raw_args->nodes.len, a);
+        PtrArray arg_types = mk_ptr_array(raw_args->branch.nodes.len, a);
 
-        for (size_t i = 0; i < raw_args->nodes.len; i++) {
-            RawTree* raw_arg = raw_args->nodes.data[i];
+        for (size_t i = 0; i < raw_args->branch.nodes.len; i++) {
+            RawTree* raw_arg = raw_args->branch.nodes.data[i];
             Syntax* arg_ty = abstract_expr_i(*raw_arg, env, a, point);
 
             push_ptr(arg_ty, &arg_types);
         }
 
-        RawTree* raw_return = raw.nodes.data[2]; 
+        RawTree* raw_return = raw.branch.nodes.data[2]; 
         Syntax* return_type = abstract_expr_i(*raw_return, env, a, point);
 
         *res = (Syntax) {
@@ -978,24 +982,24 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FStructType: {
-        SymSynAMap field_types = mk_sym_ptr_amap(raw.nodes.len, a);
+        SymSynAMap field_types = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            RawTree* fdesc = raw.nodes.data[i];
-            if (fdesc->type != RawList) {
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            RawTree* fdesc = raw.branch.nodes.data[i];
+            if (fdesc->type != RawBranch) {
                 throw_error(point, mv_string("Structure type expects all field descriptors to be lists."));
             };
             
-            if (fdesc->nodes.len < 2) {
+            if (fdesc->branch.nodes.len < 2) {
                 throw_error(point, mv_string("Structure type expects all field descriptors to have a type."));
             };
 
             Symbol field;
-            if (!get_fieldname(fdesc->nodes.data[0], &field)) {
+            if (!get_fieldname(fdesc->branch.nodes.data[0], &field)) {
                 throw_error(point, mv_string("Structure type has malformed field name."));
             };
 
-            RawTree* raw_ty = (fdesc->nodes.len == 2) ? fdesc->nodes.data[1] : raw_slice(fdesc, 1, a);
+            RawTree* raw_ty = (fdesc->branch.nodes.len == 2) ? fdesc->branch.nodes.data[1] : raw_slice(fdesc, 1, a);
             Syntax* field_ty = abstract_expr_i(*raw_ty, env, a, point);
 
             sym_ptr_insert(field, field_ty, &field_types);
@@ -1008,30 +1012,30 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FEnumType: {
-        SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.nodes.len, a);
+        SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.nodes.len; i++) {
-            RawTree* edesc = raw.nodes.data[i];
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            RawTree* edesc = raw.branch.nodes.data[i];
 
-            if (edesc->type != RawList) {
+            if (edesc->type != RawBranch) {
                 throw_error(point, mv_string("Enumeration type expects all enum descriptors to be lists."));
             };
             
-            if (edesc->nodes.len < 1) {
+            if (edesc->branch.nodes.len < 1) {
                 throw_error(point, mv_string("Enumeration type expects all enum descriptors to have at least 1 elements."));
             };
 
             Symbol tagname;
             PtrArray* types = mem_alloc(sizeof(PtrArray), a);
-            *types = mk_ptr_array(edesc->nodes.len - 1, a);
+            *types = mk_ptr_array(edesc->branch.nodes.len - 1, a);
 
-            if (!get_fieldname(edesc->nodes.data[0], &tagname)) {
+            if (!get_fieldname(edesc->branch.nodes.data[0], &tagname)) {
                 throw_error(point, mv_string("Enum type has malformed field name."));
                 return res;
             };
 
-            for (size_t i = 1; i < edesc->nodes.len; i++) {
-                Syntax* field_ty = abstract_expr_i(*(RawTree*) edesc->nodes.data[i], env, a, point);
+            for (size_t i = 1; i < edesc->branch.nodes.len; i++) {
+                Syntax* field_ty = abstract_expr_i(*(RawTree*) edesc->branch.nodes.data[i], env, a, point);
                 push_ptr(field_ty, types);
             }
 
@@ -1045,11 +1049,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FResetType: {
-        if (raw.nodes.len != 3) {
+        if (raw.branch.nodes.len != 3) {
             throw_error(point, mv_string("Reset type former expects exactly 2 arguments!"));
         }
-        Syntax* in_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[1], env, a, point);
-        Syntax* out_ty = abstract_expr_i(*(RawTree*) raw.nodes.data[2], env, a, point);
+        Syntax* in_ty = abstract_expr_i(*(RawTree*) raw.branch.nodes.data[1], env, a, point);
+        Syntax* out_ty = abstract_expr_i(*(RawTree*) raw.branch.nodes.data[2], env, a, point);
 
         *res = (Syntax) {
             .type = SResetType,
@@ -1059,10 +1063,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDynamicType: {
-        if (raw.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 2) {
             throw_error(point, mv_string("Malformed Dynamic Type expression: expects at least 1 arg."));
         }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
         Syntax* dyn_ty = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
@@ -1072,10 +1076,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FDistinctType: {
-        if (raw.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 2) {
             throw_error(point, mv_string("Malformed Distinct Type expression: expects at least 1 arg."));
         }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
         Syntax* distinct = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
@@ -1085,10 +1089,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FOpaqueType: {
-        if (raw.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 2) {
             throw_error(point, mv_string("Malformed Opaque Type expression: expects at least 1 arg."));
         }
-        RawTree* body = raw.nodes.len == 2 ? raw.nodes.data[1] : raw_slice(&raw, 1, a);
+        RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
         Syntax* opaque = abstract_expr_i(*body, env, a, point);
 
         *res = (Syntax) {
@@ -1098,35 +1102,35 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FTraitType: {
-        if (raw.nodes.len < 2) {
+        if (raw.branch.nodes.len < 2) {
             throw_error(point, mv_string("Wrong number of terms to trait type former."));
         }
 
-        RawTree* raw_vars = (RawTree*)raw.nodes.data[1];
-        SymbolArray vars = mk_u64_array(raw_vars->nodes.len, a);
+        RawTree* raw_vars = (RawTree*)raw.branch.nodes.data[1];
+        SymbolArray vars = mk_u64_array(raw_vars->branch.nodes.len, a);
 
         if (!get_symbol_list(&vars, *raw_vars)) {
             throw_error(point, mv_string("Malformed Trait parameter list."));
         }
 
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.nodes.len - 2, a);
-        for (size_t i = 2; i < raw.nodes.len; i++) {
-            RawTree* fdesc = raw.nodes.data[i];
-            if (fdesc->type != RawList) {
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - 2, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            RawTree* fdesc = raw.branch.nodes.data[i];
+            if (fdesc->type != RawBranch) {
                 throw_error(point, mv_string("Trait expects all field descriptors to be lists."));
             }
             
-            if (fdesc->nodes.len < 2) {
+            if (fdesc->branch.nodes.len < 2) {
                 throw_error(point, mv_string("Trait expects all field descriptors to have at least 2 elements."));
             }
 
             Symbol field;
-            if (!get_fieldname(fdesc->nodes.data[0], &field)) {
+            if (!get_fieldname(fdesc->branch.nodes.data[0], &field)) {
                 throw_error(point, mv_string("Trait has malformed field name."));
             }
             Syntax* syn;
-            if (fdesc->nodes.len == 2) {
-                syn = abstract_expr_i(*(RawTree*) fdesc->nodes.data[1], env, a, point);
+            if (fdesc->branch.nodes.len == 2) {
+                syn = abstract_expr_i(*(RawTree*) fdesc->branch.nodes.data[1], env, a, point);
             } else {
                 RawTree* raw_term = raw_slice(fdesc, 1, a);
                 syn = abstract_expr_i(*raw_term, env, a, point);
@@ -1143,20 +1147,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FAllType: {
-        if (raw.nodes.len < 3) {
+        if (raw.branch.nodes.len < 3) {
             throw_error(point, mk_string("All term former requires at least 2 arguments!", a));
         }
 
         SymbolArray vars = mk_u64_array(8, a);
-        if (!get_symbol_list(&vars, *(RawTree*)raw.nodes.data[1])) {
+        if (!get_symbol_list(&vars, *(RawTree*)raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("All argument list malformed", a));
         }
 
         shadow_vars(vars, env);
 
         RawTree* raw_term;
-        if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)raw.nodes.data[2];
+        if (raw.branch.nodes.len == 3) {
+            raw_term = (RawTree*)raw.branch.nodes.data[2];
         } else {
             raw_term = raw_slice(&raw, 2, a);
         }
@@ -1171,20 +1175,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         break;
     }
     case FFamily: {
-        if (raw.nodes.len < 3) {
+        if (raw.branch.nodes.len < 3) {
             throw_error(point, mk_string("Family term former requires at least 2 arguments!", a));
         }
 
         SymbolArray vars = mk_u64_array(8, a);
-        if (!get_symbol_list(&vars, *(RawTree*)raw.nodes.data[1])) {
+        if (!get_symbol_list(&vars, *(RawTree*)raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("All argument list malformed", a));
         }
 
         shadow_vars(vars, env);
 
         RawTree* raw_term;
-        if (raw.nodes.len == 3) {
-            raw_term = (RawTree*)raw.nodes.data[2];
+        if (raw.branch.nodes.len == 3) {
+            raw_term = (RawTree*)raw.branch.nodes.data[2];
         } else {
             raw_term = raw_slice(&raw, 2, a);
         }
@@ -1245,14 +1249,14 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         }
         break;
     }
-    case RawList: {
+    case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
-        if (raw.nodes.len < 1) {
+        if (raw.branch.nodes.len < 1) {
             throw_error(point, mk_string("Raw Syntax must have at least one element!", a));
         }
 
-        if (is_symbol(raw.nodes.data[0])) {
-            Symbol sym = ((RawTree*)raw.nodes.data[0])->atom.symbol;
+        if (is_symbol(raw.branch.nodes.data[0])) {
+            Symbol sym = ((RawTree*)raw.branch.nodes.data[0])->atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SErr:
@@ -1269,6 +1273,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                     return mk_term(*((TermFormer*)entry.value), raw, env, a, point);
                 } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
                     // Call the function (uses Pico ABI)
+                    RawTree output;
+                    PtrArray input = raw.branch.nodes;
                     void* dvars = get_dynamic_memory();
                     void* dynamic_memory_space = mem_alloc(4096, a);
 
@@ -1279,22 +1285,67 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                                          "push %%rbp       \n"
                                          "push %%r15       \n"
                                          "push %%r14       \n"
+                                         // Push output ptr & sizeof (Syntax), resp
+                                         "push %5          \n"
+                                         "push %6          \n"
+
                                          "mov %3, %%r14    \n"
                                          "mov %2, %%r15    \n"
+                                         //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+
+                                         // Push arg (array) onto stack
+                                         "push 0x18(%4)       \n"
+                                         "push 0x10(%4)       \n"
+                                         "push 0x8(%4)        \n"
+                                         "push (%4)         \n"
+
                                          "mov %%rsp, %%rbp \n"
-                                         "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+
+                                         // Call function, this should consume 'Array' from the stack and push
+                                         // 'Raw Syntax' onto the stack
                                          "call *%1         \n"
+
+                                         // After calling the function, we
+                                         // expect a Syntax to be atop the stack:
+#if ABI == SYSTEM_V_64
+                                         // memcpy (dest = rdi, src = rsi, size = rdx)
+                                         // retval = rax
+                                         "mov 0x30(%%rsp), %%rdx   \n"
+                                         "mov 0x38(%%rsp), %%rdi   \n"
+                                         "mov %%rsp, %%rsi         \n"
+                                         "call memcpy              \n"
+
+#elif ABI == WIN_64
+                                         "pop %%r8               \n"
+                                         //"pop %%rcx              \n"
+                                         //"mov %%rsp, %%rdx       \n"
+                                         "sub 32, %%rsp          \n"
+                                         "call memcpy            \n"
+                                         "add %5, %%rsp          \n"
+#else
+#error "Unknown calling convention"
+#endif
+                                         // pop value from stack 
+                                         "mov 0x30(%%rsp), %%rax   \n"
+                                         "add %%rax, %%rsp         \n"
+                                         // pop stashed size & dest from stack
+                                         "add $0x10, %%rsp          \n"
+
                                          "pop %%r14        \n"
                                          "pop %%r15        \n"
                                          "pop %%rbp        \n"
                                          : "=r" (out)
 
-                                         : "r" (entry.value)
+                                         : "r" (*(uint64_t*)entry.value)
                                            , "r" (dvars)
-                                           , "r"(dynamic_memory_space)) ;
+                                           , "r" (dynamic_memory_space)
+                                           , "r" (&input)
+                                           , "r" (&output)
+                                           , "c" (sizeof(RawTree))) ;
 
                     set_std_tmp_allocator(old_tmp_alloc);
                     mem_free(dynamic_memory_space, a);
+                    return abstract_expr_i(output, env, a, point);
                 } else {
                     return mk_application(raw, env, a, point);
                 }
@@ -1316,17 +1367,17 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
     TopLevel res;
     switch (former) {
     case FDefine: {
-        if (raw.nodes.len < 3) {
+        if (raw.branch.nodes.len < 3) {
             throw_error(point, mk_string("Definitions expect at least 2 terms", a));
         }
 
-        if (!is_symbol(raw.nodes.data[1])) {
+        if (!is_symbol(raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("First argument to definitions should be a symbol", a));
         }
 
-        Symbol sym = ((RawTree*)raw.nodes.data[1])->atom.symbol;
+        Symbol sym = ((RawTree*)raw.branch.nodes.data[1])->atom.symbol;
         
-        RawTree* raw_term = (raw.nodes.len == 3) ? raw.nodes.data[2] : raw_slice(&raw, 2, a);
+        RawTree* raw_term = (raw.branch.nodes.len == 3) ? raw.branch.nodes.data[2] : raw_slice(&raw, 2, a);
 
         shadow_var(sym, env);
         Syntax* term = abstract_expr_i(*raw_term, env, a, point);
@@ -1354,9 +1405,9 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
     // first: try a unique toplevel-form
     bool unique_toplevel = false;
 
-    if (raw.type == RawList && raw.nodes.len > 1) {
-        if (is_symbol(raw.nodes.data[0])) {
-            Symbol sym = ((RawTree*)raw.nodes.data[0])->atom.symbol;
+    if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
+        if (is_symbol(raw.branch.nodes.data[0])) {
+            Symbol sym = ((RawTree*)raw.branch.nodes.data[0])->atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
             case SGlobal: {
@@ -1388,20 +1439,20 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
             .type = ImportName,
             .name = raw->atom.symbol,
         };
-    } else if (raw->type == RawList) {
+    } else if (raw->type == RawBranch) {
         // Possibilities:
         // (name1 :all)
         // (name1 :as name2)
         // (. name2 name1)
         // (. (list-of-names) name1)
-        if (raw->nodes.len == 2) {
-            if (!is_symbol(raw->nodes.data[0]))
+        if (raw->branch.nodes.len == 2) {
+            if (!is_symbol(raw->branch.nodes.data[0]))
                 throw_error(point, mv_string("Invalid import clause: first element should be symbol"));
-            Symbol name = ((RawTree*)raw->nodes.data[0])->atom.symbol;
+            Symbol name = ((RawTree*)raw->branch.nodes.data[0])->atom.symbol;
 
             
             Symbol middle;
-            if(!get_fieldname(raw->nodes.data[1], &middle))
+            if(!get_fieldname(raw->branch.nodes.data[1], &middle))
                 throw_error(point, mv_string("Invalid import clause - expected :all"));
             if (middle != string_to_symbol(mv_string("all")))
                 throw_error(point, mv_string("Invalid import clause - expected :all"));
@@ -1410,26 +1461,26 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                 .type = ImportPathAll,
                 .name = name,
             };
-        } else if (raw->nodes.len == 3) {
+        } else if (raw->branch.nodes.len == 3) {
 
-            if (!is_symbol(raw->nodes.data[0]) || !is_symbol(raw->nodes.data[2]))
+            if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2]))
                 throw_error(point, mv_string("Invalid import clause"));
 
             // Check for '.'
-            if (eq_symbol(raw->nodes.data[0], string_to_symbol(mv_string(".")))) {
+            if (eq_symbol(raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
                 Symbol src;
-                if(!get_fieldname(raw->nodes.data[2], &src))
+                if(!get_fieldname(raw->branch.nodes.data[2], &src))
                     throw_error(point, mv_string("Invalid import-. source"));
 
-                RawTree* raw_members = raw->nodes.data[1];
+                RawTree* raw_members = raw->branch.nodes.data[1];
                 if (is_symbol(raw_members)) {
                     return (ImportClause) {
                         .type = ImportPath,
                         .name = src,
                         .member = raw_members->atom.symbol,
                     };
-                } else if (raw_members->type == RawList) {
-                    SymbolArray members = mk_u64_array(raw_members->nodes.len, a);
+                } else if (raw_members->type == RawBranch) {
+                    SymbolArray members = mk_u64_array(raw_members->branch.nodes.len, a);
                     if (!get_symbol_list(&members, *raw_members))
                         throw_error(point, mv_string("Invalid import-. members"));
                     return (ImportClause) {
@@ -1443,16 +1494,16 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
 
             } else {
                 Symbol middle;
-                if(!get_fieldname(raw->nodes.data[1], &middle))
+                if(!get_fieldname(raw->branch.nodes.data[1], &middle))
                     throw_error(point, mv_string("Invalid import clause"));
                 if (middle != string_to_symbol(mv_string("as")))
                     throw_error(point, mv_string("Invalid import clause"));
 
                 Symbol name;
                 Symbol rename;
-                if(!get_fieldname(raw->nodes.data[0], &name))
+                if(!get_fieldname(raw->branch.nodes.data[0], &name))
                     throw_error(point, mv_string("Invalid import-as name"));
-                if(!get_fieldname(raw->nodes.data[0], &rename))
+                if(!get_fieldname(raw->branch.nodes.data[0], &rename))
                     throw_error(point, mv_string("Invalid import-as new name"));
                 return (ImportClause) {
                     .type = ImportNameAs,
@@ -1476,24 +1527,24 @@ ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
             .type = ExportName,
             .name = raw->atom.symbol,
         };
-    } else if (raw->type == RawList) {
+    } else if (raw->type == RawBranch) {
         // Export as
         // looks like (<symbol/name> (<symbol/:> <symbol/as>) <symbol/name>)
 
-        if (raw->nodes.len != 3)
+        if (raw->branch.nodes.len != 3)
             throw_error(point, mv_string("Invalid export clause"));
 
         Symbol middle;
-        if(!get_fieldname(raw->nodes.data[1], &middle))
+        if(!get_fieldname(raw->branch.nodes.data[1], &middle))
             throw_error(point, mv_string("Invalid export clause"));
         if (middle != string_to_symbol(mv_string("as")))
             throw_error(point, mv_string("Invalid export clause"));
 
         Symbol name;
         Symbol rename;
-        if(!get_fieldname(raw->nodes.data[0], &name))
+        if(!get_fieldname(raw->branch.nodes.data[0], &name))
             throw_error(point, mv_string("Invalid export-as name"));
-        if(!get_fieldname(raw->nodes.data[0], &rename))
+        if(!get_fieldname(raw->branch.nodes.data[0], &rename))
             throw_error(point, mv_string("Invalid export-as new name"));
 
         return (ExportClause) {

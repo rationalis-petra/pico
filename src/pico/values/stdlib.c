@@ -875,30 +875,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     // Syntax Type : components and definition 
     {
-        PiType atom_type = mk_enum_type(a, 4,
-                                        "bool", 1, mk_prim_type(Bool),
-                                        "integral", 1, mk_prim_type(Int_64),
-                                        "symbol", 1,  mk_prim_type(Int_64),
-                                        "string", 1, mk_string_type(a));
-        type_data = &atom_type;
-        sym = string_to_symbol(mv_string("Atom"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        PiType hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
-        type_data = &hint_type;
-        sym = string_to_symbol(mv_string("Hint"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        type_val = mk_enum_type(a, 2,
-                                "atom", 1, atom_type,
-                                "node", 2, hint_type, mk_prim_type(Address));
-
-        type_data = &type_val;
-        sym = string_to_symbol(mv_string("Syntax"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type(type_val, a);
-        ModuleEntry* e = get_def(sym, module);
-        syntax_type = e->value;
 
         // Ptr Type
         U64Array vars = mk_u64_array(1, a);
@@ -940,21 +916,56 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_distinct_type(a, mk_type_family(a,
+        PiType type_val = mk_distinct_type(a, mk_type_family(a,
                                                       vars,
-                                                      mk_struct_type(a, 3,
+                                                      mk_struct_type(a, 4,
                                                                      "data", mk_prim_type(Address),
                                                                      "len", mk_prim_type(UInt_64),
+                                                                     "capacity", mk_prim_type(UInt_64),
                                                                      "gpa", alloc_ptr_type)));
         type_data = &type_val;
         sym = string_to_symbol(mv_string("Array"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
         delete_pi_type(type_val, a);
 
-        e = get_def(sym, module);
+        ModuleEntry* e = get_def(sym, module);
         array_type = e->value;
 
         type.kind.nargs = 0;
+
+        PiType atom_type = mk_enum_type(a, 4,
+                                        "bool", 1, mk_prim_type(Bool),
+                                        "integral", 1, mk_prim_type(Int_64),
+                                        "symbol", 1,  mk_prim_type(Int_64),
+                                        "string", 1, mk_string_type(a));
+        type_data = &atom_type;
+        sym = string_to_symbol(mv_string("Atom"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        PiType hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
+        type_data = &hint_type;
+        sym = string_to_symbol(mv_string("Hint"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        PtrArray args = mk_ptr_array(1, a);
+        PiType* addr_ty = mem_alloc(sizeof(PiType), a);
+        *addr_ty = mk_prim_type(Address);
+        push_ptr(addr_ty, &args);
+        PiType* addr_array = type_app(*array_type, args, a);
+        delete_pi_type_p(args.data[0], a);
+        sdelete_ptr_array(args);
+
+        type_val = mk_enum_type(a, 2,
+                                "atom", 1, atom_type,
+                                "node", 2, hint_type, *addr_array);
+
+        type_data = &type_val;
+        sym = string_to_symbol(mv_string("Syntax"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        mem_free(addr_array, a);
+        delete_pi_type(type_val, a);
+        e = get_def(sym, module);
+        syntax_type = e->value;
     }
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};

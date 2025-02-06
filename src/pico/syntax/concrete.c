@@ -11,22 +11,22 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
         out = pretty_atom(tree.atom, a);
         break;
     }
-    case RawList: {
-        char* open; switch (tree.hint) {
+    case RawBranch: {
+        char* open; switch (tree.branch.hint) {
           case HSpecial: open = "["; break;
           case HImplicit: open = "{"; break;
           default: open = "("; break;
         };
-        char* close; switch (tree.hint) {
+        char* close; switch (tree.branch.hint) {
           case HSpecial: close = "]"; break;
           case HImplicit: close = "}"; break;
           default: close = ")"; break;
         };
 
-        PtrArray doc_arr = mk_ptr_array(tree.nodes.len + 2, a);
+        PtrArray doc_arr = mk_ptr_array(tree.branch.nodes.len + 2, a);
         push_ptr(mv_str_doc(mk_string(open, a), a), &doc_arr);
-        for (size_t i = 0; i < tree.nodes.len; i++) {
-            RawTree node = *((RawTree*)tree.nodes.data[i]);
+        for (size_t i = 0; i < tree.branch.nodes.len; i++) {
+            RawTree node = *((RawTree*)tree.branch.nodes.data[i]);
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }
@@ -47,10 +47,10 @@ void delete_rawtree(RawTree tree, Allocator* a) {
     switch (tree.type) {
     case RawAtom:
         break;
-    case RawList:
-        for (size_t i = 0; i < tree.nodes.len; i++)
-            delete_rawtree_ptr(tree.nodes.data[i], a);
-        sdelete_ptr_array(tree.nodes);
+    case RawBranch:
+        for (size_t i = 0; i < tree.branch.nodes.len; i++)
+            delete_rawtree_ptr(tree.branch.nodes.data[i], a);
+        sdelete_ptr_array(tree.branch.nodes);
         break;
     }
 }
