@@ -871,7 +871,8 @@ size_t pi_align_of(PiType type) {
         return align;
     }
     case TEnum: {
-        size_t align = 0; 
+        // Note: this will set it to max, maybe we should shrink the tag size (16 bits? variable bits?)
+        size_t align = 8; 
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
@@ -880,11 +881,10 @@ size_t pi_align_of(PiType type) {
                 size_t field_align = pi_align_of(*(PiType*)types.data[i]);
                 // accumulate max
                 // size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
-                align += field_align > align ? field_align : align;
+                align = field_align > align ? field_align : align;
             }
         }
-        // Note: this will set it to max, we should shrink the tag size (maybe 16 bits? variable bits?)
-        return 8 > align ? 8 : align;
+        return align;
     }
 
     case TReset: {
@@ -951,7 +951,7 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 
 // TODO (UB): make this thread safe
 static int id_counter = 0;
-uint64_t distinct_id() {return id_counter++;}
+uint64_t distinct_id() { return id_counter++; }
 
 void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     switch (body->sort) {

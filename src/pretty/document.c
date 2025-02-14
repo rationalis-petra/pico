@@ -4,7 +4,6 @@
 #include "data/array.h" 
 #include "pretty/document.h"
 
-
 typedef enum {
     StringDocument,
     CatDocument,

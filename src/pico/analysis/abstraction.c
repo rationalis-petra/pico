@@ -1316,12 +1316,14 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                                          "call memcpy              \n"
 
 #elif ABI == WIN_64
-                                         "pop %%r8               \n"
-                                         //"pop %%rcx              \n"
-                                         //"mov %%rsp, %%rdx       \n"
-                                         "sub 32, %%rsp          \n"
+                                         // memcpy (dest = rcx, src = rdx, size = r8)
+                                         // retval = rax
+                                         "mov 0x30(%%rsp), %%r8   \n"
+                                         "mov 0x38(%%rsp), %%rcx   \n"
+                                         "mov %%rsp, %%rdx         \n"
+                                         "sub $0x20, %%rsp          \n"
                                          "call memcpy            \n"
-                                         "add %5, %%rsp          \n"
+                                         "add $0x20, %%rsp          \n"
 #else
 #error "Unknown calling convention"
 #endif

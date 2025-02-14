@@ -19,6 +19,7 @@
     } tprefix ## AMap;                                                  \
                                                                         \
     tprefix##AMap mk_##fprefix##_amap(size_t capacity, Allocator* a);   \
+    tprefix##AMap scopy_##fprefix##_amap(tprefix##AMap map, Allocator* a); \
     tprefix##AMap copy_##fprefix##_amap(tprefix##AMap map, key_t (*copy_key)(key_t key, Allocator* a), val_t (*copy_val)(val_t val, Allocator* a), Allocator* a); \
     void delete_##fprefix##_amap(tprefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)); \
     void sdelete_##fprefix##_amap(tprefix##AMap map);                   \
