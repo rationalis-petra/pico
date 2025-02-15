@@ -1272,21 +1272,69 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sdelete_u8_array(fn_segments.data);
 }
 
+void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("extra")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL, a);
+    delete_module_header(header);
+
+    PiType type;
+    Symbol sym;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
+    Segments null_segments = (Segments) {
+        .code = mk_u8_array(0, a),
+        .data = mk_u8_array(0, a),
+    };
+
+
+    type = (PiType) {.sort = TPrim, .prim = TFormer};
+    TermFormer former = FReinterpret;
+    sym = string_to_symbol(mv_string("reinterpret"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FConvert;
+    sym = string_to_symbol(mv_string("convert"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    add_module(string_to_symbol(mv_string("foreign")), module, base);
+    sdelete_u8_array(null_segments.code);
+    sdelete_u8_array(null_segments.data);
+}
+
 void add_user_module(Package* base, Allocator* a) {
     Imports imports = (Imports) {.clauses = mk_import_clause_array(3, a),};
     push_import_clause((ImportClause) {
-            .type = ImportPathAll,
+            .type = ImportAll,
             .name = string_to_symbol(mv_string("core")),
         },
         &imports.clauses);
     push_import_clause((ImportClause) {
-            .type = ImportPathAll,
+            .type = ImportAll,
             .name = string_to_symbol(mv_string("num")),
         },
         &imports.clauses);
     push_import_clause((ImportClause) {
-            .type = ImportPathAll,
+            .type = ImportAll,
             .name = string_to_symbol(mv_string("extra")),
+        },
+        &imports.clauses);
+    push_import_clause((ImportClause) {
+            .type = Import,
+            .name = string_to_symbol(mv_string("foreign")),
         },
         &imports.clauses);
 
@@ -1311,6 +1359,7 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     add_core_module(ass, base, a);
     add_num_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
+    add_foreign_module(ass, base, a);
     add_user_module(base, a);
 
     return base;

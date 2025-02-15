@@ -82,13 +82,8 @@ void delete_c_type_p(CType* t, Allocator* a);
 CType copy_c_type(CType t, Allocator* a);
 CType* copy_c_type_p(CType* t, Allocator* a);
 
-
 // Misc. and utility
 // Utilities for generating or manipulating types
-uint64_t distinct_id();
-
-CType* type_app (CType family, PtrArray args, Allocator* a);
-
 CType mk_prim_ctype(CPrim t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)

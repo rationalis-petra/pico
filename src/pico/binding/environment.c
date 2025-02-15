@@ -22,26 +22,28 @@ Environment* env_from_module(Module* module, Allocator* a) {
     // cache results?
     Imports imports = get_imports(module);
     Package* package = get_package(module);
+    Module* root_module = get_root_module(package);
     //Module* parent = get_parent(module);
 
-    for (size_t i = 0; i < imports.clauses.size; i++) {
+    for (size_t i = 0; i < imports.clauses.len; i++) {
         // TODO (BUG): currently, we only search in the package, not the parent
         // module's submodules!
         ImportClause clause = imports.clauses.data[i];
         switch (clause.type) {
-        case ImportName:
-            panic(mv_string("Do not support import by name yet!"));
+        case Import: {
+            // Currently, import is not a path, so we can guarantee it's a module
+            // In the future, when paths are supported, this will need to be
+            // updated to check
+            sym_ptr_insert(clause.name, root_module, &env->symbol_origins);
             break;
-        case ImportNameAs:
-            panic(mv_string("Do not support import by name + rename yet!"));
+        }
+        case ImportAs:
+            panic(mv_string("Do not support renaming import yet!"));
             break;
-        case ImportPath:
-            panic(mv_string("Do not support import by path yet!"));
+        case ImportMany:
+            panic(mv_string("Do not support import many yet!"));
             break;
-        case ImportPathMany:
-            panic(mv_string("Do not support import by path many yet!"));
-            break;
-        case ImportPathAll: {
+        case ImportAll: {
             // Find the package
             Module* importee = get_module(clause.name, package);
             SymbolArray syms = get_exported_symbols(importee, a);
@@ -77,7 +79,6 @@ Environment* env_from_module(Module* module, Allocator* a) {
         default:
             panic(mv_string("Unrecognized import form in env_from_module"));
         }
-
     }
 
     // The local (module) definitions have the highest priority, so they  

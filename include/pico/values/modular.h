@@ -96,6 +96,7 @@ Package* mk_package(Symbol name, Allocator* a);
 void delete_package(Package* package);
 Result add_module(Symbol name, Module* module, Package* package);
 Module* get_module(Symbol name, Package* package);
+Module* get_root_module(Package* package);
 
 // Module Interface
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a);

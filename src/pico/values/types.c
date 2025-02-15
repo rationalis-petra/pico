@@ -773,13 +773,16 @@ size_t pi_size_of(PiType type) {
     case TProc:
         return sizeof(uint64_t);
     case TStruct: {
+        size_t align = 0;
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            total = pi_size_align(total, pi_align_of(*(PiType*)type.structure.fields.data[i].val));
+            size_t tmp_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
+            align = align > tmp_align? align : tmp_align;
+            total = pi_size_align(total, tmp_align);
             size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
             total += field_size;
         }
-        return total;
+        return pi_size_align(total, align);
     }
     case TEnum: {
         size_t max = 0; 

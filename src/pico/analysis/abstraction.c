@@ -1438,7 +1438,7 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* point) {
     if (is_symbol(raw)) {
         return (ImportClause) {
-            .type = ImportName,
+            .type = Import,
             .name = raw->atom.symbol,
         };
     } else if (raw->type == RawBranch) {
@@ -1460,7 +1460,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                 throw_error(point, mv_string("Invalid import clause - expected :all"));
 
             return (ImportClause) {
-                .type = ImportPathAll,
+                .type = ImportAll,
                 .name = name,
             };
         } else if (raw->branch.nodes.len == 3) {
@@ -1477,7 +1477,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                 RawTree* raw_members = raw->branch.nodes.data[1];
                 if (is_symbol(raw_members)) {
                     return (ImportClause) {
-                        .type = ImportPath,
+                        .type = Import,
                         .name = src,
                         .member = raw_members->atom.symbol,
                     };
@@ -1486,7 +1486,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                     if (!get_symbol_list(&members, *raw_members))
                         throw_error(point, mv_string("Invalid import-. members"));
                     return (ImportClause) {
-                        .type = ImportPathMany,
+                        .type = ImportMany,
                         .name = src,
                         .members = members,
                     };
@@ -1508,7 +1508,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                 if(!get_fieldname(raw->branch.nodes.data[0], &rename))
                     throw_error(point, mv_string("Invalid import-as new name"));
                 return (ImportClause) {
-                    .type = ImportNameAs,
+                    .type = ImportAs,
                     .name = name,
                     .rename = rename,
                 };

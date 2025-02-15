@@ -39,8 +39,7 @@ AMAP_IMPL(Symbol, ModuleEntryInternal, entry, Entry)
 
 struct Package {
     Symbol name;
-    SymPtrAMap modules;
-    Allocator* gpa;
+    Module* root_module;
 };
 
 struct Module {
@@ -59,39 +58,49 @@ struct Module {
     Allocator executable_allocator; 
 };
 
-
 // -----------------------------------------------------------------------------
 // Package Implementation
 // -----------------------------------------------------------------------------
 Package* mk_package(Symbol name, Allocator* a) {
     Package* package = mem_alloc(sizeof(Package), a);
     package->name = name;
-    package->modules = mk_sym_ptr_amap(32, a);
-    package->gpa = a;
+
+    // Setup for root module;
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("root-for-?")),
+        .imports = (Imports) {.clauses = mk_import_clause_array(0, a),},
+        .exports = (Exports) {
+            .export_all = true,
+            .clauses = mk_export_clause_array(0, a),
+        },
+    };
+
+    package->root_module = mk_module(header, package, NULL, a);
+    delete_module_header(header);
     return package;
 }
 
 void delete_package(Package* package) {
-    Allocator* a = package->gpa;
-
-    for (size_t i = 0; i < package->modules.len; i++) {
-        Module* module = package->modules.data[i].val;
-        delete_module(module);
-    }
-    sdelete_sym_ptr_amap(package->modules);
+    Allocator* a = package->root_module->allocator;
+    delete_module(package->root_module);
     mem_free(package, a);
 }
 
 Result add_module(Symbol name, Module* module, Package* package) {
-    // TOOD (Memory leak!): check if module already exists
-    sym_ptr_insert(name, (void*)module, &(package->modules));
-
-    return (Result) {.type = Ok};
+    return add_module_def(package->root_module, name, module); 
 }
 
 Module* get_module(Symbol name, Package* package) {
-    Module** module = (Module**) sym_ptr_lookup(name, package->modules);
-    if (module) return *module; else return NULL;
+    ModuleEntry* entry = get_def(name, package->root_module);
+    if (entry && entry->is_module) {
+        return entry->value;
+    } else {
+        return NULL;
+    }
+}
+
+Module* get_root_module(Package* package) {
+    return package->root_module;
 }
 
 // -----------------------------------------------------------------------------

@@ -83,6 +83,10 @@ typedef enum TermFormer {
     FTraitType,
     FAllType,
     FFamily,
+
+    // Temporary formers: TODO delegate to macros.
+    FReinterpret,
+    FConvert,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);
