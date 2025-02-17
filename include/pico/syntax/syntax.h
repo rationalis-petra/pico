@@ -83,6 +83,10 @@ typedef enum {
     SCheckedType,
 
     SAnnotation,
+
+    // Should be moved to macros!(?)
+    SReinterpret,
+    SConvert,
 } Syntax_t;
 
 
@@ -274,6 +278,18 @@ typedef struct {
     Syntax* out;
 } SynResetType;
 
+typedef struct {
+    Syntax* ctype;
+    Syntax* ptype;
+    Syntax* body;
+} SynReinterpret;
+
+typedef struct {
+    Syntax* ctype;
+    Syntax* ptype;
+    Syntax* body;
+} SynConvert;
+
 
 struct Syntax {
     Syntax_t type;
@@ -323,6 +339,9 @@ struct Syntax {
         Syntax* opaque_type;
         SynTrait trait;
         PiType* type_val;
+
+        SynReinterpret reinterpret;
+        SynConvert convert;
     };
     PiType* ptype;
 };

@@ -39,6 +39,7 @@ typedef enum {
     TDynamic,
 
     // 'Special'
+    TNamed,
     TDistinct,
     TTrait,
     TTraitInstance, // note: not a "real" type in the theory
@@ -108,6 +109,13 @@ typedef struct {
 } TypeBinder;
 
 typedef struct {
+    Symbol name;
+    PtrArray* args;
+    PiType* type;
+} NamedType;
+
+typedef struct {
+    Symbol name;
     PiType* type;
     uint64_t id;
     void* source_module;
@@ -135,6 +143,7 @@ struct PiType {
         TraitType trait;
         TraitInstance instance;
 
+        NamedType named;
         DistinctType distinct;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)

@@ -4,7 +4,21 @@
 #include "pico/codegen/foreign-adapters.h"
 
 void* convert_c_fn(CType* ctype, PiType* ptype, Assembler* ass, Allocator* a) {
-    
+    // This function is for converting a c function (assumed platform default
+    // ABI) into a pico function. This means that it assumes that all arguments
+    // are pushed on the stack in forward order (last at top)  
+
+#if ABI == SYSTEM_V_64 
+#elif ABI == WIN_64 
+#error "convert_c_fun not imlemented for Win 64"
+#else
+#error "convert_c_fun not implemented for unknonw arch"
+#endif
+    // TODO (FEATURE): as this can be invoked by user code with user values, 
+    //   perhaps abort on invalid type is too harsh? (throw or return false?) 
+    //   perhaps depends on debug state?
+    panic(mv_string("Invalid prim provided to can_reinterpret_type"));
+
 }
 
 bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
@@ -14,7 +28,8 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
         return false;
     }
     case Bool:  {
-        return ctype == CChar || ctype == CUChar;
+        // TODO (check for signedness?)
+        return ctype.prim == CChar;
     }
     case Address: {
         // Address comparisons need to be caught earlier.
@@ -24,28 +39,32 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
         return false;
     }
     case Int_64: {
-        return ctype == CLong; 
+        return ctype.prim == CLong &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_32: {
-        return ctype == CInt; 
+        return ctype.prim == CInt &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_16: {
-        return ctype == CShort; 
+        return ctype.prim == CShort &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_8: {
-        return ctype == CChar; // TODO: is char signed by default?
+        return ctype.prim == CChar && // TODO: check if char signed by default
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case UInt_64: {
-        return ctype == CULong;
+        return ctype.prim == CLong && ctype.is_signed == Unsigned; 
     }
     case UInt_32: {
-        return ctype == CUInt;
+        return ctype.prim == CInt && ctype.is_signed == Unsigned; 
     }
     case UInt_16: {
-        return ctype == CUInt;
+        return ctype.prim == CInt && ctype.is_signed == Unsigned;
     }
     case UInt_8: {
-        return ctype == CUChar;
+        return ctype.prim == CChar && ctype.is_signed == Unsigned;
     }
     case TFormer:  {
         // TODO (FEATURE): check for enum?

@@ -13,32 +13,37 @@ size_t align_to(size_t size, size_t align) {
 }
 
 Document* pretty_cprim(CPrim prim, Allocator* a) {
-    switch (prim) {
+    PtrArray nodes = mk_ptr_array(2, a);
+    switch (prim.prim) {
     case CChar:
-        return mk_str_doc(mv_string("char"), a);
+        push_ptr(mk_str_doc(mv_string("char"), a), &nodes);
+        break;
     case CShort:
-        return mk_str_doc(mv_string("short"), a);
+        push_ptr(mk_str_doc(mv_string("short"), a), &nodes);
+        break;
     case CInt:
-        return mk_str_doc(mv_string("int"), a);
+        push_ptr(mk_str_doc(mv_string("int"), a), &nodes);
+        break;
     case CLong:
-        return mk_str_doc(mv_string("long"), a);
-
-    case CUChar:
-        return mk_str_doc(mv_string("unsigned char"), a);
-    case CUShort:
-        return mk_str_doc(mv_string("unsigned short"), a);
-    case CUInt:
-        return mk_str_doc(mv_string("unsigned int"), a);
-    case CULong:
-        return mk_str_doc(mv_string("unsigned long"), a);
-    case CVoid:
-        return mk_str_doc(mv_string("void"), a);
+        push_ptr(mk_str_doc(mv_string("long"), a), &nodes);
+        break;
+    case CLongLong:
+        push_ptr(mk_str_doc(mv_string("long long"), a), &nodes);
+        break;
     }
-    panic(mv_string("Invalid CPrim"));
+
+    if (prim.is_signed == Signed) {
+        push_ptr(mk_str_doc(mv_string("signed"), a), &nodes);
+    } else if (prim.is_signed == Unsigned) {
+        push_ptr(mk_str_doc(mv_string("unsigned"), a), &nodes);
+    }
+    return mv_sep_doc(nodes, a);
 }
 
 Document* pretty_ctype(CType* type, Allocator* a) {
     switch (type->sort) {
+    case CSVoid:
+        return mk_str_doc(mv_string("void"), a);
     case CSPrim:
         return pretty_cprim(type->prim, a);
     case CSCEnum: {
@@ -133,7 +138,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
 
 size_t c_prim_size_of(CPrim type) {
 #if ABI == SYSTEM_V_64
-    switch (type) {
+    switch (type.prim) {
     // System V ABI
     case CChar:
         return 1;
@@ -142,23 +147,13 @@ size_t c_prim_size_of(CPrim type) {
     case CInt:
         return 4;
     case CLong:
-        // TODO FEATURE:
+        // TODO (FEATURE):
         // May be 4? (ILP32)
         return 8;
-
-    case CUChar:
-        return 1;
-    case CUShort:
-        return 2;
-    case CUInt:
-        return 4;
-    case CULong:
-        // TODO FEATURE:
+    case CLongLong:
+        // TODO (FEATURE):
         // May be 4? (ILP32)
         return 8;
-
-    case CVoid:
-        return 0;
     }
 
 #elif ABI == WIN_64
@@ -178,6 +173,8 @@ size_t c_size_of(CType type) {
 #if ABI == SYSTEM_V_64
     // System V ABI
     switch (type.sort) {
+    case CSVoid:
+        return 0;
     case CSPrim:
         return c_prim_size_of(type.prim);
     case CSCEnum:
@@ -238,6 +235,8 @@ size_t c_align_of(CType type) {
 #if ABI == SYSTEM_V_64
     // System V ABI
     switch (type.sort) {
+    case CSVoid:
+        return 0;
     case CSPrim:
         // In System V, size = align for primitive types.
         return c_prim_size_of(type.prim);
@@ -295,6 +294,7 @@ size_t c_align_of(CType type) {
 // Resource Management
 void delete_c_type(CType t, Allocator* a) {
     switch(t.sort) {
+    case CSVoid:
     case CSPrim:
         break;
     case CSCEnum:
@@ -337,6 +337,7 @@ CType copy_c_type(CType t, Allocator* a) {
     CType out = t;
     switch(t.sort) {
     case CSPrim:
+    case CSVoid:
         break;
     case CSCEnum:
         out.enumeration.vals = scopy_sym_i64_assoc(t.enumeration.vals, a);

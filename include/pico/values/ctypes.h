@@ -8,13 +8,14 @@
 typedef struct CType CType;
 
 typedef enum {
+    CSVoid,
     CSPrim,
-    CSCEnum,
+    CSPtr,
+    CSIncomplete,
     CSProc,
     CSStruct,
     CSUnion,
-    CSPtr,
-    CSIncomplete,
+    CSCEnum,
 } CSort;
 
 typedef enum {
@@ -22,13 +23,18 @@ typedef enum {
     CShort,
     CInt,
     CLong,
+    CLongLong,
+} CPrimType;
 
-    CUChar,
-    CUShort,
-    CUInt,
-    CULong,
+typedef enum {
+    Signed,
+    Unsigned,
+    Unspecified,
+} CSigned;
 
-    CVoid,
+typedef struct {
+    CPrimType prim;
+    CSigned is_signed;
 } CPrim;
 
 typedef struct {

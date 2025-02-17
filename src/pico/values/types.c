@@ -59,8 +59,21 @@ void delete_pi_type(PiType t, Allocator* a) {
         delete_pi_type_p(t.reset.out, a);
         break;
     }
+    case TResumeMark: {
+        panic(mv_string("delete_pi_type not implemented for sort: Resume Mark."));
+    }
     case TDynamic: {
         delete_pi_type_p(t.dynamic, a);
+        break;
+    }
+    case TNamed: {
+        delete_pi_type_p(t.named.type, a);
+        if (t.named.args) {
+            for (size_t i = 0; i < t.named.args->len; i++)
+                delete_pi_type_p(t.named.args->data[i], a);
+            sdelete_ptr_array(*t.named.args);
+            mem_free(t.named.args, a);
+        }
         break;
     }
     case TDistinct: {
@@ -128,9 +141,6 @@ void delete_pi_type(PiType t, Allocator* a) {
 
     case TKind: break;
     case TConstraint: break;
-
-    default:
-        panic(mv_string("In delete_pi_type: unrecognized sort."));
     }
 }
 
@@ -189,6 +199,14 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.instance.fields = copy_sym_ptr_amap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
         break;
     case TResumeMark:
+        break;
+    case TNamed:
+        out.named.name = t.named.name;
+        out.named.type = copy_pi_type_p(t.named.type, a);
+        if (t.distinct.args) {
+            out.named.args = mem_alloc(sizeof(PtrArray), a);
+            *out.named.args = copy_ptr_array(*t.named.args,  (TyCopier)copy_pi_type_p, a);
+        }
         break;
     case TDistinct:
         out.distinct.type = copy_pi_type_p(t.distinct.type, a);
@@ -257,6 +275,9 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     }
     case TUVar:
         out = mk_str_doc(mv_string("No Print UVar!"), a);
+        break;
+    case TUVarDefaulted:
+        out = mk_str_doc(mv_string("No Print UVar (defaulted)!"), a);
         break;
     case TPrim:
         switch (type->prim) {
@@ -389,6 +410,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mk_str_doc(mv_string("#reset-point"), a);
         break;
     }
+    case TResumeMark: {
+        out = mk_str_doc(mv_string("#resue-mark"), a);
+        break;
+    }
     case TDynamic: {
         uint64_t dvar = *(uint64_t*)val;
         PtrArray nodes = mk_ptr_array(5, a);
@@ -453,8 +478,38 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TNamed: {
+        out = pretty_pi_value(val, type->named.type, a);
+        break;
+    }
     case TDistinct:  {
         out = pretty_pi_value(val, type->distinct.type, a);
+        break;
+    }
+    case TTrait:  {
+        // trait #id (vars...) [.field ty1] ...
+        PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
+        push_ptr(mk_str_doc(mv_string("Trait"), a), &nodes);
+        push_ptr(pretty_u64(type->trait.id, a), &nodes);
+
+        PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
+        for (size_t i = 0; i < type->trait.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->trait.vars.data[i]), a), &vars);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
+
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
+            PtrArray field = mk_ptr_array(4, a);
+            SymPtrCell cell = type->trait.fields.data[i];
+            push_ptr(mk_str_doc(mv_string("."), a), &field);
+            push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &field);
+            push_ptr(mk_str_doc(mv_string(" "), a), &field);
+            push_ptr(pretty_type(cell.val, a), &field);
+
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &nodes);
+        }
+
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case TKind:
@@ -463,9 +518,9 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = pretty_type(*ptype, a);
         break;
     }
-    default:
+    }
+    if (out == NULL) {
         out = mk_str_doc(mv_string("Error printing value: it's type has unrecognised sort."), a);
-        break;
     }
     return out;
 }
@@ -591,11 +646,36 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case TResumeMark: {
+        out = mk_str_doc(mv_string("pretty_type unimplemented for Resume Mark"), a);
+        break;
+    }
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
         push_ptr(pretty_type(type->dynamic, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TNamed:  {
+        PtrArray nodes = mk_ptr_array(6, a);
+        push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
+
+        push_ptr(mk_paren_doc("[", "]",
+                              mk_str_doc(*symbol_to_string(type->named.name), a),
+                              a),
+                 &nodes);
+
+        if (type->named.args) {
+            PtrArray args = mk_ptr_array(type->named.args->len, a);
+            for (size_t i = 0; i < type->named.args->len; i++) {
+                push_ptr(pretty_type(type->named.args->data[i], a), &args);
+            }
+            push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+        }
+
+        push_ptr(pretty_type(type->named.type, a), &nodes);
+        out = mv_sep_doc(nodes, a);
         break;
     }
     case TDistinct:  {
@@ -678,6 +758,27 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
+    case TExists: {
+        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
+        push_ptr(mk_str_doc(mv_string("Exists [" ), a), &nodes);
+        for (size_t i = 0; i < type->binder.vars.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+        }
+        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
+        push_ptr(pretty_type(type->binder.body, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TCApp: {
+        PtrArray nodes = mk_ptr_array(type->app.args.len + 1, a);
+        push_ptr(pretty_type(type->app.fam, a), &nodes);
+        for (size_t i = 0; i < type->app.args.len; i++) {
+            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case TFam: {
         PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
         push_ptr(mk_str_doc(mv_string("Family [" ), a), &nodes);
@@ -720,9 +821,9 @@ Document* pretty_type(PiType* type, Allocator* a) {
         }
         break;
     }
-    default:
+    }
+    if (out == NULL) {
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
-        break;
     }
     return out;
 }
@@ -953,7 +1054,9 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 }
 
 // TODO (UB): make this thread safe
-static int id_counter = 0;
+// Note: this counter starts at 1 as 0 is a reserved value,
+// which means 'not unique/no ID'
+static int id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
 
 void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
