@@ -230,6 +230,7 @@ int main(int argc, char** argv) {
     }
     case CInvalid:
         write_string(command.error_message, cout);
+        write_string(mv_string("\n"), cout);
         break;
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);

@@ -22,11 +22,20 @@
         mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    void sdelete_##fprefix##_assoc(tprefix##Assoc map) {                \
+    void sdelete_##fprefix##_assoc(tprefix##Assoc map) {                 \
         mem_free(map.data, map.gpa);                                    \
     }                                                                   \
                                                                         \
-    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map) {           \
+    tprefix##Assoc scopy_##fprefix##_assoc(tprefix##Assoc map, Allocator* a) { \
+        return (tprefix##Assoc) {                                       \
+            .capacity = map.len,                                        \
+            .len = map.len,                                             \
+            .data = mem_alloc(map.len * sizeof(tprefix##ACell), a),      \
+            .gpa = a,                                                   \
+        };                                                              \
+    }                                                                   \
+                                                                        \
+    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map) {            \
         for (size_t i = map.len; i > 0; i--) {                          \
             if (key == map.data[i - 1].key) {                           \
                 return &(map.data[i - 1].val);                          \

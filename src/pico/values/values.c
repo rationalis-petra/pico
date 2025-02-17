@@ -294,6 +294,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynAlloc:
         out = mk_str_doc(mv_string("::dynamic-allocate"), a);
         break;
+    case FSizeOf:
+        out = mk_str_doc(mv_string("::size-of"), a);
+        break;
+    case FAlignOf:
+        out = mk_str_doc(mv_string("::align-of"), a);
+        break;
 
         // Type formers
     case FStructType:
@@ -326,9 +332,11 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
-
-    default:
-        panic(mv_string("Unrecognized term former to pretty-former"));
+    case FReinterpret:
+        out = mk_str_doc(mv_string("::reinterpret"), a);
+        break;
+    case FConvert:
+        out = mk_str_doc(mv_string("::convert"), a);
         break;
     }
     return out;

@@ -106,6 +106,7 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* ge
 
 // "internal" type inference. Destructively mutates types.
 void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
+    untyped->ptype = NULL;
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
@@ -141,6 +142,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             throw_error(point, msg);
         }
         break;
+    }
+    case SAbsVariable: {
+        panic(mv_string("Unexpected abs variable in unchecked expression."));
     }
     case SProcedure: {
         // give each arg a unification variable type. 
@@ -821,6 +825,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = out; 
         break;
     }
+    case SModule: {
+        panic(mv_string("Unsupported operation: inferring type of module"));
+    }
     case SProcType: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
@@ -893,6 +900,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
+    case SExistsType: {
+        panic(mv_string("Unsupported operation: inferring type of existential type"));
+    }
     case STypeFamily: {
         // For now, assume that each type has the kind Type (i.e. is not a family)
         PiType* ty = mem_alloc(sizeof(PiType), a);
@@ -945,9 +955,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         break;
     }
-    default:
-        panic(mv_string("Internal Error: invalid syntax provided to (type_infer_i)"));
+    case SCheckedType: {
+        panic(mv_string("Inferring type of checked type. This is unexpected"));
+    }
+    case SAnnotation: {
+        panic(mv_string("Annotations are only supported at the top level."));
+    }
+    case SReinterpret: {
+        // TODO: type for ctype.
+        // TODO: type for ptype.
+        // TODO: check that val has ptype and can be reinterpreted as ctype.
+        panic(mv_string("Not implemented yet: typecheck of reinterpret"));
         break;
+    }
+    case SConvert: {
+        panic(mv_string("Not implemented yet: typecheck of convert"));
+        break;
+    }
+    }
+    if (untyped->ptype == NULL) {
+        panic(mv_string("Internal Error: typecheck failed to instantiate type."));
     }
 }
 
@@ -1222,6 +1249,16 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
 
     case SAnnotation:
         panic(mv_string("instantiate implicits not implemented for a annotation"));
+    case SReinterpret:
+        instantiate_implicits(syn->reinterpret.ctype, env, a, point);
+        instantiate_implicits(syn->reinterpret.ptype, env, a, point);
+        instantiate_implicits(syn->reinterpret.body, env, a, point);
+        break;
+    case SConvert:
+        instantiate_implicits(syn->convert.ctype, env, a, point);
+        instantiate_implicits(syn->convert.ptype, env, a, point);
+        instantiate_implicits(syn->convert.body, env, a, point);
+        break;
     }
 }
 
@@ -1449,6 +1486,16 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SCheckedType:
         squash_type(typed->type_val);
+        break;
+    case SReinterpret:
+        squash_types(typed->reinterpret.ctype, a, point);
+        squash_types(typed->reinterpret.ptype, a, point);
+        squash_types(typed->reinterpret.body, a, point);
+        break;
+    case SConvert:
+        squash_types(typed->convert.ctype, a, point);
+        squash_types(typed->convert.ptype, a, point);
+        squash_types(typed->convert.body, a, point);
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to (squash_types)"));

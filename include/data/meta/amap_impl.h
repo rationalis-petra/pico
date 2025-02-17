@@ -28,6 +28,16 @@
         }                                                               \
         return out;                                                     \
     }                                                                   \
+                                                                        \
+    tprefix##AMap scopy_##fprefix##_amap(tprefix##AMap map, Allocator* a) { \
+        return (tprefix##AMap) {                                        \
+            .capacity = map.capacity,                                   \
+            .len = map.len,                                             \
+            .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
+            .gpa = a,                                                   \
+        };                                                              \
+    }                                                                   \
+                                                                        \
     void delete_##fprefix##_amap(tprefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)) { \
         for (size_t i = 0; i < map.len; i++) {                          \
             delete_key(map.data[i].key);                                \

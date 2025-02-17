@@ -147,12 +147,32 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
-            // Primitives, Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
+            // Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
-                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+            // Primitives are (currently) all <= 64 bits, but may treating them
+            // as 64-bits may overflow a allocated portion of memory, so we must
+            // be more careful here.
+            } else if (indistinct_type.sort == TPrim) {
+                size_t prim_size = pi_size_of(indistinct_type);
+                AsmResult out;
+                if (prim_size == 1) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), a, point);
+                } else if (prim_size == 2) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint16_t*)e.value), a, point);
+                } else if (prim_size == 4) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint32_t*)e.value), a, point);
+                } else if (prim_size == 8) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
+                } else {
+                    panic(mv_string("Codegen expects globals bound to primitives to have size 1, 2, 4 or 8."));
+                }
+                backlink_global(syn.variable, out.backlink, links, a);
+                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
