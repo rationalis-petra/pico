@@ -920,6 +920,19 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
+    case SNamedType: {
+        PiType* self_type = mk_uvar(gen, a);
+        
+        type_var(untyped->named_type.name, self_type, env);
+        type_check_i(untyped->named_type.body, self_type, env, gen, a, point);
+        pop_type(env);
+
+        untyped->ptype = untyped->named_type.body->ptype;
+        if (untyped->ptype->sort != TKind) {
+            throw_error(point, mv_string("Named expects types and families as arguments!"));
+        }
+        break;
+    }
     case SDistinctType: {
         type_infer_i(untyped->distinct_type, env, gen, a, point);
         untyped->ptype= untyped->distinct_type->ptype;
@@ -1237,6 +1250,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     case SEnumType:
     case SResetType:
     case SDynamicType:
+    case SNamedType:
     case SDistinctType:
     case SOpaqueType:
     case STraitType:
@@ -1472,6 +1486,9 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);
+        break;
+    case SNamedType:
+        squash_types(typed->named_type.body, a, point);
         break;
     case SDistinctType:
         squash_types(typed->distinct_type, a, point);

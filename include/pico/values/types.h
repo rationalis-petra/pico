@@ -110,8 +110,8 @@ typedef struct {
 
 typedef struct {
     Symbol name;
-    PtrArray* args;
     PiType* type;
+    PtrArray* args;
 } NamedType;
 
 typedef struct {

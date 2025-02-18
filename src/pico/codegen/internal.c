@@ -519,6 +519,40 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 }
 
+void* mk_named_ty(Symbol name, PiType* body) {
+    Allocator* a = get_std_tmp_allocator();
+
+    PiType* ty = mem_alloc(sizeof(PiType), a);
+    *ty = (PiType) {
+        .sort = TNamed,
+        .named.name = name,
+        .named.type = body,
+        .named.args = NULL,
+    };
+    return ty;
+}
+
+void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
+#elif ABI == WIN_64
+    build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_named_ty), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
+    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+}
+
 void* mk_distinct_ty(PiType* body) {
     Allocator* a = get_std_tmp_allocator();
 

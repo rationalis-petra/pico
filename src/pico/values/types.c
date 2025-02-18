@@ -661,9 +661,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         PtrArray nodes = mk_ptr_array(6, a);
         push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
 
-        push_ptr(mk_paren_doc("[", "]",
-                              mk_str_doc(*symbol_to_string(type->named.name), a),
-                              a),
+        push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
                  &nodes);
 
         if (type->named.args) {

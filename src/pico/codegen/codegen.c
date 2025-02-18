@@ -1403,6 +1403,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
+    case SNamedType:
+        address_bind_type(syn.named_type.name, env);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name), a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        gen_mk_named_ty(ass, a, point);
+        address_pop(env);
+        break;
     case SDistinctType:
         generate(*(Syntax*)syn.distinct_type, env, target, links, a, point);
         gen_mk_distinct_ty(ass, a, point);

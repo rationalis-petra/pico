@@ -303,35 +303,39 @@ Document* pretty_former(TermFormer op, Allocator* a) {
 
         // Type formers
     case FStructType:
-        out = mk_str_doc(mv_string("::StructureType"), a);
+        out = mk_str_doc(mv_string("::Struct"), a);
         break;
     case FEnumType:
-        out = mk_str_doc(mv_string("::EnumType"), a);
+        out = mk_str_doc(mv_string("::enum"), a);
         break;
     case FProcType:
-        out = mk_str_doc(mv_string("::ProcedureType"), a);
+        out = mk_str_doc(mv_string("::Proc"), a);
         break;
     case FResetType:
-        out = mk_str_doc(mv_string("::ResetType"), a);
+        out = mk_str_doc(mv_string("::Reset"), a);
         break;
     case FDynamicType:
-        out = mk_str_doc(mv_string("::DynamicType"), a);
+        out = mk_str_doc(mv_string("::Dynamic"), a);
+        break;
+    case FNamedType:
+        out = mk_str_doc(mv_string("::Named"), a);
         break;
     case FDistinctType:
-        out = mk_str_doc(mv_string("::DistinctType"), a);
+        out = mk_str_doc(mv_string("::Distinct"), a);
         break;
     case FOpaqueType:
-        out = mk_str_doc(mv_string("::OpaqueType"), a);
+        out = mk_str_doc(mv_string("::Opaque"), a);
         break;
     case FTraitType:
-        out = mk_str_doc(mv_string("::TraitType"), a);
+        out = mk_str_doc(mv_string("::Trait"), a);
         break;
     case FAllType:
-        out = mk_str_doc(mv_string("::AllType"), a);
+        out = mk_str_doc(mv_string("::All"), a);
         break;
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
+
     case FReinterpret:
         out = mk_str_doc(mv_string("::reinterpret"), a);
         break;

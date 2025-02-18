@@ -1095,7 +1095,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         return res;
     }
     case FDynamicType: {
-        if (raw.branch.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 1) {
             throw_error(point, mv_string("Malformed Dynamic Type expression: expects at least 1 arg."));
         }
         RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -1108,8 +1108,30 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         return res;
     }
-    case FDistinctType: {
+    case FNamedType: {
         if (raw.branch.nodes.len <= 2) {
+            throw_error(point, mv_string("Malformed Named Type expression: expects at least 2 args."));
+        }
+
+        RawTree* rname = raw.branch.nodes.data[1];
+        if (!is_symbol(rname)) {
+            throw_error(point, mv_string("Malformed Named Type expression: 1st arg to be name."));
+        }
+        Symbol name = rname->atom.symbol;
+
+        RawTree* body = raw.branch.nodes.len == 3 ? raw.branch.nodes.data[2] : raw_slice(&raw, 2, a);
+        Syntax* rec_body = abstract_expr_i(*body, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SNamedType,
+            .named_type.name = name,
+            .named_type.body = rec_body,
+        };
+        return res;
+    }
+    case FDistinctType: {
+        if (raw.branch.nodes.len <= 1) {
             throw_error(point, mv_string("Malformed Distinct Type expression: expects at least 1 arg."));
         }
         RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -1123,7 +1145,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         return res;
     }
     case FOpaqueType: {
-        if (raw.branch.nodes.len <= 2) {
+        if (raw.branch.nodes.len <= 1) {
             throw_error(point, mv_string("Malformed Opaque Type expression: expects at least 1 arg."));
         }
         RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);

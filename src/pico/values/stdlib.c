@@ -796,6 +796,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Dynamic"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FNamedType;
+    sym = string_to_symbol(mv_string("Named"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FDistinctType;
     sym = string_to_symbol(mv_string("Distinct"));
     add_def(module, sym, type, &former, null_segments, NULL);

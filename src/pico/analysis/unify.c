@@ -404,6 +404,10 @@ void squash_type(PiType* type) {
         squash_type(type->binder.body);
         break;
     }
+    case TNamed: {
+        squash_type(type->named.type);
+        break;
+    }
     case TDistinct: {
         squash_type(type->distinct.type);
         break;

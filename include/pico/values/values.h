@@ -78,6 +78,7 @@ typedef enum TermFormer {
     FEnumType,
     FResetType,
     FDynamicType,
+    FNamedType,
     FDistinctType,
     FOpaqueType,
     FTraitType,

@@ -73,6 +73,7 @@ typedef enum {
     SEnumType,
     SResetType,
     SDynamicType,
+    SNamedType,
     SDistinctType,
     SOpaqueType,
     STraitType,
@@ -261,6 +262,11 @@ typedef struct {
 } SynBind;
 
 typedef struct {
+    Symbol name;
+    Syntax* body;
+} SynName;
+
+typedef struct {
     PtrArray args;
     Syntax* return_type;
 } SynProcType;
@@ -335,6 +341,7 @@ struct Syntax {
         SynResetType reset_type;
         Syntax* dynamic_type;
         SynBind bind_type;
+        SynName named_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
         SynTrait trait;
