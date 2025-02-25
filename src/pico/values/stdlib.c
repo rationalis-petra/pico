@@ -879,7 +879,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     // Syntax Type : components and definition 
     {
-
         // Ptr Type
         U64Array vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
@@ -1354,6 +1353,7 @@ void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
         //delete_pi_type(prim_type, a);
         delete_pi_type(c_type, a);
     }
+
 
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);

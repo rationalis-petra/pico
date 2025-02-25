@@ -135,3 +135,16 @@ void add_labels (SymbolArray labels, TypeEnv* env) {
 void pop_labels(TypeEnv* env, size_t n) {
     sym_local_unbindn(n, &env->locals);
 }
+
+SymbolArray get_bound_vars(TypeEnv* env, Allocator* a) {
+    // TODO (BUG LOGIC): how to handle labels?
+    SymbolArray out = mk_u64_array(env->locals.len, a);
+    for (size_t i = 0; i < env->locals.len; i++) {
+        push_u64(env->locals.data[i].key, &out);
+    }
+    return out;
+}
+
+Environment* get_base(TypeEnv* env) {
+    return env->env;
+}

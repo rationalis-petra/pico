@@ -80,6 +80,22 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     return links.links;
 }
 
+void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
+    AddressEnv* a_env = mk_type_address_env(env, NULL, a);
+    InternalLinkData links = (InternalLinkData) {
+        .links = (LinkData) {
+            .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(8, a),
+            .ed_links = mk_link_meta_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
+            .cd_links = mk_link_meta_array(8, a),
+        },
+        .gotolinks = mk_sym_sarr_amap(8, a),
+    };
+    generate(*syn, a_env, target, &links, a, point);
+    delete_address_env(a_env, a);
+}
+
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
     switch (syn.type) {

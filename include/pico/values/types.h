@@ -206,8 +206,13 @@ PiType mk_struct_type(Allocator* a, size_t nfields, ...);
 //   "None", 0)
 PiType mk_enum_type(Allocator* a, size_t nfields, ...);
 
+// Sample usage: mk_distinct_type(a, "List", ...)
+PiType mk_named_type(Allocator* a, const char* name, PiType inner);
+
 // Sample usage: mk_distinct_type(a, mk_prim_type(Address))
 PiType mk_distinct_type(Allocator* a, PiType inner);
+
+PiType mk_var_type(Allocator* a, const char* name);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
 PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body);
