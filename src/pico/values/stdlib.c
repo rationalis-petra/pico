@@ -1315,6 +1315,7 @@ void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
 
     // C Type Type
     {
+        type = (PiType) {.sort = TKind, .kind.nargs= 0};
         PiType* type_data;
         PiType prim_sort_type = mk_enum_type(a, 5,
                                              "char", 0,

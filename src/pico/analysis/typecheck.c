@@ -502,13 +502,15 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SProjector: {
         Module* m = try_get_module(untyped->projector.val, env);
         if (m) {
+            // TODO (INVESTIGATION): do we have a better want to manage lookup
+            // this way?
             ModuleEntry* e = get_def(untyped->projector.field, m);
             if (e) {
                 *untyped = (Syntax) {
                     .ptype = &e->type,
                     .type = SAbsVariable,
                     .abvar.index = 0,
-                    .abvar.value = e->value,
+                    .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
                 };
             } else {
                 throw_error(point, mv_string("Field not found in module!"));

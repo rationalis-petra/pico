@@ -265,20 +265,6 @@ PiType copy_pi_type(PiType t, Allocator* a) {
 Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
-    case TProc: {
-        void** addr = (void**) val;
-        PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
-        push_ptr(pretty_ptr(*addr, a), &nodes);
-        out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
-        break;
-    }
-    case TUVar:
-        out = mk_str_doc(mv_string("No Print UVar!"), a);
-        break;
-    case TUVarDefaulted:
-        out = mk_str_doc(mv_string("No Print UVar (defaulted)!"), a);
-        break;
     case TPrim:
         switch (type->prim) {
         case Unit:  {
@@ -353,10 +339,24 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             break;
         }
         default: {
-            out = mk_str_doc(mv_string("Error printing Pico Value: unrecognized primitive"), a);
+            out = mk_str_doc(mv_string("Error printing value: unrecognized primitive"), a);
             break;
         }
         }
+        break;
+    case TProc: {
+        void** addr = (void**) val;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
+        push_ptr(pretty_ptr(*addr, a), &nodes);
+        out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TUVar:
+        out = mk_str_doc(mv_string("No Print UVar!"), a);
+        break;
+    case TUVarDefaulted:
+        out = mk_str_doc(mv_string("No Print UVar (defaulted)!"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;
@@ -518,9 +518,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = pretty_type(*ptype, a);
         break;
     }
+
     }
     if (out == NULL) {
-        out = mk_str_doc(mv_string("Error printing value: it's type has unrecognised sort."), a);
+        PtrArray vals = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Error printing value: it's type has unrecognised sort:"), a), &vals);
+        // TODO: pretty int (default enum size?): 
+        push_ptr(pretty_i32(type->sort, a), &vals);
+        out = mv_sep_doc(vals, a);
     }
     return out;
 }

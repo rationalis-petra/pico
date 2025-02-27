@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/threads.h"
-
 #include "data/amap.h"
 #include "data/array.h"
+#include "pretty/standard_types.h"
+
 #include "pico/values/values.h"
 
 
@@ -343,5 +343,14 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::convert"), a);
         break;
     }
+
+    if (out == NULL) {
+        PtrArray vals = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Error printing former: invalid enum value:"), a), &vals);
+        // TODO: pretty int (default enum size?): 
+        push_ptr(pretty_i32(op, a), &vals);
+        out = mv_sep_doc(vals, a);
+    }
+
     return out;
 }
