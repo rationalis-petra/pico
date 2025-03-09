@@ -3,8 +3,10 @@
 
 #include "data/array.h"
 #include "pretty/document.h"
+
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_ptr_assoc.h"
+#include "pico/values/ctypes.h"
 
 /* Basic types in pico typesystem */
 // Forward declarations
@@ -30,36 +32,38 @@ typedef enum {
 } PrimType;
 
 typedef enum {
-    TPrim,
-    TProc,
-    TStruct,
-    TEnum,
-    TReset,
-    TResumeMark,
-    TDynamic,
+  TPrim,
+  TProc,
+  TStruct,
+  TEnum,
+  TReset,
+  TResumeMark,
+  TDynamic,
 
-    // 'Special'
-    TNamed,
-    TDistinct,
-    TTrait,
-    TTraitInstance, // note: not a "real" type in the theory
+  // 'Special'
+  TNamed,
+  TDistinct,
+  TTrait,
+  TTraitInstance, // note: not a "real" type in the theory
 
-    // Quantified Types
-    TVar,
-    TAll,
-    TExists,
+  TCType, // native (C) type
 
-    // Used by Sytem-Fω (type constructors)
-    TCApp,
-    TFam,
+  // Quantified Types
+  TVar,
+  TAll,
+  TExists,
 
-    // Kinds (higher kinds not supported)
-    TKind,
-    TConstraint,
+  // Used by Sytem-Fω (type constructors)
+  TCApp,
+  TFam,
 
-    // Used only during unification
-    TUVar,
-    TUVarDefaulted,
+  // Kinds (higher kinds not supported)
+  TKind,
+  TConstraint,
+
+  // Used only during unification
+  TUVar,
+  TUVarDefaulted,
 } PiType_t;
 
 typedef struct {
@@ -142,6 +146,8 @@ struct PiType {
 
         TraitType trait;
         TraitInstance instance;
+
+        CType c_type;
 
         NamedType named;
         DistinctType distinct;

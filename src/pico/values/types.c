@@ -103,6 +103,10 @@ void delete_pi_type(PiType t, Allocator* a) {
         sdelete_sym_ptr_amap(t.instance.fields);
         break;
     }
+    case TCType: {
+        delete_c_type(t.c_type, a);
+        break;
+    }
 
     case TAll:
     case TExists:
@@ -197,6 +201,9 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         out.instance.instance_of = t.instance.instance_of;
         out.instance.args = copy_ptr_array(t.instance.args,  (TyCopier)copy_pi_type_p, a);
         out.instance.fields = copy_sym_ptr_amap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
+        break;
+    case TCType:
+        out.c_type = copy_c_type(t.c_type, a);
         break;
     case TResumeMark:
         break;
@@ -442,6 +449,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mv_cat_doc(nodes, a);
         break;
     }
+    case TCType: {
+        out = pretty_cval(&type->c_type, val, a);
+        break;
+    }
     case TVar: {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
@@ -655,13 +666,6 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mk_str_doc(mv_string("pretty_type unimplemented for Resume Mark"), a);
         break;
     }
-    case TDynamic: {
-        PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
-        push_ptr(pretty_type(type->dynamic, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
-        break;
-    }
     case TNamed:  {
         PtrArray nodes = mk_ptr_array(6, a);
         push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
@@ -679,6 +683,13 @@ Document* pretty_type(PiType* type, Allocator* a) {
 
         push_ptr(pretty_type(type->named.type, a), &nodes);
         out = mv_sep_doc(nodes, a);
+        break;
+    }
+    case TDynamic: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
+        push_ptr(pretty_type(type->dynamic, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TDistinct:  {
@@ -743,6 +754,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
         }
 
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TCType: {
+        out = pretty_ctype(&type->c_type, a);
         break;
     }
     case TVar: {
@@ -907,36 +922,43 @@ size_t pi_size_of(PiType type) {
         return max + sizeof(uint64_t);
     }
 
-    case TReset: {
+    case TReset:
     case TResumeMark: 
     case TDynamic:
         return ADDRESS_SIZE;
-    }
-    case TDistinct: {
+    case TNamed:
+        return pi_size_of(*type.named.type);
+    case TDistinct:
         return pi_size_of(*type.distinct.type);
-    }
     case TTrait:
-        panic(mv_string("pi_size_of received invalid type: Trait."));
+        panic(mv_string("pi_size_of received invalid sort: Trait."));
         break;
     case TTraitInstance:
         return ADDRESS_SIZE;
-        break;
-    case TAll: {
+    case TCType:
+        return c_size_of(type.c_type);
+    case TVar:
+        panic(mv_string("pi_size_of received invalid sort: TVar."));
+    case TAll:
         return sizeof(void*);
-    }
-    case TFam: {
-        panic(mv_string("pi_size_of received invalid type: Family."));
-    }
+    case TExists:
+        panic(mv_string("pi_size_of not implemented for sort: Exists."));
+    case TCApp:
+        panic(mv_string("pi_size_of not implemented for sort: TCApp."));
+    case TFam:
+        panic(mv_string("pi_size_of received invalid sort: Family."));
     case TKind: 
     case TConstraint: 
         return sizeof(void*);
     case TUVar:
-        panic(mv_string("pi_size_of received invalid type: UVar."));
+        panic(mv_string("pi_size_of received invalid sort: UVar."));
     case TUVarDefaulted:
-        panic(mv_string("pi_size_of received invalid type: UVar with Default."));
-    default:
-        panic(mv_string("pi_size_of received invalid type."));
+        panic(mv_string("pi_size_of received invalid sort: UVar with Default."));
     }
+
+    // If we haven't returned at this point, then the tag is invalid
+    // (or pi_size_of doesn't support this type yet).
+    panic(mv_string("pi_size_of received invalid type."));
 }
 
 size_t pi_align_of(PiType type) {

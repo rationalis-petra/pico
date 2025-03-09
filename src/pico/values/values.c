@@ -335,12 +335,21 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
-
-    case FReinterpret:
-        out = mk_str_doc(mv_string("::reinterpret"), a);
+    case FCType:
+        out = mk_str_doc(mv_string("::CType"), a);
         break;
-    case FConvert:
-        out = mk_str_doc(mv_string("::convert"), a);
+
+    case FReinterpretNative:
+        out = mk_str_doc(mv_string("::reinterpret-native"), a);
+        break;
+    case FReinterpretRelic:
+        out = mk_str_doc(mv_string("::reinterpret-relic"), a);
+        break;
+    case FConvertNative:
+        out = mk_str_doc(mv_string("::convert-native"), a);
+        break;
+    case FConvertRelic:
+        out = mk_str_doc(mv_string("::convert-relic"), a);
         break;
     }
 

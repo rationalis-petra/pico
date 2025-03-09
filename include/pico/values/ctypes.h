@@ -78,6 +78,7 @@ struct CType {
 
 Document* pretty_cprim(CPrim prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);
+Document* pretty_cval(CType* type, void* value, Allocator* a);
 size_t c_size_of(CType type);
 size_t c_align_of(CType type);
 

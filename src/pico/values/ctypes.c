@@ -14,6 +14,12 @@ size_t align_to(size_t size, size_t align) {
 
 Document* pretty_cprim(CPrim prim, Allocator* a) {
     PtrArray nodes = mk_ptr_array(2, a);
+    if (prim.is_signed == Signed) {
+        push_ptr(mk_str_doc(mv_string("signed"), a), &nodes);
+    } else if (prim.is_signed == Unsigned) {
+        push_ptr(mk_str_doc(mv_string("unsigned"), a), &nodes);
+    }
+
     switch (prim.prim) {
     case CChar:
         push_ptr(mk_str_doc(mv_string("char"), a), &nodes);
@@ -32,11 +38,6 @@ Document* pretty_cprim(CPrim prim, Allocator* a) {
         break;
     }
 
-    if (prim.is_signed == Signed) {
-        push_ptr(mk_str_doc(mv_string("signed"), a), &nodes);
-    } else if (prim.is_signed == Unsigned) {
-        push_ptr(mk_str_doc(mv_string("unsigned"), a), &nodes);
-    }
     return mv_sep_doc(nodes, a);
 }
 
@@ -134,6 +135,71 @@ Document* pretty_ctype(CType* type, Allocator* a) {
     // TODO (LOGIC BUG): this should be a return result or thrown error,
     // as it may indicate an error in user code, not internal code!
     panic(mv_string("Invalid CType"));
+}
+
+Document* pretty_cprimval(CPrim prim, void* data, Allocator* a) {
+    if (prim.is_signed == Unsigned) {
+        switch (prim.prim) {
+        case CChar:
+            return pretty_uchar(*(unsigned char*)data, a);
+        case CShort:
+            return pretty_ushort(*(unsigned short*)data, a);
+        case CInt:
+            return pretty_uint(*(unsigned int*)data, a);
+        case CLong:
+            return pretty_ulong(*(unsigned long*)data, a);
+        case CLongLong:
+            return pretty_ulong_long(*(unsigned long long*)data, a);
+        }
+    } else {
+        // Otherwise, assume signed
+        switch (prim.prim) {
+        case CChar:
+            return pretty_char(*(char*)data, a);
+        case CShort:
+            return pretty_short(*(short*)data, a);
+        case CInt:
+            return pretty_int(*(int*)data, a);
+        case CLong:
+            return pretty_long(*(long*)data, a);
+        case CLongLong:
+            return pretty_long_long(*(long long*)data, a);
+        }
+    }
+
+    // TODO (LOGIC BUG): this should be a return result or thrown error,
+    // as it may indicate an error in user code, not internal code!
+    panic(mv_string("Invalid CPrim provided to pretty_cprimval"));
+}
+
+Document* pretty_cval(CType* type, void* data, Allocator* a) {
+    switch (type->sort) {
+    case CSVoid:
+        return mk_str_doc(mv_string("<void>"), a);
+    case CSPrim:
+        return pretty_cprimval(type->prim, data, a);
+    case CSCEnum: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for enum"), a);
+    }
+    case CSProc: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for function"), a);
+    }
+    case CSStruct: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for struct"), a);
+    }
+    case CSUnion: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for union"), a);
+    }
+    case CSPtr: {
+        return mk_str_doc(mv_string("pretty_cval not implemented for ptr"), a);
+    }
+    case CSIncomplete:
+        return mk_str_doc(mv_string("pretty_cval not implemented for incomplete"), a);
+    }
+
+    // TODO (LOGIC BUG): this should be a return result or thrown error,
+    // as it may indicate an error in user code, not internal code!
+    panic(mv_string("Invalid CType provided to pretty_cval"));
 }
 
 size_t c_prim_size_of(CPrim type) {

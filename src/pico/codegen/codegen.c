@@ -114,7 +114,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitString: {
@@ -132,7 +132,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SVariable: 
@@ -222,7 +222,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             break;
         }
         }
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcedure: {
@@ -1419,6 +1419,20 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
+    case SCType:
+        generate(*syn.c_type, env, target, links, a, point);
+        gen_mk_c_ty(ass,a, point);
+        // Now, the type lies atop the stack, and we must pop the ctype out from
+        // under it
+        size_t cts = pi_stack_size_of(*syn.c_type->ptype);
+
+        // TODO (IMPROVEMENT) this assumes address-size == 64 bits 
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+
+        address_stack_shrink(env, cts);
+        break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
         build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name), a, point);
@@ -1473,6 +1487,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
         address_pop_n(syn.trait.vars.len, env);
+        break;
+    case SReinterpret:
+        // reinterpret has no associated codegen
+        // generate();
+        generate(*syn.reinterpret.body, env, target, links, a, point);
+        break;
+    case SConvert:
         break;
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));

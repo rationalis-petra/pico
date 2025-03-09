@@ -72,3 +72,73 @@ Document* pretty_hex_u8(uint8_t val, Allocator* a) {
     snprintf(str, len, "%" PRIx8, val);
     return mv_str_doc(mv_string(str), a);
 }
+
+Document *pretty_char(char val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%d", (int)val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%d", (int)val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_short(short val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%d", (int)val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%d", (int)val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_int(int val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%d", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%d", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_long(long val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%ld", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%ld", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_long_long(long long val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%lld", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%lld", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_uchar(unsigned char val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%u", (unsigned int)val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%u", (unsigned int)val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_ushort(unsigned short val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%u", (unsigned int)val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%u", (unsigned int)val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_uint(unsigned int val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%u", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%u", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_ulong(unsigned long val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%lu", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%lu", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_ulong_long(unsigned long long val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%llu", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%llu", val);
+    return mv_str_doc(mv_string(str), a);
+}

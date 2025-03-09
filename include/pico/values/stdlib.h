@@ -20,6 +20,7 @@ void set_std_ostream(OStream* current);
 
 PiType* get_syntax_type();
 PiType* get_array_type();
+PiType* get_c_type();
 
 Allocator* get_std_tmp_allocator();
 Allocator* set_std_tmp_allocator(Allocator* al);

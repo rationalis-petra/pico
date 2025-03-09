@@ -5,7 +5,6 @@
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
-#include "pico/values/modular.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -80,6 +79,7 @@ typedef enum {
     SAllType,
     SExistsType,
     STypeFamily,
+    SCType,
 
     SCheckedType,
 
@@ -285,14 +285,14 @@ typedef struct {
 } SynResetType;
 
 typedef struct {
-    Syntax* ctype;
-    Syntax* ptype;
+    bool from_native;
+    Syntax* type;
     Syntax* body;
 } SynReinterpret;
 
 typedef struct {
-    Syntax* ctype;
-    Syntax* ptype;
+    bool from_native;
+    Syntax* type;
     Syntax* body;
 } SynConvert;
 
@@ -346,6 +346,7 @@ struct Syntax {
         Syntax* opaque_type;
         SynTrait trait;
         PiType* type_val;
+        Syntax* c_type;
 
         SynReinterpret reinterpret;
         SynConvert convert;

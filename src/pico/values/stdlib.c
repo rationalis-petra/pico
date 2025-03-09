@@ -42,6 +42,11 @@ PiType* get_array_type() {
     return array_type;
 }
 
+static PiType* exported_c_type;
+PiType* get_c_type() {
+    return exported_c_type;
+}
+
 static Package* current_package;
 void set_current_package(Package* current) { current_package = current; }
 
@@ -820,6 +825,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Family"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FCType;
+    sym = string_to_symbol(mv_string("CType"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     // ------------------------------------------------------------------------
     // Types 
     // ------------------------------------------------------------------------
@@ -1275,7 +1284,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sdelete_u8_array(fn_segments.data);
 }
 
-void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
+void add_foreign_module(Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -1305,12 +1314,20 @@ void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
 
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
-    TermFormer former = FReinterpret;
-    sym = string_to_symbol(mv_string("reinterpret"));
+    TermFormer former = FReinterpretRelic;
+    sym = string_to_symbol(mv_string("reinterpret-relic"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FConvert;
-    sym = string_to_symbol(mv_string("convert"));
+    former = FReinterpretNative;
+    sym = string_to_symbol(mv_string("reinterpret-native"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FConvertRelic;
+    sym = string_to_symbol(mv_string("convert-relic"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FConvertNative;
+    sym = string_to_symbol(mv_string("convert-native"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     // C Type Type
@@ -1346,10 +1363,13 @@ void add_foreign_module(Assembler* ass, Package* base, Allocator* a) {
         PiType c_type = mk_enum_type(a, 3,
                                      "void", 0,
                                      "prim", 1, prim_type,
-                                     "unspecified", (uint64_t)2);
+                                     "unspecified", 0);
         type_data = &c_type;
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        ModuleEntry* e = get_def(sym, module);
+        exported_c_type = e->value;
 
         //delete_pi_type(prim_type, a);
         delete_pi_type(c_type, a);
@@ -1405,8 +1425,7 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     add_core_module(ass, base, a);
     add_num_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
-    add_foreign_module(ass, base, a);
+    add_foreign_module(base, a);
     add_user_module(base, a);
-
     return base;
 }

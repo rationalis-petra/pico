@@ -14,9 +14,11 @@
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
 
+Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point);
 bool eq_symbol(RawTree* raw, Symbol s);
 bool is_symbol(RawTree* raw);
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a);
+Module* try_get_module(Syntax* syn, ShadowEnv* env);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, ErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, ErrorPoint* point);
@@ -234,10 +236,16 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env
 Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* point) {
     Syntax* fn_syn = abstract_expr_i(*(RawTree*)(raw.branch.nodes.data[0]), env, a, point);
 
+    // TODO (IMPROVEMENT): make sure that ptype not null
+    if (fn_syn->type == SAbsVariable && fn_syn->ptype->sort == TPrim&& fn_syn->ptype->prim == TFormer) {
+        return mk_term(*((TermFormer*)fn_syn->abvar.value), raw, env, a, point);
+    }
+
     Syntax* res = mem_alloc(sizeof(Syntax), a);
     if (fn_syn->type == SConstructor) {
         *res = (Syntax) {
             .type = SVariant,
+            .ptype = NULL,
             .variant.enum_type = fn_syn->constructor.enum_type,
             .variant.tagname = fn_syn->constructor.tagname,
             .variant.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
@@ -254,6 +262,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
 
         *res = (Syntax) {
             .type = SAllApplication,
+            .ptype = NULL,
             .all_application.function = mem_alloc(sizeof(Syntax), a),
             .all_application.types = mk_ptr_array(typelist.branch.nodes.len, a),
             .all_application.implicits = mk_ptr_array(0, a),
@@ -273,6 +282,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* po
     } else {
         *res = (Syntax) {
             .type = SApplication,
+            .ptype = NULL,
             .application.function = mem_alloc(sizeof(Syntax), a),
             .application.implicits = mk_ptr_array(0, a),
             .application.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
@@ -333,6 +343,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SProcedure,
+            .ptype = NULL,
             .procedure.args = arguments,
             .procedure.implicits = implicits, 
             .procedure.body = body
@@ -362,6 +373,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SAll,
+            .ptype = NULL,
             .all.args = arguments,
             .all.body = body,
         };
@@ -377,6 +389,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SMacro,
+            .ptype = NULL,
             .transformer = transformer,
         };
         return res;
@@ -396,12 +409,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
 
             if (lit == string_to_symbol(mv_string("true"))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .boolean = true,};
+                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = true,};
                 return res;
             }
             else if (lit == string_to_symbol(mv_string("false"))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .boolean = false,};
+                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = false,};
                 return res;
             } else {
                 throw_error(point, mv_string("Variant term former needs two arguments!"));
@@ -423,6 +436,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             Syntax* res = mem_alloc(sizeof(Syntax), a);
             *res = (Syntax) {
                 .type = SConstructor,
+                .ptype = NULL,
                 .constructor.enum_type = var_type,
                 .constructor.tagname = msym->atom.symbol,
             };
@@ -484,6 +498,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SMatch,
+            .ptype = NULL,
             .match.val = sval,
             .match.clauses = clauses,
         };
@@ -523,6 +538,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SStructure,
+            .ptype = NULL,
             .structure.ptype = stype,
             .structure.fields = fields,
         };
@@ -532,9 +548,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         if (raw.branch.nodes.len != 3) {
             throw_error(point, mk_string("Projection term former needs two arguments!", a));
         }
-        // Get the structure portion of the proector 
-        Syntax* structure = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
-        
+
+        // Get the source portion of the proector 
+        Syntax* source = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
+
         // Get the symbol portion of the projector
         RawTree* msym = (RawTree*)raw.branch.nodes.data[1];
         if (msym->type != RawAtom && msym->atom.type != ASymbol) {
@@ -542,12 +559,32 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
-            .type = SProjector,
-            .projector.field = msym->atom.symbol,
-            .projector.val = structure,
-        };
-        return res;
+        Module* m = try_get_module(source, env);
+        if (m) {
+            // TODO (INVESTIGATION): do we have a better way to manage lookup
+            // Note: seems like having to check for the special case of
+            // Kind/Constraint is causing issues. 
+            ModuleEntry* e = get_def(msym->atom.symbol, m);
+            if (e) {
+                *res = (Syntax) {
+                    .type = SAbsVariable,
+                    .ptype = &e->type,
+                    .abvar.index = 0,
+                    .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                };
+                return res;
+            } else {
+                throw_error(point, mv_string("Field not found in module!"));
+            }
+        } else {
+            *res = (Syntax) {
+                .type = SProjector,
+                .ptype = NULL,
+                .projector.field = msym->atom.symbol,
+                .projector.val = source,
+            };
+            return res;
+        }
     }
     case FInstance: {
         SymbolArray params = mk_u64_array(0, a);
@@ -616,6 +653,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SInstance,
+            .ptype = NULL,
             .instance.params = params,
             .instance.implicits = implicits,
             .instance.constraint = constraint,
@@ -633,6 +671,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDynamic,
+            .ptype = NULL,
             .dynamic = dynamic,
         };
         return res;
@@ -646,6 +685,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDynamicUse,
+            .ptype = NULL,
             .use = use,
         };
         return res;
@@ -691,6 +731,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SLet,
+            .ptype = NULL,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
         };
@@ -734,6 +775,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDynamicLet,
+            .ptype = NULL,
             .dyn_let_expr.bindings = bindings,
             .dyn_let_expr.body = body,
         };
@@ -752,6 +794,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SIf,
+            .ptype = NULL,
             .if_expr.condition = terms.data[0],
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
@@ -779,6 +822,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SLabels,
+            .ptype = NULL,
             .labels.entry = entry,
             .labels.terms = terms,
         };
@@ -797,6 +841,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SGoTo,
+            .ptype = NULL,
             .go_to.label = label->atom.symbol,
         };
         return res;
@@ -832,6 +877,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SWithReset,
+            .ptype = NULL,
             .with_reset.point_sym = reset_point_sym,
             .with_reset.expr = expr,
             .with_reset.in_sym = in_sym,
@@ -850,6 +896,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SResetTo,
+            .ptype = NULL,
             .reset_to.point = rpoint,
             .reset_to.arg = rarg,
         };
@@ -888,6 +935,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SSequence,
+            .ptype = NULL,
             .sequence.elements = elements,
         };
         return res;
@@ -905,6 +953,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SIs,
+            .ptype = NULL,
             .is = {.val = term, .type = type},
         };
         return res;
@@ -920,6 +969,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SInTo,
+            .ptype = NULL,
             .into = {.val = term, .type = type},
         };
         return res;
@@ -935,6 +985,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SOutOf,
+            .ptype = NULL,
             .into = {.val = term, .type = type},
         };
         return res;
@@ -949,6 +1000,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDynAlloc,
+            .ptype = NULL,
             .size = term,
         };
         return res;
@@ -963,6 +1015,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SSizeOf,
+            .ptype = NULL,
             .size = term,
         };
         return res;
@@ -977,6 +1030,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SAlignOf,
+            .ptype = NULL,
             .size = term,
         };
         return res;
@@ -1006,6 +1060,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SProcType,
+            .ptype = NULL,
             .proc_type.args = arg_types,
             .proc_type.return_type = return_type,
         };
@@ -1038,6 +1093,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SStructType,
+            .ptype = NULL,
             .struct_type.fields = field_types,
         };
         return res;
@@ -1075,6 +1131,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SEnumType,
+            .ptype = NULL,
             .enum_type.variants = enum_variants,
         };
         return res;
@@ -1089,6 +1146,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SResetType,
+            .ptype = NULL,
             .reset_type.in = in_ty,
             .reset_type.out = out_ty,
         };
@@ -1104,6 +1162,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDynamicType,
+            .ptype = NULL,
             .dynamic_type = dyn_ty,
         };
         return res;
@@ -1125,6 +1184,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SNamedType,
+            .ptype = NULL,
             .named_type.name = name,
             .named_type.body = rec_body,
         };
@@ -1140,6 +1200,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SDistinctType,
+            .ptype = NULL,
             .distinct_type = distinct,
         };
         return res;
@@ -1154,6 +1215,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SOpaqueType,
+            .ptype = NULL,
             .opaque_type = opaque,
         };
         return res;
@@ -1199,6 +1261,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = STraitType,
+            .ptype = NULL,
             .trait.vars = vars,
             .trait.fields = fields,
         };
@@ -1228,6 +1291,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SAllType,
+            .ptype = NULL,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
@@ -1255,53 +1319,69 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = STypeFamily,
+            .ptype = NULL,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
         return res;
     }
-    case FReinterpret: {
-        if (raw.branch.nodes.len < 4) {
-            throw_error(point, mk_string("Reinterpret term former requires at least 3 arguments!", a));
+    case FCType: {
+        RawTree* raw_term = (raw.branch.nodes.len == 2)
+            ? raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1, a);
+        Syntax* c_type = abstract_expr_i(*raw_term, env, a, point);
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SCType,
+            .ptype = NULL,
+            .c_type = c_type,
+        };
+        return res;
+    }
+    case FReinterpretNative:
+    case FReinterpretRelic: {
+        if (raw.branch.nodes.len < 3) {
+            throw_error(point, mk_string("Reinterpret term former requires at least 2 arguments!", a));
         }
 
-        Syntax* ctype = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
-        Syntax* ptype = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
-        RawTree* raw_term = (raw.branch.nodes.len == 4)
-            ? raw.branch.nodes.data[3]
-            : raw_slice(&raw, 3, a);
+        RawTree* raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, a);
 
         Syntax* body = abstract_expr_i(*raw_term, env, a, point);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SReinterpret,
-            .reinterpret.ctype = ctype, 
-            .reinterpret.ptype = ptype,
+            .ptype = NULL,
+            .reinterpret.from_native = former == FReinterpretNative,
+            .reinterpret.type = type, 
             .reinterpret.body = body,
         };
         return res;
     }
-    case FConvert: {
-        if (raw.branch.nodes.len < 4) {
-            throw_error(point, mk_string("Convert term former requires at least 3 arguments!", a));
+    case FConvertNative:
+    case FConvertRelic: {
+        if (raw.branch.nodes.len < 3) {
+            throw_error(point, mk_string("Convert term former requires at least 2 arguments!", a));
         }
 
-        Syntax* ctype = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
-        Syntax* ptype = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
 
-        RawTree* raw_term = (raw.branch.nodes.len == 4)
-            ? raw.branch.nodes.data[3]
-            : raw_slice(&raw, 3, a);
+        RawTree* raw_term = (raw.branch.nodes.len == 3)
+            ? raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, a);
 
         Syntax* body = abstract_expr_i(*raw_term, env, a, point);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SConvert,
-            .convert.ctype = ctype, 
-            .convert.ptype = ptype,
+            .ptype = NULL,
+            .convert.from_native = former == FConvertNative,
+            .convert.type = type, 
             .convert.body = body,
         };
         return res;
@@ -1321,6 +1401,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         case ASymbol: {
             *res = (Syntax) {
                 .type = SVariable,
+                .ptype = NULL,
                 .variable = raw.atom.symbol,
             };
             break;
@@ -1328,6 +1409,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         case AIntegral: {
             *res = (Syntax) {
                 .type = SLitUntypedIntegral,
+                .ptype = NULL,
                 .integral.value = raw.atom.int_64,
             };
             break;
@@ -1335,6 +1417,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         case ABool: {
             *res = (Syntax) {
                 .type = SLitBool,
+                .ptype = NULL,
                 .boolean = (bool) raw.atom.int_64,
             };
             break;
@@ -1342,6 +1425,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
         case AString: {
             *res = (Syntax) {
                 .type = SLitString,
+                .ptype = NULL,
                 .string = raw.atom.string,
             };
             break;
@@ -1661,3 +1745,21 @@ ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
     }
 }
 #pragma GCC diagnostic pop
+
+Module* try_get_module(Syntax* syn, ShadowEnv* env) {
+    switch (syn->type) {
+    case SVariable: {
+        ShadowEntry se = shadow_env_lookup(syn->variable, env);
+        if ((se.type == SGlobal || se.type == SLocal) && se.is_module) {
+            return se.module;
+        }
+        break;
+    }
+    case SProjector: {
+        panic(mv_string("TODO: implement try_get_module for sprojector"));
+    }
+    default:
+        return NULL;
+    }
+    return NULL;
+}

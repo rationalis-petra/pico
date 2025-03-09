@@ -304,8 +304,18 @@ bool has_unification_vars_p(PiType type) {
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
     }
+    case TResumeMark: {
+        panic(mv_string("has_unification_vars_p unimplemented for Resume Mark"));
+    }
     case TDynamic: {
         return has_unification_vars_p(*type.dynamic);
+    };
+    case TNamed: {
+        for (size_t i = 0; i < type.named.args->len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.named.args->data[i]))
+                return true;
+        }
+        return has_unification_vars_p(*type.named.type);
     };
     case TDistinct: {
         return has_unification_vars_p(*type.distinct.type);
@@ -325,10 +335,22 @@ bool has_unification_vars_p(PiType type) {
         }
         return false;
     }
+    case TCType: {
+        // TODO (INVESTIGATE): can we have any type inference for c types/values?
+        return false;
+    }
     case TVar: return false;
     
-    case TAll: {
+    case TAll:
+    case TExists: {
         return has_unification_vars_p(*type.binder.body);
+    }
+    case TCApp: {
+        for (size_t i = 0; i < type.app.args.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.app.args.data[i]))
+                return true;
+        }
+        return has_unification_vars_p(*type.app.fam);
     }
     case TFam: {
         return has_unification_vars_p(*type.binder.body);
@@ -346,10 +368,10 @@ bool has_unification_vars_p(PiType type) {
         }
 
     case TUVarDefaulted: return false;
-
-    default:
-        panic(mv_string("Invalid type given to has_unification_vars_p"));
     }
+
+    // If we are here, then none of the branches were taken!
+    panic(mv_string("Invalid type given to has_unification_vars_p"));
 }
 
 PiType* trace_uvar(PiType* uvar) {
@@ -430,6 +452,7 @@ void squash_type(PiType* type) {
         break;
     }
 
+    case TCType: break;
     case TKind: break;
     case TConstraint: break;
     // Special sort: unification variable

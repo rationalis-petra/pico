@@ -15,8 +15,12 @@ typedef enum ShadowEntry_t {
 
 typedef struct {
     ShadowEntry_t type;
+    bool is_module;
     PiType* vtype;
-    void* value;
+    union {
+        PiType* value;
+        Module* module;
+    };
 } ShadowEntry;
 
 ShadowEnv* mk_shadow_env(Allocator* a, Environment* env);
