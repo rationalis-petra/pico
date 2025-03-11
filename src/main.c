@@ -18,7 +18,8 @@
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/extra.h"
 #include "pico/values/types.h"
 
 #include "app/command_line_opts.h"

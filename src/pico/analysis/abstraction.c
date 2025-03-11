@@ -4,7 +4,7 @@
 #include "data/result.h"
 #include "data/string.h"
 #include "pico/values/values.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/extra.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"

@@ -5,6 +5,7 @@
 #include "pico/values/types.h"
 #include "pico/values/ctypes.h"
 
+bool can_convert(CType* ctype, PiType* ptype); 
 void* convert_c_fn(CType* ctype, PiType* ptype, Assembler* ass, Allocator* a); 
 
 bool can_reinterpret(CType* ctype, PiType* ptype); 

@@ -6,7 +6,7 @@
 void* convert_c_fn(CType* ctype, PiType* ptype, Assembler* ass, Allocator* a) {
     // This function is for converting a c function (assumed platform default
     // ABI) into a pico function. This means that it assumes that all arguments
-    // are pushed on the stack in forward order (last at top)  
+    // are pushed on the stack in forward order (last at top).
 
 #if ABI == SYSTEM_V_64 
 #elif ABI == WIN_64 
@@ -19,6 +19,27 @@ void* convert_c_fn(CType* ctype, PiType* ptype, Assembler* ass, Allocator* a) {
     //   perhaps depends on debug state?
     panic(mv_string("Invalid prim provided to can_reinterpret_type"));
 
+}
+
+bool can_convert(CType *ctype, PiType *ptype) {
+    if (ctype->sort == CSProc && ptype->sort == TProc) {
+      if (ctype->proc.args.len != ptype->proc.args.len) {
+          return false;
+      }
+
+      for (size_t i = 0; i < ctype->proc.args.len; i++) {
+          if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+              return false;
+          }
+      }
+      if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+          return false;
+      }
+
+      return true;
+    }
+
+    return can_reinterpret(ctype, ptype);
 }
 
 bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {

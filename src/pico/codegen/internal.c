@@ -3,7 +3,7 @@
 
 #include "platform/machine_info.h"
 #include "data/meta/array_impl.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/extra.h"
 
 int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
     int diff_1 = lhs.offset - rhs.offset;

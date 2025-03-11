@@ -9,7 +9,9 @@
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
 #include "pico/analysis/typecheck.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/core.h"
+#include "pico/stdlib/extra.h"
+#include "pico/stdlib/foreign.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/foreign-adapters.h"
@@ -1023,7 +1025,48 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SConvert: {
-        panic(mv_string("Not implemented yet: typecheck of convert"));
+        type_infer_i(untyped->convert.type, env, gen, a, point);
+        type_infer_i(untyped->convert.body, env, gen, a, point);
+        if (untyped->convert.from_native) {
+            // • Expect the body to be a c value
+            // • expect the type to be a pico type
+            if (untyped->convert.body->ptype->sort != TCType) {
+                throw_error(point, mv_string("convert-native input value to be a c value, was not!"));
+            }
+            if (untyped->convert.type->ptype->sort != TKind) {
+                throw_error(point, mv_string("convert-native expected output type to be a relic type, was not!"));
+            }
+
+            // Evaluate the output type, check that can convert.
+            PiType* pico_type = *(PiType**)eval_typed_expr(untyped->convert.type, env, a, point);
+            CType* c_type = &untyped->convert.body->ptype->c_type;
+
+            if (!can_convert(c_type, pico_type)) {
+                throw_error(point, mv_string("Cannot convert c value as relic value."));
+            }
+            untyped->ptype = pico_type;
+        } else {
+            // • Expect the body to be a pico value (which all values are, so skip check)
+            // • Expect the type to be a c type
+            if (untyped->convert.type->ptype->sort != TKind) {
+                throw_error(point, mv_string("convert-relic expected output type to be a type, was not!"));
+            }
+
+            // Evaluate the output type, check that can convert.
+            PiType* type_val = *(PiType**)eval_typed_expr(untyped->convert.type, env, a, point);
+            if (type_val->sort != TCType) {
+                throw_error(point, mv_string("convert-relic expected output type to be a c type, was not!"));
+            }
+
+            CType* c_type = &type_val->c_type;
+            PiType* pico_type = untyped->convert.body->ptype;
+
+            if (!can_convert(c_type, pico_type)) {
+                throw_error(point, mv_string("Cannot convert relic value as c value."));
+            }
+            untyped->ptype = type_val;
+        }
+
         break;
     }
 
@@ -1616,6 +1659,9 @@ void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen,
     return eval_typed_expr(untyped, env, a, point);
 }
 
+// TODO (BUG LOGIC UB): evaluation may produce a function pointer (or an object
+// with a function pointer) that points to generated code. This method currently
+// provides no means to capture that assembly.
 PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, ErrorPoint* point) {
     type_infer_i(untyped, env, gen, a, point);
 
