@@ -1,0 +1,525 @@
+#include "platform/signals.h"
+#include "platform/machine_info.h"
+
+#include "pico/codegen/internal.h"
+#include "pico/codegen/foreign_adapters.h"
+
+// -----------------------------------------------------------------------------
+// System V Specific stuff
+// -----------------------------------------------------------------------------
+
+typedef enum {
+    SysVInteger,
+    SysVSSE,
+    SysVSSEUp,
+    SysVx87,
+    SysVx87Up,
+    SysVComplex_x87,
+    SysVNoClass,
+    SysVMemory,
+} SysVArgClass;
+
+
+U8Array system_v_arg_classes(CType* type, Allocator* a);
+
+SysVArgClass merge_sysv_classes(SysVArgClass c1, SysVArgClass c2) {
+    // a) If both classes are equal, this is the resulting class
+    if (c1 == c2) {
+        return c1;
+    }
+
+    // b) If one of the classes is NoClass, this other is the resulting class
+    if (c1 == SysVNoClass) {
+        return c2;
+    } else if (c2 == SysVNoClass) {
+        return c1;
+    }
+
+    // c) If one of the classes is Memory, the result is Memory
+    if (c1 == SysVMemory || c2 == SysVMemory) {
+        return SysVMemory;
+    }
+
+    // d) If one of the classes is Integer, the result is Integer
+    if (c1 == SysVInteger || c2 == SysVInteger) {
+        return SysVInteger;
+    }
+    // e) If one of the classes is X87, X87UP, COMPLEX_X87, Memory is
+    // the resulting class.
+    if (c1 == SysVx87 || c1 == SysVx87Up || c1 == SysVComplex_x87
+        || c2 == SysVx87 || c2 == SysVx87Up || c2 == SysVComplex_x87) {
+        return SysVMemory; 
+    }
+
+    // Otherwise, SSE is used
+    return SysVSSE;
+}
+
+void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a) {
+    // We probably want to recurse and merge arrays from subclasses
+    switch (type->sort) {
+    case CSVoid:
+        panic(mv_string("void type does not have arg class"));
+        break;
+    case CSPrim:
+        switch (type->prim.prim) {
+        case CChar:
+        case CShort:
+        case CInt:
+        case CLong:
+        case CLongLong:
+            out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
+        }
+        break;
+    case CSPtr:
+    case CSProc:
+            out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
+        break;
+    case CSIncomplete:
+        panic(mv_string("incomplete type does not have arg class"));
+        break;
+    case CSStruct: {
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            // Consider
+            // struct {struct x : int} {struct y : int} -> (x, y) occupy one
+            // eightbyte (x & y have alignment 4) 
+            // struct {struct x : int} {struct y : int z : long} -> (x, y) each
+            // occupy a separate eightbyte (the second struct now has alignment 8)
+
+            // So, to determine which eightbyte a particular component is in, we
+            // need size and alignment
+            CType* field_ty = type->structure.fields.data[i].val;
+            size_t field_sz = c_size_of(*field_ty);
+            size_t field_al = c_align_of(*field_ty);
+            offset = c_size_align(offset, field_al);
+            
+            // We need now to figure out get the eightbytes
+            populate_sysv_words(out, offset, field_ty, a);
+
+            offset += field_sz; 
+        }
+        break;
+    }
+    case CSUnion:
+        for (size_t i = 0; i < type->cunion.fields.len; i++) {
+            CType* field_ty = type->cunion.fields.data[i].val;
+            populate_sysv_words(out, offset, field_ty, a);
+        }
+        break;
+    case CSCEnum:
+        out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
+        break;
+    }
+}
+
+U8Array system_v_arg_classes(CType* type, Allocator* a) {
+    U8Array out = mk_u8_array(8, a);
+    size_t type_size = c_size_of(*type);
+    if (type_size > 64) {
+        // We start by calculating the number of words (eightbytes) we need.
+        // This is the divisor (rounded up) of type_size and 8, as words are eightbytes.
+        // to ensure that there is a round up, we add 7 to the numerator, as
+        // c integer division by default rounds down. 
+        size_t num_words = (type_size + 7) / 8;
+        for (size_t i = 0; i < num_words; i++) {
+            push_u8(SysVNoClass, &out);
+        }
+        populate_sysv_words(&out, 0, type, a);
+    } else {
+        // Larger than 8 words (eightbytes), therefore class is memory
+        push_u8(SysVMemory, &out);
+    }
+
+    // TOOD (FEATURE BUG): Add the other merge steps.
+    for (size_t i = 0; i < out.len; i++) {
+      if (out.data[i] == SysVMemory) {
+          out.len = 0;
+      };
+    }
+
+    return out;
+}
+
+void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // This function is for converting a c function (assumed platform default
+    // ABI) into a pico function. This means that it assumes that all arguments
+    // are pushed on the stack in forward order (last at top).
+    if (ctype->sort != CSProc || ptype->sort != TProc) {
+        panic(mv_string("convert_c_fun requires types to be functions."));
+    }
+    if (ctype->proc.args.len != ptype->proc.args.len) {
+        panic(mv_string("convert_c_fun requires functions to have same number of args."));
+    }
+
+    if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+        // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+        panic(mv_string("Attempted to do invalid conversion of function return types!"));
+    }
+
+    // We need knowledge of the stack layout of the input arguments when
+    // constructing the function call: We know that pico are pushed
+    // left-to-right, meaning the last argument is on the bottom of the stack
+    // (offset 0). 
+    U64Array arg_offsets = mk_u64_array(ctype->proc.args.len + 1, a);
+    uint64_t offset = 0;
+    for (size_t i = 0; i < ptype->proc.args.len; i++) {
+        push_u64(offset, &arg_offsets); 
+        size_t idx = ctype->proc.args.len - (i + 1);
+        offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx]);
+    }
+    push_u64(offset, &arg_offsets); 
+
+#if ABI == SYSTEM_V_64
+    // Notes: 
+    // R14, RBP, RSP are all callee-saved registers in System V, as they are in Pico.
+    // This means that we don't have to take care of saving/restoring their
+    // values as part of the function call.
+
+    // The stack shall be aligned either on 16 bytes, (32 bytes if __m256 is used) or
+    // 64 bytes (if __m512 is used)
+    // TODO (BUG LOGIC): Generate assembly to align the stack
+    // size_t stack_align = 16;
+
+    // If class is Memory, we need to allocate space on the stack as if this
+    // were the first argument to the function!
+    U64Array in_memory_args = mk_u64_array(ctype->proc.args.len, a); 
+
+    const int max_integer_registers = 6;
+    const Regname integer_registers[8] = {RDI, RSI, RDX, RCX, R8, R9};
+    unsigned char current_integer_register = 0;
+
+    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+        CType* c_arg = ctype->proc.args.data[i].val;
+        PiType* p_arg = ptype->proc.args.data[i];
+        if (!can_reinterpret(c_arg, p_arg)) {
+            // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+            panic(mv_string("Attempted to do invalid conversion"));
+        }
+        
+        // Get the classes associated with an argument.  
+        // If there are multiple classes, each class in the array corresponds to an eightbyte of the argument.
+        U8Array classes = system_v_arg_classes(c_arg, a);
+
+        unsigned char saved_integer_register = current_integer_register;
+        size_t assembler_pos = get_pos(ass);
+        bool pass_in_memory = classes.len == 0;
+
+        for (size_t i = 0; i < classes.len; i++) {
+          switch (classes.data[i]) {
+          case SysVInteger: {
+              if (current_integer_register >= max_integer_registers) {
+                  set_pos(ass, assembler_pos);
+                  current_integer_register = saved_integer_register;
+                  pass_in_memory = true; // this breaks us out of the loop
+              } else {
+                  Regname next_reg = integer_registers[current_integer_register++];
+                  // I8 max = 127
+                  if (arg_offsets.data[i] > 127) {
+                      throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
+                  }
+                  build_binary_op(ass, Mov, reg(next_reg, sz_64), rref8(RSP, arg_offsets.data[i], sz_64), a, point);
+              }
+              break;
+          }
+          case SysVSSE:
+              panic(mv_string("Not yet implemented: passing arg of class SSE"));
+              break;
+          case SysVSSEUp:
+              panic(mv_string("Not yet implemented: passing arg of class SSE UP"));
+              break;
+          case SysVx87:
+              panic(mv_string("Not yet implemented: passing arg of class x87"));
+              break;
+          case SysVx87Up:
+              panic(mv_string("Not yet implemented: passing arg of class x87 Up"));
+              break;
+          case SysVComplex_x87:
+              panic(mv_string("Not yet implemented: passing arg of class Complex Up"));
+              break;
+          case SysVNoClass:
+              panic(mv_string("Internal Error: argument should not have No Class"));
+              break;
+          case SysVMemory:
+              break;
+          }
+          if (pass_in_memory) break;
+        }
+
+        if (pass_in_memory) {
+            push_u64(i, &in_memory_args);
+        }
+    }
+
+    // Use RBX as an indexing register, to point to the 'base':
+    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+
+    size_t extra_padding = 0;
+
+    U8Array return_classes = system_v_arg_classes(ctype->proc.ret, a);
+    size_t return_arg_size = c_size_of(*ctype->proc.ret);
+
+    bool pass_return_in_memory = (return_classes.len == 0) || (return_classes.len > 2);
+    if (pass_return_in_memory) {
+        // pass in memory - reserve space on stack:
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
+    }
+
+    for (size_t i = 0; i < in_memory_args.len; i++) {
+        // pass in memory - reserve space on stack:
+        size_t arg_idx = in_memory_args.data[i];
+        size_t arg_size = arg_offsets.data[arg_idx + 1] - arg_offsets.data[arg_idx];
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(arg_offsets.data[arg_idx]), a, point);
+        generate_monomorphic_copy(RSP, RDX, arg_size, ass, a, point);
+        extra_padding += arg_size;
+    }
+
+    // Call function
+    build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
+    build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+
+    if (pass_return_in_memory) {
+        // First, copy the value: 
+        size_t target_offset = extra_padding + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(target_offset), a, point);
+        generate_monomorphic_copy(RDX, RSP, return_arg_size, ass, a, point);
+
+        // Then, pop any extra memory from the stack.
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(target_offset), a, point);
+    } else {
+        // Pop all memory arguments (both pico and c)
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(extra_padding + arg_offsets.data[arg_offsets.len -  1]), a, point);
+
+        // Now, push registers onto stack
+        size_t current_return_register = 0;
+        const Regname return_integer_registers[2] = {RAX, RDX};
+        size_t assembler_pos = get_pos(ass);
+        for (size_t i = 0; i < return_classes.len; i++) {
+            switch (return_classes.data[i]) {
+            case SysVInteger: {
+                if (current_return_register >= 2) {
+                    set_pos(ass, assembler_pos);
+                    pass_return_in_memory = true; // this breaks us out of the loop
+                } else {
+                    Regname next_reg = return_integer_registers[current_return_register++];
+                    // I8 max = 127
+                    if (arg_offsets.data[i] > 127) {
+                        throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
+                    }
+                    // Push from registers into memory
+                    build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
+                }
+                break;
+            }
+            case SysVSSE:
+                panic(mv_string("Not yet implemented: passing arg of class SSE"));
+                break;
+            case SysVSSEUp:
+                panic(mv_string("Not yet implemented: passing arg of class SSE UP"));
+                break;
+            case SysVx87:
+                panic(mv_string("Not yet implemented: passing arg of class x87"));
+                break;
+            case SysVx87Up:
+                panic(mv_string("Not yet implemented: passing arg of class x87 Up"));
+                break;
+            case SysVComplex_x87:
+                panic(mv_string("Not yet implemented: passing arg of class Complex Up"));
+                break;
+            case SysVNoClass:
+                panic(mv_string("Internal Error: argument should not have No Class"));
+                break;
+            case SysVMemory:
+                break;
+            }
+            if (pass_return_in_memory) break;
+        }
+    }
+
+        
+    // Now, we need to pop all args and push the return value onto the stack.
+
+#elif ABI == WIN_64 
+#error "convert_c_fun not imlemented for Win 64"
+#else
+#error "convert_c_fun not implemented for unknonw arch"
+#endif
+}
+
+bool can_convert(CType *ctype, PiType *ptype) {
+    if (ctype->sort == CSProc && ptype->sort == TProc) {
+        if (ctype->proc.args.len != ptype->proc.args.len) {
+            return false;
+        }
+
+        for (size_t i = 0; i < ctype->proc.args.len; i++) {
+            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+                return false;
+            }
+        }
+        if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    return can_reinterpret(ctype, ptype);
+}
+
+bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
+#if ABI == SYSTEM_V_64 
+    switch (ptype) {
+    case Unit:  {
+        return false;
+    }
+    case Bool:  {
+        // TODO (check for signedness?)
+        return ctype.prim == CChar;
+    }
+    case Address: {
+        // Address comparisons need to be caught earlier.
+        // this is fine to enforce as a contract, as the only caller of this
+        // function is can_reinterpret (no risk of many callers being confused
+        // by overly complex contract.)
+        return false;
+    }
+    case Int_64: {
+        return ctype.prim == CLong &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_32: {
+        return ctype.prim == CInt &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_16: {
+        return ctype.prim == CShort &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_8: {
+        return ctype.prim == CChar && // TODO: check if char signed by default
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case UInt_64: {
+        return ctype.prim == CLong && ctype.is_signed == Unsigned; 
+    }
+    case UInt_32: {
+        return ctype.prim == CInt && ctype.is_signed == Unsigned; 
+    }
+    case UInt_16: {
+        return ctype.prim == CInt && ctype.is_signed == Unsigned;
+    }
+    case UInt_8: {
+        return ctype.prim == CChar && ctype.is_signed == Unsigned;
+    }
+    case TFormer:  {
+        // TODO (FEATURE): check for enum?
+        return false;
+    }
+    case TMacro:  {
+        return false;
+    }
+    }
+#elif ABI == WIN_64 
+#error "can_reinterpret_prim not imlemented for Win 64"
+#else
+#error "can_reinterpret_prim not implemented for unknonw arch"
+#endif
+    // TODO (FEATURE): as this can be invoked by user code with user values, 
+    //   perhaps abort on invalid type is too harsh? (throw or return false?) 
+    //   perhaps depends on debug state?
+    panic(mv_string("Invalid prim provided to can_reinterpret_type"));
+}
+
+bool can_reinterpret(CType* ctype, PiType* ptype) {
+    // C doesn't have a concept of distinct types, so filter those out. 
+    // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
+    // TODO (FEATURE): check for well-formedness of types in debug mode?
+    while (ptype->sort == TDistinct) ptype = ptype->distinct.type;
+
+    switch (ptype->sort) {
+    case TPrim: {
+        if (ctype->sort == CSPrim) {
+            return can_reinterpret_prim(ctype->prim, ptype->prim);
+        }
+        else if (ctype->sort == CSPtr && ptype->prim == Address) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    case TProc: {
+        if (ctype->sort != CSProc) return false;
+        if (ctype->proc.args.len != ptype->proc.args.len) return false;
+
+        for (size_t i = 0; i < ptype->proc.args.len; i++) {
+            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+                return false;
+        }
+        return can_reinterpret(ctype->proc.ret, ptype->proc.ret);
+    }
+    case TStruct: {
+        if (ptype->structure.fields.len != ctype->structure.fields.len) {
+            return false;
+        }
+
+        for (size_t i = 0; i < ptype->structure.fields.len; i++) {
+          if (!can_reinterpret(ctype->structure.fields.data[i].val,
+                               ptype->structure.fields.data[i].val)) {
+              return false;
+          }
+        }
+        return true;
+    }
+    case TEnum: {
+        // TODO: compare 0-member enums with actual c enums/ints.
+
+        if (ctype->sort != CSStruct) return false;
+        if (ctype->structure.fields.len != 2) return false;
+
+        // check that the 0th struct field is reinterpretable as a 64-bit int
+        // TODO (FEATURE): change tag size based on number of enum vals 
+        PiType tag_type = mk_prim_type(UInt_64);
+        if (!can_reinterpret(ctype->structure.fields.data[0].val, &tag_type)) return false;
+            
+        CType* cunion = ctype->structure.fields.data[1].val;
+        if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) return false;
+        // TODO (FEATURE): add ability for c type to not need union/struct if
+        // variants empty.
+
+        for (size_t i = 0; i < cunion->cunion.fields.len; i++) {
+            PtrArray* variant = ptype->enumeration.variants.data[i].val;
+            // TODO: allow if union type is struct!
+            if (variant->len != 1) return false;
+
+            if (!can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
+                return false;
+        }
+        return true;
+    }
+
+
+    case TReset:
+    case TResumeMark:
+    case TDynamic:
+    case TNamed:
+    case TDistinct:
+    case TTrait:
+    case TTraitInstance:
+    case TCType:
+    case TVar:
+    case TAll:
+    case TExists:
+    case TCApp:
+    case TFam:
+    case TKind:
+    case TConstraint:
+    case TUVar:
+    case TUVarDefaulted:
+        return false;
+    }
+
+    panic(mv_string("can_reinterpret received invalid sort!"));
+}

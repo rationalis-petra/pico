@@ -1105,7 +1105,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         for (size_t i = 0; i < body->enumeration.variants.len; i++) {
             PtrArray* variant = body->structure.fields.data[i].val;
             for (size_t j = 0; j < variant->len; j++) {
-                type_app_subst(variant->data[i], subst, a);
+                type_app_subst(variant->data[j], subst, a);
             }
         }
         break;
@@ -1397,6 +1397,25 @@ PiType mk_distinct_type(Allocator* a, PiType inner) {
     return out;
 }
 
+PiType mk_opaque_type(Allocator* a, void* module, PiType inner) {
+    PiType out = (PiType) {
+        .sort = TDistinct,
+        .distinct.type = mem_alloc(sizeof(PiType), a),
+        .distinct.id = distinct_id(),
+        .distinct.source_module = module,
+        .distinct.args = NULL,
+    };
+    *out.distinct.type = inner;
+    return out;
+}
+
+PiType mk_var_type(const char *name) {
+  return (PiType) {
+      .sort = TVar,
+      .var = string_to_symbol(mv_string(name)),
+  };
+}
+
 PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body) {
     PiType out = (PiType) {
         .sort = TFam,
@@ -1405,6 +1424,25 @@ PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body) {
     };
     *out.binder.body = body;
     return out;
+}
+
+PiType mk_app_type(Allocator *a, PiType fam, ...) {
+    PiType* lhs = &fam;
+    while (lhs->sort == TDistinct) lhs = lhs->distinct.type;
+
+    va_list args;
+    va_start(args, fam);
+
+    PtrArray fam_args = mk_ptr_array(lhs->binder.vars.len, a);
+    for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+        PiType* ptr = mem_alloc(sizeof(PiType), a);
+        *ptr = va_arg(args, PiType);
+        push_ptr(ptr, &fam_args);
+    }
+    va_end(args);
+
+    PiType* res = type_app(fam, fam_args, a);
+    return *res;
 }
 
 PiType mk_string_type(Allocator* a) {

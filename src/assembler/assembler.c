@@ -52,8 +52,12 @@ U8Array get_instructions(Assembler* ass) {
     return ass->instructions;
 }
 
-size_t get_pos(Assembler* ass) {
-    return ass->instructions.len;
+size_t get_pos(Assembler* assembler) {
+    return assembler->instructions.len;
+}
+
+void set_pos(Assembler *assembler, size_t pos) {
+    assembler->instructions.len = pos;
 }
 
 void delete_assembler (Assembler* ass) {

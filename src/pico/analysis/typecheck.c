@@ -14,7 +14,7 @@
 #include "pico/stdlib/foreign.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
-#include "pico/codegen/foreign-adapters.h"
+#include "pico/codegen/foreign_adapters.h"
 #include "pico/eval/call.h"
 
 // forward declarations

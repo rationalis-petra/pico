@@ -15,6 +15,7 @@ void clear_assembler(Assembler* assembler);
 
 U8Array get_instructions(Assembler* assembler);
 size_t get_pos(Assembler* assembler);
+void set_pos(Assembler* assembler, size_t pos);
 
 Document* pretty_assembler(Assembler* assembler, Allocator* a);
 

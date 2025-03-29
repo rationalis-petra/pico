@@ -1,11 +1,14 @@
 #include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
+#include "platform/memory/executable.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 #include "pico/codegen/polymorphic.h"
+#include "pico/codegen/foreign_adapters.h"
 #include "pico/binding/address_env.h"
+#include "pico/eval/call.h"
 
 /* Code Generation Assumptions:
  * • All expressions evaluate to integers or functions 
@@ -31,6 +34,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
+void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 
 LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     InternalLinkData links = (InternalLinkData) {
@@ -1493,8 +1497,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // generate();
         generate(*syn.reinterpret.body, env, target, links, a, point);
         break;
-    case SConvert:
+    case SConvert: {
+        if (syn.convert.from_native) {
+            void** cfn = const_fold(syn.convert.body, env, target, links, a, point);
+            convert_c_fn(cfn, &syn.convert.body->ptype->c_type, syn.ptype, ass, a, point);
+        } else {
+            panic(mv_string("Cannot yet convert pico value to c value."));
+        }
+           
         break;
+    }
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
@@ -1524,4 +1536,33 @@ size_t calc_variant_size(PtrArray* types) {
         total += pi_size_of(*(PiType*)types->data[i]);
     }
     return total;
+}
+
+// Const_fold: evaluate and place 
+void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point) {
+    Allocator exalloc = mk_executable_allocator(a);
+
+    // Catch error here; so can cleanup after self before further unwinding.
+    ErrorPoint cleanup_point;
+    if (catch_error(cleanup_point)) goto on_error;
+
+    // As we will The 
+    Target gen_target = {
+        .target = mk_assembler(&exalloc),
+        .code_aux = target.code_aux,
+        .data_aux = target.data_aux,
+    };
+
+    generate(*syn, env, target, links, a, point);
+
+    void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), a, &cleanup_point);
+
+    delete_assembler(gen_target.target);
+    release_executable_allocator(exalloc);
+    return result;
+
+ on_error:
+    delete_assembler(gen_target.target);
+    release_executable_allocator(exalloc);
+    throw_error(point, cleanup_point.error_message);
 }

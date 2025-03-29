@@ -6,12 +6,6 @@
 
 #include "pico/values/ctypes.h"
 
-size_t align_to(size_t size, size_t align) {
-    size_t rem = size % align;
-    size_t pad = rem == 0 ? 0 : align - rem;
-    return size + pad;
-}
-
 Document* pretty_cprim(CPrim prim, Allocator* a) {
     PtrArray nodes = mk_ptr_array(2, a);
     if (prim.is_signed == Signed) {
@@ -235,6 +229,12 @@ size_t c_prim_size_of(CPrim type) {
     panic(mv_string("Invalid CType"));
 }
 
+size_t c_size_align(size_t size, size_t align) {
+    size_t rem = size % align;
+    size_t pad = rem == 0 ? 0 : align - rem;
+    return size + pad;
+}
+
 size_t c_size_of(CType type) {
 #if ABI == SYSTEM_V_64
     // System V ABI
@@ -263,10 +263,10 @@ size_t c_size_of(CType type) {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             align = c_align_of(*(CType*)type.structure.fields.data[i].val);
             max_align = max_align > align ? max_align : align;
-            size = align_to(size, align);
+            size = c_size_align(size, align);
             size += c_size_of(*(CType*)type.structure.fields.data[i].val);
         }
-        return align_to(size, max_align);
+        return c_size_align(size, max_align);
     }
     case CSUnion: {
         // See struct for details
@@ -418,8 +418,7 @@ CType copy_c_type(CType t, Allocator* a) {
     case CSStruct:
         out.structure.fields = scopy_sym_ptr_amap(t.structure.fields, a);
         for (size_t i = 0; i < t.structure.fields.len; i++) {
-            CType* ty = t.structure.fields.data[i].val;
-            delete_c_type_p(ty, a);
+            out.structure.fields.data[i].val = copy_c_type_p(t.structure.fields.data[i].val, a);
         }
         break;
     case CSUnion:
@@ -446,6 +445,15 @@ CType* copy_c_type_p(CType* t, Allocator* a) {
 
 // Constructors and Utilities
 // --------------------------
+CType mk_voidptr_ctype(Allocator *a) {
+    CType* void_ty = mem_alloc(sizeof(CType), a);
+    *void_ty = (CType) {.sort = CSVoid};
+    return (CType) {
+        .sort = CSPtr,
+        .ptr.inner = void_ty,
+    };
+}
+
 CType mk_prim_ctype(CPrim t) {
     return (CType) {
         .sort = CSPrim,
@@ -543,7 +551,7 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
     va_end(args);
 
     return (CType) {
-        .sort = CSStruct,
+        .sort = CSUnion,
         .cunion.fields = fields,
     };
 }

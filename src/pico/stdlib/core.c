@@ -15,6 +15,11 @@ PiType* get_syntax_type() {
     return syntax_type;
 }
 
+static PiType* either_type;
+PiType* get_either_type() {
+    return either_type;
+}
+
 PiType build_store_fn_ty(Allocator* a) {
     Symbol ty_sym = string_to_symbol(mv_string("A"));
 
@@ -511,6 +516,26 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         ModuleEntry* e = get_def(sym, module);
         array_type = e->value;
+
+        // Either Type 
+        // Make a ptr
+        vars = mk_u64_array(2, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        push_u64(string_to_symbol(mv_string("B")), &vars);
+        type.kind.nargs = 2;
+
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_enum_type(a, 2,
+                                                                   "left", 1, mk_var_type("A"),
+                                                                   "right", 1, mk_var_type("B"))));
+        type_data = &type_val;
+        sym = string_to_symbol(mv_string("Either"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type(type_val, a);
+
+        e = get_def(sym, module);
+        either_type = e->value;
 
         type.kind.nargs = 0;
 

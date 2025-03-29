@@ -218,10 +218,16 @@ PiType mk_named_type(Allocator* a, const char* name, PiType inner);
 // Sample usage: mk_distinct_type(a, mk_prim_type(Address))
 PiType mk_distinct_type(Allocator* a, PiType inner);
 
-PiType mk_var_type(Allocator* a, const char* name);
+// Sample usage: mk_opaque_type(a, mod, mk_prim_type(Address))
+PiType mk_opaque_type(Allocator* a, void* module, PiType inner);
+
+PiType mk_var_type(const char* name);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
 PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body);
+
+// Sample usage: mk_app_type(a, array_type, int_type);
+PiType mk_app_type(Allocator* a, PiType fam, ...);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]

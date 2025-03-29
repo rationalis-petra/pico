@@ -4,6 +4,6 @@
 #include "pico/values/modular.h"
 
 PiType* get_c_type();
-void add_foreign_module(Package* base, Allocator* a);
+void add_foreign_module(Assembler* ass, Package *base, Allocator* a);
 
 #endif

@@ -11,8 +11,8 @@ typedef enum {
     CSVoid,
     CSPrim,
     CSPtr,
-    CSIncomplete,
     CSProc,
+    CSIncomplete,
     CSStruct,
     CSUnion,
     CSCEnum,
@@ -79,6 +79,7 @@ struct CType {
 Document* pretty_cprim(CPrim prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);
 Document* pretty_cval(CType* type, void* value, Allocator* a);
+size_t c_size_align(size_t size, size_t align);
 size_t c_size_of(CType type);
 size_t c_align_of(CType type);
 
@@ -91,6 +92,8 @@ CType* copy_c_type_p(CType* t, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
+CType mk_voidptr_ctype(Allocator* a);
+
 CType mk_prim_ctype(CPrim t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
