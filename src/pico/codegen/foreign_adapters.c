@@ -248,6 +248,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         if (pass_in_memory) {
             push_u64(i, &in_memory_args);
         }
+
+        sdelete_u8_array(classes);
     }
 
     // Use RBX as an indexing register, to point to the 'base':
@@ -337,7 +339,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
             if (pass_return_in_memory) break;
         }
     }
-
+    sdelete_u8_array(return_classes);
+    sdelete_u64_array(in_memory_args);
         
     // Now, we need to pop all args and push the return value onto the stack.
 
@@ -346,6 +349,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 #else
 #error "convert_c_fun not implemented for unknonw arch"
 #endif
+
+    sdelete_u64_array(arg_offsets);
 }
 
 bool can_convert(CType *ctype, PiType *ptype) {
@@ -452,6 +457,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     }
     case TProc: {
         if (ctype->sort != CSProc) return false;
+        if (ptype->proc.implicits.len != 0) return false;
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
@@ -475,13 +481,12 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     }
     case TEnum: {
         // TODO: compare 0-member enums with actual c enums/ints.
-
         if (ctype->sort != CSStruct) return false;
         if (ctype->structure.fields.len != 2) return false;
 
         // check that the 0th struct field is reinterpretable as a 64-bit int
         // TODO (FEATURE): change tag size based on number of enum vals 
-        PiType tag_type = mk_prim_type(UInt_64);
+        PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
         if (!can_reinterpret(ctype->structure.fields.data[0].val, &tag_type)) return false;
             
         CType* cunion = ctype->structure.fields.data[1].val;

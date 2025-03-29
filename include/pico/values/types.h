@@ -193,45 +193,46 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
+// Generate distinct id
 uint64_t distinct_id();
-
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
-PiType mk_prim_type(PrimType t);
-PiType mk_dynamic_type(Allocator* a, PiType t);
+// Generators 
+PiType* mk_prim_type(Allocator* a, PrimType t);
+PiType* mk_dynamic_type(Allocator* a, PiType* t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
-PiType mk_proc_type(Allocator* a, size_t nargs, ...);
+PiType* mk_proc_type(Allocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
-PiType mk_struct_type(Allocator* a, size_t nfields, ...);
+PiType* mk_struct_type(Allocator* a, size_t nfields, ...);
 
 // Sample usage: mk_enum_type(a, 3,
 //   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
 //   "Singleton", 1, mk_prim_type(Int_64),
 //   "None", 0)
-PiType mk_enum_type(Allocator* a, size_t nfields, ...);
+PiType* mk_enum_type(Allocator* a, size_t nfields, ...);
 
 // Sample usage: mk_distinct_type(a, "List", ...)
-PiType mk_named_type(Allocator* a, const char* name, PiType inner);
+PiType* mk_named_type(Allocator* a, const char* name, PiType* inner);
 
 // Sample usage: mk_distinct_type(a, mk_prim_type(Address))
-PiType mk_distinct_type(Allocator* a, PiType inner);
+PiType* mk_distinct_type(Allocator* a, PiType* inner);
 
 // Sample usage: mk_opaque_type(a, mod, mk_prim_type(Address))
-PiType mk_opaque_type(Allocator* a, void* module, PiType inner);
+PiType* mk_opaque_type(Allocator* a, void* module, PiType* inner);
 
-PiType mk_var_type(const char* name);
+PiType* mk_var_type(Allocator* a, const char* name);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
-PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body);
+PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body);
 
 // Sample usage: mk_app_type(a, array_type, int_type);
-PiType mk_app_type(Allocator* a, PiType fam, ...);
+PiType* mk_app_type(Allocator* a, PiType* fam, ...);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
-PiType mk_string_type(Allocator* a);
+PiType* mk_string_type(Allocator* a);
 
 
 #endif

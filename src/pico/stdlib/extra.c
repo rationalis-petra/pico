@@ -314,7 +314,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    PiType type;
+    PiType* typep;
     Symbol sym;
     ErrorPoint point;
     if (catch_error(point)) {
@@ -328,101 +328,101 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     
     // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
     std_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
-    type = mk_dynamic_type(a, mk_struct_type(a, 4,
-                                             "malloc", mk_prim_type(Address),
-                                             "realloc", mk_prim_type(Address),
-                                             "free", mk_prim_type(Address),
-                                             "ctx", mk_prim_type(Address)));
+    typep = mk_dynamic_type(a, mk_struct_type(a, 4,
+                                             "malloc", mk_prim_type(a, Address),
+                                             "realloc", mk_prim_type(a, Address),
+                                             "free", mk_prim_type(a, Address),
+                                             "ctx", mk_prim_type(a, Address)));
     sym = string_to_symbol(mv_string("allocator"));
-    add_def(module, sym, type, &std_allocator, null_segments, NULL);
+    add_def(module, sym, *typep, &std_allocator, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     void* nul = NULL;
     std_tmp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
     std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
-    type = mk_dynamic_type(a, mk_prim_type(Address));
+    typep = mk_dynamic_type(a, mk_prim_type(a, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
-    add_def(module, sym, type, &std_tmp_allocator, null_segments, NULL);
+    add_def(module, sym, *typep, &std_tmp_allocator, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // C Wrappers!
     Segments fn_segments = {.data = mk_u8_array(0, a),};
     Segments prepped;
 
     // exit : Proc [] Unit
-    type = mk_proc_type(a, 0, mk_prim_type(Unit));
+    typep = mk_proc_type(a, 0, mk_prim_type(a, Unit));
     build_exit_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("exit"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // malloc : Proc [U64] Address
-    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
+    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address));
     build_malloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("malloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // realloc : Proc (Address U64) Address
-    type = mk_proc_type(a, 2, mk_prim_type(Address),
-                        mk_prim_type(UInt_64),
-                        mk_prim_type(Address));
+    typep = mk_proc_type(a, 2, mk_prim_type(a, Address),
+                        mk_prim_type(a, UInt_64),
+                        mk_prim_type(a, Address));
     build_realloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("realloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // realloc : Proc [String] Unit
-    type = mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(Unit));
+    typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit));
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // print : Proc [String] Unit
-    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
     build_print_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("print"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // print : Proc [String] Unit
-    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
     build_load_module_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("load-module"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     // run-script : Proc [String] Unit
-    type = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(Unit));
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
     build_run_script_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("run-script"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     add_module(string_to_symbol(mv_string("extra")), module, base);
 

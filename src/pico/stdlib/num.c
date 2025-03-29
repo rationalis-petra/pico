@@ -2,8 +2,8 @@
 
 #include "pico/stdlib/num.h"
 
-PiType mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
-    return mk_proc_type(a, 2, mk_prim_type(a1), mk_prim_type(a2), mk_prim_type(r));
+PiType* mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
+    return mk_proc_type(a, 2, mk_prim_type(a, a1), mk_prim_type(a, a2), mk_prim_type(a, r));
 }
 
 void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
@@ -68,9 +68,7 @@ void add_primitive_module(String name, LocationSize sz, bool is_signed, Assemble
     delete_module_header(header);
     Symbol sym;
 
-    PiType type;
-    //PiType type_val;
-    //PiType* type_data = &type_val;
+    PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);
@@ -86,58 +84,58 @@ void add_primitive_module(String name, LocationSize sz, bool is_signed, Assemble
     Segments prepped;
 
     build_binary_fn(ass, Add, sz, a, &point);
-    type = mk_binop_type(a, prim, prim, prim);
+    typep = mk_binop_type(a, prim, prim, prim);
     sym = string_to_symbol(mv_string("+"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, Sub, sz, a, &point);
     sym = string_to_symbol(mv_string("-"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_special_binary_fn(ass, is_signed ? IMul : Mul, sz, a, &point);
     sym = string_to_symbol(mv_string("*"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_special_binary_fn(ass, is_signed ? IDiv : Div, sz, a, &point);
     sym = string_to_symbol(mv_string("/"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
-    type = mk_binop_type(a, prim, prim, Bool);
+    typep = mk_binop_type(a, prim, prim, Bool);
     sym = string_to_symbol(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, is_signed ? SetG : SetA, sz, a, &point);
     sym = string_to_symbol(mv_string(">"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, SetE, sz, a, &point);
     sym = string_to_symbol(mv_string("="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
     sdelete_u8_array(fn_segments.data);
 
     Result r = add_module_def(num, string_to_symbol(name), module);

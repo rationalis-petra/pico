@@ -370,6 +370,7 @@ void delete_c_type(CType t, Allocator* a) {
         for (size_t i = 0; i < t.proc.args.len; i++) {
             delete_c_type_p(t.proc.args.data[i].val, a);
         }
+        sdelete_sym_ptr_assoc(t.proc.args);
         delete_c_type_p(t.proc.ret, a);
         break;
     case CSStruct:
@@ -499,10 +500,6 @@ CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
         sym_ptr_insert(name, arg, &fields);
     }
 
-    CType* ret = mem_alloc(sizeof(CType), a);
-    *ret = va_arg(args, CType);
-    va_end(args);
-
     return (CType) {
         .sort = CSStruct,
         .structure.named = false,
@@ -545,10 +542,6 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
         *arg = va_arg(args, CType);
         sym_ptr_insert(name, arg, &fields);
     }
-
-    CType* ret = mem_alloc(sizeof(CType), a);
-    *ret = va_arg(args, CType);
-    va_end(args);
 
     return (CType) {
         .sort = CSUnion,

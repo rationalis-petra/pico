@@ -1143,6 +1143,8 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
 
     // Quantified Types
     case TVar: {
+        // TODO (BUG): situations where the type is to be deleted later, we will
+        //             need to copy here to ensure that all types are unique!
         PiType** val = (PiType**)sym_ptr_alookup(body->var, subst);
         if (val) {*body = **val;}
         break;
@@ -1304,64 +1306,66 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     }
 }
 
-PiType mk_prim_type(PrimType t) {
-    return (PiType) {
+PiType* mk_prim_type(Allocator* a, PrimType t) {
+    PiType* prim = mem_alloc(sizeof(PiType), a);
+    *prim = (PiType) {
       .sort = TPrim,
       .prim = t,
     };
+    return prim;
 }
 
-PiType mk_dynamic_type(Allocator* a, PiType t) {
+PiType* mk_dynamic_type(Allocator* a, PiType* t) {
     PiType* dyn = mem_alloc(sizeof(PiType), a);
-    *dyn = t;
-    return (PiType){.sort = TDynamic, .dynamic = dyn};
+    *dyn = (PiType){.sort = TDynamic, .dynamic = t};
+    return dyn;
 }
 
-PiType mk_proc_type(Allocator* a, size_t nargs, ...) {
+PiType* mk_proc_type(Allocator* a, size_t nargs, ...) {
     va_list args;
     va_start(args, nargs);
     
     PtrArray ty_args = mk_ptr_array(nargs, a);
     for (size_t i = 0; i < nargs ; i++) {
-        PiType* arg = mem_alloc(sizeof(PiType), a);
-        *arg = va_arg(args, PiType);
+        PiType* arg = va_arg(args, PiType*);
         push_ptr(arg, &ty_args);
     }
 
-    PiType* ret = mem_alloc(sizeof(PiType), a);
-    *ret = va_arg(args, PiType);
+    PiType* ret = va_arg(args, PiType*);
     va_end(args);
 
-    return (PiType) {
+    PiType* proc = mem_alloc(sizeof(PiType), a);
+    *proc = (PiType) {
         .sort = TProc,
         .proc.implicits = mk_ptr_array(0, a),
         .proc.args = ty_args,
         .proc.ret = ret
     };
+    return proc;
 }
 
-PiType mk_struct_type(Allocator* a, size_t nfields, ...) {
+PiType* mk_struct_type(Allocator* a, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
     
     SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
     for (size_t i = 0; i < nfields ; i++) {
         Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
-        PiType* arg = mem_alloc(sizeof(PiType), a);
-
-        *arg = va_arg(args, PiType);
+        PiType* arg = va_arg(args, PiType*);
         sym_ptr_insert(name, arg, &fields);
     }
     va_end(args);
 
-    return (PiType) {.sort = TStruct, .structure.fields = fields,};
+    PiType* structure = mem_alloc(sizeof(PiType), a);
+    *structure = (PiType) {.sort = TStruct, .structure.fields = fields,};
+    return structure;
 }
 
 // Sample usage: mk_enum_type(a, 3,
 //   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
 //   "Singleton", 1, mk_prim_type(Int_64),
 //   "None", 0)
-PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
+PiType* mk_enum_type(Allocator* a, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
     
@@ -1371,8 +1375,7 @@ PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
         int nargs = va_arg(args, int);
         PtrArray variant_args = mk_ptr_array(nargs, a);
         for (int j = 0; j < nargs; j++) {
-            PiType* arg = mem_alloc(sizeof(PiType), a);
-            *arg = va_arg(args, PiType);
+            PiType* arg = va_arg(args, PiType*);
             push_ptr(arg, &variant_args);
         }
         PtrArray* heap_variant_args = mem_alloc(sizeof(PtrArray), a);
@@ -1382,52 +1385,56 @@ PiType mk_enum_type(Allocator* a, size_t nfields, ...) {
     }
     va_end(args);
 
-    return (PiType) {.sort = TEnum, .structure.fields = fields,};
+    PiType* enumeration = mem_alloc(sizeof(PiType), a);
+    *enumeration = (PiType) {.sort = TEnum, .structure.fields = fields,};
+    return enumeration;
 }
 
-PiType mk_distinct_type(Allocator* a, PiType inner) {
-    PiType out = (PiType) {
+PiType* mk_distinct_type(Allocator* a, PiType* inner) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out =(PiType) {
         .sort = TDistinct,
-        .distinct.type = mem_alloc(sizeof(PiType), a),
+        .distinct.type = inner,
         .distinct.id = distinct_id(),
         .distinct.source_module = NULL,
         .distinct.args = NULL,
     };
-    *out.distinct.type = inner;
     return out;
 }
 
-PiType mk_opaque_type(Allocator* a, void* module, PiType inner) {
-    PiType out = (PiType) {
+PiType* mk_opaque_type(Allocator* a, void* module, PiType* inner) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
         .sort = TDistinct,
-        .distinct.type = mem_alloc(sizeof(PiType), a),
+        .distinct.type = inner,
         .distinct.id = distinct_id(),
         .distinct.source_module = module,
         .distinct.args = NULL,
     };
-    *out.distinct.type = inner;
     return out;
 }
 
-PiType mk_var_type(const char *name) {
-  return (PiType) {
-      .sort = TVar,
-      .var = string_to_symbol(mv_string(name)),
-  };
+PiType* mk_var_type(Allocator* a, const char *name) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TVar,
+        .var = string_to_symbol(mv_string(name)),
+    };
+    return out;
 }
 
-PiType mk_type_family(Allocator* a, SymbolArray vars, PiType body) {
-    PiType out = (PiType) {
+PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
         .sort = TFam,
         .binder.vars = vars,
-        .binder.body = mem_alloc(sizeof(PiType), a),
+        .binder.body = body,
     };
-    *out.binder.body = body;
     return out;
 }
 
-PiType mk_app_type(Allocator *a, PiType fam, ...) {
-    PiType* lhs = &fam;
+PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
+    PiType* lhs = fam;
     while (lhs->sort == TDistinct) lhs = lhs->distinct.type;
 
     va_list args;
@@ -1435,32 +1442,30 @@ PiType mk_app_type(Allocator *a, PiType fam, ...) {
 
     PtrArray fam_args = mk_ptr_array(lhs->binder.vars.len, a);
     for (size_t i = 0; i < lhs->binder.vars.len; i++) {
-        PiType* ptr = mem_alloc(sizeof(PiType), a);
-        *ptr = va_arg(args, PiType);
+        PiType* ptr = va_arg(args, PiType*);
         push_ptr(ptr, &fam_args);
     }
     va_end(args);
 
-    PiType* res = type_app(fam, fam_args, a);
-    return *res;
+    PiType* out = type_app(*fam, fam_args, a);
+    sdelete_ptr_array(fam_args);
+    return out;
 }
 
-PiType mk_string_type(Allocator* a) {
+PiType* mk_string_type(Allocator* a) {
     // Struct [.memsize U64] [.bytes Address]
-
-    PiType* memsize_type = mem_alloc(sizeof(PiType), a);
-    PiType* bytes_type = mem_alloc(sizeof(PiType), a);
-
-    *memsize_type = (PiType) {.sort = TPrim, .prim = UInt_64};
-    *bytes_type = (PiType) {.sort = TPrim, .prim = Address};
+    PiType* memsize_type = mk_prim_type(a, UInt_64);
+    PiType* bytes_type = mk_prim_type(a, Address);
 
     SymPtrAMap fields = mk_sym_ptr_amap(2, a);
     sym_ptr_insert(string_to_symbol(mv_string("memsize")), memsize_type, &fields);
     sym_ptr_insert(string_to_symbol(mv_string("bytes")), bytes_type, &fields);
     
-    return (PiType) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
         .sort = TStruct,
         .structure.fields = fields
     };
+    return out;
 }
 

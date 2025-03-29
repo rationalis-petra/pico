@@ -123,16 +123,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = mk_uvar_with_default(gen, a);
         break;
     case SLitTypedIntegral:
-        untyped->ptype = mem_alloc(sizeof(PiType), a);
-        *untyped->ptype = (PiType) {.sort = TPrim, .prim = untyped->integral.type,};
+        untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
     case SLitBool:
-        untyped->ptype = mem_alloc(sizeof(PiType), a);
-        *untyped->ptype = (PiType) {.sort = TPrim, .prim = Bool,};
+        untyped->ptype = mk_prim_type(a, Bool);
         break;
     case SLitString:
-        untyped->ptype = mem_alloc(sizeof(PiType), a);
-        *untyped->ptype = mk_string_type(a);
+        untyped->ptype = mk_string_type(a);
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
@@ -225,15 +222,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        // 
-        PiType* syntax = get_syntax_type();
-        PiType* array = get_array_type();
-        PtrArray syn_arr = mk_ptr_array(1, a);
-        push_ptr(syntax, &syn_arr);
-        PiType* syntax_array = type_app(*array, syn_arr, a);
-
-        PiType* transformer_proc = mem_alloc(sizeof(PiType), a);
-        *transformer_proc = mk_proc_type(a, 1, *syntax_array, *syntax);
+        PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+        PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_syntax_type());
 
         type_check_i(untyped->transformer, transformer_proc, env, gen, a, point);
         PiType* t = mem_alloc(sizeof(PiType), a);

@@ -28,7 +28,8 @@
 #include "data/stream.h"
 
 #include "assembler/assembler.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/extra.h"
 
 #include "test/command_line_opts.h"
 #include "test_pico/pico.h"

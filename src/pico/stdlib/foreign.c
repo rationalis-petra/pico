@@ -11,7 +11,6 @@ PiType* get_c_type() {
     return exported_c_type;
 }
 
-
 typedef struct {
     uint64_t tag;
     union {
@@ -47,11 +46,11 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
 
     // DynLibResult
     CType dynlib_result = mk_struct_ctype(
-        a, 2,
-        mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}),
+        a, 2, "tag",
+        mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
-                       "dynlib", mk_voidptr_ctype(a),
-                       "error_message", string_ctype));
+                       "error_message", string_ctype,
+                       "dynlib", mk_voidptr_ctype(a)));
 
     // Proc type
     CType fn_ctype = mk_fn_ctype(a, 1, copy_c_type(string_ctype, a), dynlib_result);
@@ -86,6 +85,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     delete_module_header(header);
 
     PiType type;
+    PiType* typep;
     Symbol sym;
     ErrorPoint point;
     if (catch_error(point)) {
@@ -119,44 +119,44 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     {
         type = (PiType) {.sort = TKind, .kind.nargs= 0};
         PiType* type_data;
-        PiType prim_sort_type = mk_enum_type(a, 5,
+        PiType* prim_sort_type = mk_enum_type(a, 5,
                                              "char", 0,
                                              "short", 0,
                                              "int", 0,
                                              "long", 0,
                                              "long-long", 0);
-        type_data = &prim_sort_type;
+        type_data = prim_sort_type;
         sym = string_to_symbol(mv_string("CPrimSort"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PiType signed_type = mk_enum_type(a, 3,
+        PiType* signed_type = mk_enum_type(a, 3,
                                           "signed", 0,
                                           "unsigned", 0,
                                           "unspecified", 0);
-        type_data = &signed_type;
+        type_data = signed_type;
         sym = string_to_symbol(mv_string("Signed"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PiType prim_type = mk_struct_type(a, 2,
+        PiType* prim_type = mk_struct_type(a, 2,
                                    "sort", prim_sort_type,
                                    "signed", signed_type);
-        type_data = &prim_type;
+        type_data = prim_type;
         sym = string_to_symbol(mv_string("CPrim"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
 
-        PiType c_type = mk_enum_type(a, 3,
+        PiType* c_type = mk_enum_type(a, 3,
                                      "void", 0,
                                      "prim", 1, prim_type,
                                      "unspecified", 0);
-        type_data = &c_type;
+        type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
         ModuleEntry* e = get_def(sym, module);
         exported_c_type = e->value;
 
-        delete_pi_type(c_type, a);
+        delete_pi_type_p(c_type, a);
     }
 
     Segments fn_segments = {.data = mk_u8_array(0, a),};
@@ -165,44 +165,46 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
 
     // TODO: fill in correct type
     // dynlib-open : Proc [String] (Either String DynLib)
-    PiType dynlib_ty = mk_opaque_type(a, module, mk_prim_type(Address));
-    type_data = &dynlib_ty;
+    PiType* dynlib_ty = mk_opaque_type(a, module, mk_prim_type(a, Address));
+    type_data = dynlib_ty;
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DynLib"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
     clear_assembler(ass);
 
-
-    PiType* str = mem_alloc(sizeof(PiType), a);
-    *str = mk_string_type(a);
-    type = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, *get_either_type(), str, dynlib_ty));
-    build_dynlib_open_fn(&type, ass, a, &point);
+    PiType* str = mk_string_type(a);
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, dynlib_ty));
+    build_dynlib_open_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+
+    delete_pi_type_p(typep, a);
+
+    // delete_pi_type_p(str, a);
+    // delete_pi_type_p(dynlib_ty, a);
 
     // TODO: fill in correct type
-    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
-    build_dynlib_symbol_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("dynlib-symbol"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
+    /* typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)); */
+    /* build_dynlib_symbol_fn(ass, a, &point); */
+    /* sym = string_to_symbol(mv_string("dynlib-symbol")); */
+    /* fn_segments.code = get_instructions(ass); */
+    /* prepped = prep_target(module, fn_segments, ass, NULL); */
+    /* add_def(module, sym, *typep, &prepped.code.data, prepped, NULL); */
+    /* clear_assembler(ass); */
+    /* delete_pi_type_p(typep, a); */
 
     // TODO: fill in correct type
-    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
-    build_dynlib_close_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("dynlib-close"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-    delete_pi_type(type, a);
+    /* typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)); */
+    /* build_dynlib_close_fn(ass, a, &point); */
+    /* sym = string_to_symbol(mv_string("dynlib-close")); */
+    /* fn_segments.code = get_instructions(ass); */
+    /* prepped = prep_target(module, fn_segments, ass, NULL); */
+    /* add_def(module, sym, *typep, &prepped.code.data, prepped, NULL); */
+    /* clear_assembler(ass); */
+    /* delete_pi_type_p(typep, a); */
 
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);

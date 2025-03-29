@@ -21,15 +21,10 @@ PiType* get_either_type() {
 }
 
 PiType build_store_fn_ty(Allocator* a) {
-    Symbol ty_sym = string_to_symbol(mv_string("A"));
-
-    PiType* proc_ty = mem_alloc(sizeof(PiType), a);
-
-    PiType tvar = (PiType) {.sort = TVar, .var = ty_sym, };
-    *proc_ty = mk_proc_type(a, 2, mk_prim_type(Address), tvar, mk_prim_type(Unit));
+    PiType* proc_ty  = mk_proc_type(a, 2, mk_prim_type(a, Address), mk_var_type(a, "A"), mk_prim_type(a, Unit));
 
     SymbolArray types = mk_u64_array(1, a);
-    push_u64(ty_sym, &types);
+    push_u64(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -106,14 +101,10 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 PiType build_load_fn_ty(Allocator* a) {
-    Symbol ty_sym = string_to_symbol(mv_string("A"));
-
-    PiType ret_ty = (PiType) {.sort = TVar, .prim = ty_sym, };
-    PiType* proc_ty = mem_alloc(sizeof(PiType), a);
-    *proc_ty = mk_proc_type(a, 1, mk_prim_type(Address), ret_ty);
+    PiType* proc_ty = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_var_type(a, "A"));
 
     SymbolArray types = mk_u64_array(1, a);
-    push_u64(ty_sym, &types);
+    push_u64(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -225,6 +216,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     Symbol sym;
 
     PiType type;
+    PiType* typep;
     PiType type_val;
     PiType* type_data = &type_val;
     ErrorPoint point;
@@ -416,47 +408,47 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Type"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Unit);
+    type_val = (PiType) {.sort = TPrim, .prim = Unit};
     sym = string_to_symbol(mv_string("Unit"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Bool);
+    type_val = (PiType) {.sort = TPrim, .prim = Bool};
     sym = string_to_symbol(mv_string("Bool"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Address);
+    type_val = (PiType) {.sort = TPrim, .prim = Address};
     sym = string_to_symbol(mv_string("Address"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Int_64);
+    type_val = (PiType) {.sort = TPrim, .prim = Int_64};
     sym = string_to_symbol(mv_string("I64"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Int_32);
+    type_val = (PiType) {.sort = TPrim, .prim = Int_32};
     sym = string_to_symbol(mv_string("I32"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Int_16);
+    type_val = (PiType) {.sort = TPrim, .prim = Int_16};
     sym = string_to_symbol(mv_string("I16"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(Int_8);
+    type_val = (PiType) {.sort = TPrim, .prim = Int_8};
     sym = string_to_symbol(mv_string("I8"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(UInt_64);
+    type_val = (PiType) {.sort = TPrim, .prim = UInt_64};
     sym = string_to_symbol(mv_string("U64"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(UInt_32);
+    type_val = (PiType) {.sort = TPrim, .prim = UInt_32};
     sym = string_to_symbol(mv_string("U32"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(UInt_16);
+    type_val = (PiType) {.sort = TPrim, .prim = UInt_16};
     sym = string_to_symbol(mv_string("U16"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    type_val = mk_prim_type(UInt_8);
+    type_val = (PiType) {.sort = TPrim, .prim = UInt_8};
     sym = string_to_symbol(mv_string("U8"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
@@ -465,54 +457,43 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         // Ptr Type
         U64Array vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
-        PiType ptr_type = mk_distinct_type(a, mk_type_family(a, vars, mk_prim_type(Address)));
-        type_data = &ptr_type;
+        PiType* ptr_type = mk_distinct_type(a, mk_type_family(a, vars, mk_prim_type(a, Address)));
+        type_data = ptr_type;
         sym = string_to_symbol(mv_string("Ptr"));
         type.kind.nargs = 1;
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
         // Allocator Type 
-        PiType alloc_type = mk_struct_type(a, 3,
-                                           "alloc", mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address)),
-                                           "realloc", mk_proc_type(a, 2, mk_prim_type(Address), mk_prim_type(UInt_64), mk_prim_type(Address)),
-                                           "free", mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(Unit)));
-        type_data = &alloc_type;
+        PiType* alloc_type = mk_struct_type(a, 3,
+                                            "alloc", mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
+                                            "realloc", mk_proc_type(a, 2, mk_prim_type(a, Address), mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
+                                            "free", mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit)));
+        type_data = alloc_type;
         sym = string_to_symbol(mv_string("Allocator"));
         type.kind.nargs = 0;
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
         // (Ptr Alloc)
-        PiType* alloc_ptr = mem_alloc(sizeof(PiType), a);
-        *alloc_ptr = alloc_type;
-        PtrArray* al_app = mem_alloc(sizeof(PtrArray), a);
-        *al_app = mk_ptr_array(1, a);
-        push_ptr(alloc_ptr, al_app);
-
-        PiType alloc_ptr_type = (PiType) {
-            .sort = TDistinct,
-            .distinct.type = copy_pi_type_p(ptr_type.distinct.type->binder.body, a),
-            .distinct.id = ptr_type.distinct.id,
-            .distinct.source_module = ptr_type.distinct.source_module,
-            .distinct.args = al_app,
-        };
-        delete_pi_type(ptr_type, a);
+        PiType* alloc_ptr_type = mk_app_type(a, ptr_type, alloc_type);
+        delete_pi_type_p(ptr_type, a);
+        delete_pi_type_p(alloc_type, a);
         
         // Array Type 
         // Make a ptr
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        PiType type_val = mk_distinct_type(a, mk_type_family(a,
+        PiType* type_val = mk_distinct_type(a, mk_type_family(a,
                                                       vars,
                                                       mk_struct_type(a, 4,
-                                                                     "data", mk_prim_type(Address),
-                                                                     "len", mk_prim_type(UInt_64),
-                                                                     "capacity", mk_prim_type(UInt_64),
+                                                                     "data", mk_prim_type(a, Address),
+                                                                     "len", mk_prim_type(a, UInt_64),
+                                                                     "capacity", mk_prim_type(a, UInt_64),
                                                                      "gpa", alloc_ptr_type)));
-        type_data = &type_val;
+        type_data = type_val;
         sym = string_to_symbol(mv_string("Array"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type(type_val, a);
+        delete_pi_type_p(type_val, a);
 
         ModuleEntry* e = get_def(sym, module);
         array_type = e->value;
@@ -527,51 +508,48 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_val = mk_distinct_type(a, mk_type_family(a,
                                                       vars,
                                                       mk_enum_type(a, 2,
-                                                                   "left", 1, mk_var_type("A"),
-                                                                   "right", 1, mk_var_type("B"))));
-        type_data = &type_val;
+                                                                   "left", 1, mk_var_type(a, "A"),
+                                                                   "right", 1, mk_var_type(a, "B"))));
+        type_data = type_val;
         sym = string_to_symbol(mv_string("Either"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type(type_val, a);
+        delete_pi_type_p(type_val, a);
 
         e = get_def(sym, module);
         either_type = e->value;
 
         type.kind.nargs = 0;
 
-        PiType atom_type = mk_enum_type(a, 4,
-                                        "bool", 1, mk_prim_type(Bool),
-                                        "integral", 1, mk_prim_type(Int_64),
-                                        "symbol", 1,  mk_prim_type(Int_64),
+        PiType* atom_type = mk_enum_type(a, 4,
+                                        "bool", 1, mk_prim_type(a, Bool),
+                                        "integral", 1, mk_prim_type(a, Int_64),
+                                        "symbol", 1,  mk_prim_type(a, Int_64),
                                         "string", 1, mk_string_type(a));
-        type_data = &atom_type;
+        type_data = atom_type;
         sym = string_to_symbol(mv_string("Atom"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PiType hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
-        type_data = &hint_type;
+        PiType* hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
+        type_data = hint_type;
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PtrArray args = mk_ptr_array(1, a);
-        PiType* addr_ty = mem_alloc(sizeof(PiType), a);
-        *addr_ty = mk_prim_type(Address);
-        push_ptr(addr_ty, &args);
-        PiType* addr_array = type_app(*array_type, args, a);
-        delete_pi_type_p(args.data[0], a);
-        sdelete_ptr_array(args);
+        PiType* addr_ty = mk_prim_type(a, Address);
+        PiType* addr_array = mk_app_type(a, array_type, addr_ty);
+        delete_pi_type_p(addr_ty, a);
 
         type_val = mk_enum_type(a, 2,
                                 "atom", 1, atom_type,
-                                "node", 2, hint_type, *addr_array);
+                                "node", 2, hint_type, addr_array);
 
-        type_data = &type_val;
+        type_data = type_val;
         sym = string_to_symbol(mv_string("Syntax"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        mem_free(addr_array, a);
-        delete_pi_type(type_val, a);
         e = get_def(sym, module);
         syntax_type = e->value;
+
+        delete_pi_type_p(type_val, a);
+        //delete_pi_type_p(addr_array, a);
     }
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
@@ -595,23 +573,23 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     clear_assembler(ass);
     delete_pi_type(type, a);
 
-    type = mk_proc_type(a, 1, mk_prim_type(Address), mk_prim_type(UInt_64));
+    typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, UInt_64));
     build_nop_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("address-to-num"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
-    type = mk_proc_type(a, 1, mk_prim_type(UInt_64), mk_prim_type(Address));
+    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address));
     build_nop_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("num-to-address"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type_p(typep, a);
 
     add_module(string_to_symbol(mv_string("core")), module, base);
 
