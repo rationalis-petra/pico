@@ -1224,6 +1224,7 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
         if (family.sort != TFam || family.binder.vars.len != args.len) {
             panic(mv_string("Invalid type_app!"));
         }
+
         SymPtrAssoc subst = mk_sym_ptr_assoc(args.len, a);;
         for (size_t i = 0; i < args.len; i++) {
             Symbol var = family.binder.vars.data[i];

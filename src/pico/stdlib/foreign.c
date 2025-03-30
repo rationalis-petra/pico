@@ -181,6 +181,10 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    // TODO (BUG) - there is some bug (probably in type application) which means
+    // that these types must be free'd (but not deleted) manually. 
+    mem_free(str, a);
+    mem_free(dynlib_ty, a);
     delete_pi_type_p(typep, a);
 
     // delete_pi_type_p(str, a);
