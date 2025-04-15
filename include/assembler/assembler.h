@@ -88,6 +88,7 @@ typedef enum {
     // ------------------
     //  Arithmetic
     // ------------------
+    Neg,
     Mul,
     Div,
     IMul, 
@@ -101,14 +102,15 @@ typedef enum {
 
 typedef enum {
     Ret,
+    CQO,
     Nullary_Op_Count,
 } NullaryOp;
 
 typedef enum {
     RAX = 0b0000,
-    RBX = 0b0011,
     RCX = 0b0001,
     RDX = 0b0010,
+    RBX = 0b0011,
     RSP = 0b0100,
     RBP = 0b0101,
     RSI = 0b0110,

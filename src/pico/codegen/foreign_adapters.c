@@ -19,7 +19,6 @@ typedef enum {
     SysVMemory,
 } SysVArgClass;
 
-
 U8Array system_v_arg_classes(CType* type, Allocator* a);
 
 SysVArgClass merge_sysv_classes(SysVArgClass c1, SysVArgClass c2) {
@@ -115,7 +114,7 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
 U8Array system_v_arg_classes(CType* type, Allocator* a) {
     U8Array out = mk_u8_array(8, a);
     size_t type_size = c_size_of(*type);
-    if (type_size > 64) {
+    if (type_size <= 64) {
         // We start by calculating the number of words (eightbytes) we need.
         // This is the divisor (rounded up) of type_size and 8, as words are eightbytes.
         // to ensure that there is a round up, we add 7 to the numerator, as
@@ -130,7 +129,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
         push_u8(SysVMemory, &out);
     }
 
-    // TOOD (FEATURE BUG): Add the other merge steps.
+    // TODO (FEATURE BUG): Add the other merge steps.
     for (size_t i = 0; i < out.len; i++) {
       if (out.data[i] == SysVMemory) {
           out.len = 0;
@@ -161,7 +160,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // left-to-right, meaning the last argument is on the bottom of the stack
     // (offset 0). 
     U64Array arg_offsets = mk_u64_array(ctype->proc.args.len + 1, a);
-    uint64_t offset = 0;
+    uint64_t offset = ADDRESS_SIZE; // To account for return address
     for (size_t i = 0; i < ptype->proc.args.len; i++) {
         push_u64(offset, &arg_offsets); 
         size_t idx = ctype->proc.args.len - (i + 1);
@@ -175,18 +174,26 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // This means that we don't have to take care of saving/restoring their
     // values as part of the function call.
 
-    // The stack shall be aligned either on 16 bytes, (32 bytes if __m256 is used) or
-    // 64 bytes (if __m512 is used)
-    // TODO (BUG LOGIC): Generate assembly to align the stack
-    // size_t stack_align = 16;
-
     // If class is Memory, we need to allocate space on the stack as if this
     // were the first argument to the function!
     U64Array in_memory_args = mk_u64_array(ctype->proc.args.len, a); 
+    size_t input_area_size = 0;
 
     const int max_integer_registers = 6;
     const Regname integer_registers[8] = {RDI, RSI, RDX, RCX, R8, R9};
     unsigned char current_integer_register = 0;
+
+    U8Array return_classes = system_v_arg_classes(ctype->proc.ret, a);
+    size_t return_arg_size = c_size_of(*ctype->proc.ret);
+
+    // Check if return arg in memory, if so then the return arg takes the spot of
+    // a 'hidden' extra argument - specifically, the first, with the ptr being
+    // passed in RDI.
+    bool pass_return_in_memory = (return_classes.len == 0) || (return_classes.len > 2);
+    if (pass_return_in_memory) {
+        input_area_size += return_arg_size;
+        current_integer_register++;
+    }
 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
         CType* c_arg = ctype->proc.args.data[i].val;
@@ -204,10 +211,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         size_t assembler_pos = get_pos(ass);
         bool pass_in_memory = classes.len == 0;
 
-        for (size_t i = 0; i < classes.len; i++) {
-          switch (classes.data[i]) {
+        for (size_t j = 0; j < classes.len; j++) {
+          switch (classes.data[j]) {
           case SysVInteger: {
               if (current_integer_register >= max_integer_registers) {
+                  // TODO: move ptr to value into address
                   set_pos(ass, assembler_pos);
                   current_integer_register = saved_integer_register;
                   pass_in_memory = true; // this breaks us out of the loop
@@ -217,7 +225,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                   if (arg_offsets.data[i] > 127) {
                       throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
                   }
-                  build_binary_op(ass, Mov, reg(next_reg, sz_64), rref8(RSP, arg_offsets.data[i], sz_64), a, point);
+                  // Explanation - copy into current register
+                  // copy from RSP + current offset + return address offset + eightbyte_index
+                  build_binary_op(ass, Mov, reg(next_reg, sz_64),
+                                  rref8(RSP, arg_offsets.data[i] + 0x8 * j, sz_64),
+                                  a, point);
               }
               break;
           }
@@ -240,6 +252,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
               panic(mv_string("Internal Error: argument should not have No Class"));
               break;
           case SysVMemory:
+              set_pos(ass, assembler_pos);
+              current_integer_register = saved_integer_register;
+              pass_in_memory = true; // this breaks us out of the loop
               break;
           }
           if (pass_in_memory) break;
@@ -247,34 +262,63 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         if (pass_in_memory) {
             push_u64(i, &in_memory_args);
+            input_area_size += c_size_of(*c_arg);
         }
 
         sdelete_u8_array(classes);
     }
 
-    // Use RBX as an indexing register, to point to the 'base':
+    // Use RBX as an indexing register, to point to the 'base', adding 0x8 to
+    // account for the return address
     build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
 
-    size_t extra_padding = 0;
+    // The stack shall be aligned either on 16 bytes, (32 bytes if __m256 is used) or
+    // 64 bytes (if __m512 is used). The alignment is to the 'end of input
+    // area', i.e. the stack must be (16/32/64) - byte aligned immediately BEFORE the call.  
+    // TODO (BUG LOGIC): Determine which stack alignment should be used
+    const size_t expected_stack_align = 16;
+    size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
+    needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
 
-    U8Array return_classes = system_v_arg_classes(ctype->proc.ret, a);
-    size_t return_arg_size = c_size_of(*ctype->proc.ret);
+    // Align the stack is aligned. This is done as follows:
+    // Check the offset of the stack (RSP)
+    // If this is equal to the needed offset (input 
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Mov, reg(R10, sz_64), imm64(expected_stack_align), a, point);
+    build_binary_op(ass, Mov, reg(R11, sz_64), imm64(needed_stack_offset), a, point);
 
-    bool pass_return_in_memory = (return_classes.len == 0) || (return_classes.len > 2);
-    if (pass_return_in_memory) {
-        // pass in memory - reserve space on stack:
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
-    }
+    // The div stores the remainder in RDX, which has the 1st argument and so needs saving
+    build_binary_op(ass, Mov, reg(R12, sz_64), reg(RDX, sz_64), a, point);
+    build_nullary_op(ass, CQO, a, point);
+    build_unary_op(ass, IDiv, reg(R10, sz_64), a, point);
+
+    build_binary_op(ass, Sub, reg(R11, sz_64), reg(RDX, sz_64), a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Neg, reg(R11, sz_64), a, point);
+
+    // Was RDX < R10? 
+    build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
+    
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+
+    // Restore value of RDX
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
 
     for (size_t i = 0; i < in_memory_args.len; i++) {
         // pass in memory - reserve space on stack:
         size_t arg_idx = in_memory_args.data[i];
         size_t arg_size = arg_offsets.data[arg_idx + 1] - arg_offsets.data[arg_idx];
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(arg_offsets.data[arg_idx]), a, point);
-        generate_monomorphic_copy(RSP, RDX, arg_size, ass, a, point);
-        extra_padding += arg_size;
+        build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx]), a, point);
+        generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
+    }
+
+    if (pass_return_in_memory) {
+        // pass in memory - reserve space on stack:
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
+        build_binary_op(ass, Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), a, point);
     }
 
     // Call function
@@ -282,17 +326,48 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
 
     if (pass_return_in_memory) {
-        // First, copy the value: 
-        size_t target_offset = extra_padding + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(target_offset), a, point);
-        generate_monomorphic_copy(RDX, RSP, return_arg_size, ass, a, point);
+        //        Stack currently looks like
+        //        <Args provided to Pico Fn ...>
+        //        [Return Address]
+        //        <Align Padding ...>
+        //        [Align Adjust]
+        // RSP -- <Input Area...>
+        // unadjusted offset to be at beginning of args provided to pico fn - return_arg_size (but ignore padding)
+        //   0x10 = Return address + Align adjust
+        //   However, arg_offsets include an extra + 0x8 to account for return
+        //        address, so we subtract 0x8 from 0x10 to get 0x8 
+        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
 
-        // Then, pop any extra memory from the stack.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(target_offset), a, point);
+        // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
+        build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+
+        // Use to to calculate the location of the return address (store in RCX)
+        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
+        // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  
+
+        // To copy the value, first store target address (END of where return value is copied) in RDX 
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
+
+        // Now, generate a stack copy targeting RDX
+        generate_stack_copy(RDX, return_arg_size, ass, a, point);
+
+        // Then, pop all memory (sans the return arg) from the stack.
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1] - return_arg_size), a, point);
+
+        // Push return address
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
     } else {
         // Pop all memory arguments (both pico and c)
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(extra_padding + arg_offsets.data[arg_offsets.len -  1]), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
 
         // Now, push registers onto stack
         size_t current_return_register = 0;
@@ -339,10 +414,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
             if (pass_return_in_memory) break;
         }
     }
+    build_nullary_op(ass, Ret, a, point);
+
     sdelete_u8_array(return_classes);
     sdelete_u64_array(in_memory_args);
         
-    // Now, we need to pop all args and push the return value onto the stack.
 
 #elif ABI == WIN_64 
 #error "convert_c_fun not imlemented for Win 64"

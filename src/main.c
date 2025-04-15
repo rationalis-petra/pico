@@ -166,7 +166,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
 int main(int argc, char** argv) {
     // Setup
-
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();

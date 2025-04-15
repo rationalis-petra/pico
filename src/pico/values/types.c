@@ -213,15 +213,20 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         if (t.distinct.args) {
             out.named.args = mem_alloc(sizeof(PtrArray), a);
             *out.named.args = copy_ptr_array(*t.named.args,  (TyCopier)copy_pi_type_p, a);
+        } else {
+            out.distinct.args = NULL;
         }
         break;
     case TDistinct:
         out.distinct.type = copy_pi_type_p(t.distinct.type, a);
+        out.distinct.name = t.distinct.name;
         out.distinct.id = t.distinct.id;
         out.distinct.source_module = t.distinct.source_module;
         if (t.distinct.args) {
             out.distinct.args = mem_alloc(sizeof(PtrArray), a);
             *out.distinct.args = copy_ptr_array(*t.distinct.args,  (TyCopier)copy_pi_type_p, a);
+        } else {
+            out.distinct.args = NULL;
         }
         break;
     case TVar:

@@ -69,6 +69,43 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
     push_size(offset, sarr);
 }
 
+void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Like a monomorphic copy, except that we start at the 'end' and go backwards
+    const Regname src = RSP;
+
+    size_t leftover = size % 8;
+    if (leftover >= 4) {
+        build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, size / 8, sz_32), a, point);
+        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_32), reg(RAX, sz_32), a, point);
+        leftover -= 4;
+    }
+    if (leftover >= 2) {
+        build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, size / 8, sz_16), a, point);
+        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_16), reg(RAX, sz_16), a, point);
+        leftover -= 2;
+    }
+    if (leftover >= 1) {
+        build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, size / 8, sz_8), a, point);
+        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_8), reg(RAX, sz_8), a, point);
+        leftover -= 1;
+    }
+
+    // First, assert that size_t is divisible by 8 ( we use rax for copies )
+    if (size > 255)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_copy: copy size must be smaller than 255!"));
+    };
+
+    if (src == RAX || dest == RAX)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_copy: cannoy copy from/to RAX"));
+    };
+
+    for (size_t i = 0; i < size / 8; i++) {
+        size_t j = (size / 8) - (i + 1);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(src, j * 8, sz_64), a, point);
+        build_binary_op(ass, Mov, rref8(dest, j * 8, sz_64), reg(RAX, sz_64), a, point);
+    }
+}
+
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size > 255)  {

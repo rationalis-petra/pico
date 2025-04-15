@@ -1,3 +1,4 @@
+#include <stdio.h> 
 #include "platform/dynamic_library.h"
 #include "platform/machine_info.h"
 
@@ -17,6 +18,7 @@ Result open_lib(DynLib **out, String path, Allocator* a) {
         .ptr = dlopen((char*)path.bytes, RTLD_LAZY),
         .from = a,
     };
+
     char* error_message = dlerror();
     if (error_message) {
       return (Result) {

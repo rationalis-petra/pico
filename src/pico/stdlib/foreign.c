@@ -53,7 +53,7 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
                        "dynlib", mk_voidptr_ctype(a)));
 
     // Proc type
-    CType fn_ctype = mk_fn_ctype(a, 1, copy_c_type(string_ctype, a), dynlib_result);
+    CType fn_ctype = mk_fn_ctype(a, 1, "path", copy_c_type(string_ctype, a), dynlib_result);
 
     convert_c_fn(wrap_dynlib_open, &fn_ctype, type, ass, a, point); 
 
@@ -173,11 +173,13 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     clear_assembler(ass);
 
     PiType* str = mk_string_type(a);
+    // dynlib_ty is ok here
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, dynlib_ty));
     build_dynlib_open_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
+    // but not ok here, when being copied (sort is ok, but inner data is not.).
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 

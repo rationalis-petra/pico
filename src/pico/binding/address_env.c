@@ -142,7 +142,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if ((maddr.type == SADirect || maddr.type == SAIndirect) && maddr.symbol == s) {
-            // TOOD: Check if the offset can fit into an immediate
+            // TODO: Check if the offset can fit into an immediate
             return (AddressEntry) {
                 .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
                 .stack_offset = maddr.stack_offset,
@@ -190,7 +190,7 @@ AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
 
             // TODO: check for type vars?
             if (s.index == 0) {
-                // TOOD: Check if the offset can fit into an immediate
+                // TODO: Check if the offset can fit into an immediate
                 return (AddressEntry) {
                     .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
                     .stack_offset = maddr.stack_offset,
@@ -212,7 +212,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if (maddr.type == SALabel && maddr.symbol == s) {
-            // TOOD: Check if the offset can fit into an immediate
+            // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
                 .type = Ok,
                 .stack_offset = maddr.stack_offset,

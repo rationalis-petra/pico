@@ -202,6 +202,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
 
+                // TODO (check if replace with stack copy)
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
                 throw_error(point,
@@ -692,6 +693,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             }
             build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
         }
         break;
@@ -742,6 +744,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 build_binary_op(ass, Add, reg(RCX, sz_64), imm32(align), a, point);
             }
 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_copy(RCX, RSP, offset, ass, a, point);
 
             // We need to increment the current field index to be able ot access
@@ -829,7 +832,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
 
-        //void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+        // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
         
         address_stack_shrink(env, ADDRESS_SIZE);
@@ -857,6 +860,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
             // Now we have a pointer to the value stored in RCX, swap it with
             // the value on the stack
+
+            // TODO (check if replace with stack copy)
             generate_monomorphic_swap(RCX, RSP, bind_size, ass, a, point);
         }
 
@@ -881,6 +886,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
 
             // Store ptr to local value to restore in RDX 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_swap(RCX, RDX, bind_size, ass, a, point);
             build_binary_op(ass, Add, reg(RDX, sz_64), imm32(bind_size + ADDRESS_SIZE), a, point);
 
@@ -1183,6 +1189,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* arg_type = syn.reset_to.arg->ptype;
         size_t asize = pi_size_of(*arg_type);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(asize), a, point);
+        // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, R9, asize, ass, a, point);
 
         // Step 5: Long Jump (call) register
