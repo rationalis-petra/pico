@@ -373,8 +373,8 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TStruct: {
         size_t current_offset = 0;
 
-        PtrArray nodes = mk_ptr_array(2 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("(struct ", a)), a), &nodes);
+        PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
+        push_ptr(mv_str_doc((mk_string("struct", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(4, a);
             Document* pre = mk_str_doc(mv_string("[."), a);
@@ -393,8 +393,8 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(fd_doc, &nodes);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TEnum: {
@@ -620,7 +620,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("Struct ", a)), a), &nodes);
+        push_ptr(mv_str_doc((mk_string("Struct", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);

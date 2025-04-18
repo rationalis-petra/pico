@@ -3,6 +3,8 @@
 #include "platform/signals.h"
 #include "data/result.h"
 #include "data/string.h"
+#include "pretty/string_printer.h"
+
 #include "pico/values/values.h"
 #include "pico/stdlib/extra.h"
 #include "pico/syntax/concrete.h"
@@ -470,7 +472,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             // The tag should be in a constructor (i.e. list)
             Symbol clause_tagname; 
             if (!get_fieldname(raw_pattern->branch.nodes.data[0], &clause_tagname)) {
-                throw_error(point, mv_string("Unable to get tagname in pattern."));
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
+                push_ptr(pretty_rawtree(*(RawTree*)raw_pattern->branch.nodes.data[0], a), &nodes);
+                Document* doc = mv_sep_doc(nodes, a);
+                throw_error(point, doc_to_str(doc, a));
             }
 
             SymbolArray clause_binds = mk_u64_array(raw_pattern->branch.nodes.len - 1, a);
@@ -483,7 +489,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             }
 
             // Get the term
-            RawTree* raw_term = (raw_clause->branch.nodes.len == 2) ? (RawTree*)raw.branch.nodes.data[2] : raw_slice(&raw, 2, a);
+            RawTree *raw_term = (raw_clause->branch.nodes.len == 2)
+                ? (RawTree *)raw_clause->branch.nodes.data[1]
+                : raw_slice(raw_clause, 2, a);
             Syntax* clause_body = abstract_expr_i(*raw_term, env, a, point);
 
             SynClause* clause = mem_alloc(sizeof(SynClause), a);

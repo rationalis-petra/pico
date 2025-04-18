@@ -4,6 +4,7 @@
 #include "pico/codegen/internal.h"
 #include "pico/codegen/foreign_adapters.h"
 
+#if ABI == SYSTEM_V_64 
 // -----------------------------------------------------------------------------
 // System V Specific stuff
 // -----------------------------------------------------------------------------
@@ -139,6 +140,56 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
     return out;
 }
 
+#elif ABI == WIN_64 
+
+typedef enum {
+    Win64Floating,
+    Win64Integer,
+    Win64SmallAggregate, // <= 64 bits
+    Win64LargeAggregate,
+    Win64M128, // __m128
+} Win64ArgClass;
+
+Win64ArgClass win_64_arg_class(CType* type) {
+    switch (type->sort) {
+    case CSVoid:
+        panic(mv_string("Void type does not have arg class"));
+        break;
+    case CSPrim:
+        switch (type->prim.prim) {
+        case CChar:
+        case CShort:
+        case CInt:
+        case CLong:
+        case CLongLong:
+            return Win64Integer;
+        }
+        break;
+    case CSPtr:
+    case CSProc:
+        return Win64Integer;
+        break;
+    case CSIncomplete:
+        panic(mv_string("Incomplete type does not have arg class"));
+        break;
+    case CSStruct: 
+    case CSUnion: {
+        size_t aggregate_sz = c_size_of(*type);
+        if (aggregate_sz <= 8) {
+            return Win64SmallAggregate;
+        } else {
+            return Win64LargeAggregate;
+        }
+        break;
+        case CSCEnum:
+            return Win64Integer;
+            break;
+    }
+    }
+    panic(mv_string("Invalid c type provided to win_64_arg_class."));
+}
+#endif
+
 void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // This function is for converting a c function (assumed platform default
     // ABI) into a pico function. This means that it assumes that all arguments
@@ -268,8 +319,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         sdelete_u8_array(classes);
     }
 
-    // Use RBX as an indexing register, to point to the 'base', adding 0x8 to
-    // account for the return address
+    // Use RBX as an indexing register, to point to the 'base'
     build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
 
     // The stack shall be aligned either on 16 bytes, (32 bytes if __m256 is used) or
@@ -280,7 +330,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
     needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
 
-    // Align the stack is aligned. This is done as follows:
+    // Check if the stack is aligned (and align if not). This is done as follows:
     // Check the offset of the stack (RSP)
     // If this is equal to the needed offset (input 
     build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
@@ -420,8 +470,99 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     sdelete_u64_array(in_memory_args);
         
 
-#elif ABI == WIN_64 
-#error "convert_c_fun not imlemented for Win 64"
+#elif ABI == WIN_64
+    const Regname integer_registers[4] = {RCX, RDX, R8, R9};
+    size_t current_register = 0;
+
+    const Win64ArgClass return_class = win_64_arg_class(ctype->proc.ret);
+    const bool pass_in_memory = return_class == Win64LargeAggregate || return_class == Win64LargeAggregate;
+    const size_t return_arg_size = c_size_of(*(CType*)ctype->proc.ret);
+    size_t input_area_size = 0;
+
+    // Calculate input area size:
+    if (pass_in_memory) {
+        input_area_size += return_arg_size;
+    }
+    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+      if (i < 4) {
+          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          if (class == Win64LargeAggregate || class == Win64LargeAggregate) {
+              input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+          }
+      } else {
+          input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+      }
+    }
+
+    const size_t expected_stack_align = 16;
+    size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
+    needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
+    // Check if the stack is aligned (and align if not). This is done as follows:
+    // Check the offset of the stack (RSP)
+    // If this is equal to the needed offset (input 
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Mov, reg(R10, sz_64), imm64(expected_stack_align), a, point);
+    build_binary_op(ass, Mov, reg(R11, sz_64), imm64(needed_stack_offset), a, point);
+
+    // The div stores the remainder in RDX, which has the 1st argument and so needs saving
+    build_binary_op(ass, Mov, reg(R12, sz_64), reg(RDX, sz_64), a, point);
+    build_nullary_op(ass, CQO, a, point);
+    build_unary_op(ass, IDiv, reg(R10, sz_64), a, point);
+
+    build_binary_op(ass, Sub, reg(R11, sz_64), reg(RDX, sz_64), a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Neg, reg(R11, sz_64), a, point);
+
+    // Was RDX < R10? 
+    build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
+    
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+
+    // Restore value of RDX
+    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
+
+
+    // Use RBX as an indexing register, to point to the 'base'
+    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+
+    // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
+    // rightmost argument is at the bottom of the stack. 
+    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+      if (i < 4) {
+          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          switch (class) {
+          case Win64Floating:
+              throw_error(point, mv_string("Not implemented: register arg of class Win64 float "));
+          case Win64Integer:
+          case Win64SmallAggregate: {
+              Regname next_reg = integer_registers[current_register++];
+              build_binary_op(ass, Mov, reg(next_reg, sz_64),
+                              rref8(RBX, arg_offsets.data[i], sz_64),
+                              a, point);
+              break;
+          }
+          case Win64LargeAggregate: {
+              Regname next_reg = integer_registers[current_register++];
+              build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
+              build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i]), a, point);
+              break;
+          }
+          case Win64M128: {
+              throw_error(point, mv_string("Not implemented: register arg of class Win64 __m128 "));
+          }
+          }
+      } else {
+          Regname next_reg = integer_registers[current_register++];
+          build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
+          build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i]), a, point);
+      }
+    }
+    
+    // Call function
+    build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
+    build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+
 #else
 #error "convert_c_fun not implemented for unknonw arch"
 #endif
@@ -451,7 +592,7 @@ bool can_convert(CType *ctype, PiType *ptype) {
 }
 
 bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
-#if ABI == SYSTEM_V_64 
+#if (ABI == SYSTEM_V_64) || (ABI == WIN_64)
     switch (ptype) {
     case Unit:  {
         return false;
@@ -503,8 +644,6 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
         return false;
     }
     }
-#elif ABI == WIN_64 
-#error "can_reinterpret_prim not imlemented for Win 64"
 #else
 #error "can_reinterpret_prim not implemented for unknonw arch"
 #endif
@@ -515,6 +654,8 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
 }
 
 bool can_reinterpret(CType* ctype, PiType* ptype) {
+    // TODO (BUG/FEATURE): algorithm should depend on
+
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
     // TODO (FEATURE): check for well-formedness of types in debug mode?
@@ -600,7 +741,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TUVar:
     case TUVarDefaulted:
         return false;
+    default:
+        panic(mv_string("invalid types provided to can_reinterpret"));
     }
-
-    panic(mv_string("can_reinterpret received invalid sort!"));
 }

@@ -58,12 +58,21 @@ struct DynLib {
 
 Result open_lib(DynLib **out, String path) {
     *out = mem_alloc()
-    HINSTANCE hinstLib = LoadLibrary(TEXT("MyPuts.dll"));;
+    HINSTANCE lib = LoadLibrary(TEXT("MyPuts.dll"));;
 
     **out = (DynLib) {
-        .instance = dlopen((char*)path.bytes, RTLD_LAZY),
+        .instance = lib,
         .from = a,
     };
+
+    if (lib) {
+        return (Result) {.type = Ok}
+    } else {
+        return (Result) {
+            .type = Err,
+            .error_message = mv_string("Can't load dynamic lib"),
+        };
+    }
 }
 
 void close_lib(DynLib* lib) {
