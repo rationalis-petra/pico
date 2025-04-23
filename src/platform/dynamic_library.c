@@ -69,8 +69,9 @@ Result open_lib(DynLib **out, String path, Allocator* a) {
     if (lib) {
         return (Result) {.type = Ok};
     } else {
-        return (Result) {
+        return (Result){
             .type = Err,
+            // TODO: use GetLastError()
             .error_message = mv_string("Can't load dynamic lib"),
         };
     }
@@ -90,6 +91,7 @@ Result lib_sym(void** out, DynLib* lib, String symbol) {
     } else {
         return (Result) {
             .type = Err,
+            // TODO (IMPROVEMENT): use GetLastError()
             .error_message = mv_string("Can't find symbol in dynamic lib"),
         };
     }

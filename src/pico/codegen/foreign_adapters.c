@@ -600,11 +600,14 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
         build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
 
+        // Then, update RSP to point to the return arg.
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), a, point);
+
         // Now, generate a stack copy targeting RDX
         generate_stack_copy(RDX, return_arg_size, ass, a, point);
 
         // Then, pop all memory (sans the return arg) from the stack.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(return_arg_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1] - return_arg_size), a, point);
 
