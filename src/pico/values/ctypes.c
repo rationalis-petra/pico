@@ -196,9 +196,11 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
     panic(mv_string("Invalid CType provided to pretty_cval"));
 }
 
-size_t c_prim_size_of(CPrim type) {
-#if ABI == SYSTEM_V_64
-    switch (type.prim) {
+size_t c_prim_size_of(CPrim type)
+{
+#if (ABI == SYSTEM_V_64 || ABI == WIN_64)
+    switch (type.prim)
+    {
     // System V ABI
     case CChar:
         return 1;
@@ -215,12 +217,6 @@ size_t c_prim_size_of(CPrim type) {
         // May be 4? (ILP32)
         return 8;
     }
-
-#elif ABI == WIN_64
-    switch (type) {
-#error "Win 64 prim c sizeof not implemented"
-    }
-
 #else 
 #error "Unknown host ABI"
 #endif
@@ -236,7 +232,7 @@ size_t c_size_align(size_t size, size_t align) {
 }
 
 size_t c_size_of(CType type) {
-#if ABI == SYSTEM_V_64
+#if (ABI == SYSTEM_V_64 || ABI == WIN_64)
     // System V ABI
     switch (type.sort) {
     case CSVoid:
@@ -287,10 +283,8 @@ size_t c_size_of(CType type) {
         panic(mv_string("Cannot take size of incomplete c type"));
     }
 
-#elif ABI == WIN_64
-
 #else 
-#error "Win 64 C sizeof not implemented"
+#error "Unknown architecture when compiling c_size_of not implemented"
 #endif
     // TODO (LOGIC BUG): this should be a return result or thrown error,
     // as it may indicate an error in user code, not internal code!
@@ -298,7 +292,8 @@ size_t c_size_of(CType type) {
 }
 
 size_t c_align_of(CType type) {
-#if ABI == SYSTEM_V_64
+#if (ABI == SYSTEM_V_64 || ABI == WIN_64)
+
     // System V ABI
     switch (type.sort) {
     case CSVoid:
@@ -346,8 +341,6 @@ size_t c_align_of(CType type) {
         // as it may indicate an error in user code, not internal code!
         panic(mv_string("Cannot take align of incomplete c type"));
     }
-
-#elif ABI == WIN_64
 
 #else 
 #error "Win 64 c alignof not implemented"

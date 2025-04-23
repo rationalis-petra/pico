@@ -52,13 +52,14 @@ Result lib_sym(void **out, DynLib *lib, String symbol) {
 #include <windows.h>
 
 struct DynLib {
-    HInstance instance;
+    HINSTANCE instance;
     Allocator* from;
 };
 
-Result open_lib(DynLib **out, String path) {
-    *out = mem_alloc()
-    HINSTANCE lib = LoadLibrary(TEXT("MyPuts.dll"));;
+Result open_lib(DynLib **out, String path, Allocator* a) {
+    *out = mem_alloc(sizeof(DynLib), a);
+    // TODO: use encoding change rather than raw cast
+    HINSTANCE lib = LoadLibrary((char*)path.bytes);
 
     **out = (DynLib) {
         .instance = lib,
@@ -66,7 +67,7 @@ Result open_lib(DynLib **out, String path) {
     };
 
     if (lib) {
-        return (Result) {.type = Ok}
+        return (Result) {.type = Ok};
     } else {
         return (Result) {
             .type = Err,
@@ -76,11 +77,14 @@ Result open_lib(DynLib **out, String path) {
 }
 
 void close_lib(DynLib* lib) {
-    bool fFreeDLL = FreeLibrary(lib->instance);
+    // Note: returns bool true/false as succes/fail, probably want to return error
+    //
+    FreeLibrary(lib->instance);
 }
 
 Result lib_sym(void** out, DynLib* lib, String symbol) {
-    *out = GetProcAddress(lib->instance, symbol.bytes);
+    // TODO: use encoding change rather than raw cast
+    *out = GetProcAddress(lib->instance, (char*)symbol.bytes);
     if (*out) {
         return (Result) { .type = Ok };
     } else {

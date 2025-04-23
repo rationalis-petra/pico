@@ -494,6 +494,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
       }
     }
 
+    // Use RBX as an indexing register, to point to the 'base' (before runtime offsets are added)
+    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+
     const size_t expected_stack_align = 16;
     size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
     needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
@@ -504,8 +507,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     build_binary_op(ass, Mov, reg(R10, sz_64), imm64(expected_stack_align), a, point);
     build_binary_op(ass, Mov, reg(R11, sz_64), imm64(needed_stack_offset), a, point);
 
-    // The div stores the remainder in RDX, which has the 1st argument and so needs saving
-    build_binary_op(ass, Mov, reg(R12, sz_64), reg(RDX, sz_64), a, point);
     build_nullary_op(ass, CQO, a, point);
     build_unary_op(ass, IDiv, reg(R10, sz_64), a, point);
 
@@ -519,12 +520,12 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     build_unary_op(ass, Push, reg(R11, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
 
-    // Restore value of RDX
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
-
-
-    // Use RBX as an indexing register, to point to the 'base'
-    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+    // Check for return arg/space
+    if (pass_in_memory) {
+        Regname next_reg = integer_registers[current_register++];
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(c_size_of(*ctype->proc.ret)), a, point);
+        build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
+    }
 
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
     // rightmost argument is at the bottom of the stack. 
@@ -544,8 +545,15 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
           }
           case Win64LargeAggregate: {
               Regname next_reg = integer_registers[current_register++];
+              // For windows, arguments are already on the stack (?), so just point them to the correct offset!
               build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
               build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i]), a, point);
+
+              // TODO (IMPROVEMENT) what if different sizes?
+              size_t arg_size = arg_offsets.data[i + 1] - arg_offsets.data[i];
+              build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(arg_size), a, point);
+              generate_monomorphic_copy(RSP, next_reg, arg_size, ass, a, point);
+              build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
               break;
           }
           case Win64M128: {
@@ -562,6 +570,63 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Call function
     build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
     build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+
+    // Unwind: 
+    if (pass_in_memory) {
+        //        Stack currently looks like
+        //        <Args provided to Pico Fn ...>
+        //        [Return Address]
+        //        <Align Padding ...>
+        //        [Align Adjust]
+        // RSP -- <Input Area...>
+        // unadjusted offset to be at beginning of args provided to pico fn - return_arg_size (but ignore padding)
+        //   0x10 = Return address + Align adjust
+        //   However, arg_offsets include an extra + 0x8 to account for return
+        //        address, so we subtract 0x8 from 0x10 to get 0x8 
+        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
+
+        // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
+        build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+
+        // Use to to calculate the location of the return address (store in RCX)
+        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
+        // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  
+
+        // To copy the value, first store target address (END of where return value is copied) in RDX 
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
+
+        // Now, generate a stack copy targeting RDX
+        generate_stack_copy(RDX, return_arg_size, ass, a, point);
+
+        // Then, pop all memory (sans the return arg) from the stack.
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1] - return_arg_size), a, point);
+
+        // Push return address
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+    } else {
+        // Pop all memory arguments (both pico and c)
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
+
+        // Pop return address
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+
+        // Now, registers onto stack
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        // Push return address
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+
+    }
+    build_nullary_op(ass, Ret, a, point);
 
 #else
 #error "convert_c_fun not implemented for unknonw arch"
