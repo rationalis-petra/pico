@@ -62,6 +62,10 @@ Document* pretty_atom(Atom atom, Allocator* a) {
         out = pretty_i64(atom.int_64, a);
         break;
     }
+    case AFloating: {
+        out = pretty_f64(atom.float_64, a);
+        break;
+    }
     case ABool: {
         if (atom.int_64 == 0) {
             out = mk_str_doc(mv_string("false"), a);

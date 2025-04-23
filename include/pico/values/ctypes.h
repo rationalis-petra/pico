@@ -9,7 +9,9 @@ typedef struct CType CType;
 
 typedef enum {
     CSVoid,
-    CSPrim,
+    CSPrimInt,
+    CSFloat,
+    CSDouble,
     CSPtr,
     CSProc,
     CSIncomplete,
@@ -24,7 +26,7 @@ typedef enum {
     CInt,
     CLong,
     CLongLong,
-} CPrimType;
+} CIntType;
 
 typedef enum {
     Signed,
@@ -33,9 +35,9 @@ typedef enum {
 } CSigned;
 
 typedef struct {
-    CPrimType prim;
+    CIntType prim;
     CSigned is_signed;
-} CPrim;
+} CPrimInt;
 
 typedef struct {
     bool named;
@@ -51,7 +53,7 @@ typedef struct {
 } CStruct;
 
 typedef struct {
-    CPrim base;
+    CPrimInt base;
     SymI64Assoc vals;
 } CEnum;
 
@@ -66,7 +68,7 @@ typedef struct {
 struct CType {
     CSort sort;
     union {
-        CPrim prim;
+        CPrimInt prim;
         CProc proc;
         CStruct structure;
         CEnum enumeration;
@@ -76,7 +78,7 @@ struct CType {
     };
 };
 
-Document* pretty_cprim(CPrim prim, Allocator* a);
+Document* pretty_cprimint(CPrimInt prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);
 Document* pretty_cval(CType* type, void* value, Allocator* a);
 size_t c_size_align(size_t size, size_t align);
@@ -94,7 +96,7 @@ CType* copy_c_type_p(CType* t, Allocator* a);
 // Utilities for generating or manipulating types
 CType mk_voidptr_ctype(Allocator* a);
 
-CType mk_prim_ctype(CPrim t);
+CType mk_primint_ctype(CPrimInt t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 CType mk_fn_ctype(Allocator* a, size_t nargs, ...);
@@ -103,7 +105,7 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...);
 CType mk_struct_ctype(Allocator* a, size_t nfields, ...);
 
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
-CType mk_enum_ctype(Allocator* a, CPrim store, size_t nfields, ...);
+CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 
 // Sample usage: mk_union_type(a, 3, )
 CType mk_union_ctype(Allocator* a, size_t nfields, ...);

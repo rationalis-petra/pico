@@ -24,6 +24,9 @@ typedef enum {
     UInt_32 = 0b110,
     UInt_64 = 0b111,
 
+    Float_32,
+    Float_64,
+
     Unit,
     Bool,
     Address,
@@ -63,7 +66,8 @@ typedef enum {
 
   // Used only during unification
   TUVar,
-  TUVarDefaulted,
+  TUVarIntegral,
+  TUVarFloating,
 } PiType_t;
 
 typedef struct {
@@ -187,7 +191,8 @@ PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
+PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a);
+PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 

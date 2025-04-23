@@ -68,6 +68,10 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         release_arena_allocator(arena);
         return false;
     }
+    if (res.type == ParseNone) {
+        release_arena_allocator(arena);
+        return false;
+    }
     if (res.type != ParseSuccess) {
         write_string(mv_string("Parse Returned Invalid Result!\n"), cout);
         release_arena_allocator(arena);

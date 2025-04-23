@@ -130,12 +130,8 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TUVar:
-        if (t.uvar->subst != NULL) {
-            delete_pi_type(*t.uvar->subst, a);
-        }
-        mem_free(t.uvar, a);
-        break;
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         if (t.uvar->subst != NULL) {
             delete_pi_type(*t.uvar->subst, a);
         }
@@ -243,15 +239,8 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-        out.uvar = mem_alloc(sizeof(UVarType), a);
-        out.uvar->id = t.uvar->id; 
-        if (t.uvar->subst) {
-            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
-        } else {
-            out.uvar->subst = NULL;
-        }
-        break;
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         out.uvar = mem_alloc(sizeof(UVarType), a);
         out.uvar->id = t.uvar->id; 
         if (t.uvar->subst) {
@@ -337,6 +326,16 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             out =  pretty_u8(*uival, a);
             break;
         }
+        case Float_32: {
+            float32_t* fval = (float32_t*) val;
+            out =  pretty_f32(*fval, a);
+            break;
+        }
+        case Float_64: {
+            float64_t* fval = (float64_t*) val;
+            out =  pretty_f64(*fval, a);
+            break;
+        }
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
@@ -367,8 +366,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TUVar:
         out = mk_str_doc(mv_string("No Print UVar!"), a);
         break;
-    case TUVarDefaulted:
-        out = mk_str_doc(mv_string("No Print UVar (defaulted)!"), a);
+    case TUVarIntegral:
+        out = mk_str_doc(mv_string("No Print UVar (integral)!"), a);
+        break;
+    case TUVarFloating:
+        out = mk_str_doc(mv_string("No Print UVar (floating)!"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;
@@ -575,6 +577,12 @@ Document* pretty_type(PiType* type, Allocator* a) {
         case UInt_8: 
             out = mv_str_doc(mk_string("U8", a), a);
             break;
+        case Float_32:
+            out = mv_str_doc(mk_string("F32", a), a);
+            break;
+        case Float_64: 
+            out = mv_str_doc(mk_string("F64", a), a);
+            break;
         case Unit: 
             out = mv_str_doc(mk_string("Unit", a), a);
             break;
@@ -615,8 +623,11 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TUVar:
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
         break;
-    case TUVarDefaulted:
-        out = mv_str_doc(mk_string("No Print UVar Defaulted!", a), a);
+    case TUVarIntegral:
+        out = mv_str_doc(mk_string("No Print UVar Integral", a), a);
+        break;
+    case TUVarFloating:
+        out = mv_str_doc(mk_string("No Print UVar Floating", a), a);
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
@@ -876,9 +887,11 @@ size_t pi_size_of(PiType type) {
         case Address:
         case Int_64:
         case UInt_64:
+        case Float_64:
             return sizeof(int64_t);
         case Int_32:
         case UInt_32:
+        case Float_32:
             return sizeof(int32_t);
         case Int_16:
         case UInt_16:
@@ -957,8 +970,10 @@ size_t pi_size_of(PiType type) {
         return sizeof(void*);
     case TUVar:
         panic(mv_string("pi_size_of received invalid sort: UVar."));
-    case TUVarDefaulted:
-        panic(mv_string("pi_size_of received invalid sort: UVar with Default."));
+    case TUVarIntegral:
+        panic(mv_string("pi_size_of received invalid sort: UVar with default integral."));
+    case TUVarFloating:
+        panic(mv_string("pi_size_of received invalid sort: UVar with default float."));
     }
 
     // If we haven't returned at this point, then the tag is invalid
@@ -1046,8 +1061,10 @@ size_t pi_align_of(PiType type) {
         return sizeof(void*);
     case TUVar:
         panic(mv_string("pi_align_of received invalid type: UVar."));
-    case TUVarDefaulted:
-        panic(mv_string("pi_align_of received invalid type: UVar with Default."));
+    case TUVarIntegral:
+        panic(mv_string("pi_align_of received invalid type: UVar with default integral."));
+    case TUVarFloating:
+        panic(mv_string("pi_align_of received invalid type: UVar with default floating."));
     default:
         panic(mv_string("pi_align_of received invalid type."));
     }
@@ -1063,9 +1080,19 @@ PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
     return uvar;
 }
 
-PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a) {
+PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarDefaulted; 
+    uvar->sort = TUVarIntegral; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
+    
+    return uvar;
+}
+
+PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVarFloating; 
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};

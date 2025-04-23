@@ -41,13 +41,13 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
     CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}),
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
                                          "bytes", mk_voidptr_ctype(a));
 
     // DynLibResult
     CType dynlib_result = mk_struct_ctype(
         a, 2, "tag",
-        mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}), "data",
+        mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
                        "error_message", string_ctype,
                        "dynlib", mk_voidptr_ctype(a)));

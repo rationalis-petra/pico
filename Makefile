@@ -19,7 +19,7 @@ DEBUG_FLAGS := -O0
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
 	DEBUG_FLAGS := $(DEBUG_FLAGS) # -fsanitize=address,leak
-	LINK_FLAGS := -ldl
+	LINK_FLAGS := -ldl -lm
 else
 	LINK_FLAGS := 
 endif

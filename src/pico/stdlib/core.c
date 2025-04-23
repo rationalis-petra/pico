@@ -452,6 +452,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("U8"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
+    type_val = (PiType) {.sort = TPrim, .prim = Float_32};
+    sym = string_to_symbol(mv_string("F32"));
+    add_def(module, sym, type, &type_data, null_segments, NULL);
+
+    type_val = (PiType) {.sort = TPrim, .prim = Float_64};
+    sym = string_to_symbol(mv_string("F64"));
+    add_def(module, sym, type, &type_data, null_segments, NULL);
+
     // Syntax Type : components and definition 
     {
         // Ptr Type

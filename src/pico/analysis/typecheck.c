@@ -120,9 +120,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
-        untyped->ptype = mk_uvar_with_default(gen, a);
+        untyped->ptype = mk_uvar_integral(gen, a);
         break;
     case SLitTypedIntegral:
+        untyped->ptype = mk_prim_type(a, untyped->integral.type);
+        break;
+    case SLitUntypedFloating:
+        untyped->type = SLitTypedFloating;
+        untyped->ptype = mk_uvar_floating(gen, a);
+        break;
+    case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
     case SLitBool:
@@ -1070,6 +1077,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     switch (syn->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
+    case SLitUntypedFloating:
+    case SLitTypedFloating:
     case SLitString:
     case SLitBool:
     case SVariable:
@@ -1357,6 +1366,8 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     switch (typed->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
+    case SLitUntypedFloating:
+    case SLitTypedFloating:
     case SLitBool:
     case SLitString:
     case SVariable:

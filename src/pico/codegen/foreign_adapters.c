@@ -61,7 +61,7 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
     case CSVoid:
         panic(mv_string("void type does not have arg class"));
         break;
-    case CSPrim:
+    case CSPrimInt:
         switch (type->prim.prim) {
         case CChar:
         case CShort:
@@ -70,6 +70,10 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
         case CLongLong:
             out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         }
+        break;
+    case CSFloat:
+    case CSDouble:
+        out->data[offset / 8] = merge_sysv_classes(SysVSSE, out->data[offset / 8]);
         break;
     case CSPtr:
     case CSProc:
@@ -659,7 +663,7 @@ bool can_convert(CType *ctype, PiType *ptype) {
     return can_reinterpret(ctype, ptype);
 }
 
-bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
+bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
 #if (ABI == SYSTEM_V_64) || (ABI == WIN_64)
     switch (ptype) {
     case Unit:  {
@@ -704,6 +708,12 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
     case UInt_8: {
         return ctype.prim == CChar && ctype.is_signed == Unsigned;
     }
+    case Float_32: {
+        return ctype.prim == CInt && ctype.is_signed == Unsigned;
+    }
+    case Float_64: {
+        return ctype.prim == CChar && ctype.is_signed == Unsigned;
+    }
     case TFormer:  {
         // TODO (FEATURE): check for enum?
         return false;
@@ -731,7 +741,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
 
     switch (ptype->sort) {
     case TPrim: {
-        if (ctype->sort == CSPrim) {
+        if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
         }
         else if (ctype->sort == CSPtr && ptype->prim == Address) {
@@ -807,7 +817,8 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TKind:
     case TConstraint:
     case TUVar:
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         return false;
     default:
         panic(mv_string("invalid types provided to can_reinterpret"));

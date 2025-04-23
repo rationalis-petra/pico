@@ -115,6 +115,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
+    case SLitUntypedFloating: 
+        panic(mv_string("Cannot generate monomorphic code for untyped floating!"));
+    case SLitTypedFloating: {
+        void* raw = &syn.integral.value;
+        int64_t immediate = *(int64_t*)raw;
+        build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
+        build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+        break;
+    }
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);

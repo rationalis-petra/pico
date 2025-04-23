@@ -1422,6 +1422,14 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
             };
             break;
         }
+        case AFloating: {
+            *res = (Syntax) {
+                .type = SLitUntypedFloating,
+                .ptype = NULL,
+                .floating.value = raw.atom.float_64,
+            };
+            break;
+        }
         case ABool: {
             *res = (Syntax) {
                 .type = SLitBool,
