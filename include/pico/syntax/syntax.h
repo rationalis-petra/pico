@@ -5,7 +5,6 @@
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
-#include "pico/values/modular.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -73,16 +72,22 @@ typedef enum {
     SEnumType,
     SResetType,
     SDynamicType,
+    SNamedType,
     SDistinctType,
     SOpaqueType,
     STraitType,
     SAllType,
     SExistsType,
     STypeFamily,
+    SCType,
 
     SCheckedType,
 
     SAnnotation,
+
+    // Should be moved to macros!(?)
+    SReinterpret,
+    SConvert,
 } Syntax_t;
 
 
@@ -257,6 +262,11 @@ typedef struct {
 } SynBind;
 
 typedef struct {
+    Symbol name;
+    Syntax* body;
+} SynName;
+
+typedef struct {
     PtrArray args;
     Syntax* return_type;
 } SynProcType;
@@ -273,6 +283,18 @@ typedef struct {
     Syntax* in;
     Syntax* out;
 } SynResetType;
+
+typedef struct {
+    bool from_native;
+    Syntax* type;
+    Syntax* body;
+} SynReinterpret;
+
+typedef struct {
+    bool from_native;
+    Syntax* type;
+    Syntax* body;
+} SynConvert;
 
 
 struct Syntax {
@@ -319,10 +341,15 @@ struct Syntax {
         SynResetType reset_type;
         Syntax* dynamic_type;
         SynBind bind_type;
+        SynName named_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
         SynTrait trait;
         PiType* type_val;
+        Syntax* c_type;
+
+        SynReinterpret reinterpret;
+        SynConvert convert;
     };
     PiType* ptype;
 };

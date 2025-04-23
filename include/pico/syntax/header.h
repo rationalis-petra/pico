@@ -9,11 +9,12 @@
 //------------------------------------------------------------------------------
 
 typedef enum {
-    ImportName,
-    ImportNameAs,
-    ImportPath,
-    ImportPathMany,
-    ImportPathAll,
+    Import,       // basic import, e.g. (import num.i32) imports the module
+                  // i32. Only the name is available (in this case, i32), the
+                  // module is not opened. Can also import values (import num.i32.+)
+    ImportAs,     // import and rename, e.g. (import num.i32 as int-32) 
+    ImportMany,   // Import many values from a module, e.g. (import num.i32.(+ - * /))
+    ImportAll,    // Import all values from a module, e.g. (import num.i32.*) 
 } ImportClause_t;
 
 typedef struct {

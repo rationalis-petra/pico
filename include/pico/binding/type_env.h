@@ -50,4 +50,7 @@ bool label_present(Symbol s, TypeEnv* env);
 void add_labels (SymbolArray labels, TypeEnv* env);
 void pop_labels(TypeEnv* env, size_t n);
 
+SymbolArray get_bound_vars(TypeEnv* env, Allocator* a);
+Environment* get_base(TypeEnv* env);
+
 #endif

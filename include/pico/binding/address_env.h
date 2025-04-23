@@ -44,7 +44,12 @@ typedef struct {
     uint32_t stack_offset;
 } LabelEntry;
 
+// Forward decl
+typedef struct TypeEnv TypeEnv;
+
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
+AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
+
 void delete_address_env(AddressEnv* env, Allocator* a);
 
 /* Address environment interface

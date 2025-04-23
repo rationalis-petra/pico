@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/signals.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/threads.h"
-
 #include "data/amap.h"
 #include "data/array.h"
+#include "pretty/standard_types.h"
+
 #include "pico/values/values.h"
 
 
@@ -294,42 +294,72 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynAlloc:
         out = mk_str_doc(mv_string("::dynamic-allocate"), a);
         break;
+    case FSizeOf:
+        out = mk_str_doc(mv_string("::size-of"), a);
+        break;
+    case FAlignOf:
+        out = mk_str_doc(mv_string("::align-of"), a);
+        break;
 
         // Type formers
     case FStructType:
-        out = mk_str_doc(mv_string("::StructureType"), a);
+        out = mk_str_doc(mv_string("::Struct"), a);
         break;
     case FEnumType:
-        out = mk_str_doc(mv_string("::EnumType"), a);
+        out = mk_str_doc(mv_string("::enum"), a);
         break;
     case FProcType:
-        out = mk_str_doc(mv_string("::ProcedureType"), a);
+        out = mk_str_doc(mv_string("::Proc"), a);
         break;
     case FResetType:
-        out = mk_str_doc(mv_string("::ResetType"), a);
+        out = mk_str_doc(mv_string("::Reset"), a);
         break;
     case FDynamicType:
-        out = mk_str_doc(mv_string("::DynamicType"), a);
+        out = mk_str_doc(mv_string("::Dynamic"), a);
+        break;
+    case FNamedType:
+        out = mk_str_doc(mv_string("::Named"), a);
         break;
     case FDistinctType:
-        out = mk_str_doc(mv_string("::DistinctType"), a);
+        out = mk_str_doc(mv_string("::Distinct"), a);
         break;
     case FOpaqueType:
-        out = mk_str_doc(mv_string("::OpaqueType"), a);
+        out = mk_str_doc(mv_string("::Opaque"), a);
         break;
     case FTraitType:
-        out = mk_str_doc(mv_string("::TraitType"), a);
+        out = mk_str_doc(mv_string("::Trait"), a);
         break;
     case FAllType:
-        out = mk_str_doc(mv_string("::AllType"), a);
+        out = mk_str_doc(mv_string("::All"), a);
         break;
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
+    case FCType:
+        out = mk_str_doc(mv_string("::CType"), a);
+        break;
 
-    default:
-        panic(mv_string("Unrecognized term former to pretty-former"));
+    case FReinterpretNative:
+        out = mk_str_doc(mv_string("::reinterpret-native"), a);
+        break;
+    case FReinterpretRelic:
+        out = mk_str_doc(mv_string("::reinterpret-relic"), a);
+        break;
+    case FConvertNative:
+        out = mk_str_doc(mv_string("::convert-native"), a);
+        break;
+    case FConvertRelic:
+        out = mk_str_doc(mv_string("::convert-relic"), a);
         break;
     }
+
+    if (out == NULL) {
+        PtrArray vals = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("Error printing former: invalid enum value:"), a), &vals);
+        // TODO: pretty int (default enum size?): 
+        push_ptr(pretty_i32(op, a), &vals);
+        out = mv_sep_doc(vals, a);
+    }
+
     return out;
 }

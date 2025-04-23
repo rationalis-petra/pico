@@ -1,11 +1,14 @@
 #include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
+#include "platform/memory/executable.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 #include "pico/codegen/polymorphic.h"
+#include "pico/codegen/foreign_adapters.h"
 #include "pico/binding/address_env.h"
+#include "pico/eval/call.h"
 
 /* Code Generation Assumptions:
  * • All expressions evaluate to integers or functions 
@@ -31,6 +34,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
+void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 
 LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     InternalLinkData links = (InternalLinkData) {
@@ -80,6 +84,22 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     return links.links;
 }
 
+void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
+    AddressEnv* a_env = mk_type_address_env(env, NULL, a);
+    InternalLinkData links = (InternalLinkData) {
+        .links = (LinkData) {
+            .external_links = mk_sym_sarr_amap(8, a),
+            .ec_links = mk_link_meta_array(8, a),
+            .ed_links = mk_link_meta_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
+            .cd_links = mk_link_meta_array(8, a),
+        },
+        .gotolinks = mk_sym_sarr_amap(8, a),
+    };
+    generate(*syn, a_env, target, &links, a, point);
+    delete_address_env(a_env, a);
+}
+
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
     switch (syn.type) {
@@ -98,7 +118,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitString: {
@@ -116,7 +136,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SVariable: 
@@ -147,12 +167,32 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
-            // Primitives, Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
+            // Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
-                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+            // Primitives are (currently) all <= 64 bits, but may treating them
+            // as 64-bits may overflow a allocated portion of memory, so we must
+            // be more careful here.
+            } else if (indistinct_type.sort == TPrim) {
+                size_t prim_size = pi_size_of(indistinct_type);
+                AsmResult out;
+                if (prim_size == 1) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), a, point);
+                } else if (prim_size == 2) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint16_t*)e.value), a, point);
+                } else if (prim_size == 4) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint32_t*)e.value), a, point);
+                } else if (prim_size == 8) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
+                } else {
+                    panic(mv_string("Codegen expects globals bound to primitives to have size 1, 2, 4 or 8."));
+                }
+                backlink_global(syn.variable, out.backlink, links, a);
+                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
@@ -162,6 +202,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
 
+                // TODO (check if replace with stack copy)
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
                 throw_error(point,
@@ -186,7 +227,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             break;
         }
         }
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcedure: {
@@ -652,6 +693,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             }
             build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
         }
         break;
@@ -702,6 +744,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 build_binary_op(ass, Add, reg(RCX, sz_64), imm32(align), a, point);
             }
 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_copy(RCX, RSP, offset, ass, a, point);
 
             // We need to increment the current field index to be able ot access
@@ -789,7 +832,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
 
-        //void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+        // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
         
         address_stack_shrink(env, ADDRESS_SIZE);
@@ -817,6 +860,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
             // Now we have a pointer to the value stored in RCX, swap it with
             // the value on the stack
+
+            // TODO (check if replace with stack copy)
             generate_monomorphic_swap(RCX, RSP, bind_size, ass, a, point);
         }
 
@@ -841,6 +886,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
 
             // Store ptr to local value to restore in RDX 
+            // TODO (check if replace with stack copy)
             generate_monomorphic_swap(RCX, RDX, bind_size, ass, a, point);
             build_binary_op(ass, Add, reg(RDX, sz_64), imm32(bind_size + ADDRESS_SIZE), a, point);
 
@@ -1143,6 +1189,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* arg_type = syn.reset_to.arg->ptype;
         size_t asize = pi_size_of(*arg_type);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(asize), a, point);
+        // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, R9, asize, ass, a, point);
 
         // Step 5: Long Jump (call) register
@@ -1383,6 +1430,28 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
+    case SCType:
+        generate(*syn.c_type, env, target, links, a, point);
+        gen_mk_c_ty(ass,a, point);
+        // Now, the type lies atop the stack, and we must pop the ctype out from
+        // under it
+        size_t cts = pi_stack_size_of(*syn.c_type->ptype);
+
+        // TODO (IMPROVEMENT) this assumes address-size == 64 bits 
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+
+        address_stack_shrink(env, cts);
+        break;
+    case SNamedType:
+        address_bind_type(syn.named_type.name, env);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name), a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        gen_mk_named_ty(ass, a, point);
+        address_pop(env);
+        break;
     case SDistinctType:
         generate(*(Syntax*)syn.distinct_type, env, target, links, a, point);
         gen_mk_distinct_ty(ass, a, point);
@@ -1430,6 +1499,21 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         address_pop_n(syn.trait.vars.len, env);
         break;
+    case SReinterpret:
+        // reinterpret has no associated codegen
+        // generate();
+        generate(*syn.reinterpret.body, env, target, links, a, point);
+        break;
+    case SConvert: {
+        if (syn.convert.from_native) {
+            void** cfn = const_fold(syn.convert.body, env, target, links, a, point);
+            convert_c_fn(cfn, &syn.convert.body->ptype->c_type, syn.ptype, ass, a, point);
+        } else {
+            panic(mv_string("Cannot yet convert pico value to c value."));
+        }
+           
+        break;
+    }
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
@@ -1459,4 +1543,33 @@ size_t calc_variant_size(PtrArray* types) {
         total += pi_size_of(*(PiType*)types->data[i]);
     }
     return total;
+}
+
+// Const_fold: evaluate and place 
+void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point) {
+    Allocator exalloc = mk_executable_allocator(a);
+
+    // Catch error here; so can cleanup after self before further unwinding.
+    ErrorPoint cleanup_point;
+    if (catch_error(cleanup_point)) goto on_error;
+
+    // As we will The 
+    Target gen_target = {
+        .target = mk_assembler(&exalloc),
+        .code_aux = target.code_aux,
+        .data_aux = target.data_aux,
+    };
+
+    generate(*syn, env, target, links, a, point);
+
+    void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), a, &cleanup_point);
+
+    delete_assembler(gen_target.target);
+    release_executable_allocator(exalloc);
+    return result;
+
+ on_error:
+    delete_assembler(gen_target.target);
+    release_executable_allocator(exalloc);
+    throw_error(point, cleanup_point.error_message);
 }

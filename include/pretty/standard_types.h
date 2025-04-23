@@ -16,4 +16,16 @@ Document* pretty_ptr(void*    val, Allocator* a);
 
 Document* pretty_hex_u8(uint8_t val, Allocator* a);
 
+Document* pretty_char(char val, Allocator* a);
+Document* pretty_short(short val, Allocator* a);
+Document* pretty_int(int val, Allocator* a);
+Document* pretty_long(long val, Allocator* a);
+Document* pretty_long_long(long long val, Allocator* a);
+
+Document* pretty_uchar(unsigned char val, Allocator* a);
+Document* pretty_ushort(unsigned short val, Allocator* a);
+Document* pretty_uint(unsigned int val, Allocator* a);
+Document* pretty_ulong(unsigned long val, Allocator* a);
+Document* pretty_ulong_long(unsigned long long val, Allocator* a);
+
 #endif

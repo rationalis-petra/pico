@@ -1,4 +1,3 @@
-
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/binding/environment.h"
 #include "pico/binding/shadow_env.h"
@@ -56,8 +55,13 @@ ShadowEntry shadow_env_lookup(Symbol s, ShadowEnv* env) {
     switch (e.success) {
     case Ok:
         entry.type = SGlobal;
+        entry.is_module = e.is_module;
         entry.vtype = e.type;
-        entry.value = e.value; 
+        if (entry.is_module) {
+            entry.module = e.value; 
+        } else {
+            entry.value = e.value; 
+        }
         break;
     case Err:
         entry.type = SErr;

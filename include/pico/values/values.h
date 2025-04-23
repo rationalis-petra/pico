@@ -78,11 +78,24 @@ typedef enum TermFormer {
     FEnumType,
     FResetType,
     FDynamicType,
+    FNamedType,
     FDistinctType,
     FOpaqueType,
     FTraitType,
     FAllType,
     FFamily,
+
+    // The C type former is somewhat special, as it 
+    // is more explicit about taking in a *value* in the form of a c-type.
+    // It may be part of the furture, moving towards a more 'dependent-types'
+    // style typechecker.
+    FCType,
+
+    // Temporary formers: TODO delegate to macros.
+    FReinterpretNative,
+    FReinterpretRelic,
+    FConvertNative,
+    FConvertRelic,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

@@ -18,7 +18,10 @@ DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak
+	DEBUG_FLAGS := $(DEBUG_FLAGS) # -fsanitize=address,leak
+	LINK_FLAGS := -ldl
+else
+	LINK_FLAGS := 
 endif
 
 # Find all the C files we want to compile
@@ -47,10 +50,10 @@ CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -Wundef -g -std=$(C_VERS
 
 # The final build step.
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)
-	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) 
+	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
 
 $(DEBUG_DIR)/$(TARGET_EXEC): $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ)
-	$(CC) $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ) -o $@ $(CFLAGS) $(DEBUG_FLAGS)
+	$(CC) $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ) -o $@ $(CFLAGS) $(DEBUG_FLAGS) $(LINK_FLAGS)
 
 # Build step for C source (release)
 $(RELEASE_DIR)/%.c.o: %.c
@@ -117,6 +120,11 @@ test: $(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: all
 all: debug release test
+
+# TODO: check shell; set appropriately
+.PHONY: debug_mode
+debug_mode:
+	set -x LD_LIBRARY_PATH /usr/lib/debug
 
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those

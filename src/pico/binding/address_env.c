@@ -4,6 +4,7 @@
 #include "platform/machine_info.h"
 
 #include "pico/binding/address_env.h"
+#include "pico/binding/type_env.h"
 
 // Address Environment: Implementation
 // -----------------------------------
@@ -86,6 +87,36 @@ AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
     return a_env; 
 }
 
+AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
+    AddressEnv* a_env = (AddressEnv*)mem_alloc(sizeof(AddressEnv), a);
+    a_env->rec = sym != NULL;
+    if (a_env->rec)
+        a_env->recname = *sym;
+    a_env->local_envs = mk_ptr_array(32, a);
+    a_env->env = get_base(env);
+    
+    LocalAddrs* local = mem_alloc(sizeof(LocalAddrs), a);
+    local->type = LMonomorphic;
+    local->stack_head = 0;
+    local->vars = mk_saddr_array(32, a);
+    push_ptr(local, &a_env->local_envs);
+
+
+    // NOTE: BELOW CODE IS EXTRACT FROM BIND_TYPE 
+    // ------------
+    SymbolArray syms = get_bound_vars(env, a);
+    for (size_t i = 0; i < syms.len; i++) {
+        SAddr value;
+        value.type = SATypeVar;
+        value.symbol = syms.data[i];
+        value.stack_offset = 0;
+        // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
+        push_saddr(value, &local->vars);
+    }
+
+    return a_env; 
+}
+
 void delete_local_env(LocalAddrs* local, Allocator* a) {
     sdelete_saddr_array(local->vars);
     mem_free(local, a);
@@ -111,7 +142,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if ((maddr.type == SADirect || maddr.type == SAIndirect) && maddr.symbol == s) {
-            // TOOD: Check if the offset can fit into an immediate
+            // TODO: Check if the offset can fit into an immediate
             return (AddressEntry) {
                 .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
                 .stack_offset = maddr.stack_offset,
@@ -159,7 +190,7 @@ AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
 
             // TODO: check for type vars?
             if (s.index == 0) {
-                // TOOD: Check if the offset can fit into an immediate
+                // TODO: Check if the offset can fit into an immediate
                 return (AddressEntry) {
                     .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
                     .stack_offset = maddr.stack_offset,
@@ -181,7 +212,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if (maddr.type == SALabel && maddr.symbol == s) {
-            // TOOD: Check if the offset can fit into an immediate
+            // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
                 .type = Ok,
                 .stack_offset = maddr.stack_offset,

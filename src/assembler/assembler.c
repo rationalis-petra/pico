@@ -52,8 +52,12 @@ U8Array get_instructions(Assembler* ass) {
     return ass->instructions;
 }
 
-size_t get_pos(Assembler* ass) {
-    return ass->instructions.len;
+size_t get_pos(Assembler* assembler) {
+    return assembler->instructions.len;
+}
+
+void set_pos(Assembler *assembler, size_t pos) {
+    assembler->instructions.len = pos;
 }
 
 void delete_assembler (Assembler* ass) {
@@ -1126,6 +1130,23 @@ void build_unary_opcode_table() {
     //  Arithmetic
     // ------------------
 
+    unary_opcode_table[Neg][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/};
+    unary_opcode_table[Neg][uindex(Dest_Deref, sz_64)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/};
+    unary_opcode_table[Neg][uindex(Dest_Register, sz_32)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+    unary_opcode_table[Neg][uindex(Dest_Deref, sz_32)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, };
+    unary_opcode_table[Neg][uindex(Dest_Register, sz_16)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+    unary_opcode_table[Neg][uindex(Dest_Deref, sz_16)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+    unary_opcode_table[Neg][uindex(Dest_Register, sz_8)] =
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/};
+    unary_opcode_table[Neg][uindex(Dest_Deref, sz_8)] =
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/};
+
     unary_opcode_table[Mul][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/};
     unary_opcode_table[Mul][uindex(Dest_Deref, sz_64)] =
@@ -1373,9 +1394,16 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
 
 AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point) {
     uint8_t opcode;
+    bool use_rex_byte = false;
+    uint8_t rex_byte = 0x0;
     switch (op) {
     case Ret:
         opcode = 0xC3;
+        break;
+    case CQO:
+        opcode = 0x99;
+        use_rex_byte = true;
+        rex_byte = 0b01001000;
         break;
     default: {
         PtrArray nodes = mk_ptr_array(4, err_allocator);
@@ -1387,6 +1415,8 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
     }
     }
     U8Array* instructions = &assembler->instructions;
+    if (use_rex_byte)
+        push_u8(rex_byte, instructions);
     push_u8(opcode, instructions);
     AsmResult out = {.backlink = 0};
     return out;
@@ -1404,9 +1434,9 @@ void asm_init() {
 Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
     char* names[17][4] = {
         {"AL", "AX", "EAX", "RAX"},
-        {"BL", "BX", "EBX", "RBX"},
         {"CL", "CX", "ECX", "RCX"},
         {"DL", "DX", "EDX", "RDX"},
+        {"BL", "BX", "EBX", "RBX"},
         {"AH", "SP", "ESP", "RSP"},
         {"CH", "BP", "EBP", "RBP"},
         {"DH", "SI", "ESI", "RSI"},

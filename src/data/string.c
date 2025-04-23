@@ -6,6 +6,7 @@
 #include "encodings/utf8.h"
 
 String mk_string(const char* str, Allocator* a) {
+    // TODO (FEATURE): panic if str == NULL and in debug
     size_t slen = strlen(str);
     String out;
     out.memsize = (slen + 1) * sizeof(uint8_t);
@@ -15,6 +16,7 @@ String mk_string(const char* str, Allocator* a) {
 }
 
 String mv_string(const char* str) {
+    // TODO (FEATURE): panic if str == NULL and in debug
     size_t slen = strlen(str);
     String out;
     out.memsize = (slen + 1) * sizeof(uint8_t);

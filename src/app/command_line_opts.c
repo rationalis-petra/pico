@@ -47,6 +47,18 @@ Command parse_command(StringArray args) {
             .type = CEval,
             .eval.expr = args.data[1],
         };
+    } else if (string_cmp(subcommand, mv_string("help")) == 0) {
+        if (args.len != 1) {
+            return (Command) {
+                .type = CInvalid,
+                .error_message = mv_string("Help subcommand expects no arguments. Correct usage: 'pico help'"),
+            };
+        }
+
+        return (Command) {
+            .type = CHelp,
+            .help.help_all = true,
+        };
     } else {
         return (Command) {
             .type = CInvalid,

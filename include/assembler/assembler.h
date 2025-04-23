@@ -15,6 +15,7 @@ void clear_assembler(Assembler* assembler);
 
 U8Array get_instructions(Assembler* assembler);
 size_t get_pos(Assembler* assembler);
+void set_pos(Assembler* assembler, size_t pos);
 
 Document* pretty_assembler(Assembler* assembler, Allocator* a);
 
@@ -87,6 +88,7 @@ typedef enum {
     // ------------------
     //  Arithmetic
     // ------------------
+    Neg,
     Mul,
     Div,
     IMul, 
@@ -100,14 +102,15 @@ typedef enum {
 
 typedef enum {
     Ret,
+    CQO,
     Nullary_Op_Count,
 } NullaryOp;
 
 typedef enum {
     RAX = 0b0000,
-    RBX = 0b0011,
     RCX = 0b0001,
     RDX = 0b0010,
+    RBX = 0b0011,
     RSP = 0b0100,
     RBP = 0b0101,
     RSI = 0b0110,

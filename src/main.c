@@ -18,7 +18,8 @@
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/values/stdlib.h"
+#include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/extra.h"
 #include "pico/values/types.h"
 
 #include "app/command_line_opts.h"
@@ -165,7 +166,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
 int main(int argc, char** argv) {
     // Setup
-
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();
@@ -230,6 +230,7 @@ int main(int argc, char** argv) {
     }
     case CInvalid:
         write_string(command.error_message, cout);
+        write_string(mv_string("\n"), cout);
         break;
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
