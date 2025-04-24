@@ -37,6 +37,10 @@ DynLibResult wrap_dynlib_open(String str) {
     }
 }
 
+void wrap_dynlib_close(DynLib* lib) {
+    close_lib(lib);
+}
+
 void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
@@ -60,8 +64,13 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     delete_c_type(fn_ctype, a);
 }
 
-void build_dynlib_close_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType fn_ctype = mk_fn_ctype(a, 1, "lib", copy_c_type(mk_voidptr_ctype(a), a), mk_void_ctype());
 
+    convert_c_fn(wrap_dynlib_open, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
 }
 
 void build_dynlib_symbol_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -173,20 +182,27 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     clear_assembler(ass);
 
     PiType* str = mk_string_type(a);
-    // dynlib_ty is ok here
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, dynlib_ty));
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, copy_pi_type_p(dynlib_ty, a)));
     build_dynlib_open_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    // but not ok here, when being copied (sort is ok, but inner data is not.).
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, dynlib_ty, mk_prim_type(a, Unit));
+    build_dynlib_close_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("dynlib-close"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // TODO (BUG) - there is some bug (probably in type application) which means
     // that these types must be free'd (but not deleted) manually. 
     mem_free(str, a);
-    mem_free(dynlib_ty, a);
+    //mem_free(dynlib_ty, a);
     delete_pi_type_p(typep, a);
 
     // delete_pi_type_p(str, a);

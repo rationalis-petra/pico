@@ -59,7 +59,7 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
     // We probably want to recurse and merge arrays from subclasses
     switch (type->sort) {
     case CSVoid:
-        panic(mv_string("void type does not have arg class"));
+        // Do nothing, merge with class 'None'
         break;
     case CSPrimInt:
         switch (type->prim.prim) {
@@ -221,7 +221,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         size_t idx = ctype->proc.args.len - (i + 1);
         offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx]);
     }
-    push_u64(offset, &arg_offsets); 
+    push_u64(offset, &arg_offsets);
 
 #if ABI == SYSTEM_V_64
     // Notes: 
@@ -244,7 +244,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Check if return arg in memory, if so then the return arg takes the spot of
     // a 'hidden' extra argument - specifically, the first, with the ptr being
     // passed in RDI.
-    bool pass_return_in_memory = (return_classes.len == 0) || (return_classes.len > 2);
+    bool pass_return_in_memory =
+        (return_classes.len == 0 && ctype->proc.ret->sort != CSVoid)
+        || (return_classes.len > 2);
     if (pass_return_in_memory) {
         input_area_size += return_arg_size;
         current_integer_register++;
@@ -743,8 +745,8 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TPrim: {
         if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
-        }
-        else if (ctype->sort == CSPtr && ptype->prim == Address) {
+        } else if ((ctype->sort == CSPtr && ptype->prim == Address)
+                   || (ctype->sort == CSVoid && ptype->prim == Unit)) {
             return true;
         } else {
             return false;

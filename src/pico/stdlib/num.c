@@ -51,7 +51,7 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_nullary_op (ass, Ret, a, point);
 }
 
-void add_primitive_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
+void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -140,7 +140,6 @@ void add_primitive_module(String name, LocationSize sz, bool is_signed, Assemble
 
     Result r = add_module_def(num, string_to_symbol(name), module);
     if (r.type == Err) panic(r.error_message);
-
 }
 
 void add_num_module(Assembler* ass, Package* base, Allocator* a) {
@@ -159,16 +158,15 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    add_primitive_module(mv_string("u8"), sz_8, false, ass, module, a);
-    add_primitive_module(mv_string("u16"), sz_16, false, ass, module, a);
-    add_primitive_module(mv_string("u32"), sz_32, false, ass, module, a);
-    add_primitive_module(mv_string("u64"), sz_64, false, ass, module, a);
+    add_integral_module(mv_string("u8"), sz_8, false, ass, module, a);
+    add_integral_module(mv_string("u16"), sz_16, false, ass, module, a);
+    add_integral_module(mv_string("u32"), sz_32, false, ass, module, a);
+    add_integral_module(mv_string("u64"), sz_64, false, ass, module, a);
 
-    add_primitive_module(mv_string("i8"), sz_8, true, ass, module, a);
-    add_primitive_module(mv_string("i16"), sz_16, true, ass, module, a);
-    add_primitive_module(mv_string("i32"), sz_32, true, ass, module, a);
-    add_primitive_module(mv_string("i64"), sz_64, true, ass, module, a);
+    add_integral_module(mv_string("i8"), sz_8, true, ass, module, a);
+    add_integral_module(mv_string("i16"), sz_16, true, ass, module, a);
+    add_integral_module(mv_string("i32"), sz_32, true, ass, module, a);
+    add_integral_module(mv_string("i64"), sz_64, true, ass, module, a);
 
     add_module(string_to_symbol(mv_string("num")), module, base);
 }
-

@@ -94,6 +94,8 @@ CType* copy_c_type_p(CType* t, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
+CType mk_void_ctype();
+
 CType mk_voidptr_ctype(Allocator* a);
 
 CType mk_primint_ctype(CPrimInt t);

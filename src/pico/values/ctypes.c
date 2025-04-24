@@ -456,9 +456,14 @@ CType* copy_c_type_p(CType* t, Allocator* a) {
     return ty;
 }
 
-
 // Constructors and Utilities
 // --------------------------
+CType mk_void_ctype() {
+    return (CType) {
+        .sort = CSVoid,
+    };
+}
+
 CType mk_voidptr_ctype(Allocator *a) {
     CType* void_ty = mem_alloc(sizeof(CType), a);
     *void_ty = (CType) {.sort = CSVoid};
