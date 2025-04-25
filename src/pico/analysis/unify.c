@@ -40,6 +40,14 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
         out = assert_maybe_integral(rhs);
         if (out.type == Ok) lhs->uvar->subst = rhs;
     }
+    else if (rhs->sort == TUVarIntegral) {
+        out = assert_maybe_integral(rhs);
+        if (out.type == Ok) rhs->uvar->subst = lhs;
+    }
+    else if (lhs->sort == TUVarFloating) {
+        out = assert_maybe_floating(lhs);
+        if (out.type == Ok) lhs->uvar->subst = rhs;
+    }
     else if (rhs->sort == TUVarFloating) {
         out = assert_maybe_floating(lhs);
         if (out.type == Ok) rhs->uvar->subst = lhs;

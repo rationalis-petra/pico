@@ -438,7 +438,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         PiType* enum_type = untyped->match.val->ptype;
         if (enum_type->sort != TEnum) {
-            throw_error(point, mv_string("Match expects value to have an enum type!"));
+            throw_error(point, mv_string("Match expects value to have an enum type."));
         }
 
         // Typecheck each variant, ensure they are the same
@@ -455,6 +455,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 if (clause->tagname == enum_type->enumeration.variants.data[j].key) {
                     found_tag = true;
                     clause->tag = j;
+                    if (used_indices.data[j] != 0) {
+                        throw_error(point, mv_string("Same tag occurs twice in match body."));
+                    }
                     used_indices.data[j] = 1;
                 }
             }
@@ -464,7 +467,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             }
 
             // Now we've found the tag, typecheck the body
-            PtrArray* types_to_bind = enum_type->enumeration.variants.data[i].val;
+            PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
             if (types_to_bind->len != clause->vars.len) {
                 throw_error(point,  mv_string("Bad number of binds!"));
             }
