@@ -403,11 +403,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         uint64_t tagidx = *(uint64_t*)val;
 
         PtrArray variant_types = *(PtrArray*)type->enumeration.variants.data[tagidx].val;
-        PtrArray nodes = mk_ptr_array(2 + variant_types.len, a);
+        PtrArray nodes = mk_ptr_array(1 + variant_types.len, a);
 
         // Symbol 
         Symbol tagname = type->enumeration.variants.data[tagidx].key;
-        push_ptr(mk_str_doc(string_cat(mv_string("[:"), *symbol_to_string(tagname), a), a), &nodes);
+        push_ptr(mk_str_doc( *symbol_to_string(tagname), a), &nodes);
 
         size_t current_offset = sizeof(uint64_t); // Start after current tag
         for (size_t i = 0; i < variant_types.len; i++) {
@@ -416,8 +416,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(arg, &nodes);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("[:", "]", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {
