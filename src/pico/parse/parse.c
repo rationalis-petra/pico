@@ -348,9 +348,9 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
 
     if (result == StreamSuccess && codepoint == '.') {
         floating = true;
+        just_negation = false;
         next(is, &codepoint);
         while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
-            just_negation = false;
             next(is, &codepoint);
             // the cast is safe as is-numchar ensures codepoint < 256
             uint8_t val = (uint8_t) codepoint - 48;
@@ -404,7 +404,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         int64_t int_result = 0;
         uint64_t tens = 1;
         for (size_t i = lhs.len; i > 0; i--) {
-            int_result += tens * rhs.data[i-1];
+            int_result += tens * lhs.data[i-1];
             tens *= 10;
         }
         int_result *= is_positive ? 1 : -1;
