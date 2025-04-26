@@ -728,8 +728,13 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     }
     case TTrait:  {
-        PtrArray nodes = mk_ptr_array(2 + type->trait.fields.len, a);
+        PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
         push_ptr(mk_str_doc(mv_string("Trait" ), a), &nodes);
+        
+        PtrArray id_nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("#"), a), &id_nodes);
+        push_ptr(pretty_u64(type->trait.id, a), &id_nodes);
+        push_ptr(mv_cat_doc(id_nodes, a), &nodes);
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {

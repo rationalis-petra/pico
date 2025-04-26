@@ -466,8 +466,8 @@ void squash_type(PiType* type) {
         break;
     }
     case TTrait: {
-        // TODO (INVESTIGATE BUG): do we need to sqyash implicits also?
-        for (size_t i = 0; i < type->structure.fields.len; i++) {
+        // TODO (INVESTIGATE PERFORMANCE): do we need to squash implicits also?
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
             squash_type((type->trait.fields.data + i)->val);
         }
         break;
