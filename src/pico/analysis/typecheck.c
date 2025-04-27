@@ -437,6 +437,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->match.val, env, gen, a, point);
 
         PiType* enum_type = untyped->match.val->ptype;
+        // Unwrap any distinct type. Note that we do NOT unwrap opaque types!
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
+
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Match expects value to have an enum type."));
         }

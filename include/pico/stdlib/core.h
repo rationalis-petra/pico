@@ -4,6 +4,7 @@
 #include "pico/values/modular.h"
 
 PiType* get_array_type();
+PiType* get_maybe_type();
 PiType* get_syntax_type();
 PiType* get_either_type();
 

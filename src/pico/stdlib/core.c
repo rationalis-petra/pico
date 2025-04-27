@@ -10,6 +10,11 @@ PiType* get_array_type() {
     return array_type;
 }
 
+static PiType* maybe_type;
+PiType* get_maybe_type() {
+    return maybe_type;
+}
+
 static PiType* syntax_type;
 PiType* get_syntax_type() {
     return syntax_type;
@@ -505,6 +510,24 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         ModuleEntry* e = get_def(sym, module);
         array_type = e->value;
+        
+        // Maybe Type 
+        // Make a ptr
+        vars = mk_u64_array(1, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        type.kind.nargs = 1;
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_enum_type(a, 2,
+                                                                   "some", 1, mk_var_type(a, "A"),
+                                                                   "none", 0)));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Maybe"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, a);
+
+        e = get_def(sym, module);
+        maybe_type = e->value;
 
         // Either Type 
         // Make a ptr

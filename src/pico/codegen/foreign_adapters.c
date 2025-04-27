@@ -425,6 +425,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
 
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+
         // Now, push registers onto stack
         size_t current_return_register = 0;
         const Regname return_integer_registers[2] = {RAX, RDX};
@@ -470,6 +472,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
             if (pass_return_in_memory) break;
         }
     }
+    build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op(ass, Ret, a, point);
 
     sdelete_u8_array(return_classes);

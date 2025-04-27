@@ -514,6 +514,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SMatch: {
         // Generate code for the value
         Syntax* match_value = syn.match.val;
+        PiType* enum_type = syn.match.val->ptype;
+        // Unwrap any distinct type. Note that we do NOT unwrap opaque types!
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
         size_t enum_size = pi_size_of(*match_value->ptype);
         size_t out_size = pi_size_of(*syn.ptype);
 
@@ -552,7 +557,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             *branch_ref = (uint8_t)(body_pos - branch_pos);
 
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            PtrArray variant_types = *(PtrArray*)match_value->ptype->enumeration.variants.data[clause.tag].val; 
+            PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
 
             // Bind Clause Vars 
             SymSizeAssoc arg_sizes = mk_sym_size_assoc(variant_types.len, a);
