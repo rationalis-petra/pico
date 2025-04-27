@@ -1427,6 +1427,17 @@ PiType* mk_enum_type(Allocator* a, size_t nfields, ...) {
     return enumeration;
 }
 
+PiType *mk_named_type(Allocator *a, const char *name, PiType *inner) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TNamed,
+        .named.name = string_to_symbol(mv_string(name)),
+        .named.type = inner,
+        .named.args = NULL,
+    };
+    return out;
+}
+
 PiType* mk_distinct_type(Allocator* a, PiType* inner) {
     PiType* out = mem_alloc(sizeof(PiType), a);
     *out =(PiType) {

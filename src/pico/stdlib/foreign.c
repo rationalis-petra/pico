@@ -211,13 +211,20 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
 
-        PiType* c_type = mk_enum_type(a, 3,
-                                      "void", 0,
-                                      "prim", 1, prim_type,
-                                      "float", 0,
-                                      "double", 0,
-                                      //"proc", 3,  // (Maybe Name) (Array (Pair Sym Ptr)) (Ptr CType)
-                                      "unspecified", 0);
+        PiType *c_type =
+            mk_named_type(a, "CType",
+                          mk_enum_type(a, 5,
+                                       "void", 0,
+                                       "prim-int", 1, prim_type,
+                                       "float", 0,
+                                       "double", 0,
+                                       // TODO: replace u64 with symbol
+                                       "ptr", 1, mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
+                                       //"proc", 3,
+                                       //mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
+                                       //mk_app_type(a, get_ptr_type(), ),
+                                       // (Array (Pair Sym Ptr)) (Ptr CType)
+                                       "unspecified", 0));
         type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
