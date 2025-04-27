@@ -147,6 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
 #elif ABI == WIN_64 
 
 typedef enum {
+    Win64None,
     Win64Floating,
     Win64Integer,
     Win64SmallAggregate, // <= 64 bits
@@ -157,9 +158,8 @@ typedef enum {
 Win64ArgClass win_64_arg_class(CType* type) {
     switch (type->sort) {
     case CSVoid:
-        panic(mv_string("Void type does not have arg class"));
-        break;
-    case CSPrim:
+        return Win64None;
+    case CSPrimInt:
         switch (type->prim.prim) {
         case CChar:
         case CShort:
@@ -169,13 +169,14 @@ Win64ArgClass win_64_arg_class(CType* type) {
             return Win64Integer;
         }
         break;
+    case CSFloat:
+    case CSDouble:
+        return Win64Floating;
     case CSPtr:
     case CSProc:
         return Win64Integer;
-        break;
     case CSIncomplete:
         panic(mv_string("Incomplete type does not have arg class"));
-        break;
     case CSStruct: 
     case CSUnion: {
         size_t aggregate_sz = c_size_of(*type);
@@ -184,11 +185,10 @@ Win64ArgClass win_64_arg_class(CType* type) {
         } else {
             return Win64LargeAggregate;
         }
-        break;
-        case CSCEnum:
-            return Win64Integer;
-            break;
     }
+    case CSCEnum:
+        return Win64Integer;
+        break;
     }
     panic(mv_string("Invalid c type provided to win_64_arg_class."));
 }
@@ -539,6 +539,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
       if (i < 4) {
           Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
           switch (class) {
+          case Win64None: // Do nothing!
+            break;
           case Win64Floating:
               throw_error(point, mv_string("Not implemented: register arg of class Win64 float "));
           case Win64Integer:

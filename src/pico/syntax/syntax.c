@@ -37,6 +37,11 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = pretty_i64(syntax->integral.value, a);
         break;
     }
+    case SLitUntypedFloating: {
+    case SLitTypedFloating: 
+        out = pretty_f64(syntax->floating.value, a);
+        break;
+    }
     case SLitBool: {
         if (syntax->integral.value == 0) {
             out = mk_str_doc(mv_string(":false"), a);
