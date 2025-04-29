@@ -25,6 +25,7 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
+ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected);
 ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a);
 ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
@@ -40,6 +41,10 @@ bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
 ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
+    return parse_expr(is, parse_state, a, '0');
+}
+
+ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected) {
     // default if we never enter loop body 
     ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
@@ -105,22 +110,23 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
                 // "foo.bar" is pared as a single unit (. foo bar), while
-                // "foo . bar" requires parse_main to be called thrice.
+                // "foo . bar" requires parse_expr to be called thrice.
                 out.type = ParseNone;
                 running = false;
                 break;
             }
             else if (is_symchar(point)){
                 out = parse_atom(is, parse_state, a);
+            } else if (point == expected) {
+                // We couldn't do a parse!
+                out.type = ParseNone;
+                running = false;
+                break;
             } else {
+                // We couldn't do a parse!
                 out.type = ParseFail;
-                // Consume the character, so that we don't encounter an
-                // identidcal error next time!
-                next(is, &point);
-
-                // error location
-                out.data.range.start = *parse_state,
-                out.data.range.end = *parse_state,
+                out.data.range.start = *parse_state;
+                out.data.range.end = *parse_state;
                 running = false;
                 break;
             }
@@ -206,7 +212,7 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_main(is, parse_state, a);
+        res = parse_expr(is, parse_state, a, terminator);
 
         if (res.type == ParseFail) {
             out = res;
