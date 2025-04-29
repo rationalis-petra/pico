@@ -423,9 +423,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         // Pop all memory arguments (both pico and c)
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm8(8), a, point);
 
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[arg_offsets.len -  1] - 0x8), a, point);
 
         // Now, push registers onto stack
         size_t current_return_register = 0;
