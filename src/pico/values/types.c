@@ -206,11 +206,11 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TNamed:
         out.named.name = t.named.name;
         out.named.type = copy_pi_type_p(t.named.type, a);
-        if (t.distinct.args) {
+        if (t.named.args) {
             out.named.args = mem_alloc(sizeof(PtrArray), a);
             *out.named.args = copy_ptr_array(*t.named.args,  (TyCopier)copy_pi_type_p, a);
         } else {
-            out.distinct.args = NULL;
+            out.named.args = NULL;
         }
         break;
     case TDistinct:

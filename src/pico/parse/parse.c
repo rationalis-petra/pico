@@ -113,7 +113,14 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
             else if (is_symchar(point)){
                 out = parse_atom(is, parse_state, a);
             } else {
-                out.type = ParseNone;
+                out.type = ParseFail;
+                // Consume the character, so that we don't encounter an
+                // identidcal error next time!
+                next(is, &point);
+
+                // error location
+                out.data.range.start = *parse_state,
+                out.data.range.end = *parse_state,
                 running = false;
                 break;
             }
