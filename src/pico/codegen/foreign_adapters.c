@@ -581,8 +581,10 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
     
     // Call function
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(32), a, point);
     build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
     build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(32), a, point);
 
     // Unwind: 
     if (pass_in_memory) {
@@ -630,12 +632,15 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         // Pop all memory arguments (both pico and c)
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8), a, point);
 
         // Pop return address
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-        // Now, registers onto stack
+        // The offsets account for the return address (which we just popped!), therefore subtract 0x8
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[arg_offsets.len -  1] - 0x8), a, point);
+
+        // Now, push result onto stack
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
         // Push return address
