@@ -124,6 +124,8 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 break;
             } else {
                 // We couldn't do a parse!
+                next(is, &point);
+
                 out.type = ParseFail;
                 out.data.range.start = *parse_state;
                 out.data.range.end = *parse_state;
