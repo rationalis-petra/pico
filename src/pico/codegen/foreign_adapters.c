@@ -355,8 +355,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Was RDX < R10? 
     build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
     
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
     // Restore value of RDX
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
@@ -528,8 +528,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Was RDX < R10? 
     build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
     
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
     // Check for return arg/space
     if (pass_in_memory) {
