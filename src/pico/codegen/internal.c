@@ -92,11 +92,11 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size > 255)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_copy: copy size must be smaller than 255!"));
+        throw_error(point, mv_string("Error in generate_stack_copy: copy size must be smaller than 255!"));
     };
 
     if (src == RAX || dest == RAX)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_copy: cannoy copy from/to RAX"));
+        throw_error(point, mv_string("Error in generate_stack_copy: cannoy copy from/to RAX"));
     };
 
     for (size_t i = 0; i < size / 8; i++) {

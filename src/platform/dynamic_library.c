@@ -36,7 +36,7 @@ void close_lib(DynLib *lib) {
 
 Result lib_sym(void **out, DynLib *lib, String symbol) {
     dlerror();
-    *out = dlsym(lib, (char*)symbol.bytes);
+    *out = dlsym(lib->ptr, (char*)symbol.bytes);
     char* error_message = dlerror();
     if (error_message) {
       return (Result) {
