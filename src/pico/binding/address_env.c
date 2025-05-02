@@ -60,7 +60,6 @@ typedef struct {
 } LocalAddrs;
 
 struct AddressEnv {
-    LocalType type;
     Environment* env;
 
     // To handle recursive top level definitions.

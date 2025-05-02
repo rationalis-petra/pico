@@ -425,12 +425,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                                                 + syn.all_application.implicits.len
                                                 + syn.all_application.args.len + 2));
 
+        size_t args_size = 0;
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
+            args_size += pi_size_of(*arg->ptype);
             generate(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
+            args_size += pi_size_of(*arg->ptype);
             generate(*arg, env, target, links, a, point);
         }
 
@@ -451,6 +454,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // TODO: make sure this gets done!
         //address_stack_shrink(env, args_size);
 
+        // Update as popped args from stack
+        address_stack_shrink(env, args_size + ADDRESS_SIZE);
+        address_stack_shrink(env, ADDRESS_SIZE * (syn.all_application.types.len
+                                                + syn.all_application.implicits.len
+                                                + syn.all_application.args.len + 2));
         // Update as pushed the final value onto the stack
         address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
@@ -458,6 +466,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SConstructor: {
         PiType* enum_type = syn.constructor.enum_type->type_val;
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
@@ -470,6 +481,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SVariant: {
         const size_t tag_size = sizeof(uint64_t);
         PiType* enum_type = syn.variant.enum_type->type_val;
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 

@@ -1,4 +1,3 @@
-#include <stdio.h> 
 #include "platform/dynamic_library.h"
 #include "platform/machine_info.h"
 

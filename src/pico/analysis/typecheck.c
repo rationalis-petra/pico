@@ -367,6 +367,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SConstructor: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -398,8 +401,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SVariant: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
 
-        // Typecheck is pretty simple: ensure that the tag is present in the
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
         }
