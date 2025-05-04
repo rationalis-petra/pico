@@ -130,9 +130,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_unary_op(ass, Push, imm8(immediate), a, point);
         break;
     }
-    case SVariable: {
+    case SVariable:
+    case SAbsVariable: {
         // Lookup the variable in the assembly envionrment
-        AddressEntry e = address_env_lookup(syn.variable, env);
+        AddressEntry e = (syn.type == SVariable)
+            ? address_env_lookup(syn.variable, env)
+            : address_abs_lookup(syn.abvar, env);
         switch (e.type) {
         case ALocalDirect:
             // TODO (UB BUG): this won't work for values > 64 bits wide!
