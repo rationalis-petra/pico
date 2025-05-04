@@ -120,9 +120,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
-        untyped->ptype = mk_uvar_with_default(gen, a);
+        untyped->ptype = mk_uvar_integral(gen, a);
         break;
     case SLitTypedIntegral:
+        untyped->ptype = mk_prim_type(a, untyped->integral.type);
+        break;
+    case SLitUntypedFloating:
+        untyped->type = SLitTypedFloating;
+        untyped->ptype = mk_uvar_floating(gen, a);
+        break;
+    case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
     case SLitBool:
@@ -360,6 +367,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SConstructor: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -391,8 +401,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SVariant: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
 
-        // Typecheck is pretty simple: ensure that the tag is present in the
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
         }
@@ -430,8 +442,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->match.val, env, gen, a, point);
 
         PiType* enum_type = untyped->match.val->ptype;
+        // Unwrap any distinct type. Note that we do NOT unwrap opaque types!
+        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
+            enum_type = enum_type->distinct.type;
+        }
+
         if (enum_type->sort != TEnum) {
-            throw_error(point, mv_string("Match expects value to have an enum type!"));
+            throw_error(point, mv_string("Match expects value to have an enum type."));
         }
 
         // Typecheck each variant, ensure they are the same
@@ -448,6 +465,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 if (clause->tagname == enum_type->enumeration.variants.data[j].key) {
                     found_tag = true;
                     clause->tag = j;
+                    if (used_indices.data[j] != 0) {
+                        throw_error(point, mv_string("Same tag occurs twice in match body."));
+                    }
                     used_indices.data[j] = 1;
                 }
             }
@@ -457,7 +477,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             }
 
             // Now we've found the tag, typecheck the body
-            PtrArray* types_to_bind = enum_type->enumeration.variants.data[i].val;
+            PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
             if (types_to_bind->len != clause->vars.len) {
                 throw_error(point,  mv_string("Bad number of binds!"));
             }
@@ -507,6 +527,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
         PiType source_type = *untyped->projector.val->ptype;
+        while (source_type.sort == TDistinct && source_type.distinct.source_module == NULL) {
+            source_type = *source_type.distinct.type;
+        }
         if (source_type.sort == TStruct) {
             // search for field
             PiType* ret_ty = NULL;
@@ -1070,6 +1093,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     switch (syn->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
+    case SLitUntypedFloating:
+    case SLitTypedFloating:
     case SLitString:
     case SLitBool:
     case SVariable:
@@ -1357,6 +1382,8 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     switch (typed->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
+    case SLitUntypedFloating:
+    case SLitTypedFloating:
     case SLitBool:
     case SLitString:
     case SVariable:

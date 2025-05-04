@@ -130,9 +130,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_unary_op(ass, Push, imm8(immediate), a, point);
         break;
     }
-    case SVariable: {
+    case SVariable:
+    case SAbsVariable: {
         // Lookup the variable in the assembly envionrment
-        AddressEntry e = address_env_lookup(syn.variable, env);
+        AddressEntry e = (syn.type == SVariable)
+            ? address_env_lookup(syn.variable, env)
+            : address_abs_lookup(syn.abvar, env);
         switch (e.type) {
         case ALocalDirect:
             // TODO (UB BUG): this won't work for values > 64 bits wide!
@@ -557,51 +560,44 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 }
 
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    switch (type->sort) {
-    case TPrim:
-    case TProc:
-    case TTraitInstance:
-        build_binary_op(ass, Mov, reg(dest, sz_64), imm32(pi_stack_size_of(*type)), a, point);
-        break;
-    case TVar: {
-        AddressEntry e = address_env_lookup(type->var, env);
-        switch (e.type) {
-        case ALocalDirect:
-            build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
-            build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFFFFFFF), a, point);
-            break;
-        case ALocalIndirect:
-            panic(mv_string("cannot generate code for local indirect."));
-            break;
-        case AGlobal:
-            panic(mv_string("Unexpected type variable sort: Global."));
-            break;
-        case ATypeVar:
-            panic(mv_string("Unexpected type variable sort: ATypeVar."));
-            break;
-        case ANotFound: {
-            panic(mv_string("Type Variable not found during codegen."));
-            break;
+    size_t sz; 
+    Result_t sz_res = pi_maybe_size_of(*type, &sz);
+    if (sz_res == Ok) {
+        build_binary_op(ass, Mov, reg(dest, sz_64), imm32(sz), a, point);
+    } else {
+        if (type->sort == TVar) {
+            AddressEntry e = address_env_lookup(type->var, env);
+            switch (e.type) {
+            case ALocalDirect:
+                build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
+                build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFFFFFFF), a, point);
+                break;
+            case ALocalIndirect:
+                panic(mv_string("cannot generate code for local indirect."));
+                break;
+            case AGlobal:
+                panic(mv_string("Unexpected type variable sort: Global."));
+                break;
+            case ATypeVar:
+                panic(mv_string("Unexpected type variable sort: ATypeVar."));
+                break;
+            case ANotFound: {
+                panic(mv_string("Type Variable not found during codegen."));
+                break;
+            }
+            case ATooManyLocals: {
+                throw_error(point, mk_string("Too Many Local variables!", a));
+                break;
+            }
+            }
+        } else {
+            // TODO BUG: This seems to cause crashes!
+            PtrArray nodes = mk_ptr_array(4, a);
+            push_ptr(mv_str_doc(mv_string("Unrecognized type provided to generate_stack_size_of:"), a), &nodes);
+            push_ptr(pretty_type(type, a), &nodes);
+            Document* message = mk_sep_doc(nodes, a);
+            panic(doc_to_str(message, a));
         }
-        case ATooManyLocals: {
-            throw_error(point, mk_string("Too Many Local variables!", a));
-            break;
-        }
-        }
-        break;
-    }
-    case TDistinct: {
-        generate_stack_size_of(dest, type->distinct.type, env, ass, a, point);
-        break;
-    }
-    default: {
-        // TODO BUG: This seems to cause crashes!
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc(mv_string("Unrecognized type provided to generate_stack_size_of:"), a), &nodes);
-        push_ptr(pretty_type(type, a), &nodes);
-        Document* message = mk_sep_doc(nodes, a);
-        panic(doc_to_str(message, a));
-    }
     }
 }
 

@@ -100,6 +100,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         // NOTE: When updating to push more registers, make sure to also update assembly
         //       in abstraction.c
         "push %%rbp       \n"
+        "push %%rbx       \n"
         "push %%r15       \n"
         "push %%r14       \n"
         "push %%r13       \n"
@@ -113,6 +114,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "pop %%r13        \n"
         "pop %%r14        \n"
         "pop %%r15        \n"
+        "pop %%rbx        \n"
         "pop %%rbp        \n"
         : "=r" (out)
 

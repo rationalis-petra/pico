@@ -66,9 +66,10 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     if (res.type == ParseFail) {
         write_string(mv_string("Parse Failed :(\n"), cout);
         release_arena_allocator(arena);
-        return false;
+        return true;
     }
     if (res.type != ParseSuccess) {
+        // If parse is invalid, means internal bug, so better exit soon!
         write_string(mv_string("Parse Returned Invalid Result!\n"), cout);
         release_arena_allocator(arena);
         return false;

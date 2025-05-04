@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
+#include "data/result.h"
 
 #include "pretty/standard_types.h"
 #include "pretty/string_printer.h"
@@ -130,12 +131,8 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TUVar:
-        if (t.uvar->subst != NULL) {
-            delete_pi_type(*t.uvar->subst, a);
-        }
-        mem_free(t.uvar, a);
-        break;
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         if (t.uvar->subst != NULL) {
             delete_pi_type(*t.uvar->subst, a);
         }
@@ -210,11 +207,11 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TNamed:
         out.named.name = t.named.name;
         out.named.type = copy_pi_type_p(t.named.type, a);
-        if (t.distinct.args) {
+        if (t.named.args) {
             out.named.args = mem_alloc(sizeof(PtrArray), a);
             *out.named.args = copy_ptr_array(*t.named.args,  (TyCopier)copy_pi_type_p, a);
         } else {
-            out.distinct.args = NULL;
+            out.named.args = NULL;
         }
         break;
     case TDistinct:
@@ -243,15 +240,8 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-        out.uvar = mem_alloc(sizeof(UVarType), a);
-        out.uvar->id = t.uvar->id; 
-        if (t.uvar->subst) {
-            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
-        } else {
-            out.uvar->subst = NULL;
-        }
-        break;
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         out.uvar = mem_alloc(sizeof(UVarType), a);
         out.uvar->id = t.uvar->id; 
         if (t.uvar->subst) {
@@ -337,6 +327,16 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             out =  pretty_u8(*uival, a);
             break;
         }
+        case Float_32: {
+            float32_t* fval = (float32_t*) val;
+            out =  pretty_f32(*fval, a);
+            break;
+        }
+        case Float_64: {
+            float64_t* fval = (float64_t*) val;
+            out =  pretty_f64(*fval, a);
+            break;
+        }
         case TFormer:  {
             TermFormer* pformer = (TermFormer*) val;
             out = pretty_former(*pformer, a);
@@ -367,8 +367,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TUVar:
         out = mk_str_doc(mv_string("No Print UVar!"), a);
         break;
-    case TUVarDefaulted:
-        out = mk_str_doc(mv_string("No Print UVar (defaulted)!"), a);
+    case TUVarIntegral:
+        out = mk_str_doc(mv_string("No Print UVar (integral)!"), a);
+        break;
+    case TUVarFloating:
+        out = mk_str_doc(mv_string("No Print UVar (floating)!"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;
@@ -401,11 +404,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         uint64_t tagidx = *(uint64_t*)val;
 
         PtrArray variant_types = *(PtrArray*)type->enumeration.variants.data[tagidx].val;
-        PtrArray nodes = mk_ptr_array(2 + variant_types.len, a);
+        PtrArray nodes = mk_ptr_array(1 + variant_types.len, a);
 
         // Symbol 
         Symbol tagname = type->enumeration.variants.data[tagidx].key;
-        push_ptr(mk_str_doc(string_cat(mv_string("[:"), *symbol_to_string(tagname), a), a), &nodes);
+        push_ptr(mk_str_doc( *symbol_to_string(tagname), a), &nodes);
 
         size_t current_offset = sizeof(uint64_t); // Start after current tag
         for (size_t i = 0; i < variant_types.len; i++) {
@@ -414,8 +417,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(arg, &nodes);
             current_offset += pi_size_of(*ftype);
         }
-        push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("[:", "]", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {
@@ -575,6 +577,12 @@ Document* pretty_type(PiType* type, Allocator* a) {
         case UInt_8: 
             out = mv_str_doc(mk_string("U8", a), a);
             break;
+        case Float_32:
+            out = mv_str_doc(mk_string("F32", a), a);
+            break;
+        case Float_64: 
+            out = mv_str_doc(mk_string("F64", a), a);
+            break;
         case Unit: 
             out = mv_str_doc(mk_string("Unit", a), a);
             break;
@@ -615,8 +623,11 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TUVar:
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
         break;
-    case TUVarDefaulted:
-        out = mv_str_doc(mk_string("No Print UVar Defaulted!", a), a);
+    case TUVarIntegral:
+        out = mv_str_doc(mk_string("No Print UVar Integral", a), a);
+        break;
+    case TUVarFloating:
+        out = mv_str_doc(mk_string("No Print UVar Floating", a), a);
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
@@ -718,8 +729,13 @@ Document* pretty_type(PiType* type, Allocator* a) {
         break;
     }
     case TTrait:  {
-        PtrArray nodes = mk_ptr_array(2 + type->trait.fields.len, a);
+        PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
         push_ptr(mk_str_doc(mv_string("Trait" ), a), &nodes);
+        
+        PtrArray id_nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("#"), a), &id_nodes);
+        push_ptr(pretty_u64(type->trait.id, a), &id_nodes);
+        push_ptr(mv_cat_doc(id_nodes, a), &nodes);
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
@@ -865,37 +881,48 @@ size_t pi_stack_size_of(PiType type) {
     return pi_stack_align(pi_size_of(type));
 }
 
-size_t pi_size_of(PiType type) {
+Result_t pi_maybe_size_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
         case Unit:
-            return 0;
+            *out = 0;
+            return Ok;
         case Bool:
-            return sizeof(uint8_t);
+            *out = sizeof(uint8_t);
+            return Ok;
         case Address:
         case Int_64:
         case UInt_64:
-            return sizeof(int64_t);
+        case Float_64:
+            *out = sizeof(int64_t);
+            return Ok;
         case Int_32:
         case UInt_32:
-            return sizeof(int32_t);
+        case Float_32:
+            *out = sizeof(int32_t);
+            return Ok;
         case Int_16:
         case UInt_16:
-            return sizeof(int16_t);
+            *out = sizeof(int16_t);
+            return Ok;
         case Int_8:
         case UInt_8:
-            return sizeof(int8_t);
+            *out = sizeof(int8_t);
+            return Ok;
         case TFormer:
-            return sizeof(TermFormer);
+            *out = sizeof(TermFormer);
+            return Ok;
         case TMacro:
-            return ADDRESS_SIZE;
+            *out = ADDRESS_SIZE;
+            return Ok;
         default:
-            panic(mv_string("pi-size-of: unrecognized primitive."));
+            panic(mv_string("pi-maybe-size-of: unrecognized primitive."));
         }
         break;
     case TProc:
-        return sizeof(uint64_t);
+        *out = sizeof(uint64_t);
+        return Ok;
     case TStruct: {
         size_t align = 0;
         size_t total = 0; 
@@ -903,10 +930,13 @@ size_t pi_size_of(PiType type) {
             size_t tmp_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
             align = align > tmp_align? align : tmp_align;
             total = pi_size_align(total, tmp_align);
-            size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
+            size_t field_size;
+            Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+            if (res != Ok) return res;
             total += field_size;
         }
-        return pi_size_align(total, align);
+        *out = pi_size_align(total, align);
+        return Ok;
     }
     case TEnum: {
         size_t max = 0; 
@@ -915,7 +945,9 @@ size_t pi_size_of(PiType type) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
                 total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
-                size_t field_size = pi_size_of(*(PiType*)types.data[i]);
+                size_t field_size;
+                Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+                if (res != Ok) return res;
                 total += field_size;
             }
 
@@ -923,47 +955,66 @@ size_t pi_size_of(PiType type) {
                 max = total;
             }
         }
+
         // Add 1 for tag!
-        return max + sizeof(uint64_t);
+        *out = max + sizeof(uint64_t);
+        return Ok;
     }
 
     case TReset:
     case TResumeMark: 
     case TDynamic:
-        return ADDRESS_SIZE;
+        *out = ADDRESS_SIZE;
+        return Ok;
     case TNamed:
-        return pi_size_of(*type.named.type);
+        *out = pi_size_of(*type.named.type);
+        return Ok;
     case TDistinct:
-        return pi_size_of(*type.distinct.type);
+        *out =  pi_size_of(*type.distinct.type);
+        return Ok;
     case TTrait:
-        panic(mv_string("pi_size_of received invalid sort: Trait."));
+        return Err;
         break;
     case TTraitInstance:
-        return ADDRESS_SIZE;
+        *out = ADDRESS_SIZE;
+        return Ok;
     case TCType:
-        return c_size_of(type.c_type);
+        *out = c_size_of(type.c_type);
+        return Ok;
     case TVar:
-        panic(mv_string("pi_size_of received invalid sort: TVar."));
     case TAll:
-        return sizeof(void*);
+        *out = sizeof(void*);
+        return Ok;
     case TExists:
-        panic(mv_string("pi_size_of not implemented for sort: Exists."));
+        panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));
     case TCApp:
-        panic(mv_string("pi_size_of not implemented for sort: TCApp."));
+        panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
-        panic(mv_string("pi_size_of received invalid sort: Family."));
+        return Err;
     case TKind: 
     case TConstraint: 
-        return sizeof(void*);
+        *out = sizeof(void*);
+        return Ok;
     case TUVar:
-        panic(mv_string("pi_size_of received invalid sort: UVar."));
-    case TUVarDefaulted:
-        panic(mv_string("pi_size_of received invalid sort: UVar with Default."));
+        return Err;
+    case TUVarIntegral:
+        return Err;
+    case TUVarFloating:
+        return Err;
     }
 
     // If we haven't returned at this point, then the tag is invalid
-    // (or pi_size_of doesn't support this type yet).
-    panic(mv_string("pi_size_of received invalid type."));
+    // (or pi_maybe_size_of doesn't support this type yet).
+    panic(mv_string("pi_maybe_size_of received invalid type."));
+}
+
+size_t pi_size_of(PiType type) {
+    size_t out = 0;
+    Result_t result = pi_maybe_size_of(type, &out);
+    if (result == Err) {
+        panic(mv_string("pi_size_of called with invalid type!"));
+    }
+    return out;
 }
 
 size_t pi_align_of(PiType type) {
@@ -1046,8 +1097,10 @@ size_t pi_align_of(PiType type) {
         return sizeof(void*);
     case TUVar:
         panic(mv_string("pi_align_of received invalid type: UVar."));
-    case TUVarDefaulted:
-        panic(mv_string("pi_align_of received invalid type: UVar with Default."));
+    case TUVarIntegral:
+        panic(mv_string("pi_align_of received invalid type: UVar with default integral."));
+    case TUVarFloating:
+        panic(mv_string("pi_align_of received invalid type: UVar with default floating."));
     default:
         panic(mv_string("pi_align_of received invalid type."));
     }
@@ -1063,9 +1116,19 @@ PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
     return uvar;
 }
 
-PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a) {
+PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarDefaulted; 
+    uvar->sort = TUVarIntegral; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
+    
+    return uvar;
+}
+
+PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVarFloating; 
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
@@ -1394,6 +1457,17 @@ PiType* mk_enum_type(Allocator* a, size_t nfields, ...) {
     PiType* enumeration = mem_alloc(sizeof(PiType), a);
     *enumeration = (PiType) {.sort = TEnum, .structure.fields = fields,};
     return enumeration;
+}
+
+PiType *mk_named_type(Allocator *a, const char *name, PiType *inner) {
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TNamed,
+        .named.name = string_to_symbol(mv_string(name)),
+        .named.type = inner,
+        .named.args = NULL,
+    };
+    return out;
 }
 
 PiType* mk_distinct_type(Allocator* a, PiType* inner) {

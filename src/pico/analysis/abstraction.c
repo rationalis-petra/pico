@@ -670,7 +670,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         return res;
     }
     case FDynamic: {
-        if (raw.branch.nodes.len <= 2) {
+        if (raw.branch.nodes.len < 2) {
             throw_error(point, mv_string("Malformed dynamic expression: expects at least 1 arg."));
         }
         RawTree* body = raw.branch.nodes.len == 2 ? raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -750,10 +750,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         size_t index = 1;
 
         bool is_special = true;
-        while (is_special) {
+        while (is_special && index < raw.branch.nodes.len) {
             RawTree* bind = raw.branch.nodes.data[index];
-            // let [x₁ e₁]
-            //     [x₂ e₂]
+            // bind [x₁ e₁]
+            //      [x₂ e₂]
             //  body
             is_special = bind->type == RawBranch && bind->branch.hint == HSpecial;
             if (is_special) {
@@ -1419,6 +1419,14 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                 .type = SLitUntypedIntegral,
                 .ptype = NULL,
                 .integral.value = raw.atom.int_64,
+            };
+            break;
+        }
+        case AFloating: {
+            *res = (Syntax) {
+                .type = SLitUntypedFloating,
+                .ptype = NULL,
+                .floating.value = raw.atom.float_64,
             };
             break;
         }

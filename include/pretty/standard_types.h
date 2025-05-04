@@ -1,6 +1,7 @@
 #ifndef __PRETTY_STANDARD_TYPES_H
 #define __PRETTY_STANDARD_TYPES_H
 
+#include "data/float.h"
 #include "platform/memory/allocator.h"
 #include "pretty/document.h"
 
@@ -12,6 +13,8 @@ Document* pretty_u64(uint64_t val, Allocator* a);
 Document* pretty_u32(uint32_t val, Allocator* a);
 Document* pretty_u16(uint16_t val, Allocator* a);
 Document* pretty_u8 (uint8_t val,  Allocator* a);
+Document* pretty_f32(float32_t val, Allocator* a);
+Document* pretty_f64(float64_t val,  Allocator* a);
 Document* pretty_ptr(void*    val, Allocator* a);
 
 Document* pretty_hex_u8(uint8_t val, Allocator* a);
@@ -27,5 +30,8 @@ Document* pretty_ushort(unsigned short val, Allocator* a);
 Document* pretty_uint(unsigned int val, Allocator* a);
 Document* pretty_ulong(unsigned long val, Allocator* a);
 Document* pretty_ulong_long(unsigned long long val, Allocator* a);
+
+Document* pretty_float(float val, Allocator* a);
+Document* pretty_double(double val, Allocator* a);
 
 #endif

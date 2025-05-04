@@ -59,9 +59,9 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
     // We probably want to recurse and merge arrays from subclasses
     switch (type->sort) {
     case CSVoid:
-        panic(mv_string("void type does not have arg class"));
+        // Do nothing, merge with class 'None'
         break;
-    case CSPrim:
+    case CSPrimInt:
         switch (type->prim.prim) {
         case CChar:
         case CShort:
@@ -70,6 +70,10 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
         case CLongLong:
             out->data[offset / 8] = merge_sysv_classes(SysVInteger, out->data[offset / 8]);
         }
+        break;
+    case CSFloat:
+    case CSDouble:
+        out->data[offset / 8] = merge_sysv_classes(SysVSSE, out->data[offset / 8]);
         break;
     case CSPtr:
     case CSProc:
@@ -143,6 +147,7 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
 #elif ABI == WIN_64 
 
 typedef enum {
+    Win64None,
     Win64Floating,
     Win64Integer,
     Win64SmallAggregate, // <= 64 bits
@@ -153,9 +158,8 @@ typedef enum {
 Win64ArgClass win_64_arg_class(CType* type) {
     switch (type->sort) {
     case CSVoid:
-        panic(mv_string("Void type does not have arg class"));
-        break;
-    case CSPrim:
+        return Win64None;
+    case CSPrimInt:
         switch (type->prim.prim) {
         case CChar:
         case CShort:
@@ -165,13 +169,14 @@ Win64ArgClass win_64_arg_class(CType* type) {
             return Win64Integer;
         }
         break;
+    case CSFloat:
+    case CSDouble:
+        return Win64Floating;
     case CSPtr:
     case CSProc:
         return Win64Integer;
-        break;
     case CSIncomplete:
         panic(mv_string("Incomplete type does not have arg class"));
-        break;
     case CSStruct: 
     case CSUnion: {
         size_t aggregate_sz = c_size_of(*type);
@@ -180,11 +185,10 @@ Win64ArgClass win_64_arg_class(CType* type) {
         } else {
             return Win64LargeAggregate;
         }
-        break;
-        case CSCEnum:
-            return Win64Integer;
-            break;
     }
+    case CSCEnum:
+        return Win64Integer;
+        break;
     }
     panic(mv_string("Invalid c type provided to win_64_arg_class."));
 }
@@ -207,17 +211,18 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
 
     // We need knowledge of the stack layout of the input arguments when
-    // constructing the function call: We know that pico are pushed
+    // constructing the function call: We know that in pico args are pushed
     // left-to-right, meaning the last argument is on the bottom of the stack
-    // (offset 0). 
+    // (offset 8). This means we need to go through thelist backwards!
     U64Array arg_offsets = mk_u64_array(ctype->proc.args.len + 1, a);
+    arg_offsets.len = arg_offsets.size;
     uint64_t offset = ADDRESS_SIZE; // To account for return address
-    for (size_t i = 0; i < ptype->proc.args.len; i++) {
-        push_u64(offset, &arg_offsets); 
-        size_t idx = ctype->proc.args.len - (i + 1);
-        offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx]);
+    for (size_t i = 0; i < ctype->proc.args.len; i++) {
+        size_t idx = arg_offsets.len - (i + 1);
+        arg_offsets.data[idx] = offset;
+        offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
     }
-    push_u64(offset, &arg_offsets); 
+    arg_offsets.data[0] = offset;
 
 #if ABI == SYSTEM_V_64
     // Notes: 
@@ -240,7 +245,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Check if return arg in memory, if so then the return arg takes the spot of
     // a 'hidden' extra argument - specifically, the first, with the ptr being
     // passed in RDI.
-    bool pass_return_in_memory = (return_classes.len == 0) || (return_classes.len > 2);
+    bool pass_return_in_memory =
+        (return_classes.len == 0 && ctype->proc.ret->sort != CSVoid)
+        || (return_classes.len > 2);
     if (pass_return_in_memory) {
         input_area_size += return_arg_size;
         current_integer_register++;
@@ -273,13 +280,13 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
               } else {
                   Regname next_reg = integer_registers[current_integer_register++];
                   // I8 max = 127
-                  if (arg_offsets.data[i] > 127) {
+                  if (arg_offsets.data[i + 1] > 127) {
                       throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
                   build_binary_op(ass, Mov, reg(next_reg, sz_64),
-                                  rref8(RSP, arg_offsets.data[i] + 0x8 * j, sz_64),
+                                  rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
                                   a, point);
               }
               break;
@@ -349,8 +356,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Was RDX < R10? 
     build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
     
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
     // Restore value of RDX
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
@@ -358,10 +365,10 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     for (size_t i = 0; i < in_memory_args.len; i++) {
         // pass in memory - reserve space on stack:
         size_t arg_idx = in_memory_args.data[i];
-        size_t arg_size = arg_offsets.data[arg_idx + 1] - arg_offsets.data[arg_idx];
+        size_t arg_size = arg_offsets.data[arg_idx] - arg_offsets.data[arg_idx + 1];
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
         build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx]), a, point);
+        build_binary_op(ass, Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx + 1]), a, point);
         generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
     }
 
@@ -386,7 +393,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         //   0x10 = Return address + Align adjust
         //   However, arg_offsets include an extra + 0x8 to account for return
         //        address, so we subtract 0x8 from 0x10 to get 0x8 
-        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
+        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
@@ -409,7 +416,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         // Then, pop all memory (sans the return arg) from the stack.
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1] - return_arg_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), a, point);
 
         // Push return address
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -417,7 +424,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         // Pop all memory arguments (both pico and c)
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm8(8), a, point);
+
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push registers onto stack
         size_t current_return_register = 0;
@@ -432,7 +443,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                 } else {
                     Regname next_reg = return_integer_registers[current_return_register++];
                     // I8 max = 127
-                    if (arg_offsets.data[i] > 127) {
+                    if (arg_offsets.data[i + 1] > 127) {
                         throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
                     }
                     // Push from registers into memory
@@ -517,8 +528,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Was RDX < R10? 
     build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
     
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
+    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
     // Check for return arg/space
     if (pass_in_memory) {
@@ -530,29 +541,36 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
     // rightmost argument is at the bottom of the stack. 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
-      if (i < 4) {
+      if (current_register < 4) {
           Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
           switch (class) {
+          case Win64None: // Do nothing!
+            break;
           case Win64Floating:
               throw_error(point, mv_string("Not implemented: register arg of class Win64 float "));
           case Win64Integer:
           case Win64SmallAggregate: {
               Regname next_reg = integer_registers[current_register++];
               build_binary_op(ass, Mov, reg(next_reg, sz_64),
-                              rref8(RBX, arg_offsets.data[i], sz_64),
+                              rref8(RBX, arg_offsets.data[i + 1], sz_64),
                               a, point);
               break;
           }
           case Win64LargeAggregate: {
               Regname next_reg = integer_registers[current_register++];
-              // For windows, arguments are already on the stack (?), so just point them to the correct offset!
+              // we know that next_reg is about to hold a pointer to this
+              // argument, so we can safely use it as a scratch register.
+              // In this case, it stores the source of the stack argument (to copy)
               build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
-              build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i]), a, point);
+              build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
 
               // TODO (IMPROVEMENT) what if different sizes?
-              size_t arg_size = arg_offsets.data[i + 1] - arg_offsets.data[i];
+              // Copy the argument to the bottom of the stack.
+              size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
               build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(arg_size), a, point);
               generate_monomorphic_copy(RSP, next_reg, arg_size, ass, a, point);
+
+              // Now, update the register to point to the argument.
               build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
               break;
           }
@@ -561,15 +579,22 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
           }
           }
       } else {
-          Regname next_reg = integer_registers[current_register++];
-          build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
-          build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i]), a, point);
+          build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
+          build_binary_op(ass, Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+
+          // TODO (IMPROVEMENT) what if different sizes?
+          // Copy the argument to the bottom of the stack.
+          size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
+          build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(arg_size), a, point);
+          generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
       }
     }
     
     // Call function
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(32), a, point);
     build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
     build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(32), a, point);
 
     // Unwind: 
     if (pass_in_memory) {
@@ -583,7 +608,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         //   0x10 = Return address + Align adjust
         //   However, arg_offsets include an extra + 0x8 to account for return
         //        address, so we subtract 0x8 from 0x10 to get 0x8 
-        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[arg_offsets.len -  1] - return_arg_size;
+        size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
@@ -609,20 +634,24 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         // Then, pop all memory (sans the return arg) from the stack.
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(return_arg_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1] - return_arg_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), a, point);
 
         // Push return address
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+
     } else {
         // Pop all memory arguments (both pico and c)
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[arg_offsets.len -  1]), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8), a, point);
 
         // Pop return address
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-        // Now, registers onto stack
+        // The offsets account for the return address (which we just popped!), therefore subtract 0x8
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
+
+        // Now, push result onto stack
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
         // Push return address
@@ -659,7 +688,7 @@ bool can_convert(CType *ctype, PiType *ptype) {
     return can_reinterpret(ctype, ptype);
 }
 
-bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
+bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
 #if (ABI == SYSTEM_V_64) || (ABI == WIN_64)
     switch (ptype) {
     case Unit:  {
@@ -704,6 +733,12 @@ bool can_reinterpret_prim(CPrim ctype, PrimType ptype) {
     case UInt_8: {
         return ctype.prim == CChar && ctype.is_signed == Unsigned;
     }
+    case Float_32: {
+        return ctype.prim == CInt && ctype.is_signed == Unsigned;
+    }
+    case Float_64: {
+        return ctype.prim == CChar && ctype.is_signed == Unsigned;
+    }
     case TFormer:  {
         // TODO (FEATURE): check for enum?
         return false;
@@ -731,10 +766,10 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
 
     switch (ptype->sort) {
     case TPrim: {
-        if (ctype->sort == CSPrim) {
+        if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
-        }
-        else if (ctype->sort == CSPtr && ptype->prim == Address) {
+        } else if ((ctype->sort == CSPtr && ptype->prim == Address)
+                   || (ctype->sort == CSVoid && ptype->prim == Unit)) {
             return true;
         } else {
             return false;
@@ -807,7 +842,8 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TKind:
     case TConstraint:
     case TUVar:
-    case TUVarDefaulted:
+    case TUVarIntegral:
+    case TUVarFloating:
         return false;
     default:
         panic(mv_string("invalid types provided to can_reinterpret"));

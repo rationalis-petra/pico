@@ -1,3 +1,4 @@
+#include <math.h>
 #include "pico/parse/parse.h"
 
 /* High Level overview of the grammar:
@@ -24,6 +25,7 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
+ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected);
 ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a);
 ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
@@ -32,13 +34,19 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
 ParseResult parse_char(IStream* is, SourcePos* parse_state);
 
 // Helper functions
+StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state);
 StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
 bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
 ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
-    ParseResult out;
+    return parse_expr(is, parse_state, a, '0');
+}
+
+ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected) {
+    // default if we never enter loop body 
+    ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
 
     consume_whitespace(is, parse_state);
@@ -100,14 +108,27 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
                 out = parse_number(is, parse_state, a);
             }
             else if (is_whitespace(point)) {
+                // Whitespace always terminates a unit, e.g. 
+                // "foo.bar" is pared as a single unit (. foo bar), while
+                // "foo . bar" requires parse_expr to be called thrice.
                 out.type = ParseNone;
                 running = false;
                 break;
             }
             else if (is_symchar(point)){
                 out = parse_atom(is, parse_state, a);
-            } else {
+            } else if (point == expected) {
+                // We couldn't do a parse!
                 out.type = ParseNone;
+                running = false;
+                break;
+            } else {
+                // We couldn't do a parse!
+                next(is, &point);
+
+                out.type = ParseFail;
+                out.data.range.start = *parse_state;
+                out.data.range.end = *parse_state;
                 running = false;
                 break;
             }
@@ -136,12 +157,24 @@ ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
         }
     }
 
-    if (out.type == ParseSuccess && terms.len == 0) {
+    // Post-run cleanup: reduce the term list to a single term (or ParseNone)
+    if (out.type != ParseFail && terms.len == 0) {
         out.type = ParseNone;
     } else if (out.type == ParseNone && terms.len == 1) {
         out.type = ParseSuccess;
         out.data.result = *(RawTree*)terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
+        // Check that there is an appropriate (odd) number of terms for infix operator
+        // unrolling to function
+        if (terms.len % 2 == 0) {
+          out = (ParseResult) {
+            .type = ParseFail,
+            .data.range.start = *parse_state,
+            .data.range.end = *parse_state,
+          };
+          return out;
+        }
+
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
         // meaning that (num : i64 . +) becomes (. + (: num i64))
         RawTree* current = terms.data[0];
@@ -181,7 +214,7 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_main(is, parse_state, a);
+        res = parse_expr(is, parse_state, a, terminator);
 
         if (res.type == ParseFail) {
             out = res;
@@ -308,9 +341,11 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
-    U8Array arr = mk_u8_array(10, a);
+    U8Array lhs = mk_u8_array(10, a);
+    U8Array rhs = mk_u8_array(10, a);
     bool is_positive = true;
     bool just_negation = true;
+    bool floating = false;
 
     result = peek(is, &codepoint);
     if (result == StreamSuccess && codepoint == '-') {
@@ -323,7 +358,19 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         next(is, &codepoint);
         // the cast is safe as is-numchar ensures codepoint < 256
         uint8_t val = (uint8_t) codepoint - 48;
-        push_u8(val, &arr);
+        push_u8(val, &lhs);
+    }
+
+    if (result == StreamSuccess && codepoint == '.') {
+        floating = true;
+        just_negation = false;
+        next(is, &codepoint);
+        while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+            next(is, &codepoint);
+            // the cast is safe as is-numchar ensures codepoint < 256
+            uint8_t val = (uint8_t) codepoint - 48;
+            push_u8(val, &rhs);
+        }
     }
 
     if (just_negation) {
@@ -344,20 +391,46 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
         };
     }
 
-    int64_t int_result = 0;
-    uint64_t tens = 1;
-    for (size_t i = arr.len; i > 0; i--) {
-        int_result += tens * arr.data[i-1];
-        tens *= 10;
-    }
-    int_result *= is_positive ? 1 : -1;
+    if (floating) {
+        int64_t lhs_result = 0;
+        uint64_t rhs_result = 0;
+        uint64_t tens = 1;
+        for (size_t i = lhs.len; i > 0; i--) {
+            lhs_result += tens * lhs.data[i-1];
+            tens *= 10;
+        }
+        tens = 1;
+        for (size_t i = rhs.len; i > 0; i--) {
+            rhs_result += tens * rhs.data[i-1];
+            tens *= 10;
+        }
+        lhs_result *= is_positive ? 1 : -1;
+        double dlhs = (double)lhs_result;
+        double drhs = (double)rhs_result;
+        drhs = drhs / powl(10, rhs.len);
 
-    return (ParseResult) {
-        .type = ParseSuccess,
-        .data.result.type = RawAtom,
-        .data.result.atom.type = AIntegral,
-        .data.result.atom.int_64 = int_result,
-    };
+        return (ParseResult) {
+            .type = ParseSuccess,
+            .data.result.type = RawAtom,
+            .data.result.atom.type = AFloating,
+            .data.result.atom.float_64 = dlhs + drhs,
+        };
+    } else {
+        int64_t int_result = 0;
+        uint64_t tens = 1;
+        for (size_t i = lhs.len; i > 0; i--) {
+            int_result += tens * lhs.data[i-1];
+            tens *= 10;
+        }
+        int_result *= is_positive ? 1 : -1;
+
+        return (ParseResult) {
+            .type = ParseSuccess,
+            .data.result.type = RawAtom,
+            .data.result.atom.type = AIntegral,
+            .data.result.atom.int_64 = int_result,
+        };
+    }
 }
 
 ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a) {
@@ -469,16 +542,37 @@ ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     };
 }
 
-StreamResult consume_whitespace(IStream* is, SourcePos* parse_state) {
+StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
     uint32_t codepoint;
     StreamResult result;
+
+    next(is, &codepoint); // consume token #)
+    result = next(is, &codepoint);
+
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
-        if (is_whitespace(codepoint)) {
+        if (codepoint != stop) {
             // TODO: Check if newline!
             parse_state->col++;
             result = next(is, &codepoint);
         }
         else {
+            break;
+        }
+    }
+    return result;
+}
+
+StreamResult consume_whitespace(IStream* is, SourcePos* parse_state) {
+    uint32_t codepoint;
+    StreamResult result;
+    while ((result = peek(is, &codepoint)) == StreamSuccess) {
+        if (is_whitespace(codepoint) ) {
+            // TODO: Check if newline!
+            parse_state->col++;
+            result = next(is, &codepoint);
+        } else if (codepoint == ';') {
+            result = consume_until('\n', is, parse_state);
+        } else {
             break;
         }
     }

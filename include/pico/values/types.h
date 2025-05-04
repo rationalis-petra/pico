@@ -2,6 +2,7 @@
 #define __PICO_VALUES_TYPES_H
 
 #include "data/array.h"
+#include "data/result.h"
 #include "pretty/document.h"
 
 #include "pico/data/sym_ptr_amap.h"
@@ -23,6 +24,9 @@ typedef enum {
     UInt_16 = 0b101,
     UInt_32 = 0b110,
     UInt_64 = 0b111,
+
+    Float_32,
+    Float_64,
 
     Unit,
     Bool,
@@ -63,7 +67,8 @@ typedef enum {
 
   // Used only during unification
   TUVar,
-  TUVarDefaulted,
+  TUVarIntegral,
+  TUVarFloating,
 } PiType_t;
 
 typedef struct {
@@ -174,6 +179,7 @@ bool pi_type_eql(PiType* lhs, PiType* rhs);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
+Result_t pi_maybe_size_of(PiType type, size_t* out);
 
 size_t pi_size_align(size_t size, size_t align);
 size_t pi_stack_align(size_t in);
@@ -187,7 +193,8 @@ PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_with_default(UVarGenerator* gen, Allocator* a);
+PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a);
+PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a);
 UVarGenerator* mk_gen(Allocator* a);
 void delete_gen(UVarGenerator* gen, Allocator* a);
 

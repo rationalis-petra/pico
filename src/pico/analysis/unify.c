@@ -9,6 +9,7 @@ PiType* trace_uvar(PiType* uvar);
 Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a);
 
 Result assert_maybe_integral(PiType* type);
+Result assert_maybe_floating(PiType* type);
 
 Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     // Unification Implementation:
@@ -35,12 +36,20 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
         rhs->uvar->subst = lhs;
         out.type = Ok;
     }
-    else if (lhs->sort == TUVarDefaulted) {
+    else if (lhs->sort == TUVarIntegral) {
         out = assert_maybe_integral(rhs);
         if (out.type == Ok) lhs->uvar->subst = rhs;
     }
-    else if (rhs->sort == TUVarDefaulted) {
-        out = assert_maybe_integral(lhs);
+    else if (rhs->sort == TUVarIntegral) {
+        out = assert_maybe_integral(rhs);
+        if (out.type == Ok) rhs->uvar->subst = lhs;
+    }
+    else if (lhs->sort == TUVarFloating) {
+        out = assert_maybe_floating(lhs);
+        if (out.type == Ok) lhs->uvar->subst = rhs;
+    }
+    else if (rhs->sort == TUVarFloating) {
+        out = assert_maybe_floating(lhs);
         if (out.type == Ok) rhs->uvar->subst = lhs;
     }
     else if (rhs->sort == lhs->sort)
@@ -251,7 +260,26 @@ Result assert_maybe_integral(PiType* type) {
         // If it is a primtive, check it is integral type
         if (type->sort == TPrim && (type->prim < 0b1000)) {
             return (Result) {.type = Ok};
-        } else if (type->sort == TUVar || type->sort == TUVarDefaulted) {
+        } else if (type->sort == TUVar || type->sort == TUVarIntegral) {
+            // continue on to next iteration
+            type = type->uvar->subst;
+        } else {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
+            };
+        }
+    }
+    return (Result) {.type = Ok};
+}
+
+Result assert_maybe_floating(PiType* type) {
+    // Use a while loop to trace through uvars
+    while (type) {
+        // If it is a primtive, check it is integral type
+        if (type->sort == TPrim && (type->prim == Float_32 || type->prim == Float_64)) {
+            return (Result) {.type = Ok};
+        } else if (type->sort == TUVar || type->sort == TUVarFloating) {
             // continue on to next iteration
             type = type->uvar->subst;
         } else {
@@ -367,7 +395,9 @@ bool has_unification_vars_p(PiType type) {
             return has_unification_vars_p(*type.uvar->subst);
         }
 
-    case TUVarDefaulted: return false;
+    case TUVarIntegral:
+    case TUVarFloating:
+        return false;
     }
 
     // If we are here, then none of the branches were taken!
@@ -375,7 +405,8 @@ bool has_unification_vars_p(PiType type) {
 }
 
 PiType* trace_uvar(PiType* uvar) {
-    while ((uvar->sort == TUVar || uvar->sort == TUVarDefaulted) && uvar->uvar->subst != NULL) {
+  while ((uvar->sort == TUVar || uvar->sort == TUVarIntegral || uvar->sort == TUVarFloating)
+         && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
     return uvar;
@@ -435,8 +466,8 @@ void squash_type(PiType* type) {
         break;
     }
     case TTrait: {
-        // TODO (INVESTIGATE BUG): do we need to sqyash implicits also?
-        for (size_t i = 0; i < type->structure.fields.len; i++) {
+        // TODO (INVESTIGATE PERFORMANCE): do we need to squash implicits also?
+        for (size_t i = 0; i < type->trait.fields.len; i++) {
             squash_type((type->trait.fields.data + i)->val);
         }
         break;
@@ -464,13 +495,23 @@ void squash_type(PiType* type) {
         } 
         break;
     }
-    case TUVarDefaulted: {
+    case TUVarIntegral: {
         PiType* subst = type->uvar->subst;
         if (subst) {
             squash_type(subst);
             *type = *subst;
         } else {
             *type = (PiType) {.sort = TPrim, .prim = Int_64,};
+        }
+        break;
+    }
+    case TUVarFloating: {
+        PiType* subst = type->uvar->subst;
+        if (subst) {
+            squash_type(subst);
+            *type = *subst;
+        } else {
+            *type = (PiType) {.sort = TPrim, .prim = Float_64,};
         }
         break;
     }

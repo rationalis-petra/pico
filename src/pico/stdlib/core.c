@@ -10,6 +10,16 @@ PiType* get_array_type() {
     return array_type;
 }
 
+static PiType* ptr_type;
+PiType* get_ptr_type() {
+    return ptr_type;
+}
+
+static PiType* maybe_type;
+PiType* get_maybe_type() {
+    return maybe_type;
+}
+
 static PiType* syntax_type;
 PiType* get_syntax_type() {
     return syntax_type;
@@ -18,6 +28,11 @@ PiType* get_syntax_type() {
 static PiType* either_type;
 PiType* get_either_type() {
     return either_type;
+}
+
+static PiType* pair_type;
+PiType* get_pair_type() {
+    return pair_type;
 }
 
 PiType build_store_fn_ty(Allocator* a) {
@@ -452,16 +467,34 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("U8"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
+    type_val = (PiType) {.sort = TPrim, .prim = Float_32};
+    sym = string_to_symbol(mv_string("F32"));
+    add_def(module, sym, type, &type_data, null_segments, NULL);
+
+    type_val = (PiType) {.sort = TPrim, .prim = Float_64};
+    sym = string_to_symbol(mv_string("F64"));
+    add_def(module, sym, type, &type_data, null_segments, NULL);
+
     // Syntax Type : components and definition 
     {
-        // Ptr Type
-        U64Array vars = mk_u64_array(1, a);
+        PiType *type_val;
+        SymbolArray vars;
+        ModuleEntry* e;
+
+        // Ptr Type 
+        vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
-        PiType* ptr_type = mk_distinct_type(a, mk_type_family(a, vars, mk_prim_type(a, Address)));
-        type_data = ptr_type;
-        sym = string_to_symbol(mv_string("Ptr"));
         type.kind.nargs = 1;
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_prim_type(a, Address)));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Ptr"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, a);
+
+        e = get_def(sym, module);
+        ptr_type = e->value;
 
         // Allocator Type 
         PiType* alloc_type = mk_struct_type(a, 3,
@@ -475,7 +508,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         // (Ptr Alloc)
         PiType* alloc_ptr_type = mk_app_type(a, ptr_type, alloc_type);
-        delete_pi_type_p(ptr_type, a);
         delete_pi_type_p(alloc_type, a);
         
         // Array Type 
@@ -483,7 +515,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        PiType* type_val = mk_distinct_type(a, mk_type_family(a,
+        type_val = mk_distinct_type(a, mk_type_family(a,
                                                       vars,
                                                       mk_struct_type(a, 4,
                                                                      "data", mk_prim_type(a, Address),
@@ -495,11 +527,27 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         add_def(module, sym, type, &type_data, null_segments, NULL);
         delete_pi_type_p(type_val, a);
 
-        ModuleEntry* e = get_def(sym, module);
+        e = get_def(sym, module);
         array_type = e->value;
+        
+        // Maybe Type 
+        vars = mk_u64_array(1, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        type.kind.nargs = 1;
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_enum_type(a, 2,
+                                                                   "some", 1, mk_var_type(a, "A"),
+                                                                   "none", 0)));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Maybe"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, a);
+
+        e = get_def(sym, module);
+        maybe_type = e->value;
 
         // Either Type 
-        // Make a ptr
         vars = mk_u64_array(2, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         push_u64(string_to_symbol(mv_string("B")), &vars);
@@ -517,6 +565,25 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         e = get_def(sym, module);
         either_type = e->value;
+
+        // Pair Type 
+        vars = mk_u64_array(2, a);
+        push_u64(string_to_symbol(mv_string("A")), &vars);
+        push_u64(string_to_symbol(mv_string("B")), &vars);
+        type.kind.nargs = 2;
+
+        type_val = mk_distinct_type(a, mk_type_family(a,
+                                                      vars,
+                                                      mk_struct_type(a, 2,
+                                                                   "_1", mk_var_type(a, "A"),
+                                                                   "_2", mk_var_type(a, "B"))));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Pair"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, a);
+
+        e = get_def(sym, module);
+        pair_type = e->value;
 
         type.kind.nargs = 0;
 

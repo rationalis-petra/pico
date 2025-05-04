@@ -1,5 +1,6 @@
 #include "platform/signals.h"
 #include "platform/dynamic_library.h"
+#include "platform/memory/arena.h"
 
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
@@ -37,17 +38,42 @@ DynLibResult wrap_dynlib_open(String str) {
     }
 }
 
+void wrap_dynlib_close(DynLib* lib) {
+    close_lib(lib);
+}
+
+typedef struct {
+    uint64_t tag;
+    union {
+        String error_message;
+        void* result;
+    };
+} SymbolResult;
+
+SymbolResult wrap_dynlib_sym(DynLib* lib, String symbol) {
+    void* out; 
+
+    Result res = lib_sym(&out, lib, symbol);
+
+    if (res.type == Err) {
+        return (SymbolResult) {.tag = 0, .error_message = res.error_message};
+    }
+    else {
+        return (SymbolResult) {.tag = 1, .result = out};
+    }
+}
+
 void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
     CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}),
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
                                          "bytes", mk_voidptr_ctype(a));
 
     // DynLibResult
     CType dynlib_result = mk_struct_ctype(
         a, 2, "tag",
-        mk_prim_ctype((CPrim){.prim = CLong, .is_signed = Unsigned}), "data",
+        mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
                        "error_message", string_ctype,
                        "dynlib", mk_voidptr_ctype(a)));
@@ -60,15 +86,58 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     delete_c_type(fn_ctype, a);
 }
 
-void build_dynlib_close_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType fn_ctype = mk_fn_ctype(a, 1, "lib", copy_c_type(mk_voidptr_ctype(a), a), mk_void_ctype());
 
+    convert_c_fn(wrap_dynlib_close, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
 }
 
-void build_dynlib_symbol_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_mk_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType string_ctype = mk_struct_ctype(a, 2,
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                                         "bytes", mk_voidptr_ctype(a));
+
+    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}));
+
+    convert_c_fn(string_to_symbol, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
+}
+
+void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // here, we use void pointers because we don't need the  
+    // C API to check everything for us.
+    CType string_ctype = mk_struct_ctype(a, 2,
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                                         "bytes", mk_voidptr_ctype(a));
+
+    // DynLibResult
+    CType symbol_result = mk_struct_ctype(
+        a, 2, "tag",
+        mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}), "data",
+        mk_union_ctype(a, 2,
+                       "error_message", string_ctype,
+                       "value", mk_voidptr_ctype(a)));
+
+    // Proc type
+    CType fn_ctype = mk_fn_ctype(a, 2,
+                                 "lib", mk_voidptr_ctype(a),
+                                 "symbol", copy_c_type(string_ctype, a),
+                                 symbol_result);
+
+    convert_c_fn(wrap_dynlib_sym, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
 
 }
 
 void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
+    Allocator arena = mk_arena_allocator(4096, a);
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -97,6 +166,8 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         .data = mk_u8_array(0, a),
     };
 
+    // Now that we have setup appropriately, override the allocator
+    a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
     TermFormer former = FReinterpretRelic;
@@ -145,18 +216,26 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
 
-        PiType* c_type = mk_enum_type(a, 3,
-                                     "void", 0,
-                                     "prim", 1, prim_type,
-                                     "unspecified", 0);
+        // TODO: replace u64 with symbol
+        PiType *c_type =
+            mk_named_type(a, "CType",
+                          mk_enum_type(a, 5,
+                                       "void", 0,
+                                       "prim-int", 1, prim_type,
+                                       "float", 0,
+                                       "double", 0,
+                                       "ptr", 1, mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
+                                       "proc", 3,
+                                         mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
+                                         mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
+                                         mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
+                                       "unspecified", 0));
         type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
         ModuleEntry* e = get_def(sym, module);
         exported_c_type = e->value;
-
-        delete_pi_type_p(c_type, a);
     }
 
     Segments fn_segments = {.data = mk_u8_array(0, a),};
@@ -173,48 +252,45 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     clear_assembler(ass);
 
     PiType* str = mk_string_type(a);
-    // dynlib_ty is ok here
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, dynlib_ty));
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_app_type(a, get_either_type(), str, copy_pi_type_p(dynlib_ty, a)));
     build_dynlib_open_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    // but not ok here, when being copied (sort is ok, but inner data is not.).
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // TODO (BUG) - there is some bug (probably in type application) which means
-    // that these types must be free'd (but not deleted) manually. 
-    mem_free(str, a);
-    mem_free(dynlib_ty, a);
-    delete_pi_type_p(typep, a);
+    typep = mk_proc_type(a, 1, copy_pi_type_p(dynlib_ty, a), mk_prim_type(a, Unit));
+    build_dynlib_close_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("dynlib-close"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
-    // delete_pi_type_p(str, a);
-    // delete_pi_type_p(dynlib_ty, a);
+    str = mk_string_type(a);
+    typep = mk_proc_type(a, 2, dynlib_ty, mk_string_type(a),
+                         mk_app_type(a, get_either_type(), str, mk_prim_type(a, Address)));
+    build_dynlib_symbol_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("dynlib-symbol"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
-    // TODO: fill in correct type
-    /* typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)); */
-    /* build_dynlib_symbol_fn(ass, a, &point); */
-    /* sym = string_to_symbol(mv_string("dynlib-symbol")); */
-    /* fn_segments.code = get_instructions(ass); */
-    /* prepped = prep_target(module, fn_segments, ass, NULL); */
-    /* add_def(module, sym, *typep, &prepped.code.data, prepped, NULL); */
-    /* clear_assembler(ass); */
-    /* delete_pi_type_p(typep, a); */
-
-    // TODO: fill in correct type
-    /* typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)); */
-    /* build_dynlib_close_fn(ass, a, &point); */
-    /* sym = string_to_symbol(mv_string("dynlib-close")); */
-    /* fn_segments.code = get_instructions(ass); */
-    /* prepped = prep_target(module, fn_segments, ass, NULL); */
-    /* add_def(module, sym, *typep, &prepped.code.data, prepped, NULL); */
-    /* clear_assembler(ass); */
-    /* delete_pi_type_p(typep, a); */
+    str = mk_string_type(a);
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, UInt_64));
+    build_mk_symbol_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("mk-symbol"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);
 
     sdelete_u8_array(fn_segments.data);
+    release_arena_allocator(arena);
 }

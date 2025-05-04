@@ -13,6 +13,7 @@
 typedef enum : uint64_t {
     ABool,
     AIntegral,
+    AFloating,
     ASymbol,
     AString,
 } Atom_t;
@@ -22,6 +23,7 @@ typedef struct {
     Atom_t type;
     union {
         int64_t int_64;
+        double float_64;
         Symbol symbol;
         String string;
     };

@@ -66,6 +66,20 @@ Document* pretty_ptr(void* val, Allocator* a) {
     return mv_str_doc(mv_string(str), a);
 }
 
+Document *pretty_f32(float32_t val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%f", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%f", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_f64(float64_t val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%lf", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%lf", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
 Document* pretty_hex_u8(uint8_t val, Allocator* a) {
     int len = snprintf(NULL, 0, "%" PRIx8, val) + 1;
     char* str = (char*)mem_alloc(sizeof(char) * len, a);
@@ -140,5 +154,19 @@ Document *pretty_ulong_long(unsigned long long val, Allocator *a) {
     int len = snprintf(NULL, 0, "%llu", val) + 1;
     char* str = (char*)mem_alloc(sizeof(char) * len, a);
     snprintf(str, len, "%llu", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_float(float val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%f", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%f", val);
+    return mv_str_doc(mv_string(str), a);
+}
+
+Document *pretty_double(double val, Allocator *a) {
+    int len = snprintf(NULL, 0, "%lf", val) + 1;
+    char* str = (char*)mem_alloc(sizeof(char) * len, a);
+    snprintf(str, len, "%lf", val);
     return mv_str_doc(mv_string(str), a);
 }

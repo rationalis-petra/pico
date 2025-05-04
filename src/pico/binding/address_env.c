@@ -60,7 +60,6 @@ typedef struct {
 } LocalAddrs;
 
 struct AddressEnv {
-    LocalType type;
     Environment* env;
 
     // To handle recursive top level definitions.
@@ -381,9 +380,11 @@ void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
 
         // Variables are in reverse order!
         // due to how the stack pushes/pops args.
+
+        // TODO: in (some x), x getting bound to a sentinel!
         for (size_t i = 0; i < vars.len; i++) {
             SAddr local;
-            local.type = SASentinel;
+            local.type = SADirect;
 
             local.symbol = vars.data[i].key;
             local.stack_offset = stack_offset;

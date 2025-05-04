@@ -85,7 +85,6 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Push, reg(R9, sz_64), a, point);
 
     build_nullary_op(ass, Ret, a, point);
-    
 }
 
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -148,6 +147,40 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #endif
 
     build_nullary_op(ass, Ret, a, point);
+}
+
+void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Pop return address (we don't need it)
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(8), a, point);
+
+    // panic : All [A] Proc (String) A
+#if ABI == SYSTEM_V_64
+    // panic (str.memsize = rdi, str.bytes = rsi)
+    // 
+    // copy address into RDI
+    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+
+#elif ABI == WIN_64
+    // panic (&str = rcx)
+    // copy address into RCX
+    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#endif
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&panic),  a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    // Panic does not return
+}
+
+PiType* build_panic_fn_ty(Allocator* a) {
+    PiType* proc_ty = mk_proc_type(a, 1, mk_string_type(a), mk_var_type(a, "A"));
+
+    SymbolArray types = mk_u64_array(1, a);
+    push_u64(string_to_symbol(mv_string("A")), &types);
+
+    PiType* out_ty = mem_alloc(sizeof(PiType), a);
+    *out_ty =  (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
+    return out_ty;
 }
 
 void exit_callback() {
@@ -356,6 +389,16 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     typep = mk_proc_type(a, 0, mk_prim_type(a, Unit));
     build_exit_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("exit"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    // panic : All [A] Proc [String] A
+    typep = build_panic_fn_ty(a);
+    build_panic_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("panic"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -6,7 +6,7 @@
 
 #include "pico/values/ctypes.h"
 
-Document* pretty_cprim(CPrim prim, Allocator* a) {
+Document* pretty_cprim(CPrimInt prim, Allocator* a) {
     PtrArray nodes = mk_ptr_array(2, a);
     if (prim.is_signed == Signed) {
         push_ptr(mk_str_doc(mv_string("signed"), a), &nodes);
@@ -39,8 +39,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
     switch (type->sort) {
     case CSVoid:
         return mk_str_doc(mv_string("void"), a);
-    case CSPrim:
+    case CSPrimInt:
         return pretty_cprim(type->prim, a);
+    case CSFloat:
+        return mk_str_doc(mv_string("float"), a);
+    case CSDouble:
+        return mk_str_doc(mv_string("double"), a);
     case CSCEnum: {
         // enum name { l1 = n1, l2 = n2 }
         PtrArray main_nodes = mk_ptr_array(3, a);
@@ -131,7 +135,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
     panic(mv_string("Invalid CType"));
 }
 
-Document* pretty_cprimval(CPrim prim, void* data, Allocator* a) {
+Document* pretty_cprimval(CPrimInt prim, void* data, Allocator* a) {
     if (prim.is_signed == Unsigned) {
         switch (prim.prim) {
         case CChar:
@@ -170,8 +174,12 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
     switch (type->sort) {
     case CSVoid:
         return mk_str_doc(mv_string("<void>"), a);
-    case CSPrim:
+    case CSPrimInt:
         return pretty_cprimval(type->prim, data, a);
+    case CSFloat:
+        return pretty_float(*(float*)data, a);
+    case CSDouble:
+        return pretty_double(*(double*)data, a);
     case CSCEnum: {
         return mk_str_doc(mv_string("pretty_cval not implemented for enum"), a);
     }
@@ -196,7 +204,7 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
     panic(mv_string("Invalid CType provided to pretty_cval"));
 }
 
-size_t c_prim_size_of(CPrim type)
+size_t c_prim_size_of(CPrimInt type)
 {
 #if (ABI == SYSTEM_V_64 || ABI == WIN_64)
     switch (type.prim)
@@ -237,8 +245,12 @@ size_t c_size_of(CType type) {
     switch (type.sort) {
     case CSVoid:
         return 0;
-    case CSPrim:
+    case CSPrimInt:
         return c_prim_size_of(type.prim);
+    case CSFloat:
+        return 4;
+    case CSDouble:
+        return 8;
     case CSCEnum:
         return c_prim_size_of(type.enumeration.base);
     case CSProc:
@@ -298,8 +310,12 @@ size_t c_align_of(CType type) {
     switch (type.sort) {
     case CSVoid:
         return 0;
-    case CSPrim:
+    case CSPrimInt:
         // In System V, size = align for primitive types.
+        return c_prim_size_of(type.prim);
+    case CSFloat:
+        return c_prim_size_of(type.prim);
+    case CSDouble:
         return c_prim_size_of(type.prim);
     case CSCEnum:
         // In System V, size = align for primitive types.
@@ -354,7 +370,9 @@ size_t c_align_of(CType type) {
 void delete_c_type(CType t, Allocator* a) {
     switch(t.sort) {
     case CSVoid:
-    case CSPrim:
+    case CSPrimInt:
+    case CSFloat:
+    case CSDouble:
         break;
     case CSCEnum:
         sdelete_sym_i64_assoc(t.enumeration.vals);
@@ -396,7 +414,9 @@ void delete_c_type_p(CType* t, Allocator* a) {
 CType copy_c_type(CType t, Allocator* a) {
     CType out = t;
     switch(t.sort) {
-    case CSPrim:
+    case CSPrimInt:
+    case CSFloat:
+    case CSDouble:
     case CSVoid:
         break;
     case CSCEnum:
@@ -436,9 +456,14 @@ CType* copy_c_type_p(CType* t, Allocator* a) {
     return ty;
 }
 
-
 // Constructors and Utilities
 // --------------------------
+CType mk_void_ctype() {
+    return (CType) {
+        .sort = CSVoid,
+    };
+}
+
 CType mk_voidptr_ctype(Allocator *a) {
     CType* void_ty = mem_alloc(sizeof(CType), a);
     *void_ty = (CType) {.sort = CSVoid};
@@ -448,9 +473,9 @@ CType mk_voidptr_ctype(Allocator *a) {
     };
 }
 
-CType mk_prim_ctype(CPrim t) {
+CType mk_primint_ctype(CPrimInt t) {
     return (CType) {
-        .sort = CSPrim,
+        .sort = CSPrimInt,
         .prim = t,
     };
 }
@@ -501,7 +526,7 @@ CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
 }
 
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
-CType mk_enum_ctype(Allocator* a, CPrim store, size_t nfields, ...) {
+CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 

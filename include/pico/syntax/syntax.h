@@ -27,6 +27,8 @@ typedef enum {
     // Atoms
     SLitUntypedIntegral,
     SLitTypedIntegral,
+    SLitUntypedFloating,
+    SLitTypedFloating,
     SLitString,
     SLitBool,
     SVariable,
@@ -100,6 +102,11 @@ typedef struct {
     int64_t value;
     PrimType type;
 } SynIntegralLiteral;
+
+typedef struct {
+    double value;
+    PrimType type;
+} SynFloatingLiteral;
 
 typedef struct {
     size_t index;
@@ -301,6 +308,7 @@ struct Syntax {
     Syntax_t type;
     union {
         SynIntegralLiteral integral;
+        SynFloatingLiteral floating;
         bool boolean;
         String string;
 
