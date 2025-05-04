@@ -527,6 +527,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
         PiType source_type = *untyped->projector.val->ptype;
+        while (source_type.sort == TDistinct && source_type.distinct.source_module == NULL) {
+            source_type = *source_type.distinct.type;
+        }
         if (source_type.sort == TStruct) {
             // search for field
             PiType* ret_ty = NULL;

@@ -682,24 +682,28 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SProjector: {
         // First, allocate space on the stack for the value
+        PiType* source_type = syn.projector.val->ptype;
+        while (source_type->sort == TDistinct && source_type->distinct.source_module == NULL) {
+            source_type = source_type->distinct.type;
+        }
         size_t out_sz = pi_stack_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(out_sz), a, point);
         address_stack_grow(env, out_sz);
 
         // Second, generate the structure/instance object
         generate(*syn.projector.val, env, target, links, a, point);
-        size_t src_sz = pi_size_of(*syn.projector.val->ptype);
+        size_t src_sz = pi_size_of(*source_type);
 
         // From this point, behaviour depends on whether we are projecting from
         // a structure or from an instance
-        if (syn.projector.val->ptype->sort == TStruct) {
+        if (source_type->sort == TStruct) {
             // Now, copy the structure to the destination
             // for this, we need the struct size + offset of field in the struct
             size_t offset = 0;
-            for (size_t i = 0; i < syn.projector.val->ptype->structure.fields.len; i++) {
-                if (syn.projector.val->ptype->structure.fields.data[i].key == syn.projector.field)
+            for (size_t i = 0; i < source_type->structure.fields.len; i++) {
+                if (source_type->structure.fields.data[i].key == syn.projector.field)
                     break;
-                offset += pi_size_of(*(PiType*)syn.projector.val->ptype->structure.fields.data[i].val);
+                offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
             }
 
             generate_stack_move(src_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
@@ -714,11 +718,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // Now, calculate offset for field 
             size_t offset = 0;
-            for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
-                offset = pi_size_align(offset, pi_align_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val));
-                if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
+            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
+                if (source_type->instance.fields.data[i].key == syn.projector.field)
                     break;
-                offset += pi_size_of(*(PiType*)syn.projector.val->ptype->instance.fields.data[i].val);
+                offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
             }
             build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
 

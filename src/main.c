@@ -68,11 +68,6 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         release_arena_allocator(arena);
         return true;
     }
-    if (res.type == ParseNone) {
-        // If parse is none, means encountered EOF, so exit!
-        release_arena_allocator(arena);
-        return false;
-    }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
         write_string(mv_string("Parse Returned Invalid Result!\n"), cout);

@@ -1,5 +1,6 @@
 #include "platform/signals.h"
 #include "platform/dynamic_library.h"
+#include "platform/memory/arena.h"
 
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
@@ -135,6 +136,8 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
 }
 
 void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
+    Allocator arena = mk_arena_allocator(4096, a);
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -163,6 +166,8 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         .data = mk_u8_array(0, a),
     };
 
+    // Now that we have setup appropriately, override the allocator
+    a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
     TermFormer former = FReinterpretRelic;
@@ -211,6 +216,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
 
+        // TODO: replace u64 with symbol
         PiType *c_type =
             mk_named_type(a, "CType",
                           mk_enum_type(a, 5,
@@ -218,12 +224,11 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
                                        "prim-int", 1, prim_type,
                                        "float", 0,
                                        "double", 0,
-                                       // TODO: replace u64 with symbol
                                        "ptr", 1, mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
-                                       //"proc", 3,
-                                       //mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
-                                       //mk_app_type(a, get_ptr_type(), ),
-                                       // (Array (Pair Sym Ptr)) (Ptr CType)
+                                       "proc", 3,
+                                         mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
+                                         mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
+                                         mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
                                        "unspecified", 0));
         type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));
@@ -231,8 +236,6 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
 
         ModuleEntry* e = get_def(sym, module);
         exported_c_type = e->value;
-
-        delete_pi_type_p(c_type, a);
     }
 
     Segments fn_segments = {.data = mk_u8_array(0, a),};
@@ -256,9 +259,8 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
-    typep = mk_proc_type(a, 1, dynlib_ty, mk_prim_type(a, Unit));
+    typep = mk_proc_type(a, 1, copy_pi_type_p(dynlib_ty, a), mk_prim_type(a, Unit));
     build_dynlib_close_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("dynlib-close"));
     fn_segments.code = get_instructions(ass);
@@ -285,18 +287,10 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // TODO (BUG) - there is some bug (probably in type application) which means
-    // that these types must be free'd (but not deleted) manually. 
-    mem_free(str, a);
-    //mem_free(dynlib_ty, a);
-    delete_pi_type_p(typep, a);
-
-    // delete_pi_type_p(str, a);
-    // delete_pi_type_p(dynlib_ty, a);
-
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);
 
     sdelete_u8_array(fn_segments.data);
+    release_arena_allocator(arena);
 }
