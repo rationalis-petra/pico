@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
+#include "data/result.h"
 
 #include "pretty/standard_types.h"
 #include "pretty/string_printer.h"
@@ -880,39 +881,48 @@ size_t pi_stack_size_of(PiType type) {
     return pi_stack_align(pi_size_of(type));
 }
 
-size_t pi_size_of(PiType type) {
+Result_t pi_maybe_size_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
         case Unit:
-            return 0;
+            *out = 0;
+            return Ok;
         case Bool:
-            return sizeof(uint8_t);
+            *out = sizeof(uint8_t);
+            return Ok;
         case Address:
         case Int_64:
         case UInt_64:
         case Float_64:
-            return sizeof(int64_t);
+            *out = sizeof(int64_t);
+            return Ok;
         case Int_32:
         case UInt_32:
         case Float_32:
-            return sizeof(int32_t);
+            *out = sizeof(int32_t);
+            return Ok;
         case Int_16:
         case UInt_16:
-            return sizeof(int16_t);
+            *out = sizeof(int16_t);
+            return Ok;
         case Int_8:
         case UInt_8:
-            return sizeof(int8_t);
+            *out = sizeof(int8_t);
+            return Ok;
         case TFormer:
-            return sizeof(TermFormer);
+            *out = sizeof(TermFormer);
+            return Ok;
         case TMacro:
-            return ADDRESS_SIZE;
+            *out = ADDRESS_SIZE;
+            return Ok;
         default:
-            panic(mv_string("pi-size-of: unrecognized primitive."));
+            panic(mv_string("pi-maybe-size-of: unrecognized primitive."));
         }
         break;
     case TProc:
-        return sizeof(uint64_t);
+        *out = sizeof(uint64_t);
+        return Ok;
     case TStruct: {
         size_t align = 0;
         size_t total = 0; 
@@ -920,10 +930,13 @@ size_t pi_size_of(PiType type) {
             size_t tmp_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
             align = align > tmp_align? align : tmp_align;
             total = pi_size_align(total, tmp_align);
-            size_t field_size = pi_size_of(*(PiType*)type.structure.fields.data[i].val);
+            size_t field_size;
+            Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+            if (res != Ok) return res;
             total += field_size;
         }
-        return pi_size_align(total, align);
+        *out = pi_size_align(total, align);
+        return Ok;
     }
     case TEnum: {
         size_t max = 0; 
@@ -932,7 +945,9 @@ size_t pi_size_of(PiType type) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
                 total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
-                size_t field_size = pi_size_of(*(PiType*)types.data[i]);
+                size_t field_size;
+                Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+                if (res != Ok) return res;
                 total += field_size;
             }
 
@@ -940,49 +955,66 @@ size_t pi_size_of(PiType type) {
                 max = total;
             }
         }
+
         // Add 1 for tag!
-        return max + sizeof(uint64_t);
+        *out = max + sizeof(uint64_t);
+        return Ok;
     }
 
     case TReset:
     case TResumeMark: 
     case TDynamic:
-        return ADDRESS_SIZE;
+        *out = ADDRESS_SIZE;
+        return Ok;
     case TNamed:
-        return pi_size_of(*type.named.type);
+        *out = pi_size_of(*type.named.type);
+        return Ok;
     case TDistinct:
-        return pi_size_of(*type.distinct.type);
+        *out =  pi_size_of(*type.distinct.type);
+        return Ok;
     case TTrait:
-        panic(mv_string("pi_size_of received invalid sort: Trait."));
+        return Err;
         break;
     case TTraitInstance:
-        return ADDRESS_SIZE;
+        *out = ADDRESS_SIZE;
+        return Ok;
     case TCType:
-        return c_size_of(type.c_type);
+        *out = c_size_of(type.c_type);
+        return Ok;
     case TVar:
-        panic(mv_string("pi_size_of received invalid sort: TVar."));
     case TAll:
-        return sizeof(void*);
+        *out = sizeof(void*);
+        return Ok;
     case TExists:
-        panic(mv_string("pi_size_of not implemented for sort: Exists."));
+        panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));
     case TCApp:
-        panic(mv_string("pi_size_of not implemented for sort: TCApp."));
+        panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
-        panic(mv_string("pi_size_of received invalid sort: Family."));
+        return Err;
     case TKind: 
     case TConstraint: 
-        return sizeof(void*);
+        *out = sizeof(void*);
+        return Ok;
     case TUVar:
-        panic(mv_string("pi_size_of received invalid sort: UVar."));
+        return Err;
     case TUVarIntegral:
-        panic(mv_string("pi_size_of received invalid sort: UVar with default integral."));
+        return Err;
     case TUVarFloating:
-        panic(mv_string("pi_size_of received invalid sort: UVar with default float."));
+        return Err;
     }
 
     // If we haven't returned at this point, then the tag is invalid
-    // (or pi_size_of doesn't support this type yet).
-    panic(mv_string("pi_size_of received invalid type."));
+    // (or pi_maybe_size_of doesn't support this type yet).
+    panic(mv_string("pi_maybe_size_of received invalid type."));
+}
+
+size_t pi_size_of(PiType type) {
+    size_t out = 0;
+    Result_t result = pi_maybe_size_of(type, &out);
+    if (result == Err) {
+        panic(mv_string("pi_size_of called with invalid type!"));
+    }
+    return out;
 }
 
 size_t pi_align_of(PiType type) {

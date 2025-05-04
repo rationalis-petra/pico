@@ -183,6 +183,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+
             // Primitives are (currently) all <= 64 bits, but may treating them
             // as 64-bits may overflow a allocated portion of memory, so we must
             // be more careful here.

@@ -70,10 +70,6 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
             release_arena_allocator(arena);
             return;
         }
-        if (res.type == ParseNone) {
-            release_arena_allocator(arena);
-            return;
-        }
         if (res.type != ParseSuccess) {
             write_string(mv_string("Parse Returned Invalid Result!\n"), serr);
             release_arena_allocator(arena);
@@ -153,10 +149,6 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
 
         if (res.type == ParseFail) {
             write_string(mv_string("Parse Failed :(\n"), serr);
-            release_arena_allocator(arena);
-            return;
-        }
-        if (res.type == ParseNone) {
             release_arena_allocator(arena);
             return;
         }

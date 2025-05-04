@@ -2,6 +2,7 @@
 #define __PICO_VALUES_TYPES_H
 
 #include "data/array.h"
+#include "data/result.h"
 #include "pretty/document.h"
 
 #include "pico/data/sym_ptr_amap.h"
@@ -178,6 +179,7 @@ bool pi_type_eql(PiType* lhs, PiType* rhs);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
+Result_t pi_maybe_size_of(PiType type, size_t* out);
 
 size_t pi_size_align(size_t size, size_t align);
 size_t pi_stack_align(size_t in);
