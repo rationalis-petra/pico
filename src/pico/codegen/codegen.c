@@ -620,9 +620,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // For structures, we have to be careful - this is because the order in
         // which arguments are evaluated is not necessarily the order in which
         // arguments are inserted into the structure.
+        PiType* struct_type = syn.ptype;
+        while (struct_type->sort == TDistinct && struct_type->distinct.source_module == NULL) {
+            struct_type = struct_type->distinct.type;
+        }
 
         // Step 1: Make room on the stack for our struct
-        size_t struct_size = pi_stack_size_of(*syn.ptype);
+        size_t struct_size = pi_stack_size_of(*struct_type);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
         address_stack_grow(env, struct_size);
 
@@ -644,19 +648,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
         size_t dest_offset = 0;
-        for (size_t i = 0; i < syn.ptype->structure.fields.len; i++) {
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
 
             // Find the field in the source & compute offset
             size_t src_offset = 0;
             for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, syn.ptype->structure.fields);
+                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, struct_type->structure.fields);
                 if (t) {
                     src_offset += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
                 } else {
                     throw_error(point, mv_string("Error code-generating for structure: field not found."));
                 }
 
-                if (syn.structure.fields.data[j].key == syn.ptype->structure.fields.data[i].key) {
+                if (syn.structure.fields.data[j].key == struct_type->structure.fields.data[i].key) {
                     break; // offset is correct, end the loop
                 }
             }
@@ -667,7 +671,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // of the stack.
             size_t src_stack_offset = struct_size - src_offset;
             size_t dest_stack_offset = struct_size + dest_offset;
-            size_t field_size = pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);

@@ -505,6 +505,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* ty = eval_type(untyped->structure.ptype, env, a, gen, point);
         untyped->ptype = ty; 
 
+        while (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
+            ty = ty->distinct.type;
+        }
+
         if (ty->sort != TStruct) {
             throw_error(point, mv_string("Structure type invalid"));
         }

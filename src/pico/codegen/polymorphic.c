@@ -374,7 +374,30 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SStructure: {
-        throw_error(point, mv_string("Not implemented: structure in forall."));
+        PiType* struct_type = syn.ptype;
+        while (struct_type->sort == TDistinct && struct_type->distinct.source_module == NULL) {
+            struct_type = struct_type->distinct.type;
+        }
+
+        bool labels_match = true;
+        const size_t len = struct_type->structure.fields.len;
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            if (struct_type->structure.fields.data[len - (i + 1)].key != syn.structure.fields.data[i].key) {
+                labels_match = false;
+                break;
+            }
+        }
+
+        if (!labels_match)
+            throw_error(point, mv_string("Not implemented: out of order structures structure in all."));
+
+        for (size_t i = 0; i < syn.structure.fields.len; i++) {
+            generate_polymorphic_i(*(Syntax*)syn.structure.fields.data[i].val, env, target, links, a, point);
+        }
+
+        //generate_stack_size_of(RAX, struct_type, env, ass, a, point);
+        //build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+        break;
     }
     case SProjector: {
         if (syn.projector.val->ptype->sort == TStruct) {
