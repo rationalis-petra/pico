@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
+#include "pretty/standard_types.h"
 #include "pretty/string_printer.h"
 
 #include "pico/binding/environment.h"
@@ -321,7 +322,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         
         if (all_type.binder.vars.len != untyped->all_application.types.len) {
-            throw_error(point, mk_string("Incorrect number of all type function arguments", a));
+            PtrArray nodes = mk_ptr_array(4, a);
+            push_ptr(mk_str_doc(mv_string("Incorrect number of type arguments to all function - expected: "), a), &nodes);
+            push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
+            push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
+            push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
+            throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
         }
 
         if (all_type.binder.body->sort != TProc) {
@@ -348,10 +354,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // Bind the vars in the all type to specific types!
             PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
             if (proc_type->proc.args.len != untyped->all_application.args.len) {
-                const char* msg = proc_type->proc.args.len < untyped->all_application.args.len
-                    ? "Too many args to procedure in all-application"
-                    : "Too few args to procedure in all-application";
-                throw_error(point, mk_string(msg, a));
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mk_str_doc(mv_string("Incorrect number of value arguments to all function - expected: "), a), &nodes);
+                push_ptr(pretty_u64(proc_type->proc.args.len, a), &nodes);
+                push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
+                push_ptr(pretty_u64(untyped->all_application.args.len, a), &nodes);
+                throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
             }
 
             for (size_t i = 0; i < proc_type->proc.args.len; i++) {
@@ -990,9 +998,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
         break;
     }
-    case SCheckedType: {
-        panic(mv_string("Inferring type of checked type. This is unexpected"));
-    }
+    case SCheckedType:
+        // In the case of a checked type, the typechecking is already complete,
+        // so we can do nothing.
+        break;
     case SAnnotation: {
         panic(mv_string("Annotations are only supported at the top level."));
     }
