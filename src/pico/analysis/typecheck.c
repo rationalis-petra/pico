@@ -375,9 +375,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SConstructor: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        enum_type = unwrap_type(enum_type);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -409,9 +407,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SVariant: {
         // Typecheck variant
         PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        enum_type = unwrap_type(enum_type);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -450,10 +446,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->match.val, env, gen, a, point);
 
         PiType* enum_type = untyped->match.val->ptype;
-        // Unwrap any distinct type. Note that we do NOT unwrap opaque types!
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        enum_type = unwrap_type(enum_type);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Match expects value to have an enum type."));
@@ -512,10 +505,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SStructure: {
         PiType* ty = eval_type(untyped->structure.ptype, env, a, gen, point);
         untyped->ptype = ty; 
-
-        while (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
-            ty = ty->distinct.type;
-        }
+        ty = unwrap_type(ty);
 
         if (ty->sort != TStruct) {
             throw_error(point, mv_string("Structure type invalid"));
@@ -538,10 +528,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
-        PiType source_type = *untyped->projector.val->ptype;
-        while (source_type.sort == TDistinct && source_type.distinct.source_module == NULL) {
-            source_type = *source_type.distinct.type;
-        }
+        PiType source_type = *unwrap_type(untyped->projector.val->ptype);
+
         if (source_type.sort == TStruct) {
             // search for field
             PiType* ret_ty = NULL;
@@ -1156,32 +1144,36 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
             throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
         }
         PiType fn_type = *syn->application.function->ptype;
-        for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
-            PiType* arg_ty = fn_type.proc.implicits.data[i];
-            if (arg_ty->sort != TTraitInstance) {
-                throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
-            }
+        if (fn_type.sort == TProc) {
+            for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
+                PiType* arg_ty = fn_type.proc.implicits.data[i];
+                if (arg_ty->sort != TTraitInstance) {
+                    throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+                }
 
-            InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
-            switch (e.type) {
-            case IEAbsSymbol: {
-                Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
-                *new_impl = (Syntax) {
-                    .type = SAbsVariable,
-                    .abvar = e.abvar,
-                    .ptype = arg_ty,
-                };
-                push_ptr(new_impl, &syn->application.implicits);
-                break;
+                InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
+                switch (e.type) {
+                case IEAbsSymbol: {
+                    Syntax* new_impl = mem_alloc(sizeof(Syntax), a);
+                    *new_impl = (Syntax) {
+                        .type = SAbsVariable,
+                        .abvar = e.abvar,
+                        .ptype = arg_ty,
+                    };
+                    push_ptr(new_impl, &syn->application.implicits);
+                    break;
+                }
+                case IENotFound:
+                    throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+                case IEAmbiguous:
+                    throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+                default:
+                    panic(mv_string("Invalid instance entry type!"));
+                }
             }
-            case IENotFound:
-                throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
-            case IEAmbiguous:
-                throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
-            default:
-                panic(mv_string("Invalid instance entry type!"));
-            }
-        }
+        } else if (fn_type.sort != TKind) {
+            panic(mv_string("Invalid lhs in application in instantiate_implicits: not Proc or Kind"));
+        } 
         break;
     }
     case SAllApplication: {

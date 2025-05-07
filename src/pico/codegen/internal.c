@@ -1,8 +1,8 @@
-#include "pico/codegen/codegen.h"
-#include "pico/codegen/internal.h"
-
 #include "platform/machine_info.h"
 #include "data/meta/array_impl.h"
+
+#include "pico/codegen/codegen.h"
+#include "pico/codegen/internal.h"
 #include "pico/stdlib/extra.h"
 
 int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
@@ -200,7 +200,6 @@ PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
 }
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
-
 #if ABI == SYSTEM_V_64
     build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
@@ -209,10 +208,23 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), imm32(nfields), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
+
+    // Align RSP to closest 16 bytes
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    
+#if ABI == WIN_64
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
 
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&internal_type_app), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
@@ -220,6 +232,9 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
 #endif 
+    
+    build_unary_op(ass, Pop, reg(RCX, sz_64),  a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
 
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(nfields * ADDRESS_SIZE), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);

@@ -25,7 +25,7 @@ Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Imports abstract_imports(RawTree* raw, Allocator* a, ErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, ErrorPoint* point);
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* point);
-ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* point);
+ExportClause abstract_export_clause(RawTree* raw, ErrorPoint* point);
 
 //------------------------------------------------------------------------------
 // Interface Implementation
@@ -97,7 +97,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
             exports.clauses = mk_export_clause_array(clauses_1->branch.nodes.len - 1, a);
 
             for (size_t i = 1; i < clauses_1->branch.nodes.len; i++) {
-                ExportClause clause = abstract_export_clause(clauses_1->branch.nodes.data[i], a, point);
+                ExportClause clause = abstract_export_clause(clauses_1->branch.nodes.data[i], point);
                 push_export_clause(clause, &exports.clauses);
             }
         } else {
@@ -1723,9 +1723,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
     }
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* point) {
+ExportClause abstract_export_clause(RawTree* raw, ErrorPoint* point) {
     if (is_symbol(raw)) {
         return (ExportClause) {
             .type = ExportName,
@@ -1760,7 +1758,6 @@ ExportClause abstract_export_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
         throw_error(point, mv_string("Invalid export clause"));
     }
 }
-#pragma GCC diagnostic pop
 
 Module* try_get_module(Syntax* syn, ShadowEnv* env) {
     switch (syn->type) {

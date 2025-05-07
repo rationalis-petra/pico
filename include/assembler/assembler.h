@@ -193,7 +193,7 @@ AsmResult build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location s
 AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point);
 AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point);
 
-void asm_init();
+void init_asm();
 
 // Utility & Pretty
 Document* pretty_register(Regname reg, LocationSize sz, Allocator* a);

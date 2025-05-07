@@ -400,6 +400,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SProjector: {
+        PiType* source_type = syn.projector.val->ptype;
+        while (source_type->sort == TDistinct && source_type->distinct.source_module == NULL) {
+            source_type = source_type->distinct.type;
+        }
+
         if (syn.projector.val->ptype->sort == TStruct) {
             panic(mv_string("Projector not implemented for structures in polymorphic function"));
         } else {
@@ -419,6 +424,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
+                // TODO: segfault here!
                 generate_size_of(RAX, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
                 build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
             }

@@ -88,7 +88,7 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
 
 void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType fn_ctype = mk_fn_ctype(a, 1, "lib", copy_c_type(mk_voidptr_ctype(a), a), mk_void_ctype());
+    CType fn_ctype = mk_fn_ctype(a, 1, "lib", copy_c_type(mk_voidptr_ctype(a), a), c_void);
 
     convert_c_fn(wrap_dynlib_close, &fn_ctype, type, ass, a, point); 
 

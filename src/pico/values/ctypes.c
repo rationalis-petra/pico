@@ -206,7 +206,7 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
 
 size_t c_prim_size_of(CPrimInt type)
 {
-#if (ABI == SYSTEM_V_64 || ABI == WIN_64)
+#if ABI == SYSTEM_V_64
     switch (type.prim)
     {
     // System V ABI
@@ -223,6 +223,21 @@ size_t c_prim_size_of(CPrimInt type)
     case CLongLong:
         // TODO (FEATURE):
         // May be 4? (ILP32)
+        return 8;
+    }
+#elif ABI == WIN_64
+    switch (type.prim)
+    {
+    // Win 64 V ABI
+    case CChar:
+        return 1;
+    case CShort:
+        return 2;
+    case CInt:
+        return 4;
+    case CLong:
+        return 4;
+    case CLongLong:
         return 8;
     }
 #else 
@@ -458,12 +473,6 @@ CType* copy_c_type_p(CType* t, Allocator* a) {
 
 // Constructors and Utilities
 // --------------------------
-CType mk_void_ctype() {
-    return (CType) {
-        .sort = CSVoid,
-    };
-}
-
 CType mk_voidptr_ctype(Allocator *a) {
     CType* void_ty = mem_alloc(sizeof(CType), a);
     *void_ty = (CType) {.sort = CSVoid};
@@ -565,4 +574,15 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
         .sort = CSUnion,
         .cunion.fields = fields,
     };
+}
+
+CType c_size_type;
+CType c_void;
+void init_ctypes() {
+#if (ABI == SYSTEM_V_64 || ABI == WIN_64)
+    c_size_type = (CType) {.sort = CSPrimInt, .prim = (CPrimInt){.prim = CLongLong, .is_signed = Unsigned}};
+    c_void = (CType){.sort = CSVoid};
+#else 
+#error "Unknown host ABI"
+#endif
 }

@@ -202,6 +202,13 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 // Utilities for generating or manipulating types
 // Generate distinct id
 uint64_t distinct_id();
+
+// Recursively extracts the inner type from both named and distinct types.
+// Does not unwrap opaque types
+PiType* unwrap_type(PiType* ty);
+
+// Like unwrap_type, but also unwraps opaque types
+PiType* strip_type(PiType* ty);
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 // Generators 

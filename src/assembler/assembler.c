@@ -1422,7 +1422,7 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
     return out;
 }
 
-void asm_init() {
+void init_asm() {
     build_unary_table();
     build_unary_opcode_table();
 
