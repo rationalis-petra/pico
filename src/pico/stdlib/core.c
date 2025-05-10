@@ -350,6 +350,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("out-of"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FName;
+    sym = string_to_symbol(mv_string("name"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FUnName;
+    sym = string_to_symbol(mv_string("unname"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FDynAlloc;
     sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former, null_segments, NULL);

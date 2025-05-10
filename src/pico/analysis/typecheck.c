@@ -808,6 +808,27 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = distinct_type->distinct.type; 
         break;
     }
+    case SName: {
+        PiType* named_type = eval_type(untyped->name.type, env, a, gen, point);
+        if (named_type->sort != TNamed) {
+            throw_error(point, mv_string("name must name a value with a named type!"));
+        }
+
+        type_check_i(untyped->name.val,
+                     named_type,
+                     env, gen, a, point);
+        untyped->ptype = named_type; 
+        break;
+    }
+    case SUnName: {
+        type_infer_i(untyped->unname, env, gen, a, point);
+
+        if (untyped->unname->ptype->sort != TNamed) {
+            throw_error(point, mv_string("Unname expects inner term to be named."));
+        }
+        untyped->ptype = untyped->unname->ptype->named.type;
+        break;
+    }
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -1340,6 +1361,13 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     case SOutOf:
         instantiate_implicits(syn->out_of.val, env, a, point);
         instantiate_implicits(syn->out_of.type, env, a, point);
+        break;
+    case SName:
+        instantiate_implicits(syn->name.val, env, a, point);
+        instantiate_implicits(syn->name.type, env, a, point);
+        break;
+    case SUnName:
+        instantiate_implicits(syn->unname, env, a, point);
         break;
     case SDynAlloc:
     case SSizeOf:

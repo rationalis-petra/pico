@@ -998,6 +998,37 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         return res;
     }
+    case FName: {
+        if (raw.branch.nodes.len != 3) {
+            throw_error(point, mv_string("Term former 'name' expects precisely 2 arguments!"));
+        }
+
+        Syntax* type = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[2], env, a, point);
+        
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SName,
+            .ptype = NULL,
+            .name = {.val = term, .type = type},
+        };
+        return res;
+    }
+    case FUnName: {
+        if (raw.branch.nodes.len != 2) {
+            throw_error(point, mv_string("Term former 'unname' expects precisely 1 argument!"));
+        }
+
+        Syntax* term = abstract_expr_i(*(RawTree*)raw.branch.nodes.data[1], env, a, point);
+        
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SUnName,
+            .ptype = NULL,
+            .unname = term,
+        };
+        return res;
+    }
     case FDynAlloc: {
         if (raw.branch.nodes.len != 2) {
             throw_error(point, mv_string("Term former 'dynamic-alloc' expects precisely 1 arguments!"));
