@@ -815,7 +815,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         }
 
         type_check_i(untyped->name.val,
-                     named_type,
+                     named_type->named.type,
                      env, gen, a, point);
         untyped->ptype = named_type; 
         break;
@@ -1579,6 +1579,13 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SOutOf:
         squash_type(typed->out_of.type->type_val);
         squash_types(typed->out_of.val, a, point);
+        break;
+    case SName:
+        squash_type(typed->name.type->type_val);
+        squash_types(typed->name.val, a, point);
+        break;
+    case SUnName:
+        squash_types(typed->unname, a, point);
         break;
     case SDynAlloc:
     case SSizeOf:

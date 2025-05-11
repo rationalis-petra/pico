@@ -9,11 +9,14 @@ typedef struct {
     size_t bmp;
 } ArenaBlock;
 
-int compare_arena_block() {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+int compare_arena_block(ArenaBlock lhs, ArenaBlock rhs) {
     // TODO: fill this out if we ever need to compare two arenas
     // used by array_cmp_impl to implement find!
     panic(mv_string("compare arena block not implemented!"));
 }
+#pragma GCC diagnostic pop
 
 ARRAY_HEADER(ArenaBlock, block, Block)
 ARRAY_CMP_IMPL(ArenaBlock, compare_arena_block, block, Block)

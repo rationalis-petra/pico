@@ -164,8 +164,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             throw_error(point, mv_string("Codegen not implemented for ATypeVar"));
             break;
         case AGlobal: {
-            PiType indistinct_type = *syn.ptype;
-            while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
+            PiType indistinct_type = *strip_type(syn.ptype);
 
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
@@ -374,10 +373,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SStructure: {
-        PiType* struct_type = syn.ptype;
-        while (struct_type->sort == TDistinct && struct_type->distinct.source_module == NULL) {
-            struct_type = struct_type->distinct.type;
-        }
+        PiType* struct_type = strip_type(syn.ptype);
 
         bool labels_match = true;
         const size_t len = struct_type->structure.fields.len;
@@ -400,10 +396,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SProjector: {
-        PiType* source_type = syn.projector.val->ptype;
-        while (source_type->sort == TDistinct && source_type->distinct.source_module == NULL) {
-            source_type = source_type->distinct.type;
-        }
+        PiType* source_type = strip_type(syn.ptype);
 
         if (syn.projector.val->ptype->sort == TStruct) {
             panic(mv_string("Projector not implemented for structures in polymorphic function"));
