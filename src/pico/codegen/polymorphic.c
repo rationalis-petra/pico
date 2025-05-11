@@ -398,27 +398,27 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SProjector: {
         PiType* source_type = strip_type(syn.ptype);
 
-        if (syn.projector.val->ptype->sort == TStruct) {
+        if (source_type->sort == TStruct) {
             panic(mv_string("Projector not implemented for structures in polymorphic function"));
         } else {
             generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
 
             // Now, calculate offset for field 
             build_unary_op(ass, Push, imm8(0), a, point);
-            for (size_t i = 0; i < syn.projector.val->ptype->instance.fields.len; i++) {
+            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
                 if (i != 0) {
                     // Align to the new field; can skip if size = 0;
-                    generate_align_of(R8, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
+                    generate_align_of(R8, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
                     build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
                     generate_align_to(R9, R8, ass, a, point);
                     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
                 }
 
-                if (syn.projector.val->ptype->instance.fields.data[i].key == syn.projector.field)
+                if (source_type->instance.fields.data[i].key == syn.projector.field)
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
                 // TODO: segfault here!
-                generate_size_of(RAX, (PiType*)syn.projector.val->ptype->instance.fields.data[i].val, env, ass, a, point);
+                generate_size_of(RAX, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
                 build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
             }
 
@@ -463,6 +463,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     case SOutOf:
         generate_polymorphic_i(*syn.out_of.val, env, target, links, a, point);
+        break;
+    case SName:
+        generate_polymorphic_i(*syn.name.val, env, target, links, a, point);
+        break;
+    case SUnName:
+        generate_polymorphic_i(*syn.unname, env, target, links, a, point);
         break;
     case SDynAlloc: {
         throw_error(point, mv_string("Not implemented: dynamic allocation in polymorphic code."));
