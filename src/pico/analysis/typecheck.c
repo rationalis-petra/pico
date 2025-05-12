@@ -116,8 +116,10 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* ge
 
 // "internal" type inference. Destructively mutates types.
 void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
-    // TODO (INVESTIGATE): consider checking if ptype is null or not to save
-    // duplicate work?
+    // Sometimes we go back and typecheck a term again, e.g. checking an
+    // Application to an All generates a new term and typecheckes that.
+    if (untyped->ptype) return;
+
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
@@ -146,6 +148,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 throw_error(point, mv_string("Unexpected module."));
             }
 
+            // Note: if type is unification var...
+            // then the kind is NULL? 
             untyped->ptype = te.ptype;
             if (te.value) {
                 untyped->type = SCheckedType;
@@ -159,10 +163,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SAbsVariable: {
-      if (untyped->ptype == NULL) {
-          panic(mv_string("Expect abolute variables being typechecked to have types!"));
-      }
-      break;
+        if (untyped->ptype == NULL) {
+            panic(mv_string("Expect abolute variables being typechecked to have types!"));
+        }
+        break;
     }
     case SProcedure: {
         // give each arg a unification variable type. 
@@ -273,9 +277,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         } else if (fn_type.sort == TAll) {
             SynArray types = mk_ptr_array(fn_type.binder.vars.len, a);
+            // TODO (FUTURE BUG): When HKTs are allowed, this will need to be
+            // replaced with the correct kind!
+            PiType* kind = mem_alloc(sizeof(PiType), a);
+            *kind = (PiType){.sort = TKind, .kind.nargs = 0};
             for (size_t i = 0; i < fn_type.binder.vars.len; i++) {
                 Syntax* syn = mem_alloc(sizeof(Syntax), a);
-                *syn = (Syntax) {.type = SCheckedType, .type_val = mk_uvar(gen, a),};
+                *syn = (Syntax) {.type = SCheckedType, .ptype = kind, .type_val = mk_uvar(gen, a),};
                 push_ptr(syn, &types);
             }
 
@@ -285,10 +293,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 .implicits = untyped->application.implicits,
                 .args = untyped->application.args
             };
+
             untyped->type = SAllApplication;
             untyped->all_application = new_app;
             type_infer_i(untyped, env, gen, a, point);
-
         } else if (fn_type.sort == TKind) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
                 throw_error(point, mk_string("Incorrect number of family arguments", a));
@@ -668,7 +676,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {.sort = TPrim,.prim = Bool};
         type_check_i(untyped->if_expr.condition,
-                           t, env, gen, a, point);
+                     t, env, gen, a, point);
 
         type_infer_i(untyped->if_expr.true_branch, env, gen, a, point);
 
@@ -1107,7 +1115,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
     }
     if (untyped->ptype == NULL) {
-        panic(mv_string("Internal Error: typecheck failed to instantiate type."));
+        panic(mv_string("Internal Error: typecheck failed to infer type."));
     }
 }
 
@@ -1207,14 +1215,16 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
             throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
         }
 
+        // Given, e.g. an application (a {I64 Bool} x y), with a : All [A B] t, perform a
+        // beta-reduction to get t[A/I64, B/Bool]. This will be used to
+        // instantiate implicits if t is a Proc.
         PiType all_type = *syn->all_application.function->ptype;
         SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
         for (size_t i = 0; i < all_type.binder.vars.len; i++) {
             Syntax* type = syn->all_application.types.data[i];
             sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
         }
-        
-        // Bind the vars in the all type to specific types!
+        // TODO (BUG): unwrap?!
         PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
 
         // Early exit if we don't need to do any instantiation.
@@ -1395,7 +1405,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         instantiate_implicits(syn->c_type, env, a, point);
         break;
     case SCheckedType:
-        // TODO: check that it is OK to do nothing? (no implicits in types, right?)
+        // TODO (INVESTIGATE FEATURE): check that it is OK to do nothing? (no implicits in types, right?)
+        //      what if we have types produced by procedures, i.e. Proc [...] Type)?
         break;
 
     case SAnnotation:
@@ -1411,6 +1422,9 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     }
 }
 
+// This function recursively descends into a term and squashes all types.
+// In this case, to squash a type removes all unification vars from 
+// the type. (see squash_type in unify.h)
 void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     switch (typed->type) {
     case SLitUntypedIntegral:
@@ -1424,7 +1438,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         break;
     case SProcedure: {
         // squash body
-        // TODO (FUTURE BUG): Need to squash types of annotated arguments!
+        // TODO (BUG): Need to squash types of annotated arguments!
         squash_types(typed->procedure.body, a, point);
         break;
     }

@@ -111,11 +111,12 @@ Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator*
 bool var_eq(Symbol lhs, Symbol rhs, SymPairArray *rename) {
     // bound
     for (size_t i = 0; i < rename->len; i++) {
-      if (lhs == rename->data[i].lhs && rhs == rename->data[i].rhs) {
-          return true;
-      } else if (lhs == rename->data[i].lhs || rhs == rename->data[i].rhs) {
-          return false;
-      } 
+        size_t idx = rename->len - (i + 1);
+        if (lhs == rename->data[idx].lhs && rhs == rename->data[idx].rhs) {
+            return true;
+        } else if (lhs == rename->data[idx].lhs || rhs == rename->data[idx].rhs) {
+            return false;
+        } 
     }
 
     // unbound
@@ -245,12 +246,33 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     }
     case TNamed: {
       SymPair syms = (SymPair) {
-          .lhs = rhs->named.name,
+          .lhs = lhs->named.name,
           .rhs = rhs->named.name
       };
       push_sym_pair(syms, rename);
       Result res = unify_internal(lhs->named.type, rhs->named.type, rename, a); 
       rename->len--;
+
+      if (res.type == Err) return res;
+
+      if (lhs->named.args && rhs->named.args) {
+        if (lhs->named.args->len != rhs->named.args->len) {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("named type mismatch: different arg count!"),
+            };
+        }
+
+        for (size_t i = 0; i < lhs->named.args->len; i++) {
+            res = unify_internal(lhs->named.args->data[i], rhs->named.args->data[i], rename, a); 
+            if (res.type == Err) return res;
+        }
+      } else if (lhs->named.args || rhs->named.args) {
+        return (Result) {
+            .type = Err,
+            .error_message = mv_string("named type mismatch: one has args and one doesn't!"),
+        };
+      }
       return res;
       break;
     }
