@@ -16,6 +16,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_poly_stack_move(Location dest_offset, Location src_offset, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
@@ -399,7 +400,57 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         PiType* source_type = strip_type(syn.projector.val->ptype);
 
         if (source_type->sort == TStruct) {
-            panic(mv_string("Projector not implemented for structures in polymorphic function"));
+            generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
+            build_unary_op(ass, Push, imm8(0), a, point);
+            // Now, generate a calculation of the field offset 
+            for (size_t i = 0; i < source_type->structure.fields.len; i++) {
+                if (i != 0) {
+                    // Align to the new field; can skip if size = 0;
+                    generate_align_of(R8, (PiType*)source_type->structure.fields.data[i].val, env, ass, a, point);
+                    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
+                    generate_align_to(R9, R8, ass, a, point);
+                    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+                }
+
+                if (source_type->structure.fields.data[i].key == syn.projector.field)
+                    break;
+
+                // Push the size into RAX; this is then added to the value at
+                // the top of the stack  
+                generate_size_of(RAX, (PiType*)source_type->structure.fields.data[i].val, env, ass, a, point);
+                build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
+            }
+
+            // Generate the size of the struct + field
+            generate_stack_size_of(RAX, source_type, env, ass, a, point);
+            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+            // Now, RAX = size of field, RCX = struct size, RSI = offset
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+
+            // Dest offset = size of struct - size of field
+            build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+
+            // save dest offset
+            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+
+            // increment both offsets by 8
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm8(8), a, point);
+            build_binary_op(ass, Add, reg(RSI, sz_64), imm8(8), a, point);
+
+            // generate poly stack move: 
+            // RAX = size
+            // RCX = dest offset (from RSP)
+            // RSI = src offset  (from RSP)
+            generate_poly_stack_move(reg(RCX, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            // Pop the field offset and shrink the stack by that much
+            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64),  a, point);
+
+        // Is Instance
         } else {
             generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
 
@@ -417,7 +468,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 if (source_type->instance.fields.data[i].key == syn.projector.field)
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
-                // TODO: segfault here!
                 generate_size_of(RAX, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
                 build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
             }
@@ -425,7 +475,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Generate the size of the output.
             generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
-            // Pop the index and instance ptr from the stack
+            // Pop the offset and instance ptr from the stack
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
@@ -687,6 +737,43 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 
     // copy memcpy into RCX & call
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+#endif
+}
+
+
+void stack_copy(char *dest, const char *src, size_t size) {
+  for (size_t i = size; i > 0; i--) {
+      dest[i - 1] = src[i - 1];
+  }
+}
+
+void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_binary_op(ass, Add, dest, reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, src, reg(RSP, sz_64), a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
+    build_binary_op(ass, Mov, reg(RSI, sz_64), src, a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), size, a, point);
+
+#elif ABI == WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
+    build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
+    build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    // copy memcpy into RCX & call
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stack_copy), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64
