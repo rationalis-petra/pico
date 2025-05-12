@@ -396,7 +396,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SProjector: {
-        PiType* source_type = strip_type(syn.ptype);
+        PiType* source_type = strip_type(syn.projector.val->ptype);
 
         if (source_type->sort == TStruct) {
             panic(mv_string("Projector not implemented for structures in polymorphic function"));
