@@ -1515,6 +1515,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
 
                     int64_t out;
                     __asm__ __volatile__(
+                                         // save nonvolatile registers
                                          "push %%rbp       \n"
                                          "push %%r15       \n"
                                          "push %%r14       \n"

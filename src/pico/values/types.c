@@ -954,7 +954,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             for (size_t i = 0; i < types.len; i++) {
                 total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
                 size_t field_size;
-                Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+                Result_t res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
                 total += field_size;
             }

@@ -427,9 +427,11 @@ bool has_unification_vars_p(PiType type) {
         return has_unification_vars_p(*type.dynamic);
     };
     case TNamed: {
-        for (size_t i = 0; i < type.named.args->len; i++) {
-            if (has_unification_vars_p(*(PiType*)type.named.args->data[i]))
-                return true;
+        if (type.named.args) {
+            for (size_t i = 0; i < type.named.args->len; i++) {
+                if (has_unification_vars_p(*(PiType*)type.named.args->data[i]))
+                    return true;
+            }
         }
         return has_unification_vars_p(*type.named.type);
     };

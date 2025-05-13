@@ -145,7 +145,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case ALocalIndirect:
             // First, we need the size of the variable & allocate space for it on the stack
             // ------------------------------
-            // Store stack size in R8
+            // Store stack size in R9
             generate_stack_size_of(R9, syn.ptype, env, ass, a, point);
 
             // Subtract stack size
