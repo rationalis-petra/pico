@@ -67,13 +67,13 @@ void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
     CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                          "bytes", mk_voidptr_ctype(a));
 
     // DynLibResult
     CType dynlib_result = mk_struct_ctype(
         a, 2, "tag",
-        mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}), "data",
+        mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
                        "error_message", string_ctype,
                        "dynlib", mk_voidptr_ctype(a)));
@@ -98,10 +98,10 @@ void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoin
 void build_mk_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
     CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                          "bytes", mk_voidptr_ctype(a));
 
-    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}));
+    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
 
     convert_c_fn(string_to_symbol, &fn_ctype, type, ass, a, point); 
 
@@ -112,13 +112,13 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
     CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                          "bytes", mk_voidptr_ctype(a));
 
     // DynLibResult
     CType symbol_result = mk_struct_ctype(
         a, 2, "tag",
-        mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}), "data",
+        mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
                        "error_message", string_ctype,
                        "value", mk_voidptr_ctype(a)));
