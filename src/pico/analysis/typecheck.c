@@ -234,7 +234,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+        PiType* syntax_array = mk_app_type(a, get_array_type(), mk_app_type(a, get_ptr_type(), get_syntax_type()));
         PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_syntax_type());
 
         type_check_i(untyped->transformer, transformer_proc, env, gen, a, point);
@@ -382,8 +382,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SConstructor: {
         // Typecheck variant
-        PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        enum_type = unwrap_type(enum_type);
+        untyped->ptype = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        PiType* enum_type = unwrap_type(untyped->ptype);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -400,7 +400,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 if (args->len != 0) {
                     throw_error(point, mv_string("Incorrect number of args to variant constructor"));
                 }
-                untyped->ptype = enum_type;
                 break;
             }
         }
@@ -414,8 +413,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SVariant: {
         // Typecheck variant
-        PiType* enum_type = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        enum_type = unwrap_type(enum_type);
+        untyped->ptype = eval_type(untyped->variant.enum_type, env, a, gen, point);
+        PiType* enum_type = unwrap_type(untyped->ptype);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -436,8 +435,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 for (size_t i = 0; i < args->len; i++) {
                     type_check_i(untyped->variant.args.data[i], args->data[i], env, gen, a, point);
                 }
-                
-                untyped->ptype = enum_type;
                 break;
             }
         }
@@ -511,22 +508,21 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SStructure: {
-        PiType* ty = eval_type(untyped->structure.ptype, env, a, gen, point);
-        untyped->ptype = ty; 
-        ty = unwrap_type(ty);
+        untyped->ptype = eval_type(untyped->structure.ptype, env, a, gen, point);
+        PiType* struct_type = unwrap_type(untyped->ptype);
 
-        if (ty->sort != TStruct) {
+        if (struct_type->sort != TStruct) {
             throw_error(point, mv_string("Structure type invalid"));
         }
 
-        if (untyped->structure.fields.len != ty->structure.fields.len) {
+        if (untyped->structure.fields.len != struct_type->structure.fields.len) {
             throw_error(point, mv_string("Structure must have exactly n fields."));
         }
 
-        for (size_t i = 0; i < ty->structure.fields.len; i++) {
-            Syntax** field_syn = (Syntax**)sym_ptr_lookup(ty->structure.fields.data[i].key, untyped->structure.fields);
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
             if (field_syn) {
-                PiType* field_ty = ty->structure.fields.data[i].val;
+                PiType* field_ty = struct_type->structure.fields.data[i].val;
                 type_check_i(*field_syn, field_ty, env, gen, a, point);
             } else {
                 throw_error(point, mv_string("Structure is missing a field"));

@@ -708,7 +708,18 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(pretty_type_internal(type->named.type, false, a), &nodes);
             out = mv_sep_doc(nodes, a);
         } else {
-            out = mk_str_doc(*symbol_to_string(type->named.name), a);
+            Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
+
+            if (type->named.args) {
+                PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
+                push_ptr(base, &args);
+                for (size_t i = 0; i < type->named.args->len; i++) {
+                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                }
+                out = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
+            } else {
+                out = base;
+            }
         }
         break;
     }
@@ -929,7 +940,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
         break;
     case TProc:
-        *out = sizeof(uint64_t);
+        *out = ADDRESS_SIZE;
         return Ok;
     case TStruct: {
         size_t align = 0;
@@ -990,8 +1001,9 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         *out = c_size_of(type.c_type);
         return Ok;
     case TVar:
+        return Err;
     case TAll:
-        *out = sizeof(void*);
+        *out = ADDRESS_SIZE;
         return Ok;
     case TExists:
         panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));

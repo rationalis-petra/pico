@@ -79,7 +79,7 @@ TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o)
 
 # Final build step for tests 
 $(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS) $(DEBUG_OBJS)
-	$(CC) $(TEST_OBJS) $(DEBUG_OBJS) -I $(TEST_INC_DIR) -o $@ $(LDFLAGS) $(DEBUG_FLAGS) 
+	$(CC) $(TEST_OBJS) $(DEBUG_OBJS) -I $(TEST_INC_DIR) -o $@ $(LINK_FLAGS) $(DEBUG_FLAGS) 
 
 # Build step for C tests
 $(TEST_DIR)/%.c.o: %.c

@@ -234,8 +234,9 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
     SAddr padding;
     padding.type = SASentinel;
     padding.symbol = 0;
-    stack_offset += 2 * ADDRESS_SIZE; // We add 2x the register size to account for the
-                                      // return address and dynamic memory pointer.
+    stack_offset += 3 * ADDRESS_SIZE; // We add 2x the register size to account for the
+                                      // return address, rbp and the dynamic
+                                      // memory ptr.
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
@@ -246,8 +247,8 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
         local.type = SADirect;
 
         local.symbol = vars.data[i - 1].key;
-        stack_offset += vars.data[i - 1].val;
         local.stack_offset = stack_offset;
+        stack_offset += vars.data[i - 1].val;
 
         push_saddr(local, &new_local->vars);
     }
@@ -256,8 +257,8 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
         local.type = SADirect;
 
         local.symbol = implicits.data[i - 1].key;
-        stack_offset += implicits.data[i - 1].val;
         local.stack_offset = stack_offset;
+        stack_offset += implicits.data[i - 1].val;
 
         push_saddr(local, &new_local->vars);
     }

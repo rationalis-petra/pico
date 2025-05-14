@@ -493,7 +493,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Now, move them into the space allocated in reverse order
-        PtrArray args = *(PtrArray*)syn.ptype->enumeration.variants.data[syn.variant.tag].val;
+        PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
         size_t src_stack_offset = variant_size - tag_size;
         size_t dest_stack_offset = variant_size;
         for (size_t i = 0; i < syn.variant.args.len; i++) {

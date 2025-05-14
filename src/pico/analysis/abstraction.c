@@ -1510,6 +1510,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                     PtrArray input = raw.branch.nodes;
                     void* dvars = get_dynamic_memory();
                     void* dynamic_memory_space = mem_alloc(4096, a);
+                    void* offset_memory_space = mem_alloc(1024, a);
 
                     Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
 
@@ -1517,21 +1518,25 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                     __asm__ __volatile__(
                                          // save nonvolatile registers
                                          "push %%rbp       \n"
+                                         "push %%rbx       \n" // Nonvolatile on System V + Win64
+                                         "push %%rdi       \n" // Nonvolatile on Win 64
                                          "push %%r15       \n"
                                          "push %%r14       \n"
+                                         "push %%r13       \n"
                                          // Push output ptr & sizeof (Syntax), resp
-                                         "push %5          \n"
                                          "push %6          \n"
+                                         "push %7          \n"
 
+                                         "mov %4, %%r13    \n"
                                          "mov %3, %%r14    \n"
                                          "mov %2, %%r15    \n"
                                          //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
                                          // Push arg (array) onto stack
-                                         "push 0x18(%4)       \n"
-                                         "push 0x10(%4)       \n"
-                                         "push 0x8(%4)        \n"
-                                         "push (%4)         \n"
+                                         "push 0x18(%5)       \n"
+                                         "push 0x10(%5)       \n"
+                                         "push 0x8(%5)        \n"
+                                         "push (%5)         \n"
 
                                          "mov %%rsp, %%rbp \n"
 
@@ -1552,12 +1557,12 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
 #elif ABI == WIN_64
                                          // memcpy (dest = rcx, src = rdx, size = r8)
                                          // retval = rax
-                                         "mov 0x30(%%rsp), %%r8   \n"
+                                         "mov 0x30(%%rsp), %%r8    \n"
                                          "mov 0x38(%%rsp), %%rcx   \n"
                                          "mov %%rsp, %%rdx         \n"
-                                         "sub $0x20, %%rsp          \n"
-                                         "call memcpy            \n"
-                                         "add $0x20, %%rsp          \n"
+                                         "sub $0x20, %%rsp         \n"
+                                         "call memcpy              \n"
+                                         "add $0x20, %%rsp         \n"
 #else
 #error "Unknown calling convention"
 #endif
@@ -1567,14 +1572,18 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, ErrorPoint* p
                                          // pop stashed size & dest from stack
                                          "add $0x10, %%rsp          \n"
 
+                                         "pop %%r13        \n"
                                          "pop %%r14        \n"
                                          "pop %%r15        \n"
+                                         "pop %%rdi        \n" 
+                                         "pop %%rbx        \n"
                                          "pop %%rbp        \n"
                                          : "=r" (out)
 
                                          : "r" (*(uint64_t*)entry.value)
                                            , "r" (dvars)
                                            , "r" (dynamic_memory_space)
+                                           , "r" (offset_memory_space)
                                            , "r" (&input)
                                            , "r" (&output)
                                            , "c" (sizeof(RawTree))) ;
