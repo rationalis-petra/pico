@@ -611,14 +611,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PiType* addr_ty = mk_prim_type(a, Address);
-        PiType* addr_array = mk_app_type(a, array_type, addr_ty);
-        delete_pi_type_p(addr_ty, a);
+        PiType* syn_name_ty = mk_var_type(a, "Syntax");
+        PiType* syn_array = mk_app_type(a, array_type, syn_name_ty);
+        delete_pi_type_p(syn_name_ty, a);
 
         type_val = mk_named_type(a, "Syntax",
                                  mk_enum_type(a, 2,
                                               "atom", 1, atom_type,
-                                              "node", 2, hint_type, addr_array));
+                                              "node", 2, hint_type, syn_array));
 
         type_data = type_val;
         sym = string_to_symbol(mv_string("Syntax"));

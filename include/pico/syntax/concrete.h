@@ -2,6 +2,7 @@
 #define __PICO_SYNTAX_CONCRETE_H
 
 #include "data/meta/amap_header.h"
+#include "data/meta/array_header.h"
 #include "data/array.h"
 #include "platform/memory/allocator.h"
 #include "pretty/document.h"
@@ -36,9 +37,12 @@ typedef enum : uint64_t {
     HImplicit,
 } SyntaxHint;
 
+typedef struct RawTree RawTree;
+ARRAY_HEADER(RawTree, rawtree, RawTree);
+
 typedef struct {
     SyntaxHint hint;
-    PtrArray nodes;
+    RawTreeArray nodes;
 } Branch;
 
 AMAP_HEADER(Symbol, Atom, sym_atom, SymAtom)
@@ -49,7 +53,7 @@ typedef enum : uint64_t {
 } RawTree_t;
 
 
-typedef struct {
+typedef struct RawTree {
     RawTree_t type;
     union {
         Atom atom;

@@ -1,7 +1,14 @@
 #include "platform/signals.h"
+#include "data/meta/array_impl.h"
 
 #include "pico/syntax/concrete.h"
 #include "pretty/standard_types.h"
+
+int cmp_rawtree(RawTree lhs, RawTree rhs) {
+    panic(mv_string("cmp_rawtree not implemented!"));
+}
+
+ARRAY_CMP_IMPL(RawTree, cmp_rawtree, rawtree, RawTree)
 
 
 Document* pretty_rawtree(RawTree tree, Allocator* a) {
@@ -26,7 +33,7 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
         PtrArray doc_arr = mk_ptr_array(tree.branch.nodes.len + 2, a);
         push_ptr(mv_str_doc(mk_string(open, a), a), &doc_arr);
         for (size_t i = 0; i < tree.branch.nodes.len; i++) {
-            RawTree node = *((RawTree*)tree.branch.nodes.data[i]);
+            RawTree node = tree.branch.nodes.data[i];
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }
@@ -49,8 +56,8 @@ void delete_rawtree(RawTree tree, Allocator* a) {
         break;
     case RawBranch:
         for (size_t i = 0; i < tree.branch.nodes.len; i++)
-            delete_rawtree_ptr(tree.branch.nodes.data[i], a);
-        sdelete_ptr_array(tree.branch.nodes);
+            delete_rawtree(tree.branch.nodes.data[i], a);
+        sdelete_rawtree_array(tree.branch.nodes);
         break;
     }
 }
