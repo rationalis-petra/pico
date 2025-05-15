@@ -172,7 +172,8 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
-    asm_init();
+    init_ctypes();
+    init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
     thread_init_dynamic_vars();

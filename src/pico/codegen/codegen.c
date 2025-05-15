@@ -173,8 +173,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             panic(mv_string("Monomorphic code does not expect address entries of type 'local indirect'"));
             break;
         case AGlobal: {
-            PiType indistinct_type = *syn.ptype;
-            while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
+            PiType indistinct_type = *strip_type(syn.ptype);
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
             // Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
@@ -466,10 +465,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             
     }
     case SConstructor: {
-        PiType* enum_type = syn.constructor.enum_type->type_val;
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        PiType* enum_type = strip_type(syn.constructor.enum_type->type_val);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
@@ -481,10 +477,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SVariant: {
         const size_t tag_size = sizeof(uint64_t);
-        PiType* enum_type = syn.variant.enum_type->type_val;
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
@@ -500,7 +493,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Now, move them into the space allocated in reverse order
-        PtrArray args = *(PtrArray*)syn.ptype->enumeration.variants.data[syn.variant.tag].val;
+        PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
         size_t src_stack_offset = variant_size - tag_size;
         size_t dest_stack_offset = variant_size;
         for (size_t i = 0; i < syn.variant.args.len; i++) {
@@ -529,11 +522,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SMatch: {
         // Generate code for the value
         Syntax* match_value = syn.match.val;
-        PiType* enum_type = syn.match.val->ptype;
-        // Unwrap any distinct type. Note that we do NOT unwrap opaque types!
-        while (enum_type->sort == TDistinct && enum_type->distinct.source_module == NULL) {
-            enum_type = enum_type->distinct.type;
-        }
+        PiType* enum_type = strip_type(syn.match.val->ptype);
         size_t enum_size = pi_size_of(*match_value->ptype);
         size_t out_size = pi_size_of(*syn.ptype);
 
@@ -620,9 +609,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // For structures, we have to be careful - this is because the order in
         // which arguments are evaluated is not necessarily the order in which
         // arguments are inserted into the structure.
+        PiType* struct_type = strip_type(syn.ptype);
 
         // Step 1: Make room on the stack for our struct
-        size_t struct_size = pi_stack_size_of(*syn.ptype);
+        size_t struct_size = pi_stack_size_of(*struct_type);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
         address_stack_grow(env, struct_size);
 
@@ -644,19 +634,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
         size_t dest_offset = 0;
-        for (size_t i = 0; i < syn.ptype->structure.fields.len; i++) {
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
 
             // Find the field in the source & compute offset
             size_t src_offset = 0;
             for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, syn.ptype->structure.fields);
+                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, struct_type->structure.fields);
                 if (t) {
                     src_offset += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
                 } else {
                     throw_error(point, mv_string("Error code-generating for structure: field not found."));
                 }
 
-                if (syn.structure.fields.data[j].key == syn.ptype->structure.fields.data[i].key) {
+                if (syn.structure.fields.data[j].key == struct_type->structure.fields.data[i].key) {
                     break; // offset is correct, end the loop
                 }
             }
@@ -667,7 +657,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // of the stack.
             size_t src_stack_offset = struct_size - src_offset;
             size_t dest_stack_offset = struct_size + dest_offset;
-            size_t field_size = pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
@@ -683,10 +673,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SProjector: {
         // First, allocate space on the stack for the value
-        PiType* source_type = syn.projector.val->ptype;
-        while (source_type->sort == TDistinct && source_type->distinct.source_module == NULL) {
-            source_type = source_type->distinct.type;
-        }
+        PiType* source_type = strip_type(syn.projector.val->ptype);
         size_t out_sz = pi_stack_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(out_sz), a, point);
         address_stack_grow(env, out_sz);
@@ -1277,6 +1264,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SOutOf:
         generate(*syn.out_of.val, env, target, links, a, point);
+        break;
+    case SName:
+        generate(*syn.name.val, env, target, links, a, point);
+        break;
+    case SUnName:
+        generate(*syn.unname, env, target, links, a, point);
         break;
     case SDynAlloc:
         generate(*syn.size, env, target, links, a, point);

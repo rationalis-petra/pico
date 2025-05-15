@@ -359,16 +359,27 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SInTo: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->into.type, a), &nodes);
+        push_ptr(pretty_syntax(syntax->into.val, a), &nodes);
         out = mk_paren_doc("(into ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SOutOf: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->out_of.type, a), &nodes);
+        push_ptr(pretty_syntax(syntax->out_of.val, a), &nodes);
         out = mk_paren_doc("(out-of ", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SName: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(pretty_syntax(syntax->name.type, a), &nodes);
+        push_ptr(pretty_syntax(syntax->name.val, a), &nodes);
+        out = mk_paren_doc("(name ", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SUnName: {
+        out = mk_paren_doc("(unname ", ")", pretty_syntax(syntax->unname, a), a);
         break;
     }
     case SDynAlloc: {

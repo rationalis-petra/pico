@@ -689,7 +689,7 @@ bool can_convert(CType *ctype, PiType *ptype) {
 }
 
 bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
-#if (ABI == SYSTEM_V_64) || (ABI == WIN_64)
+#if ABI == SYSTEM_V_64
     switch (ptype) {
     case Unit:  {
         return false;
@@ -706,7 +706,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
         return false;
     }
     case Int_64: {
-        return ctype.prim == CLong &&
+        return (ctype.prim == CLong || ctype.prim == CLongLong) &&
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_32: {
@@ -722,27 +722,75 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case UInt_64: {
-        return ctype.prim == CLong && ctype.is_signed == Unsigned; 
+        return (ctype.prim == CLong || ctype.prim == CLongLong) && ctype.is_signed == Unsigned; 
     }
     case UInt_32: {
         return ctype.prim == CInt && ctype.is_signed == Unsigned; 
     }
     case UInt_16: {
-        return ctype.prim == CInt && ctype.is_signed == Unsigned;
+        return ctype.prim == CShort && ctype.is_signed == Unsigned;
     }
     case UInt_8: {
         return ctype.prim == CChar && ctype.is_signed == Unsigned;
     }
-    case Float_32: {
-        return ctype.prim == CInt && ctype.is_signed == Unsigned;
-    }
-    case Float_64: {
-        return ctype.prim == CChar && ctype.is_signed == Unsigned;
-    }
-    case TFormer:  {
+    case Float_32: 
+    case Float_64: 
+    case TFormer:
         // TODO (FEATURE): check for enum?
         return false;
+    case TMacro:  {
+        return false;
     }
+    }
+#elif ABI == WIN_64
+    switch (ptype) {
+    case Unit:  {
+        return false;
+    }
+    case Bool:  {
+        // TODO (check for signedness?)
+        return ctype.prim == CChar;
+    }
+    case Address: {
+        // Address comparisons need to be caught earlier.
+        // this is fine to enforce as a contract, as the only caller of this
+        // function is can_reinterpret (no risk of many callers being confused
+        // by overly complex contract.)
+        return false;
+    }
+    case Int_64: {
+        return ctype.prim == CLongLong &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_32: {
+        return (ctype.prim == CInt && ctype.prim == CLong) &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_16: {
+        return ctype.prim == CShort &&
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case Int_8: {
+        return ctype.prim == CChar && // TODO: check if char signed by default
+            (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
+    }
+    case UInt_64: {
+        return ctype.prim == CLongLong && ctype.is_signed == Unsigned; 
+    }
+    case UInt_32: {
+        return (ctype.prim == CInt && ctype.prim == CLong) && ctype.is_signed == Unsigned; 
+    }
+    case UInt_16: {
+        return ctype.prim == CShort && ctype.is_signed == Unsigned;
+    }
+    case UInt_8: {
+        return ctype.prim == CChar && ctype.is_signed == Unsigned;
+    }
+    case Float_32:
+    case Float_64:
+    case TFormer:
+        // TODO (FEATURE): check for enum?
+        return false;
     case TMacro:  {
         return false;
     }
@@ -762,7 +810,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
     // TODO (FEATURE): check for well-formedness of types in debug mode?
-    while (ptype->sort == TDistinct) ptype = ptype->distinct.type;
+    ptype = strip_type(ptype);
 
     switch (ptype->sort) {
     case TPrim: {

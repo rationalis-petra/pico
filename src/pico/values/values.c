@@ -291,6 +291,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FOutOf:
         out = mk_str_doc(mv_string("::out-of"), a);
         break;
+    case FName:
+        out = mk_str_doc(mv_string("::name"), a);
+        break;
+    case FUnName:
+        out = mk_str_doc(mv_string("::unname"), a);
+        break;
     case FDynAlloc:
         out = mk_str_doc(mv_string("::dynamic-allocate"), a);
         break;

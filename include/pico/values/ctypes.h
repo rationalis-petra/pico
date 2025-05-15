@@ -94,8 +94,6 @@ CType* copy_c_type_p(CType* t, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
-CType mk_void_ctype();
-
 CType mk_voidptr_ctype(Allocator* a);
 
 CType mk_primint_ctype(CPrimInt t);
@@ -111,5 +109,13 @@ CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 
 // Sample usage: mk_union_type(a, 3, )
 CType mk_union_ctype(Allocator* a, size_t nfields, ...);
+
+void init_ctypes();
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+extern CType c_size_type;
+extern CType c_void;
+#pragma GCC diagnostic pop
 
 #endif

@@ -350,6 +350,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("out-of"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FName;
+    sym = string_to_symbol(mv_string("name"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FUnName;
+    sym = string_to_symbol(mv_string("unname"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FDynAlloc;
     sym = string_to_symbol(mv_string("dyn-alloc"));
     add_def(module, sym, type, &former, null_segments, NULL);
@@ -485,9 +493,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_distinct_type(a, mk_type_family(a,
-                                                      vars,
-                                                      mk_prim_type(a, Address)));
+        type_val = mk_named_type(a, "Ptr", mk_type_family(a,
+                                                          vars,
+                                                          mk_prim_type(a, Address)));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Ptr"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
@@ -515,13 +523,15 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_distinct_type(a, mk_type_family(a,
-                                                      vars,
-                                                      mk_struct_type(a, 4,
-                                                                     "data", mk_prim_type(a, Address),
-                                                                     "len", mk_prim_type(a, UInt_64),
-                                                                     "capacity", mk_prim_type(a, UInt_64),
-                                                                     "gpa", alloc_ptr_type)));
+        type_val = 
+            mk_named_type(a, "Array",
+                          mk_type_family(a,
+                                         vars,
+                                         mk_struct_type(a, 4,
+                                                        "data", mk_prim_type(a, Address),
+                                                        "len", mk_prim_type(a, UInt_64),
+                                                        "capacity", mk_prim_type(a, UInt_64),
+                                                        "gpa", alloc_ptr_type)));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Array"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
@@ -534,7 +544,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         vars = mk_u64_array(1, a);
         push_u64(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_distinct_type(a, mk_type_family(a,
+        type_val = mk_named_type(a, "Maybe", mk_type_family(a,
                                                       vars,
                                                       mk_enum_type(a, 2,
                                                                    "some", 1, mk_var_type(a, "A"),
@@ -553,11 +563,11 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         push_u64(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
-        type_val = mk_distinct_type(a, mk_type_family(a,
-                                                      vars,
-                                                      mk_enum_type(a, 2,
-                                                                   "left", 1, mk_var_type(a, "A"),
-                                                                   "right", 1, mk_var_type(a, "B"))));
+        type_val = mk_named_type(a, "Either", mk_type_family(a,
+                                                             vars,
+                                                             mk_enum_type(a, 2,
+                                                                          "left", 1, mk_var_type(a, "A"),
+                                                                          "right", 1, mk_var_type(a, "B"))));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Either"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
@@ -572,7 +582,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         push_u64(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
-        type_val = mk_distinct_type(a, mk_type_family(a,
+        type_val = mk_named_type(a, "Pair", mk_type_family(a,
                                                       vars,
                                                       mk_struct_type(a, 2,
                                                                    "_1", mk_var_type(a, "A"),
@@ -601,13 +611,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        PiType* addr_ty = mk_prim_type(a, Address);
-        PiType* addr_array = mk_app_type(a, array_type, addr_ty);
-        delete_pi_type_p(addr_ty, a);
+        PiType* syn_name_ty = mk_var_type(a, "Syntax");
+        PiType* syn_array = mk_app_type(a, array_type, syn_name_ty);
+        delete_pi_type_p(syn_name_ty, a);
 
-        type_val = mk_enum_type(a, 2,
-                                "atom", 1, atom_type,
-                                "node", 2, hint_type, addr_array);
+        type_val = mk_named_type(a, "Syntax",
+                                 mk_enum_type(a, 2,
+                                              "atom", 1, atom_type,
+                                              "node", 2, hint_type, syn_array));
 
         type_data = type_val;
         sym = string_to_symbol(mv_string("Syntax"));

@@ -1,17 +1,56 @@
 #include "platform/signals.h"
 #include "pretty/string_printer.h"
+#include "data/meta/array_header.h"
+#include "data/meta/array_impl.h"
 
 #include "pico/analysis/unify.h"
+
+// Handling of named types
+// Unification destructively modifies uvars 
+// Thus, simply, e.g. copying and then renaming types won't work.
+// A rename-map has to deal with shadowing variables, e.g.
+// (Name x (Name x x)) ?= (Name x (Name y x))
+// For this reason, we need a solution satisfying
+// • Does not copy or modify named types
+// • Takes care of naming and shadowing
+// The solution is an array (stack) of lhs & rhs symbols 
+// 
+// lhs_symbol
+// rhs_symbol
+
+typedef struct {
+    Symbol lhs;
+    Symbol rhs;
+} SymPair;
+
+uint64_t cmp_sym_pair(SymPair s1, SymPair s2) {
+    uint64_t r1 = s1.lhs - s2.lhs;
+    return r1 == 0 ? s1.rhs - s2.rhs : r1;
+}
+
+ARRAY_HEADER(SymPair, sym_pair, SymPair)
+ARRAY_CMP_IMPL(SymPair, cmp_sym_pair, sym_pair, SymPair)
+
+typedef SymPair SymbolPair;
 
 PiType* trace_uvar(PiType* uvar);
 
 // Unify two types such they are equal. Assumes they have the same sort
-Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a);
+Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
+Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
 
 Result assert_maybe_integral(PiType* type);
 Result assert_maybe_floating(PiType* type);
 
+
 Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
+    SymPairArray renames = mk_sym_pair_array(8, a);
+    Result r = unify_internal(lhs, rhs, &renames, a);
+    sdelete_sym_pair_array(renames);
+    return r;
+}
+
+Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     // Unification Implementation:
     // The LHS and RHS may contain unification variables
     // These are represented as a pair *(uid, type*) 
@@ -53,7 +92,7 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
         if (out.type == Ok) rhs->uvar->subst = lhs;
     }
     else if (rhs->sort == lhs->sort)
-        out = unify_eq(lhs, rhs, a);
+        out = unify_eq(lhs, rhs, rename, a);
     else {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), a), &nodes);
@@ -69,7 +108,22 @@ Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
     return out;
 }
 
-Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
+bool var_eq(Symbol lhs, Symbol rhs, SymPairArray *rename) {
+    // bound
+    for (size_t i = 0; i < rename->len; i++) {
+        size_t idx = rename->len - (i + 1);
+        if (lhs == rename->data[idx].lhs && rhs == rename->data[idx].rhs) {
+            return true;
+        } else if (lhs == rename->data[idx].lhs || rhs == rename->data[idx].rhs) {
+            return false;
+        } 
+    }
+
+    // unbound
+    return lhs == rhs;
+}
+
+Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     switch (lhs->sort) {
     case TPrim: {
         if (lhs->prim == rhs->prim) {
@@ -98,18 +152,18 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         }
 
         for (size_t i = 0; i < lhs->proc.implicits.len; i++) {
-            Result out = unify(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], a);
+            Result out = unify_internal(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], rename, a);
             if (out.type == Err) return out;
         }
 
         // Unify each argumet
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
-            Result out = unify(lhs->proc.args.data[i], rhs->proc.args.data[i], a);
+            Result out = unify_internal(lhs->proc.args.data[i], rhs->proc.args.data[i], rename, a);
             if (out.type == Err) return out;
         }
 
         // Unify the return values
-        return unify(lhs->proc.ret, rhs->proc.ret, a);
+        return unify_internal(lhs->proc.ret, rhs->proc.ret, rename, a);
         
         break;
     }
@@ -135,7 +189,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
                 };
             }
 
-            Result out = unify(lhs_ty, rhs_ty, a);
+            Result out = unify_internal(lhs_ty, rhs_ty, rename, a);
             if (out.type == Err) return out;
         }
 
@@ -172,7 +226,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             }
 
             for (size_t i = 0; i < lhs_args.len; i++) {
-                Result out = unify(lhs_args.data[i], rhs_args.data[i], a);
+                Result out = unify_internal(lhs_args.data[i], rhs_args.data[i], rename, a);
                 if (out.type == Err) return out;
             }
         }
@@ -181,14 +235,46 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         break;
     }
     case TReset: {
-        Result out = unify(lhs->reset.in, rhs->reset.in, a);
+        Result out = unify_internal(lhs->reset.in, rhs->reset.in, rename, a);
         if (out.type == Err) return out;
-        return unify(lhs->reset.out, rhs->reset.out, a);
+        return unify_internal(lhs->reset.out, rhs->reset.out, rename, a);
         break;
     }
     case TDynamic: {
-        return unify(lhs->dynamic, rhs->dynamic, a);
+        return unify_internal(lhs->dynamic, rhs->dynamic, rename, a);
         break;
+    }
+    case TNamed: {
+      SymPair syms = (SymPair) {
+          .lhs = lhs->named.name,
+          .rhs = rhs->named.name
+      };
+      push_sym_pair(syms, rename);
+      Result res = unify_internal(lhs->named.type, rhs->named.type, rename, a); 
+      rename->len--;
+
+      if (res.type == Err) return res;
+
+      if (lhs->named.args && rhs->named.args) {
+        if (lhs->named.args->len != rhs->named.args->len) {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("named type mismatch: different arg count!"),
+            };
+        }
+
+        for (size_t i = 0; i < lhs->named.args->len; i++) {
+            res = unify_internal(lhs->named.args->data[i], rhs->named.args->data[i], rename, a); 
+            if (res.type == Err) return res;
+        }
+      } else if (lhs->named.args || rhs->named.args) {
+        return (Result) {
+            .type = Err,
+            .error_message = mv_string("named type mismatch: one has args and one doesn't!"),
+        };
+      }
+      return res;
+      break;
     }
     case TDistinct: {
         if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
@@ -205,12 +291,12 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
             PtrArray lhs_args = *lhs->distinct.args;
             PtrArray rhs_args = *rhs->distinct.args;
             for (size_t i = 0; i < lhs_args.len; i++) {
-                res = unify(lhs_args.data[i], rhs_args.data[i], a);
+                res = unify_internal(lhs_args.data[i], rhs_args.data[i], rename, a);
                 if (res.type == Err) return res;
             }
         }
 
-        return unify(lhs->distinct.type, rhs->distinct.type, a);
+        return unify_internal(lhs->distinct.type, rhs->distinct.type, rename, a);
         break;
     } case TKind: {
           if (lhs->kind.nargs == rhs->kind.nargs)
@@ -233,8 +319,10 @@ Result unify_eq(PiType* lhs, PiType* rhs, Allocator* a) {
         break;
     }
     case TVar: {
-        // check they are the same var
-        if (lhs->var != rhs->var) {
+        // Check that they are alpha-equivalent
+
+        // Check they are the same var
+        if (!var_eq(lhs->var, rhs->var, rename)) {
             return (Result) {
                 .type = Err,
                 .error_message = mk_string("Cannot Unify different type variables", a),
@@ -339,9 +427,11 @@ bool has_unification_vars_p(PiType type) {
         return has_unification_vars_p(*type.dynamic);
     };
     case TNamed: {
-        for (size_t i = 0; i < type.named.args->len; i++) {
-            if (has_unification_vars_p(*(PiType*)type.named.args->data[i]))
-                return true;
+        if (type.named.args) {
+            for (size_t i = 0; i < type.named.args->len; i++) {
+                if (has_unification_vars_p(*(PiType*)type.named.args->data[i]))
+                    return true;
+            }
         }
         return has_unification_vars_p(*type.named.type);
     };

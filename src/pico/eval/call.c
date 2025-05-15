@@ -99,8 +99,9 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     __asm__ __volatile__(
         // NOTE: When updating to push more registers, make sure to also update assembly
         //       in abstraction.c
-        "push %%rbp       \n"
-        "push %%rbx       \n"
+        "push %%rbp       \n" // Nonvolatile on System V + Win64
+        "push %%rbx       \n" // Nonvolatile on System V + Win64
+        "push %%rdi       \n" // Nonvolatile on Win 64
         "push %%r15       \n"
         "push %%r14       \n"
         "push %%r13       \n"
@@ -114,6 +115,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "pop %%r13        \n"
         "pop %%r14        \n"
         "pop %%r15        \n"
+        "pop %%rdi        \n" 
         "pop %%rbx        \n"
         "pop %%rbp        \n"
         : "=r" (out)

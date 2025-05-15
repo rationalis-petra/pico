@@ -68,6 +68,8 @@ typedef enum TermFormer {
     FIs,
     FInTo,
     FOutOf,
+    FName,
+    FUnName,
     FDynAlloc,
     FSizeOf,
     FAlignOf,

@@ -548,7 +548,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     return out;
 }
 
-Document* pretty_type(PiType* type, Allocator* a) {
+Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TPrim:
@@ -606,17 +606,17 @@ Document* pretty_type(PiType* type, Allocator* a) {
         if (type->proc.implicits.len != 0) {
             PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
-                push_ptr(pretty_type(type->proc.implicits.data[i], a), &arg_nodes);
+                push_ptr(pretty_type_internal(type->proc.implicits.data[i], show_named, a), &arg_nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(pretty_type(type->proc.args.data[i], a), &arg_nodes);
+            push_ptr(pretty_type_internal(type->proc.args.data[i], show_named, a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-        push_ptr(pretty_type(type->proc.ret, a), &nodes);
+        push_ptr(pretty_type_internal(type->proc.ret, show_named, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -635,7 +635,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            Document* arg = pretty_type(type->structure.fields.data[i].val, a);
+            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, show_named, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -656,7 +656,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
             for (size_t j = 0; j < types->len; j++) {
-                Document* arg = pretty_type((PiType*)types->data[j], a);
+                Document* arg = pretty_type_internal((PiType*)types->data[j], show_named, a);
                 push_ptr(arg, &ty_nodes);
             }
             Document* ptypes = mv_sep_doc(ty_nodes, a);
@@ -673,39 +673,54 @@ Document* pretty_type(PiType* type, Allocator* a) {
     case TReset: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("Reset"), a), &nodes);
-        push_ptr(pretty_type(type->reset.in, a), &nodes);
-        push_ptr(pretty_type(type->reset.out, a), &nodes);
+        push_ptr(pretty_type_internal(type->reset.in, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->reset.out, show_named, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TResumeMark: {
-        out = mk_str_doc(mv_string("pretty_type unimplemented for Resume Mark"), a);
-        break;
-    }
-    case TNamed:  {
-        PtrArray nodes = mk_ptr_array(6, a);
-        push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
-
-        push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
-                 &nodes);
-
-        if (type->named.args) {
-            PtrArray args = mk_ptr_array(type->named.args->len, a);
-            for (size_t i = 0; i < type->named.args->len; i++) {
-                push_ptr(pretty_type(type->named.args->data[i], a), &args);
-            }
-            push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
-        }
-
-        push_ptr(pretty_type(type->named.type, a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_str_doc(mv_string("pretty_type_internal unimplemented for Resume Mark"), a);
         break;
     }
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
-        push_ptr(pretty_type(type->dynamic, a), &nodes);
+        push_ptr(pretty_type_internal(type->dynamic, show_named, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TNamed:  {
+        if (show_named) {
+            PtrArray nodes = mk_ptr_array(6, a);
+            push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
+
+            push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
+                     &nodes);
+
+            if (type->named.args) {
+                PtrArray args = mk_ptr_array(type->named.args->len, a);
+                for (size_t i = 0; i < type->named.args->len; i++) {
+                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                }
+                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+            }
+
+            push_ptr(pretty_type_internal(type->named.type, false, a), &nodes);
+            out = mv_sep_doc(nodes, a);
+        } else {
+            Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
+
+            if (type->named.args) {
+                PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
+                push_ptr(base, &args);
+                for (size_t i = 0; i < type->named.args->len; i++) {
+                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                }
+                out = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
+            } else {
+                out = base;
+            }
+        }
         break;
     }
     case TDistinct:  {
@@ -719,12 +734,12 @@ Document* pretty_type(PiType* type, Allocator* a) {
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
             for (size_t i = 0; i < type->distinct.args->len; i++) {
-                push_ptr(pretty_type(type->distinct.args->data[i], a), &args);
+                push_ptr(pretty_type_internal(type->distinct.args->data[i], show_named, a), &args);
             }
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
-        push_ptr(pretty_type(type->distinct.type, a), &nodes);
+        push_ptr(pretty_type_internal(type->distinct.type, show_named, a), &nodes);
         out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
         break;
     }
@@ -746,7 +761,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a);
-            Document* arg = pretty_type(type->trait.fields.data[i].val, a);
+            Document* arg = pretty_type_internal(type->trait.fields.data[i].val, show_named, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -765,7 +780,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
-            Document* arg = pretty_type(type->instance.fields.data[i].val, a);
+            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, show_named, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -792,7 +807,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -804,16 +819,16 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
     }
     case TCApp: {
         PtrArray nodes = mk_ptr_array(type->app.args.len + 1, a);
-        push_ptr(pretty_type(type->app.fam, a), &nodes);
+        push_ptr(pretty_type_internal(type->app.fam, show_named, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+            push_ptr(pretty_type_internal(type->app.args.data[i], show_named, a), &nodes);
         }
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
@@ -825,7 +840,7 @@ Document* pretty_type(PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -865,6 +880,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
     }
     return out;
+}
+
+Document* pretty_type(PiType* type, Allocator* a) {
+    return pretty_type_internal(type, true, a);
 }
 
 size_t pi_size_align(size_t size, size_t align) {
@@ -921,7 +940,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
         break;
     case TProc:
-        *out = sizeof(uint64_t);
+        *out = ADDRESS_SIZE;
         return Ok;
     case TStruct: {
         size_t align = 0;
@@ -946,7 +965,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             for (size_t i = 0; i < types.len; i++) {
                 total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
                 size_t field_size;
-                Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+                Result_t res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
                 total += field_size;
             }
@@ -982,8 +1001,9 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         *out = c_size_of(type.c_type);
         return Ok;
     case TVar:
+        return Err;
     case TAll:
-        *out = sizeof(void*);
+        *out = ADDRESS_SIZE;
         return Ok;
     case TExists:
         panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));
@@ -1077,6 +1097,9 @@ size_t pi_align_of(PiType type) {
     case TDynamic:
         return ADDRESS_ALIGN;
     }
+    case TNamed: {
+        return pi_align_of(*type.named.type);
+    }
     case TDistinct: {
         return pi_align_of(*type.distinct.type);
     }
@@ -1152,6 +1175,34 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 static int id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
 
+PiType* unwrap_type(PiType *ty) {
+    bool unwrapping = true;
+    while (unwrapping) {
+        if (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
+            ty = ty->distinct.type;
+        } else if (ty->sort == TNamed) {
+            ty = ty->named.type;
+        } else {
+            unwrapping = false;
+        }
+    }
+    return ty;
+}
+
+PiType* strip_type(PiType *ty) {
+    bool unwrapping = true;
+    while (unwrapping) {
+        if (ty->sort == TDistinct) {
+            ty = ty->distinct.type;
+        } else if (ty->sort == TNamed) {
+            ty = ty->named.type;
+        } else {
+            unwrapping = false;
+        }
+    }
+    return ty;
+}
+
 void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
@@ -1186,6 +1237,14 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         break;
     case TDynamic:
         type_app_subst(body->dynamic, subst, a);
+        break;
+    case TNamed:
+        type_app_subst(body->distinct.type, subst, a);
+        if (body->named.args) {
+            for (size_t i = 0; i < body->named.args->len; i++) {
+                type_app_subst(body->named.args->data[i], subst, a);
+            }
+        }
         break;
     case TDistinct:
         type_app_subst(body->distinct.type, subst, a);
@@ -1276,6 +1335,16 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
             .instance.fields = new_fields,
         };
         return out_ty;
+    } else if (family.sort == TNamed) {
+        // TODO (BUG LOGIC): check kind of family?
+        PiType* new_type = mem_alloc(sizeof(PiType), a);
+        *new_type = family;
+        new_type->named.type = type_app(*family.named.type, args, a);
+        new_type->named.args = mem_alloc(sizeof(PtrArray), a);
+
+        typedef void* (*TyCopier)(void*, Allocator*);
+        *new_type->named.args = copy_ptr_array(args,  (TyCopier)copy_pi_type_p, a);
+        return new_type;
     } else if (family.sort == TDistinct) {
         // TODO (BUG LOGIC): check kind of family?
         PiType* new_type = mem_alloc(sizeof(PiType), a);
@@ -1343,6 +1412,8 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     case TDynamic:
         panic(mv_string("pi_type_eql not implemented for dynamics"));
 
+  case TNamed:
+        panic(mv_string("pi_type_eql not implemented for named"));
     // 'Special'
     case TDistinct:
         panic(mv_string("pi_type_eql not implemented for distinct types"));
@@ -1514,8 +1585,7 @@ PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body) {
 }
 
 PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
-    PiType* lhs = fam;
-    while (lhs->sort == TDistinct) lhs = lhs->distinct.type;
+    PiType* lhs = unwrap_type(fam);
 
     va_list args;
     va_start(args, fam);
