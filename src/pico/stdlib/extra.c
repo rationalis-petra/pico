@@ -175,8 +175,8 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType* build_panic_fn_ty(Allocator* a) {
     PiType* proc_ty = mk_proc_type(a, 1, mk_string_type(a), mk_var_type(a, "A"));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     PiType* out_ty = mem_alloc(sizeof(PiType), a);
     *out_ty =  (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};

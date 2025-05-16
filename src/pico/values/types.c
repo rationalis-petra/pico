@@ -5,6 +5,7 @@
 #include "data/string.h"
 #include "data/result.h"
 
+#include "pico/data/sym_ptr_amap.h"
 #include "pretty/standard_types.h"
 #include "pretty/string_printer.h"
 #include "pico/values/types.h"
@@ -88,7 +89,7 @@ void delete_pi_type(PiType t, Allocator* a) {
         break;
     }
     case TTrait: {
-        sdelete_u64_array(t.trait.vars);
+        sdelete_symbol_array(t.trait.vars);
         for (size_t i = 0; i < t.trait.fields.len; i++)
             delete_pi_type_p(t.trait.fields.data[i].val, a);
         sdelete_sym_ptr_amap(t.trait.fields);
@@ -112,7 +113,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     case TAll:
     case TExists:
     case TFam: {
-        sdelete_u64_array(t.binder.vars);
+        sdelete_symbol_array(t.binder.vars);
         delete_pi_type_p(t.binder.body, a);
         break;
     }
@@ -191,7 +192,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
     case TTrait:
         out.trait.id = t.trait.id;
-        out.trait.vars = scopy_u64_array(t.trait.vars, a);
+        out.trait.vars = scopy_symbol_array(t.trait.vars, a);
         out.trait.fields = copy_sym_ptr_amap(t.trait.fields, symbol_id, (TyCopier)copy_pi_type_p, a);
         break;
     case TTraitInstance:
@@ -232,7 +233,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TExists:
     case TAll:
     case TFam: {
-        out.binder.vars = scopy_u64_array(t.binder.vars, a);
+        out.binder.vars = scopy_symbol_array(t.binder.vars, a);
         out.binder.body = copy_pi_type_p(t.binder.body, a);
         break;
     }

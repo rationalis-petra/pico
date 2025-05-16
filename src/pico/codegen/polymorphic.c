@@ -23,16 +23,16 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     SymbolArray vars;
     Syntax body;
     if (syn.type == SProcedure) {
-        vars = mk_u64_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
+        vars = mk_symbol_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            push_u64(syn.procedure.implicits.data[i].key, &vars);
+            push_symbol(syn.procedure.implicits.data[i].key, &vars);
         }
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            push_u64(syn.procedure.args.data[i].key, &vars);
+            push_symbol(syn.procedure.args.data[i].key, &vars);
         }
         body = *syn.procedure.body;
     } else {
-        vars = mk_u64_array(0, a);
+        vars = mk_symbol_array(0, a);
         body = syn;
     }
 
@@ -379,7 +379,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         bool labels_match = true;
         const size_t len = struct_type->structure.fields.len;
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            if (struct_type->structure.fields.data[len - (i + 1)].key != syn.structure.fields.data[i].key) {
+            if (!symbol_eq(struct_type->structure.fields.data[len - (i + 1)].key, syn.structure.fields.data[i].key)) {
                 labels_match = false;
                 break;
             }
@@ -412,7 +412,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
                 }
 
-                if (source_type->structure.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
                     break;
 
                 // Push the size into RAX; this is then added to the value at
@@ -465,7 +465,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
                 }
 
-                if (source_type->instance.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
                 generate_size_of(RAX, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);

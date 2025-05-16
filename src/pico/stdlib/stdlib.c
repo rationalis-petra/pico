@@ -8,7 +8,7 @@
 #include "pico/stdlib/user.h"
 
 Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator) {
-    Package* base = mk_package(string_to_symbol(mv_string("base")), a);
+    Package* base = mk_package(string_to_name(mv_string("base")), a);
     add_core_module(ass, base, a);
     add_data_module(ass, base, a);
     add_num_module(ass, base, a);

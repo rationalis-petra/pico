@@ -147,9 +147,10 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, ErrorPoint* point) {
 //------------------------------------------------------------------------------
 
 bool eq_symbol(RawTree* raw, Symbol s) {
-    return (raw->type == RawAtom
-            && raw->atom.type == ASymbol
-            && raw->atom.symbol == s);
+  return (raw->type == RawAtom &&
+          raw->atom.type == ASymbol &&
+          raw->atom.symbol.name == s.name && 
+          raw->atom.symbol.did == s.did);
 }
 
 bool is_symbol(RawTree* raw) {
@@ -212,7 +213,7 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
         RawTree node = nodes.branch.nodes.data[i];
         if (node.type != RawAtom || node.atom.type != ASymbol) { return false; }
-        push_u64(node.atom.symbol, arr);
+        push_symbol(node.atom.symbol, arr);
     }
     return true;
 }
@@ -332,7 +333,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
 
         // TODO (BUG): shadow the arguments!
-        SymbolArray to_shadow = mk_u64_array(8, a);
+        SymbolArray to_shadow = mk_symbol_array(8, a);
         shadow_vars(to_shadow, env);
 
         RawTree* raw_term;
@@ -359,7 +360,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             throw_error(point, mk_string("all term former requires at least 2 arguments!", a));
         }
 
-        SymbolArray arguments = mk_u64_array(2, a);
+        SymbolArray arguments = mk_symbol_array(2, a);
         if (!get_symbol_list(&arguments, raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("all term former requires first arguments to be a symbol-list!", a));
         }
@@ -411,12 +412,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             }
             Symbol lit = msym.atom.symbol;
 
-            if (lit == string_to_symbol(mv_string("true"))) {
+            if (symbol_eq(lit, string_to_symbol(mv_string("true")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
                 *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = true,};
                 return res;
             }
-            else if (lit == string_to_symbol(mv_string("false"))) {
+            else if (symbol_eq(lit, string_to_symbol(mv_string("false")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
                 *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = false,};
                 return res;
@@ -481,13 +482,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 throw_error(point, doc_to_str(doc, a));
             }
 
-            SymbolArray clause_binds = mk_u64_array(raw_pattern.branch.nodes.len - 1, a);
+            SymbolArray clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
             for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
                 RawTree raw_name = raw_pattern.branch.nodes.data[s];
                 if (!is_symbol(&raw_name)) {
                     throw_error(point, mv_string("Pattern binding was not a symbol!"));
                 }
-                push_u64(raw_name.atom.symbol, &clause_binds); 
+                push_symbol(raw_name.atom.symbol, &clause_binds); 
             }
 
             // Get the term
@@ -597,7 +598,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
     }
     case FInstance: {
-        SymbolArray params = mk_u64_array(0, a);
+        SymbolArray params = mk_symbol_array(0, a);
         SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
         Syntax* constraint;
 
@@ -861,8 +862,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         if (raw.branch.nodes.len != 5) {
           throw_error(point, mv_string("Term former 'with-reset' expects exactly 5 arguments!"));
         }
-        SymbolArray reset_binds = mk_u64_array(1, a);
-        SymbolArray handle_binds = mk_u64_array(2, a);
+        SymbolArray reset_binds = mk_symbol_array(1, a);
+        SymbolArray handle_binds = mk_symbol_array(2, a);
 
         if (!get_symbol_list(&reset_binds, raw.branch.nodes.data[1]) || reset_binds.len != 1) {
           throw_error(point, mv_string("Term former 'with-reset' 1st argument list malformed."));
@@ -1265,7 +1266,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         }
 
         RawTree raw_vars = raw.branch.nodes.data[1];
-        SymbolArray vars = mk_u64_array(raw_vars.branch.nodes.len, a);
+        SymbolArray vars = mk_symbol_array(raw_vars.branch.nodes.len, a);
 
         if (!get_symbol_list(&vars, raw_vars)) {
             throw_error(point, mv_string("Malformed Trait parameter list."));
@@ -1311,7 +1312,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             throw_error(point, mk_string("All term former requires at least 2 arguments!", a));
         }
 
-        SymbolArray vars = mk_u64_array(8, a);
+        SymbolArray vars = mk_symbol_array(8, a);
         if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("All argument list malformed", a));
         }
@@ -1341,7 +1342,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             throw_error(point, mk_string("Family term former requires at least 2 arguments!", a));
         }
 
-        SymbolArray vars = mk_u64_array(8, a);
+        SymbolArray vars = mk_symbol_array(8, a);
         if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
             throw_error(point, mk_string("All argument list malformed", a));
         }
@@ -1364,14 +1365,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         };
         return res;
     }
-    case FCType: {
+    case FLiftCType: {
         RawTree* raw_term = (raw.branch.nodes.len == 2)
             ? &raw.branch.nodes.data[1]
             : raw_slice(&raw, 1, a);
         Syntax* c_type = abstract_expr_i(*raw_term, env, a, point);
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SCType,
+            .type = SLiftCType,
             .ptype = NULL,
             .c_type = c_type,
         };
@@ -1699,7 +1700,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle))
                 throw_error(point, mv_string("Invalid import clause - expected :all"));
-            if (middle != string_to_symbol(mv_string("all")))
+            if (!symbol_eq(middle, string_to_symbol(mv_string("all"))))
                 throw_error(point, mv_string("Invalid import clause - expected :all"));
 
             return (ImportClause) {
@@ -1725,7 +1726,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                         .member = raw_members.atom.symbol,
                     };
                 } else if (raw_members.type == RawBranch) {
-                    SymbolArray members = mk_u64_array(raw_members.branch.nodes.len, a);
+                    SymbolArray members = mk_symbol_array(raw_members.branch.nodes.len, a);
                     if (!get_symbol_list(&members, raw_members))
                         throw_error(point, mv_string("Invalid import-. members"));
                     return (ImportClause) {
@@ -1741,7 +1742,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, ErrorPoint* poin
                 Symbol middle;
                 if(!get_fieldname(&raw->branch.nodes.data[1], &middle))
                     throw_error(point, mv_string("Invalid import clause"));
-                if (middle != string_to_symbol(mv_string("as")))
+                if (!symbol_eq(middle , string_to_symbol(mv_string("as"))))
                     throw_error(point, mv_string("Invalid import clause"));
 
                 Symbol name;
@@ -1780,7 +1781,7 @@ ExportClause abstract_export_clause(RawTree* raw, ErrorPoint* point) {
         Symbol middle;
         if(!get_fieldname(&raw->branch.nodes.data[1], &middle))
             throw_error(point, mv_string("Invalid export clause"));
-        if (middle != string_to_symbol(mv_string("as")))
+        if (!symbol_eq(middle, string_to_symbol(mv_string("as"))))
             throw_error(point, mv_string("Invalid export clause"));
 
         Symbol name;

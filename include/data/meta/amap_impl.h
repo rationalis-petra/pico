@@ -99,6 +99,30 @@
         };                                                              \
     }                                                                   \
                                                                         \
+    tprefix##AMap copy_##fprefix##_amap(tprefix##AMap map, key_t (*copy_key)(key_t key, Allocator* a), val_t (*copy_val)(val_t val, Allocator* a), Allocator* a) { \
+        tprefix##AMap out = (tprefix##AMap) {                           \
+            .capacity = map.capacity,                                   \
+            .len = map.len,                                             \
+            .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
+            .gpa = a,                                                   \
+        };                                                              \
+        for (size_t i = 0; i < map.len; i++) {                          \
+            out.data[i].key = copy_key(map.data[i].key, a);             \
+            out.data[i].val = copy_val(map.data[i].val, a);             \
+        }                                                               \
+        return out;                                                     \
+    }                                                                   \
+                                                                        \
+    tprefix##AMap scopy_##fprefix##_amap(tprefix##AMap map, Allocator* a) { \
+        return (tprefix##AMap) {                                        \
+            .capacity = map.capacity,                                   \
+            .len = map.len,                                             \
+            .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
+            .gpa = a,                                                   \
+        };                                                              \
+    }                                                                   \
+                                                                        \
+                                                                        \
     void delete_##fprefix##_amap(tprefix##AMap map, void (*delete_key)(key_t key), void (*delete_val)(val_t val)) { \
         for (size_t i = 0; i < map.len; i++) {                          \
             delete_key(map.data[i].key);                                \

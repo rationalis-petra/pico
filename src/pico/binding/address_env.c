@@ -38,7 +38,7 @@ typedef struct {
 int compare_saddr(SAddr lhs, SAddr rhs) {
     int out = lhs.type - rhs.type;
     if (!out) return out;
-    out = lhs.symbol - rhs.symbol;
+    out = cmp_symbol(lhs.symbol, rhs.symbol);
     if (!out) return out;
     out = lhs.stack_offset - rhs.stack_offset;
     return out;
@@ -140,7 +140,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
-        if ((maddr.type == SADirect || maddr.type == SAIndirect) && maddr.symbol == s) {
+        if ((maddr.type == SADirect || maddr.type == SAIndirect) && symbol_eq(maddr.symbol, s)) {
             // TODO: Check if the offset can fit into an immediate
             return (AddressEntry) {
                 .type = maddr.type == SADirect ? ALocalDirect : ALocalIndirect,
@@ -154,7 +154,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
     }
 
     // Now search the recsym
-    if (env->rec && env->recname == s) {
+    if (env->rec && symbol_eq(env->recname, s)) {
         return (AddressEntry) {
             .type = AGlobal,
             .value = NULL,
@@ -210,7 +210,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
 
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
-        if (maddr.type == SALabel && maddr.symbol == s) {
+        if (maddr.type == SALabel && symbol_eq(maddr.symbol, s)) {
             // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
                 .type = Ok,
@@ -233,7 +233,7 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
 
     SAddr padding;
     padding.type = SASentinel;
-    padding.symbol = 0;
+    // padding.symbol = 0;
     stack_offset += 3 * ADDRESS_SIZE; // We add 2x the register size to account for the
                                       // return address, rbp and the dynamic
                                       // memory ptr.
@@ -284,7 +284,7 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
                                   // old RBP.
     SAddr padding;
     padding.type = SASentinel;
-    padding.symbol = 0;
+    // padding.symbol = 0;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
@@ -374,7 +374,7 @@ void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
     case LMonomorphic: {
         SAddr padding;
         padding.type = SASentinel;
-        padding.symbol = 0;
+        // padding.symbol = 0;
         stack_offset += REGISTER_SIZE;
         padding.stack_offset = stack_offset;
         push_saddr(padding, &locals->vars);
@@ -423,7 +423,7 @@ void address_start_labels(SymbolArray labels, AddressEnv* env) {
 
     SAddr padding;
     padding.type = SASentinel;
-    padding.symbol = 0;
+    // padding.symbol = 0;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &locals->vars);
 

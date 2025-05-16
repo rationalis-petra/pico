@@ -38,8 +38,8 @@ PiType* get_pair_type() {
 PiType build_store_fn_ty(Allocator* a) {
     PiType* proc_ty  = mk_proc_type(a, 2, mk_prim_type(a, Address), mk_var_type(a, "A"), mk_prim_type(a, Unit));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -118,8 +118,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType build_load_fn_ty(Allocator* a) {
     PiType* proc_ty = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_var_type(a, "A"));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -414,8 +414,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Family"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FCType;
-    sym = string_to_symbol(mv_string("CType"));
+    former = FLiftCType;
+    sym = string_to_symbol(mv_string("LiftCType"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
@@ -490,8 +490,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         ModuleEntry* e;
 
         // Ptr Type 
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = mk_named_type(a, "Ptr", mk_type_family(a,
                                                           vars,
@@ -520,8 +520,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         
         // Array Type 
         // Make a ptr
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = 
             mk_named_type(a, "Array",
@@ -541,8 +541,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         array_type = e->value;
         
         // Maybe Type 
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = mk_named_type(a, "Maybe", mk_type_family(a,
                                                       vars,
@@ -558,9 +558,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         maybe_type = e->value;
 
         // Either Type 
-        vars = mk_u64_array(2, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
-        push_u64(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_symbol_array(2, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        push_symbol(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
         type_val = mk_named_type(a, "Either", mk_type_family(a,
@@ -577,9 +577,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         either_type = e->value;
 
         // Pair Type 
-        vars = mk_u64_array(2, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
-        push_u64(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_symbol_array(2, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        push_symbol(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
         type_val = mk_named_type(a, "Pair", mk_type_family(a,

@@ -77,9 +77,9 @@
 
 #define ARRAY_CMP_IMPL(type, cmpfun, fprefix, tprefix)              \
     ARRAY_COMMON_IMPL(type, fprefix, tprefix)                       \
-         size_t find_ ## fprefix(type val, tprefix##Array arr) {    \
+    size_t find_ ## fprefix(type val, tprefix##Array arr) {         \
         for (size_t i = 0; i < arr.len; i++) {                      \
-            if (cmpfun(arr.data[i], val)) return i;                 \
+            if (cmpfun(arr.data[i], val) == 0) return i;            \
         }                                                           \
         return arr.len;                                             \
     }                                                               \

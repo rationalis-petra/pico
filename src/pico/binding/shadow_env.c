@@ -41,7 +41,7 @@ void shadow_bind(Symbol var, PiType* type, ShadowEnv* env) {
 ShadowEntry shadow_env_lookup(Symbol s, ShadowEnv* env) {
     ShadowEntry entry;
     for (size_t i = env->locals.len; i > 0; i--) {
-        if (s == env->locals.data[i-1].key) {
+        if (symbol_eq(s, env->locals.data[i-1].key)) {
             PiType* type = env->locals.data[i-1].val;
             if (type) {
                 entry = (ShadowEntry) {.type = SLocal, .value = type,};

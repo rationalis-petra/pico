@@ -213,7 +213,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
-        all_ty->binder.vars = mk_u64_array(untyped->all.args.len, a);
+        all_ty->binder.vars = mk_symbol_array(untyped->all.args.len, a);
 
         for (size_t i = 0; i < untyped->all.args.len; i++) {
             Symbol arg = untyped->all.args.data[i];
@@ -222,7 +222,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
             type_qvar(arg, arg_ty, env);
-            push_u64(arg, &all_ty->binder.vars);
+            push_symbol(arg, &all_ty->binder.vars);
         }
 
         type_infer_i(untyped->all.body, env, gen, a, point); 
@@ -391,7 +391,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            if (enum_type->enumeration.variants.data[i].key == untyped->variant.tagname) {
+            if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
                 untyped->variant.tag = i;
                 found_variant = true;
 
@@ -422,7 +422,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            if (enum_type->enumeration.variants.data[i].key == untyped->variant.tagname) {
+            if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
                 untyped->variant.tag = i;
                 found_variant = true;
 
@@ -468,7 +468,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             SynClause* clause = untyped->match.clauses.data[i];
             bool found_tag = false;
             for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
-                if (clause->tagname == enum_type->enumeration.variants.data[j].key) {
+                if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
                     found_tag = true;
                     clause->tag = j;
                     if (used_indices.data[j] != 0) {
@@ -538,7 +538,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // search for field
             PiType* ret_ty = NULL;
             for (size_t i = 0; i < source_type.structure.fields.len; i++) {
-                if (source_type.structure.fields.data[i].key == untyped->projector.field) {
+                if (symbol_eq(source_type.structure.fields.data[i].key, untyped->projector.field)) {
                     ret_ty = source_type.structure.fields.data[i].val;
                 }
             }
@@ -551,7 +551,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // search for field
             PiType* ret_ty = NULL;
             for (size_t i = 0; i < source_type.instance.fields.len; i++) {
-                if (source_type.instance.fields.data[i].key == untyped->projector.field) {
+                if (symbol_eq(source_type.instance.fields.data[i].key, untyped->projector.field)) {
                     ret_ty = source_type.instance.fields.data[i].val;
                 }
             }
@@ -735,9 +735,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SLabels: {
         PiType* ty = mk_uvar(gen, a);
         untyped->ptype = ty;
-        SymbolArray labels = mk_u64_array(untyped->labels.terms.len, a);
+        SymbolArray labels = mk_symbol_array(untyped->labels.terms.len, a);
         for (size_t i = 0;i < untyped->labels.terms.len; i++) {
-            push_u64(untyped->labels.terms.data[i].key, &labels);
+            push_symbol(untyped->labels.terms.data[i].key, &labels);
         }
 
         add_labels(labels, env);
@@ -953,7 +953,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
-    case SCType: {
+    case SLiftCType: {
         // Get c type
         PiType* c_type = get_c_type();
         type_check_i(untyped->c_type, c_type, env, gen, a, point);
@@ -1397,7 +1397,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
     case SExistsType:
     case STypeFamily:
         break;
-    case SCType:
+    case SLiftCType:
         instantiate_implicits(syn->c_type, env, a, point);
         break;
     case SCheckedType:
@@ -1641,7 +1641,7 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);
         break;
-    case SCType:
+    case SLiftCType:
         squash_types(typed->c_type, a, point);
         break;
     case SNamedType:

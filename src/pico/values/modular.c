@@ -9,7 +9,6 @@
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
 #include "pico/syntax/header.h"
-#include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_sarr_amap.h"
 
 /* Module and package implementation details
@@ -35,10 +34,10 @@ typedef struct {
 } ModuleEntryInternal;
 
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
-AMAP_IMPL(Symbol, ModuleEntryInternal, entry, Entry)
+AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, cmp_symbol, entry, Entry)
 
 struct Package {
-    Symbol name;
+    Name name;
     Module* root_module;
 };
 
@@ -61,7 +60,7 @@ struct Module {
 // -----------------------------------------------------------------------------
 // Package Implementation
 // -----------------------------------------------------------------------------
-Package* mk_package(Symbol name, Allocator* a) {
+Package* mk_package(Name name, Allocator* a) {
     Package* package = mem_alloc(sizeof(Package), a);
     package->name = name;
 
@@ -86,12 +85,12 @@ void delete_package(Package* package) {
     mem_free(package, a);
 }
 
-Result add_module(Symbol name, Module* module, Package* package) {
-    return add_module_def(package->root_module, name, module); 
+Result add_module(Symbol symbol, Module* module, Package* package) {
+    return add_module_def(package->root_module, symbol, module); 
 }
 
-Module* get_module(Symbol name, Package* package) {
-    ModuleEntry* entry = get_def(name, package->root_module);
+Module* get_module(Symbol symbol, Package* package) {
+    ModuleEntry* entry = get_def(symbol, package->root_module);
     if (entry && entry->is_module) {
         return entry->value;
     } else {
@@ -213,7 +212,7 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
     return out;
 }
 
-Result add_def (Module* module, Symbol name, PiType type, void* data, Segments segments, LinkData* links) {
+Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links) {
     ModuleEntryInternal entry;
     entry.is_module = false;
     entry.data_segment = NULL;
@@ -253,13 +252,13 @@ Result add_def (Module* module, Symbol name, PiType type, void* data, Segments s
     if (links) {
         entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
         *(entry.backlinks) = copy_sym_sarr_amap(links->external_links,
-                                                copy_symbol,
-                                                scopy_size_array,
-                                                module->allocator);
+                                                 copy_symbol,
+                                                 scopy_size_array,
+                                                 module->allocator);
 
         // swap out self-references
         SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
-        sym_ptr_insert(name, entry.value, &self_ref);
+        sym_ptr_insert(symbol, entry.value, &self_ref);
         update_function(entry.value, self_ref, links->external_links);
         sdelete_sym_ptr_amap(self_ref);
     } else {
@@ -269,17 +268,17 @@ Result add_def (Module* module, Symbol name, PiType type, void* data, Segments s
     entry.type = copy_pi_type(type, module->allocator);
 
     // Free a previous definition (if it exists!)
-    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
     if (old_entry) delete_module_entry(*old_entry, module);
 
-    entry_insert(name, entry, &module->entries);
+    entry_insert(symbol, entry, &module->entries);
 
     Result out;
     out.type = Ok;
     return out;
 }
 
-Result add_module_def(Module* module, Symbol name, Module* child) {
+Result add_module_def(Module* module, Symbol symbol, Module* child) {
     ModuleEntryInternal entry = (ModuleEntryInternal) {
         .value = child,
         .is_module = true,
@@ -290,16 +289,16 @@ Result add_module_def(Module* module, Symbol name, Module* child) {
 
     // Free a previous definition (if it exists!)
     // TODO BUG UB: possibly throw here?
-    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
+    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
     if (old_entry) delete_module_entry(*old_entry, module);
 
-    entry_insert(name, entry, &module->entries);
+    entry_insert(symbol, entry, &module->entries);
 
     return (Result) {.type = Ok};
 }
 
-ModuleEntry* get_def(Symbol sym, Module* module) {
-    return (ModuleEntry*)entry_lookup(sym, module->entries);
+ModuleEntry* get_def(Symbol symbol, Module* module) {
+    return (ModuleEntry*)entry_lookup(symbol, module->entries);
 }
 
 String* get_name(Module* module) {
@@ -307,11 +306,11 @@ String* get_name(Module* module) {
 }
 
 SymbolArray get_exported_symbols(Module* module, Allocator* a) {
-    SymbolArray syms = mk_u64_array(module->entries.len, a);
+    SymbolArray symbols = mk_symbol_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
-        push_u64(module->entries.data[i].key, &syms);
+        push_symbol(module->entries.data[i].key, &symbols);
     };
-    return syms;
+    return symbols;
 }
 
 PtrArray get_exported_instances(Module* module, Allocator* a) {

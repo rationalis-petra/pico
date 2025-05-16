@@ -3,12 +3,18 @@
 
 #include <stdint.h>
 
+#include "data/meta/array_header.h"
 #include "data/array.h"
 #include "data/string.h"
 #include "pretty/document.h"
 
-typedef uint64_t Symbol;
-typedef U64Array SymbolArray;
+typedef uint64_t Name;
+typedef U64Array NameArray;
+
+typedef struct {
+    Name name;
+    uint64_t did;
+} Symbol;
 
 // Forward declarations of environment.h (to avoid circular includes!)
 typedef struct env_capture env_capture;
@@ -16,12 +22,18 @@ typedef struct env_capture env_capture;
 // Symbol table
 String* symbol_to_string(Symbol symbol);
 Symbol string_to_symbol(String string);
+Name string_to_name(String string);
 void init_symbols(Allocator* a);
 void clear_symbols();
+
+bool symbol_eq(Symbol lhs, Symbol rhs);
+int64_t cmp_symbol(Symbol lhs, Symbol rhs);
 
 // Useful for container methods
 void delete_symbol(Symbol s);
 Symbol copy_symbol(Symbol s, Allocator* a);
+void delete_name(Name n);
+Name copy_name(Name n, Allocator* a);
 
 // Dynamic Variables
 void init_dynamic_vars(Allocator* a);
@@ -91,7 +103,7 @@ typedef enum TermFormer {
     // is more explicit about taking in a *value* in the form of a c-type.
     // It may be part of the furture, moving towards a more 'dependent-types'
     // style typechecker.
-    FCType,
+    FLiftCType,
 
     // Temporary formers: TODO delegate to macros.
     FReinterpretNative,

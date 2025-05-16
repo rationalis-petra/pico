@@ -92,10 +92,10 @@ typedef struct {
 } Segments;
 
 // Package Interface
-Package* mk_package(Symbol name, Allocator* a);
+Package* mk_package(Name name, Allocator* a);
 void delete_package(Package* package);
-Result add_module(Symbol name, Module* module, Package* package);
-Module* get_module(Symbol name, Package* package);
+Result add_module(Symbol symbol, Module* module, Package* package);
+Module* get_module(Symbol symbol, Package* package);
 Module* get_root_module(Package* package);
 
 // Module Interface
@@ -108,12 +108,12 @@ void delete_module(Module* module);
 Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
 
 // Add a value definition in to the module's namespace. Must be prepped (see above)
-Result add_def(Module* module, Symbol name, PiType type, void* data, Segments segments, LinkData* links); 
+Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
 
 // Add a module definition in to the module's namespace. 
-Result add_module_def(Module* module, Symbol name, Module* child); 
+Result add_module_def(Module* module, Symbol symbol, Module* child); 
 
-ModuleEntry* get_def(Symbol sym, Module* module);
+ModuleEntry* get_def(Symbol symbol, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);
 PtrArray get_exported_instances(Module* module, Allocator* a);
 

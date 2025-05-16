@@ -3,6 +3,7 @@
 
 #include "data/meta/array_header.h"
 #include "pico/values/values.h"
+#include "pico/data/symbol_array.h"
 
 //------------------------------------------------------------------------------
 // Import Clauses

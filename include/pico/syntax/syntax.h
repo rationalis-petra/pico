@@ -5,6 +5,7 @@
 
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/data/symbol_array.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -83,7 +84,7 @@ typedef enum {
     SAllType,
     SExistsType,
     STypeFamily,
-    SCType,
+    SLiftCType,
 
     SCheckedType,
 

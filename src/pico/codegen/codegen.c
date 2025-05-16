@@ -646,7 +646,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                     throw_error(point, mv_string("Error code-generating for structure: field not found."));
                 }
 
-                if (syn.structure.fields.data[j].key == struct_type->structure.fields.data[i].key) {
+                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
                     break; // offset is correct, end the loop
                 }
             }
@@ -663,7 +663,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
 
             // Compute dest_offset for next loop
-            dest_offset += pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            dest_offset += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
         }
 
         // Remove the space occupied by the temporary values 
@@ -689,7 +689,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // for this, we need the struct size + offset of field in the struct
             size_t offset = 0;
             for (size_t i = 0; i < source_type->structure.fields.len; i++) {
-                if (source_type->structure.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
                     break;
                 offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
             }
@@ -708,7 +708,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t offset = 0;
             for (size_t i = 0; i < source_type->instance.fields.len; i++) {
                 offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
-                if (source_type->instance.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
                     break;
                 offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
             }
@@ -993,9 +993,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         //  3.1 Mark Beginning of label expression
         //  3.2 Generate label expressions
         // 4. Backlink all labels.
-        SymbolArray labels = mk_u64_array(syn.labels.terms.len, a);
+        SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
         for (size_t i = 0; i < syn.labels.terms.len; i++) 
-            push_u64(syn.labels.terms.data[i].key, &labels);
+            push_symbol(syn.labels.terms.data[i].key, &labels);
 
         address_start_labels(labels, env);
 
@@ -1339,13 +1339,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SStructType:
         // Generate struct type: for each element of the struct type
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 3 * ADDRESS_SIZE), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
         for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
             SymPtrCell field = syn.struct_type.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1358,10 +1359,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
-            // Now, incremenet index by 2 (to account for struct size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            // Now, incremenet index by 3 (to account for struct size!)
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type
@@ -1372,13 +1373,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SEnumType:
         // Generate enum type: malloc array for enum
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 3 * ADDRESS_SIZE), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
         for (size_t i = 0; i < syn.enum_type.variants.len; i++) {
             SymPtrCell field = syn.enum_type.variants.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & variant (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1415,10 +1417,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
             address_stack_shrink(env, 2*ADDRESS_SIZE);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
-            // Now, incremenet index by 2 (to account for ptr + symbol)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            // Now, incremenet index by 3 (to account for ptr + symbol)
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type
@@ -1457,7 +1459,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
-    case SCType:
+    case SLiftCType:
         generate(*syn.c_type, env, target, links, a, point);
         gen_mk_c_ty(ass,a, point);
         // Now, the type lies atop the stack, and we must pop the ctype out from
@@ -1473,9 +1475,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        address_stack_grow(env, sizeof(Symbol));
         generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        address_stack_shrink(env, sizeof(Symbol));
         gen_mk_named_ty(ass, a, point);
         address_pop(env);
         break;
@@ -1494,14 +1501,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
 
         for (size_t i = 0; i < syn.trait.fields.len; i++) {
             SymPtrCell field = syn.trait.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1514,10 +1522,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
             // Now, incremenet index by 2 (to account for trait size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type

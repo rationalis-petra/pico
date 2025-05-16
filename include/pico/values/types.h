@@ -7,6 +7,7 @@
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_ptr_assoc.h"
+#include "pico/data/symbol_array.h"
 #include "pico/values/ctypes.h"
 
 /* Basic types in pico typesystem */
@@ -158,7 +159,7 @@ struct PiType {
         DistinctType distinct;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
-        uint64_t var;
+        Symbol var;
         TAppType app;
         TypeBinder binder;
 

@@ -626,7 +626,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SCType: {
+    case SLiftCType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("C-Type"), a), &nodes);
 
