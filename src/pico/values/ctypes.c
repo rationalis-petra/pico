@@ -53,7 +53,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
 
         PtrArray arg_nodes = mk_ptr_array(type->enumeration.vals.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->enumeration.vals.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->enumeration.vals.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(" = "), a), &arg_nodes);
             push_ptr(pretty_i64(type->enumeration.vals.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
@@ -68,12 +68,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(pretty_ctype(type->proc.ret, a), &main_nodes);
         if (type->proc.named) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->proc.name), a), &main_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->proc.args.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->proc.args.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
             push_ptr(pretty_ctype(type->proc.args.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
@@ -88,12 +88,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("struct"), a), &main_nodes);
         if (type->proc.named) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->proc.name), a), &main_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->structure.fields.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
             push_ptr(pretty_ctype(type->structure.fields.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
@@ -111,7 +111,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
 
         PtrArray arg_nodes = mk_ptr_array(type->cunion.fields.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->cunion.fields.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(*name_to_string(type->cunion.fields.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(" : "), a), &arg_nodes);
             push_ptr(pretty_ctype(type->cunion.fields.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
@@ -128,7 +128,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         return mv_cat_doc(nodes, a);
     }
     case CSIncomplete:
-        return mk_str_doc(*symbol_to_string(type->incomplete), a);
+        return mk_str_doc(*name_to_string(type->incomplete), a);
     }
     // TODO (LOGIC BUG): this should be a return result or thrown error,
     // as it may indicate an error in user code, not internal code!
@@ -390,13 +390,13 @@ void delete_c_type(CType t, Allocator* a) {
     case CSDouble:
         break;
     case CSCEnum:
-        sdelete_sym_i64_assoc(t.enumeration.vals);
+        sdelete_name_i64_assoc(t.enumeration.vals);
         break;
     case CSProc:
         for (size_t i = 0; i < t.proc.args.len; i++) {
             delete_c_type_p(t.proc.args.data[i].val, a);
         }
-        sdelete_sym_ptr_assoc(t.proc.args);
+        sdelete_name_ptr_assoc(t.proc.args);
         delete_c_type_p(t.proc.ret, a);
         break;
     case CSStruct:
@@ -404,14 +404,14 @@ void delete_c_type(CType t, Allocator* a) {
             CType* ty = t.structure.fields.data[i].val;
             delete_c_type_p(ty, a);
         }
-        sdelete_sym_ptr_amap(t.structure.fields);
+        sdelete_name_ptr_amap(t.structure.fields);
         break;
     case CSUnion:
         for (size_t i = 0; i < t.cunion.fields.len; i++) {
             CType* ty = t.cunion.fields.data[i].val;
             delete_c_type_p(ty, a);
         }
-        sdelete_sym_ptr_amap(t.cunion.fields);
+        sdelete_name_ptr_amap(t.cunion.fields);
         break;
     case CSPtr:
         delete_c_type_p(t.ptr.inner, a);
@@ -435,23 +435,23 @@ CType copy_c_type(CType t, Allocator* a) {
     case CSVoid:
         break;
     case CSCEnum:
-        out.enumeration.vals = scopy_sym_i64_assoc(t.enumeration.vals, a);
+        out.enumeration.vals = scopy_name_i64_assoc(t.enumeration.vals, a);
         break;
     case CSProc:
-        out.proc.args = scopy_sym_ptr_assoc(t.proc.args, a);
+        out.proc.args = scopy_name_ptr_assoc(t.proc.args, a);
         for (size_t i = 0; i < t.proc.args.len; i++) {
             out.proc.args.data[i].val = copy_c_type_p(t.proc.args.data[i].val, a);
         }
         out.proc.ret = copy_c_type_p(t.proc.ret, a);
         break;
     case CSStruct:
-        out.structure.fields = scopy_sym_ptr_amap(t.structure.fields, a);
+        out.structure.fields = scopy_name_ptr_amap(t.structure.fields, a);
         for (size_t i = 0; i < t.structure.fields.len; i++) {
             out.structure.fields.data[i].val = copy_c_type_p(t.structure.fields.data[i].val, a);
         }
         break;
     case CSUnion:
-        out.cunion.fields = scopy_sym_ptr_amap(t.cunion.fields, a);
+        out.cunion.fields = scopy_name_ptr_amap(t.cunion.fields, a);
         for (size_t i = 0; i < t.cunion.fields.len; i++) {
             out.cunion.fields.data[i].val = copy_c_type_p(t.cunion.fields.data[i].val, a);
         }
@@ -494,12 +494,12 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...) {
     va_list args;
     va_start(args, nargs);
 
-    SymPtrAssoc pargs = mk_sym_ptr_assoc(nargs, a);
+    NamePtrAssoc pargs = mk_name_ptr_assoc(nargs, a);
     for (size_t i = 0; i < nargs; i++) {
-        Symbol name = string_to_symbol(mv_string(va_arg(args, const char*)));
+        Name name = string_to_name(mv_string(va_arg(args, const char*)));
         CType* arg = mem_alloc(sizeof(CType), a);
         *arg = va_arg(args, CType);
-        sym_ptr_bind(name, arg, &pargs);
+        name_ptr_bind(name, arg, &pargs);
     }
 
     CType* ret = mem_alloc(sizeof(CType), a);
@@ -519,12 +519,12 @@ CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    NamePtrAMap fields = mk_name_ptr_amap(nfields, a);
     for (size_t i = 0; i < nfields; i++) {
-        Symbol name = string_to_symbol(mv_string(va_arg(args, const char*)));
+        Name name = string_to_name(mv_string(va_arg(args, const char*)));
         CType* arg = mem_alloc(sizeof(CType), a);
         *arg = va_arg(args, CType);
-        sym_ptr_insert(name, arg, &fields);
+        name_ptr_insert(name, arg, &fields);
     }
 
     return (CType) {
@@ -539,11 +539,11 @@ CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    SymI64Assoc vals = mk_sym_i64_assoc(nfields, a);
+    NameI64Assoc vals = mk_name_i64_assoc(nfields, a);
     for (size_t i = 0; i < nfields; i++) {
-        Symbol name = string_to_symbol(mv_string(va_arg(args, const char*)));
+        Name name = string_to_name(mv_string(va_arg(args, const char*)));
         int64_t arg = va_arg(args, int64_t);
-        sym_i64_bind(name, arg, &vals);
+        name_i64_bind(name, arg, &vals);
     }
 
     CType* ret = mem_alloc(sizeof(CType), a);
@@ -562,12 +562,12 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    NamePtrAMap fields = mk_name_ptr_amap(nfields, a);
     for (size_t i = 0; i < nfields; i++) {
-        Symbol name = string_to_symbol(mv_string(va_arg(args, const char*)));
+        Name name = string_to_name(mv_string(va_arg(args, const char*)));
         CType* arg = mem_alloc(sizeof(CType), a);
         *arg = va_arg(args, CType);
-        sym_ptr_insert(name, arg, &fields);
+        name_ptr_insert(name, arg, &fields);
     }
 
     return (CType) {

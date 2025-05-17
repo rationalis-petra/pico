@@ -3,12 +3,13 @@
 
 #include "pico/values/modular.h"
 
-PiType* get_array_type();
 PiType* get_ptr_type();
+PiType* get_array_type();
 PiType* get_maybe_type();
-PiType* get_syntax_type();
 PiType* get_pair_type();
 PiType* get_either_type();
+PiType* get_symbol_type();
+PiType* get_syntax_type();
 
 void add_core_module(Assembler* ass, Package* base, Allocator* a);
 

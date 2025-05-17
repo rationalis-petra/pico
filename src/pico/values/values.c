@@ -14,12 +14,14 @@
 static StrU64AMap symbol_table;
 static PtrArray symbol_names;
 static Allocator* symbol_allocator;
+static uint64_t distinct_counter;
 
 // Helper functions
 void init_symbols(Allocator* a) {
     symbol_allocator = a;
     symbol_table = mk_str_u64_amap(1024, a);
     symbol_names = mk_ptr_array(1024, a);
+    distinct_counter = 0;
 }
 
 void delete_string_pointer(String* ptr, Allocator* a) {
@@ -35,6 +37,10 @@ Symbol string_to_symbol(String string) {
     return (Symbol){ .name = string_to_name(string), .did = 0 };
 }
 
+Symbol string_to_unique_symbol(String string) {
+    return (Symbol){ .name = string_to_name(string), .did = distinct_counter++ };
+}
+
 Name string_to_name(String string) {
     Name new_name_id = symbol_names.len;
     Name* name = str_u64_lookup(string, symbol_table);
@@ -46,6 +52,9 @@ Name string_to_name(String string) {
         name = &new_name_id;
     }
     return *name;
+}
+String* name_to_string(Name name) {
+    return symbol_names.data[name];
 }
 
 void clear_symbols() {

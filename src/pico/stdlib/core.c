@@ -5,24 +5,19 @@
 
 #include "pico/stdlib/core.h"
 
-static PiType* array_type;
-PiType* get_array_type() {
-    return array_type;
-}
-
 static PiType* ptr_type;
 PiType* get_ptr_type() {
     return ptr_type;
 }
 
+static PiType* array_type;
+PiType* get_array_type() {
+    return array_type;
+}
+
 static PiType* maybe_type;
 PiType* get_maybe_type() {
     return maybe_type;
-}
-
-static PiType* syntax_type;
-PiType* get_syntax_type() {
-    return syntax_type;
 }
 
 static PiType* either_type;
@@ -33,6 +28,16 @@ PiType* get_either_type() {
 static PiType* pair_type;
 PiType* get_pair_type() {
     return pair_type;
+}
+
+static PiType* symbol_type;
+PiType* get_symbol_type() {
+    return symbol_type;
+}
+
+static PiType* syntax_type;
+PiType* get_syntax_type() {
+    return syntax_type;
 }
 
 PiType build_store_fn_ty(Allocator* a) {
@@ -483,7 +488,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("F64"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    // Syntax Type : components and definition 
+    // All standard library types: components and definition 
+    // These are aggregated here, even if they are present in other modules, 
+    // as some core types 
     {
         PiType *type_val;
         SymbolArray vars;
@@ -597,10 +604,22 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         type.kind.nargs = 0;
 
+        symbol_type = mk_named_type(a, "Symbol",
+                                  mk_struct_type(a, 2,
+                                                 "name", mk_prim_type(a, UInt_64), 
+                                                 "did", mk_prim_type(a, UInt_64)));
+        type_data = symbol_type;
+        sym = string_to_symbol(mv_string("Symbol"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_data, a);
+
+        e = get_def(sym, module);
+        symbol_type = e->value;
+
         PiType* atom_type = mk_enum_type(a, 4,
                                         "bool", 1, mk_prim_type(a, Bool),
                                         "integral", 1, mk_prim_type(a, Int_64),
-                                        "symbol", 1,  mk_prim_type(a, Int_64),
+                                        "symbol", 1,  copy_pi_type_p(symbol_type, a),
                                         "string", 1, mk_string_type(a));
         type_data = atom_type;
         sym = string_to_symbol(mv_string("Atom"));

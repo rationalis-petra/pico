@@ -1,9 +1,9 @@
 #ifndef __PICO_VALUES_CTYPES_H
 #define __PICO_VALUES_CTYPES_H
 
-#include "pico/data/sym_ptr_assoc.h"
-#include "pico/data/sym_i64_assoc.h"
-#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/name_ptr_assoc.h"
+#include "pico/data/name_i64_assoc.h"
+#include "pico/data/name_ptr_amap.h"
 
 typedef struct CType CType;
 
@@ -41,24 +41,24 @@ typedef struct {
 
 typedef struct {
     bool named;
-    Symbol name;
-    SymPtrAssoc args;
+    Name name;
+    NamePtrAssoc args;
     CType* ret;
 } CProc;
 
 typedef struct {
     bool named;
-    Symbol name; 
-    SymPtrAMap fields;
+    Name name; 
+    NamePtrAMap fields;
 } CStruct;
 
 typedef struct {
     CPrimInt base;
-    SymI64Assoc vals;
+    NameI64Assoc vals;
 } CEnum;
 
 typedef struct {
-    SymPtrAMap fields;
+    NamePtrAMap fields;
 } CUnion;
 
 typedef struct {
@@ -74,7 +74,7 @@ struct CType {
         CEnum enumeration;
         CUnion cunion;
         CPtr ptr;
-        Symbol incomplete;
+        Name incomplete;
     };
 };
 

@@ -442,10 +442,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                     pass_return_in_memory = true; // this breaks us out of the loop
                 } else {
                     Regname next_reg = return_integer_registers[current_return_register++];
-                    // I8 max = 127
-                    if (arg_offsets.data[i + 1] > 127) {
-                        throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
-                    }
                     // Push from registers into memory
                     build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
                 }
