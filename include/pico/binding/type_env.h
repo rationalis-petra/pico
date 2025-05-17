@@ -46,8 +46,8 @@ void type_qvar (Symbol var, PiType* type, TypeEnv* env);
 void pop_type(TypeEnv* env);
 void pop_types(TypeEnv* env, size_t n);
 
-bool label_present(Symbol s, TypeEnv* env);
-void add_labels (SymbolArray labels, TypeEnv* env);
+PtrArray* lookup_label(Symbol s, TypeEnv* env);
+void add_labels (SymPtrAssoc labels, TypeEnv* env);
 void pop_labels(TypeEnv* env, size_t n);
 
 SymbolArray get_bound_vars(TypeEnv* env, Allocator* a);

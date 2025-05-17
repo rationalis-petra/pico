@@ -1004,6 +1004,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
 
+        size_t out_size = pi_size_of(*syn.ptype);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
             SymPtrACell cell = syn.labels.terms.data[i];
 
@@ -1011,10 +1012,41 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t pos = get_pos(ass);
             sym_size_bind(cell.key, pos, &label_points);
 
-            generate(*(Syntax*)cell.val, env, target, links, a, point);
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            
+            SynLabelBranch* branch = cell.val;
+
+            // Bind Label Vars 
+            size_t arg_total = 0;
+            SymSizeAssoc arg_sizes = mk_sym_size_assoc(branch->args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                size_t arg_size = pi_size_of(*(PiType*)branch->args.data[i].val);
+                sym_size_bind(branch->args.data[i].key, arg_size, &arg_sizes);
+                arg_total += arg_size;
+            }
+
+            address_stack_grow(env,arg_total);
+            address_bind_label_vars(arg_sizes, env);
+            generate(*branch->body, env, target, links, a, point);
+            address_unbind_label_vars(env);
+
+            LabelEntry lble = label_env_lookup(cell.key, env);
+            if (lble.type == Err)
+                throw_error(point, mv_string("Label not found during codegen!!"));
+            address_stack_shrink(env, lble.stack_offset);
+
+            // Copy the result down the stack
+            generate_stack_move(arg_total, 0, out_size, ass, a, point);
+
+            // ensure the stack is at the sam epoint for the next iteration! 
+            address_stack_shrink(env,out_size);
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
+
+        // The final iteration will have shrunk the stack "too much", so add the
+        // result back in.
+        address_stack_grow(env,out_size);
 
         size_t label_end = get_pos(ass);
 
@@ -1025,14 +1057,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Step 1: make the end of the label jump to the end of the expression.
             {
                 size_t backlink = label_jumps.data[i].val;
-                size_t origin = backlink + 1;
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
                 size_t dest = label_end;
 
                 int64_t amt = dest - origin;
-                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
-                *loc = (int8_t) amt;
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
             }
 
 
@@ -1042,13 +1075,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             for (size_t i = 0; i < arr->len; i++) {
                 size_t backlink = arr->data[i];
-                size_t origin = backlink + 1;
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
 
                 int64_t amt = dest - origin;
-                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
-                *loc = (int8_t) amt;
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
             }
         }
 
@@ -1057,17 +1091,31 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SGoTo: {
         // Generating code for a goto:
-        // 1. Backlink the label
-        //throw_error(point, mv_string("Codegen is not implemented for this syntactic form: 'go-to'"));
+        // 1. Generate args
+        size_t arg_total = 0;
+        for (size_t i = 0; i < syn.go_to.args.len; i++) {
+            Syntax* expr = syn.go_to.args.data[i];
+            arg_total += pi_size_of(*expr->ptype);
+            generate(*expr, env, target, links, a, point);
+        }
+
+        // 2. Backlink the label
         LabelEntry lble = label_env_lookup(syn.go_to.label, env);
         if (lble.type == Ok) {
-            if (lble.stack_offset != 0) {
+            size_t delta = lble.stack_offset - arg_total;
+            generate_stack_move(delta, 0, arg_total, ass, a, point);
+            if (delta != 0) {
                 // jump up stack
                 // TODO handle dynamic variable unbinding (if needed!)
-                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(lble.stack_offset), a, point);
+                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(delta), a, point);
             }
 
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            // Stack sould "pretend" it pushed a value of type syn.ptype and
+            // consumed all args
+            address_stack_shrink(env, arg_total);
+            address_stack_grow(env, pi_size_of(*syn.ptype));
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
         } else {
@@ -1556,6 +1604,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 }
 
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
+
     // first, assert that size_t is divisible by 8 ( we use rax for copies )
     /* if (size % 8 != 0)  { */
     /*     throw_error(point, mv_string("Error in generate_stack_move expected copy size to be divisible by 8")); */

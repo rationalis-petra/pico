@@ -184,12 +184,18 @@ typedef struct {
 } SynInstance;
 
 typedef struct {
+    SymPtrAssoc args;
+    Syntax* body;
+} SynLabelBranch;
+
+typedef struct {
     Syntax* entry;
     SymPtrAssoc terms;
 } SynLabels;
 
 typedef struct {
     Symbol label;
+    PtrArray args;
 } SynGoTo;
 
 typedef struct {

@@ -4,9 +4,12 @@
 #include "pico/syntax/concrete.h"
 #include "pretty/standard_types.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 int cmp_rawtree(RawTree lhs, RawTree rhs) {
     panic(mv_string("cmp_rawtree not implemented!"));
 }
+#pragma GCC diagnostic pop
 
 ARRAY_CMP_IMPL(RawTree, cmp_rawtree, rawtree, RawTree)
 

@@ -91,10 +91,19 @@ void address_pop(AddressEnv* env);
 
 // Bind and unbind enum vars: 
 // Binding assumes that an enum sits on top of the stack (i.e. at stack_head). 
-//   it establishes bindings for the members of the enum, but does not 
+//   it establishes bindings for the members of the enum, but does not adjust the
+//   stack head.
 // Unbind removes these bindings. Like bind, it does not adjust the stack head.
 void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env);
 void address_unbind_enum_vars(AddressEnv* env);
+
+// Bind and unbind label vars: 
+// Binding assumes that an labels' vars sit on top of the stack (i.e. at stack_head). 
+//   it establishes bindings for these variables, but it doesnot adjust the
+//   stack head.
+// Unbind removes these bindings. Like bind, it does not adjust the stack head.
+void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env);
+void address_unbind_label_vars(AddressEnv* env);
 
 // Start/end 
 void address_start_labels(SymbolArray labels, AddressEnv* env);

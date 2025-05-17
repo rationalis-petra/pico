@@ -191,7 +191,7 @@ bool get_fieldname(RawTree* raw, Symbol* fieldname) {
 // Helper function for labels, when we are expecting [label expr] clauses
 // returns true on success, false on failure
 bool get_label(RawTree* raw, Symbol* fieldname) {
-    if (raw->type == RawBranch && raw->branch.nodes.len == 2) {
+    if (raw->type == RawBranch && raw->branch.nodes.len >= 1) {
         raw = &raw->branch.nodes.data[0];
         if (is_symbol(raw)) {
             *fieldname = raw->atom.symbol;
@@ -824,10 +824,35 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             Symbol label;
             RawTree* label_expr = &raw.branch.nodes.data[i];
             if (!get_label(label_expr, &label)) {
-                throw_error(point, mv_string("Each label must be of the form [label expr]"));
+                throw_error(point, mv_string("Each label must be of the form [label [args]? expr]. However, label is incorrect"));
             }
-            Syntax* res = abstract_expr_i(label_expr->branch.nodes.data[1], env, a, point);
-            sym_ptr_bind(label, res, &terms);
+
+            if (label_expr->branch.nodes.len < 2) {
+                throw_error(point, mv_string("Each label branch is expected to have at least 2 terms. However, this only has 1."));
+            }
+            
+            size_t index = 1;
+            SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
+            if (label_expr->branch.nodes.data[index].type == RawBranch
+                && label_expr->branch.nodes.data[index].branch.hint == HSpecial) {
+                Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], env, a, point);
+                if (args_out.type == Err) throw_error(point, args_out.error_message);
+            }
+
+            if (label_expr->branch.nodes.len < 1 + index) {
+                throw_error(point, mv_string("Label branch missing body!"));
+            }
+
+            RawTree* raw_term = (label_expr->branch.nodes.len == index + 1)
+                ? &label_expr->branch.nodes.data[index]
+                : raw_slice(label_expr, index, a);
+            Syntax* res = abstract_expr_i(*raw_term, env, a, point);
+            SynLabelBranch* branch = mem_alloc(sizeof(SynLabelBranch), a);
+            *branch = (SynLabelBranch) {
+                .args = arguments,
+                .body = res,
+            };
+            sym_ptr_bind(label, branch, &terms);
         }
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -840,13 +865,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
         return res;
     }
     case FGoTo: {
-        if (raw.branch.nodes.len != 2) {
-            throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
+        if (raw.branch.nodes.len < 2) {
+            throw_error(point, mv_string("Term former 'go-to' expects at least one argument!"));
         }
         RawTree* label = &raw.branch.nodes.data[1]; 
 
         if (label->type != RawAtom && label->atom.type != ASymbol) {
-            throw_error(point, mv_string("Term former 'go-to' expects one argument!"));
+            throw_error(point, mv_string("Term former 'go-to' expects first argument to be a symbol!"));
+        }
+
+        PtrArray args = mk_ptr_array(raw.branch.nodes.len - 2, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            push_ptr(abstract_expr_i(raw.branch.nodes.data[i], env, a, point), &args);
         }
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -854,6 +884,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .type = SGoTo,
             .ptype = NULL,
             .go_to.label = label->atom.symbol,
+            .go_to.args = args,
         };
         return res;
     }

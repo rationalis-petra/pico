@@ -204,9 +204,11 @@ AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
 LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     if (env->local_envs.len == 0) return (LabelEntry) {.type = Err,};
 
-
     // Search for symbol
     LocalAddrs locals = *(LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    int64_t current_head = 0;
+    if (locals.type == LMonomorphic) { current_head = locals.stack_head; }
+    else { panic(mv_string("label env lookup only supported in monomorphic envs.")); }
 
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
@@ -214,7 +216,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
             // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
                 .type = Ok,
-                .stack_offset = maddr.stack_offset,
+                .stack_offset = maddr.stack_offset - current_head ,
             };
         };
     }
@@ -406,6 +408,57 @@ void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
 }
 
 void address_unbind_enum_vars(AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+    pop_saddr(&locals->vars);
+    for (size_t i = env->local_envs.len; i > 0; i--) {
+        SAddr local = pop_saddr(&locals->vars);
+        if (local.type == SASentinel) {
+            break;
+        }
+    }
+}
+
+void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
+    // Note: We don't adjust the stack head
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    int64_t stack_offset = locals->stack_head;
+
+    switch (locals->type) {
+    case LMonomorphic: {
+        SAddr padding;
+        padding.type = SASentinel;
+
+        // padding.symbol = 0;
+        padding.stack_offset = stack_offset;
+        push_saddr(padding, &locals->vars);
+
+        // Variables are in reverse order!
+        // due to how the stack pushes/pops args.
+
+        for (size_t i = 0; i < vars.len; i++) {
+            SAddr local;
+            local.type = SADirect;
+
+            local.symbol = vars.data[i].key;
+            local.stack_offset = stack_offset;
+            stack_offset += vars.data[i].val;
+
+            push_saddr(local, &locals->vars);
+        }
+
+        padding.stack_offset = stack_offset + REGISTER_SIZE;
+        push_saddr(padding, &locals->vars);
+        break;
+    } 
+    case LPolymorphic: {
+        panic(mv_string("Polymorphic enum bind not implemented"));
+        break;
+    }
+    }
+}
+
+void address_unbind_label_vars(AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
     pop_saddr(&locals->vars);

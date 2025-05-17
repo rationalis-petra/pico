@@ -683,7 +683,17 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SGoTo: {
-        if (label_present(untyped->go_to.label, env)) {
+        PtrArray* args = lookup_label(untyped->go_to.label, env);
+        if (args) {
+            if (args->len != untyped->go_to.args.len) {
+                throw_error(point, mv_string("Error in go-to: wrong number of args!"));
+            }
+
+            for (size_t i = 0; i < args->len; i++) {
+                type_check_i(untyped->go_to.args.data[i], args->data[i], env, gen, a, point);
+            }
+
+            // TODO (FEATURE): another type of defaulted uvar - unit!
             PiType* t = mk_uvar(gen, a);
             untyped->ptype = t;
         } else {
@@ -733,17 +743,50 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SLabels: {
+        // Recall that a lables looks like
+        // (labels (expr)
+        //  [l1 [arg1 arg2] body1]
+        //  [l2 body2]
+        //  [l3 [arg1 arg2 arg3] body3])
+        //
+        // The labels (along with their argument types) can be jumped to from
+        // within the expr and within any body. Therefore, we must bind all
+        // label symbols with their argument types into the environment before
+        // checking any sub expression. This is what ethe below loop does.
         PiType* ty = mk_uvar(gen, a);
         untyped->ptype = ty;
-        SymbolArray labels = mk_symbol_array(untyped->labels.terms.len, a);
-        for (size_t i = 0;i < untyped->labels.terms.len; i++) {
-            push_symbol(untyped->labels.terms.data[i].key, &labels);
+        SymPtrAssoc labels = mk_sym_ptr_assoc(untyped->labels.terms.len, a);
+        for (size_t i = 0; i < untyped->labels.terms.len; i++) {
+            SynLabelBranch* branch = untyped->labels.terms.data[i].val;
+            PtrArray* arr = mem_alloc(sizeof(PtrArray*), a);
+            *arr = mk_ptr_array(branch->args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                SymPtrACell arg = branch->args.data[i];
+                PiType* aty;
+                if (arg.val) {
+                    aty = eval_type(arg.val, env, a, gen, point);
+                } else  {
+                    aty = mk_uvar(gen, a);
+                    branch->args.data[i].val = aty;
+                }
+                push_ptr(aty, arr);
+            }
+            sym_ptr_bind(untyped->labels.terms.data[i].key, arr, &labels);
         }
-
         add_labels(labels, env);
+
+        // Now that the environment is setup, we typecheck the expression
         type_check_i(untyped->labels.entry, ty, env, gen, a, point);
+
+        // Then typecheck all label bodies, with arguments appropriately bound in the environment
         for (size_t i = 0 ; i < untyped->labels.terms.len; i++) {
-            type_check_i(untyped->labels.terms.data[i].val, ty, env, gen, a, point);
+            SynLabelBranch* branch = untyped->labels.terms.data[i].val;
+            for (size_t i = 0; i < branch->args.len; i++) {
+                SymPtrACell arg = branch->args.data[i];
+                type_var(arg.key, arg.val, env);
+            }
+            type_check_i(branch->body, ty, env, gen, a, point);
+            pop_types(env, branch->args.len);
         }
         pop_labels(env, labels.len);
         
@@ -1337,8 +1380,16 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         instantiate_implicits(syn->if_expr.false_branch, env, a, point);
         break;
     case SLabels:
-        panic(mv_string("instantiate implicits not implemented for labels"));
+        instantiate_implicits(syn->labels.entry, env, a, point);
+        for (size_t i = 0; i < syn->labels.terms.len; i++) {
+            SynLabelBranch* branch = syn->labels.terms.data[i].val;
+            instantiate_implicits(branch->body, env, a, point);
+        }
+        break;
     case SGoTo:
+        for (size_t i = 0; i < syn->go_to.args.len; i++) {
+            instantiate_implicits(syn->go_to.args.data[i], env, a, point);
+        }
         break;
     case SSequence:
         for (size_t i = 0; i < syn->sequence.elements.len; i++) {
@@ -1548,10 +1599,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
     case SLabels:
         squash_types(typed->labels.entry, a, point);
         for (size_t i = 0; i < typed->labels.terms.len; i++) {
-            squash_types(typed->labels.terms.data[i].val, a, point);
+            SynLabelBranch* branch = typed->labels.terms.data[i].val;
+            squash_types(branch->body, a, point);
         }
         break;
     case SGoTo:
+        for (size_t i = 0; i < typed->go_to.args.len; i++) {
+            squash_types(typed->go_to.args.data[i], a, point);
+        }
         break;
     case SWithReset:
         squash_types(typed->with_reset.expr, a, point);

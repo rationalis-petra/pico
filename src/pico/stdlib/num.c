@@ -45,7 +45,10 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
     build_binary_op (ass, Cmp, reg(RAX, sz), reg(RDX, sz), a, point);
+    // TODO (BUG): most oops onyl work on sz_8 - the fact that the assembler
+    // didn't complain is an issue!!
     build_unary_op (ass, op, reg(RAX, sz_64), a, point);
+    build_binary_op (ass, And, reg(RAX, sz_64), imm32(0xff), a, point);
     build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
     build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op (ass, Ret, a, point);
