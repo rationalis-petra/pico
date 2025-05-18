@@ -11,13 +11,10 @@
 
 
 // The 'actual' parser funciton
-ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_main(IStream* is, Allocator* a);
 
 ParseResult parse_rawtree(IStream* is, Allocator* a) {
-    SourcePos start_state;
-    start_state.col = 0;
-    start_state.row = 0;
-    return parse_main(is, &start_state, a);
+    return parse_main(is, a);
 }
 
 // The three main parsing functions, which parse:
@@ -25,31 +22,31 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected);
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a);
-ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_char(IStream* is, SourcePos* parse_state);
+ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected);
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a);
+ParseResult parse_atom(IStream* is, Allocator* a);
+ParseResult parse_number(IStream* is, Allocator* a);
+ParseResult parse_prefix(char prefix, IStream* is, Allocator* a);
+ParseResult parse_string(IStream* is, Allocator* a);
+ParseResult parse_char(IStream* is);
 
 // Helper functions
-StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state);
-StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
+StreamResult consume_until(uint32_t stop, IStream* is);
+StreamResult consume_whitespace(IStream* is);
 bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
-ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
-    return parse_expr(is, parse_state, a, '0');
+ParseResult parse_main(IStream* is, Allocator* a) {
+    return parse_expr(is, a, '0');
 }
 
-ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected) {
+ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
     // default if we never enter loop body 
     ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
 
-    consume_whitespace(is, parse_state);
+    consume_whitespace(is);
     StreamResult result;
     RawTreeArray terms = mk_rawtree_array(8, a);
     bool running = true;
@@ -58,17 +55,17 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         switch (peek(is, &point)) {
         case StreamSuccess:
             if (point == '(') {
-                out = parse_list(is, parse_state, ')', HExpression, a);
+                out = parse_list(is, ')', HExpression, a);
             }
             else if (point == '[') {
-                out = parse_list(is, parse_state, ']', HSpecial, a);
+                out = parse_list(is, ']', HSpecial, a);
             }
             else if (point == '{') {
-                out = parse_list(is, parse_state, '}', HImplicit, a);
+                out = parse_list(is, '}', HImplicit, a);
             }
             else if (point == ':') {
                 if (terms.len == 0) {
-                    out = parse_prefix(':', is, parse_state, a);
+                    out = parse_prefix(':', is, a);
                 } else {
                     next(is, &point);
 
@@ -84,7 +81,7 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
             }
             else if (point == '.') {
                 if (terms.len == 0) {
-                    out = parse_prefix('.', is, parse_state, a);
+                    out = parse_prefix('.', is, a);
                 } else {
                     next(is, &point);
 
@@ -99,13 +96,13 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 }
             }
             else if (point == '"') {
-                out = parse_string(is, parse_state, a);
+                out = parse_string(is, a);
             }
             else if (point == '#') {
-                out = parse_char(is, parse_state);
+                out = parse_char(is);
             }
             else if (is_numchar(point) || point == '-') {
-                out = parse_number(is, parse_state, a);
+                out = parse_number(is, a);
             }
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -116,7 +113,7 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 break;
             }
             else if (is_symchar(point)){
-                out = parse_atom(is, parse_state, a);
+                out = parse_atom(is, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
                 out.type = ParseNone;
@@ -126,9 +123,12 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 // We couldn't do a parse!
                 next(is, &point);
 
-                out.type = ParseFail;
-                out.data.range.start = *parse_state;
-                out.data.range.end = *parse_state;
+                out = (ParseResult) {
+                    .type = ParseFail,
+                    .data.error.range.start = bytecount(is),
+                    .data.error.range.end = bytecount(is),
+                    .data.error.message = mv_string("Unexpected character: "),
+                };
                 running = false;
                 break;
             }
@@ -143,8 +143,9 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         default: {
             out = (ParseResult) {
                 .type = ParseFail,
-                .data.range.start = *parse_state,
-                .data.range.end = *parse_state,
+                .data.error.message = mv_string("Stream result was in unexpected state."),
+                .data.error.range.start = bytecount(is),
+                .data.error.range.end = bytecount(is),
             };
             running = false;
         } break;
@@ -167,8 +168,9 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .data.error.message = mv_string("Inappropriate number of terms for infix-operator: "),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
           };
           return out;
         }
@@ -197,21 +199,20 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
     return out;
 }
 
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a) {
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a) {
     ParseResult res;
     res.type = ParseSuccess;
-    res.data.range.start = *parse_state;
     ParseResult out;
     RawTreeArray nodes = mk_rawtree_array(8, a);
     uint32_t codepoint;
 
     // Assume '(' is next character
     next(is, &codepoint);
-    consume_whitespace(is, parse_state);
+    consume_whitespace(is);
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_expr(is, parse_state, a, terminator);
+        res = parse_expr(is, a, terminator);
 
         if (res.type == ParseFail) {
             out = res;
@@ -219,13 +220,16 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
         } else {
             push_rawtree(res.data.result, &nodes);
         }
-        consume_whitespace(is, parse_state);
+        consume_whitespace(is);
     }
 
     if (sres != StreamSuccess) {
-        out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
+        out = (ParseResult) {
+            .type = ParseFail,
+            .data.error.message = mv_string("Input stream failure"),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
+        };
     } else if (res.type == ParseFail) {
         out = res;
     } else {
@@ -241,7 +245,7 @@ ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator,
     return out;
 }
 
-ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_atom(IStream* is, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as num, + or foo. Strings separated by '.'
      * and ':' are also considered by the parser as 'atoms' as these elements are not separated
@@ -301,8 +305,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .data.error.message = mv_string("Stream failure."),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
         };
     } else {
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
@@ -329,7 +334,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     return out;
 }
 
-ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_number(IStream* is, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -377,8 +382,9 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .data.error.message = mv_string("Stream failure"),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
         };
     }
 
@@ -424,7 +430,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     }
 }
 
-ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     ParseResult out;
@@ -439,8 +445,9 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
 
     if (result != StreamSuccess) {
         out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
+        out.data.error.message = mv_string("Stream failed");
+        out.data.error.range.start = bytecount(is);
+        out.data.error.range.end = bytecount(is);
     } else if (arr.len == 0) {
         char cstr[2] = {prefix, '\0'};
         String str = mv_string(cstr);
@@ -484,7 +491,7 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
     return out;
 }
 
-ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_string(IStream* is, Allocator* a) {
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
@@ -498,8 +505,9 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .data.error.message = mv_string("Stream failed"),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
         };
     }
 
@@ -512,7 +520,7 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, SourcePos* parse_state) {
+ParseResult parse_char(IStream* is) {
     StreamResult result;
     uint32_t codepoint;
     next(is, &codepoint); // consume token #)
@@ -521,8 +529,9 @@ ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .data.error.message = mv_string("Stream failed"),
+            .data.error.range.start = bytecount(is),
+            .data.error.range.end = bytecount(is),
         };
     }
 
@@ -535,7 +544,7 @@ ParseResult parse_char(IStream* is, SourcePos* parse_state) {
     };
 }
 
-StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
+StreamResult consume_until(uint32_t stop, IStream* is) {
     uint32_t codepoint;
     StreamResult result;
 
@@ -545,7 +554,6 @@ StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (codepoint != stop) {
             // TODO: Check if newline!
-            parse_state->col++;
             result = next(is, &codepoint);
         }
         else {
@@ -555,16 +563,15 @@ StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
     return result;
 }
 
-StreamResult consume_whitespace(IStream* is, SourcePos* parse_state) {
+StreamResult consume_whitespace(IStream* is) {
     uint32_t codepoint;
     StreamResult result;
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (is_whitespace(codepoint) ) {
             // TODO: Check if newline!
-            parse_state->col++;
             result = next(is, &codepoint);
         } else if (codepoint == ';') {
-            result = consume_until('\n', is, parse_state);
+            result = consume_until('\n', is);
         } else {
             break;
         }

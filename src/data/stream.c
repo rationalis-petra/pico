@@ -11,6 +11,7 @@
 typedef enum {
     IStreamFile,
     IStreamString,
+    IStreamCapturing,
 } IStreamType;
 
 typedef struct {
@@ -34,13 +35,23 @@ typedef struct {
     StreamResult peek_result;
 } StringIStream;
 
+typedef struct  {
+    IStream* inner;
+    String buffer;
+} CapturingIStream;
+
 struct IStream {
     IStreamType type;
+    size_t bytecount;
     union {
         FileIStream file_istream;
         StringIStream string_istream;
+        CapturingIStream capturing_istream;
     } impl;
 };
+
+IStream* mv_capturing_istream(IStream* stream, Allocator* a);
+String* get_captured_buffer(String contents, Allocator* a);
 
 // Constructors
 IStream* get_stdin_stream(void) {
@@ -49,6 +60,7 @@ IStream* get_stdin_stream(void) {
 
     if (!initialized) {
         cin.type = IStreamFile;
+        cin.bytecount = 0;
         cin.impl.file_istream.peeked = false;
         cin.impl.file_istream.file_ptr = stdin;
         cin.impl.file_istream.owns = false;
@@ -79,6 +91,7 @@ IStream* mv_string_istream(String string, Allocator* a) {
 
     *istring = (IStream) {
      .type = IStreamString,
+     .bytecount = 0,
      .impl.string_istream.peeked = false,
      .impl.string_istream.string = string,
      .impl.string_istream.index = 0,
@@ -93,6 +106,7 @@ IStream* mk_string_istream(String string, Allocator* a) {
 
     *istring = (IStream) {
      .type = IStreamString,
+     .bytecount = 0,
      .impl.string_istream.peeked = false,
      .impl.string_istream.string = copy_string(string, a),
      .impl.string_istream.index = 0,
@@ -115,6 +129,12 @@ void delete_istream(IStream* stream, Allocator* a) {
             delete_string(stream->impl.string_istream.string, a);
         }
         mem_free(stream, a);
+        break;
+    }
+    case IStreamCapturing: {
+        delete_istream(stream->impl.capturing_istream.inner, a);
+        mem_free(stream, a);
+        break;
     }
     }
 }
@@ -150,6 +170,9 @@ StreamResult peek(IStream* stream, uint32_t* out) {
             return result;
         }
     } break;
+    case IStreamCapturing: {
+        return peek(stream->impl.capturing_istream.inner, out);
+    }
     default:
         panic(mv_string("Invalid istream provided to next!"));
     }
@@ -168,6 +191,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
             // Assume utf-8 encoding (may be wrong!!)
             uint8_t head = (uint8_t)next_int;
             uint8_t num_bytes = num_bytes_utf8(head);
+            stream->bytecount += num_bytes;
             uint8_t in_bytes[4];
             in_bytes[0] = head;
             for (uint8_t i = 1; i < num_bytes; i++) {
@@ -221,9 +245,21 @@ StreamResult next(IStream* stream, uint32_t* out) {
         }
         break;
     }
+    case IStreamCapturing: {
+    }
     default:
         panic(mv_string("Invalid istream provided to next!"));
     }
+}
+
+size_t bytecount(IStream *stream) {
+    return stream->bytecount;
+}
+void reset_bytecount(IStream *stream) {
+    if (stream->type == IStreamCapturing) {
+        reset_bytecount(stream->impl.capturing_istream.inner);
+    }
+    stream->bytecount = 0;
 }
 
 //string get_n(istream* stream, size_t nchars);

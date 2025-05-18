@@ -4,26 +4,21 @@
 #include "data/stream.h"
 #include "pico/syntax/concrete.h"
 
-typedef struct SourcePos {
-    size_t row;
-    size_t col;
-} SourcePos;
-
-typedef struct SourceRange {
-    SourcePos start;
-    SourcePos end;
-} SourceRange;
-
 typedef enum ParseResult_t {
     ParseSuccess, 
     ParseNone, 
     ParseFail
 } ParseResult_t;
 
+typedef struct {
+    String message;
+    Range range;
+} ParseError;
+
 typedef struct ParseResult {
     ParseResult_t type;
     union {
-        SourceRange range;
+        ParseError error;
         RawTree result;
     } data;
 } ParseResult;

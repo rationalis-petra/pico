@@ -52,9 +52,14 @@ typedef enum : uint64_t {
     RawBranch,
 } RawTree_t;
 
+typedef struct {
+    size_t start;
+    size_t end;
+} Range;
 
 typedef struct RawTree {
     RawTree_t type;
+    Range range;
     union {
         Atom atom;
         Branch branch;

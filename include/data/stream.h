@@ -22,12 +22,21 @@ typedef struct IOStream {
     OStream* ostream;
 } IOStream;
 
-
 // Constructors
 IStream* get_stdin_stream();
 IStream* open_file_istream(String filename, Allocator* a);
+
+// mv/mk string istream - creates an istream which reads the contents of a string.
+// The end of the string produces an EOF, and the mv_ constructor will take ownership 
+// of the string.
 IStream* mk_string_istream(String contents, Allocator* a);
 IStream* mv_string_istream(String contents, Allocator* a);
+
+// A capturing istream - an istream which stores process bytes into a buffer.
+// This buffer can be retrieved with get_captured_bufffer. Calling get_captured_buffer
+// on an istream that is non-capturing will return NULL.
+IStream* mv_capturing_istream(IStream* stream, Allocator* a);
+String* get_captured_buffer(String contents, Allocator* a);
 
 OStream* get_stdout_stream();
 OStream* open_file_ostream(String filename, Allocator* a);
@@ -40,6 +49,8 @@ void delete_ostream(OStream* stream, Allocator* a);
 // istream methods
 StreamResult peek(IStream* stream, uint32_t* out);
 StreamResult next(IStream* stream, uint32_t* out);
+size_t bytecount(IStream* stream);
+void reset_bytecount(IStream* stream);
 
 // ostream methods
 void write_impl(int char_literal, OStream* stream);
