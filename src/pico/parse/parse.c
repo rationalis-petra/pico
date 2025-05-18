@@ -67,12 +67,15 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 if (terms.len == 0) {
                     out = parse_prefix(':', is, a);
                 } else {
+                    size_t start = bytecount(is);
                     next(is, &point);
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
                         .result = (RawTree) {
                             .type = RawAtom,
+                            .range.start = start,
+                            .range.end = bytecount(is),
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(":")),
                         }
@@ -83,12 +86,15 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 if (terms.len == 0) {
                     out = parse_prefix('.', is, a);
                 } else {
+                    size_t start = bytecount(is);
                     next(is, &point);
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
                         .result = (RawTree) {
                             .type = RawAtom,
+                            .range.start = start,
+                            .range.end = bytecount(is),
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(".")),
                         }
@@ -198,6 +204,8 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
             current = (RawTree) {
                 .type = RawBranch,
+                .range.start = terms.data[0].range.start,
+                .range.end = current.range.end,
                 .branch.hint = HNone,
                 .branch.nodes = children,
             };
@@ -219,6 +227,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     uint32_t codepoint;
 
     // Assume '(' is next character
+    size_t start = bytecount(is);
     next(is, &codepoint);
     consume_whitespace(is);
     StreamResult sres;
@@ -248,6 +257,8 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
         out.type = ParseSuccess;
         out.result = (RawTree) {
             .type = RawBranch,
+            .range.start = start,
+            .range.end = bytecount(is),
             .branch.hint = hint,
             .branch.nodes = nodes,
         };
@@ -287,6 +298,8 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
+                .range.start = start,
+                .range.end = bytecount(is),
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -295,6 +308,8 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
 
             RawTree op = (RawTree) {
                 .type = RawAtom,
+                .range.start = start,
+                .range.end = bytecount(is),
                 .atom.type = ASymbol,
                 .atom.symbol = codepoint == '.'
                   ? string_to_symbol(mv_string("."))
@@ -305,6 +320,8 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
             String str = string_from_UTF_32(arr, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
+                .range.start = start,
+                .range.end = bytecount(is),
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -451,6 +468,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
     ParseResult out;
     U32Array arr = mk_u32_array(10, a);
 
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
@@ -479,6 +497,8 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
         Symbol sym_result = string_to_symbol(str);
         RawTree proj = (RawTree) {
             .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
             .atom.type = ASymbol,
             .atom.symbol = sym_result,
         };
@@ -487,6 +507,8 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
         sym_result = string_to_symbol(str);
         RawTree field = (RawTree) {
             .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
             .atom.type = ASymbol,
             .atom.symbol = sym_result,
         };
@@ -498,6 +520,8 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
         out.type = ParseSuccess;
         out.result = (RawTree) {
             .type = RawBranch,
+            .range.start = start,
+            .range.end = bytecount(is),
             .branch.hint = HNone,
             .branch.nodes = nodes,
         };
