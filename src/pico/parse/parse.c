@@ -121,14 +121,21 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 break;
             } else {
                 // We couldn't do a parse!
+                size_t range_start = bytecount(is);
                 next(is, &point);
 
-                String char_string = string_from_codepoint(point, a);
-                String message = string_cat(mv_string("Unexpected character: "), char_string, a);
+                String actual_string = string_from_codepoint(point, a);
+                String expected_string = string_from_codepoint(expected, a);
+                String message = string_ncat(a, 5,
+                                             mv_string("Unexpected character: '"),
+                                             actual_string,
+                                             mv_string("', expected: '"),
+                                             expected_string,
+                                             mv_string("'"));
 
                 out = (ParseResult) {
                     .type = ParseFail,
-                    .data.error.range.start = bytecount(is),
+                    .data.error.range.start = range_start,
                     .data.error.range.end = bytecount(is),
                     .data.error.message = message,
                 };

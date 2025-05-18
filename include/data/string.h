@@ -24,4 +24,6 @@ int string_cmp(const String lhs, const String rhs);
 String string_cat(const String lhs, const String rhs, Allocator* a);
 String string_ncat(Allocator* a, size_t n, ...);
 
+String substring(size_t start, size_t end, const String source, Allocator* a);
+
 #endif

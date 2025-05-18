@@ -116,3 +116,11 @@ String string_ncat(Allocator* a, size_t n, ...) {
     va_end(args);
     return out;
 }
+
+String substring(size_t start, size_t end, const String source, Allocator *a) {
+    String out = (String) {.memsize = (end - start) + 1};
+    out.bytes = mem_alloc(out.memsize, a);
+    memcpy(out.bytes, source.bytes + start, out.memsize - 1);
+    out.bytes[out.memsize - 1] = '\0';
+    return out;
+}

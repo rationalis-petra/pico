@@ -36,7 +36,7 @@ IStream* mv_string_istream(String contents, Allocator* a);
 // This buffer can be retrieved with get_captured_bufffer. Calling get_captured_buffer
 // on an istream that is non-capturing will return NULL.
 IStream* mv_capturing_istream(IStream* stream, Allocator* a);
-String* get_captured_buffer(String contents, Allocator* a);
+String* get_captured_buffer(IStream* contents);
 
 OStream* get_stdout_stream();
 OStream* open_file_ostream(String filename, Allocator* a);

@@ -3,6 +3,7 @@
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
+#include "platform/io/terminal.h"
 
 #include "data/string.h"
 #include "data/stream.h"
@@ -29,11 +30,42 @@ typedef struct {
     bool interactive;
 } IterOpts;
 
+void display_error(IStream *is, OStream* cout, String error, Range range, Allocator* a) {
+    String* buffer = get_captured_buffer(is);
+    if (buffer) {
+        String s1 = substring(0, range.start, *buffer, a);
+        // TODO (BUG) '+1' won't work with UTF-8!
+        String err = substring(range.start, range.end, *buffer, a);
+        String s2 = substring(range.end, buffer->memsize, *buffer, a);;
+
+        write_string(s1, cout);
+
+        start_coloured_text(colour(200, 0, 0));
+        write_string(err, cout);
+        end_coloured_text();
+
+        write_string(s2, cout);
+
+        delete_string(s1, a);
+        delete_string(err, a);
+        delete_string(s2, a);
+
+        write_string(mv_string("\n"), cout);
+        write_string(error, cout);
+    } else {
+        write_string(error, cout);
+    }
+    write_string(mv_string("\n"), cout);
+}
+
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
+
+    cin = mv_capturing_istream(cin, &arena);
+    reset_bytecount(cin);
 
     Target gen_target = {
         .target = mk_assembler(exec),
@@ -64,8 +96,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         goto on_exit;
     }
     if (res.type == ParseFail) {
-        write_string(res.data.error.message, cout);
-        write_string(mv_string("\n"), cout);
+        display_error(cin, cout, res.data.error.message, res.data.error.range, a);
         release_arena_allocator(arena);
         return true;
     }
@@ -167,6 +198,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 }
 
 int main(int argc, char** argv) {
+
     // Setup
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
@@ -177,6 +209,7 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+    init_terminal(stdalloc);
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);
