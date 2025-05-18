@@ -71,7 +71,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
-                        .data.result = (RawTree) {
+                        .result = (RawTree) {
                             .type = RawAtom,
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(":")),
@@ -87,7 +87,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
-                        .data.result = (RawTree) {
+                        .result = (RawTree) {
                             .type = RawAtom,
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(".")),
@@ -135,9 +135,9 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
                 out = (ParseResult) {
                     .type = ParseFail,
-                    .data.error.range.start = range_start,
-                    .data.error.range.end = bytecount(is),
-                    .data.error.message = message,
+                    .error.range.start = range_start,
+                    .error.range.end = bytecount(is),
+                    .error.message = message,
                 };
                 running = false;
                 break;
@@ -153,16 +153,16 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         default: {
             out = (ParseResult) {
                 .type = ParseFail,
-                .data.error.message = mv_string("Stream result was in unexpected state."),
-                .data.error.range.start = bytecount(is),
-                .data.error.range.end = bytecount(is),
+                .error.message = mv_string("Stream result was in unexpected state."),
+                .error.range.start = bytecount(is),
+                .error.range.end = bytecount(is),
             };
             running = false;
         } break;
         }
 
         if (out.type == ParseSuccess) {
-            push_rawtree(out.data.result, &terms);
+            push_rawtree(out.result, &terms);
         } else if (out.type == ParseFail) {
             running = false;
         }
@@ -173,16 +173,16 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         out.type = ParseNone;
     } else if (out.type == ParseNone && terms.len == 1) {
         out.type = ParseSuccess;
-        out.data.result = terms.data[0];
+        out.result = terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
         // Check that there is an appropriate (odd) number of terms for infix operator
         // unrolling to function
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Inappropriate number of terms for infix-operator: "),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Inappropriate number of terms for infix-operator: "),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
           };
           return out;
         }
@@ -205,7 +205,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
         out = (ParseResult) {
             .type = ParseSuccess,
-            .data.result = current,
+            .result = current,
         };
     }
     return out;
@@ -230,7 +230,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
             out = res;
             break;
         } else {
-            push_rawtree(res.data.result, &nodes);
+            push_rawtree(res.result, &nodes);
         }
         consume_whitespace(is);
     }
@@ -238,15 +238,15 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     if (sres != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Input stream failure"),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Input stream failure"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     } else if (res.type == ParseFail) {
         out = res;
     } else {
         out.type = ParseSuccess;
-        out.data.result = (RawTree) {
+        out.result = (RawTree) {
             .type = RawBranch,
             .branch.hint = hint,
             .branch.nodes = nodes,
@@ -271,6 +271,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
     U32Array arr = mk_u32_array(16, a);
 
     RawTreeArray terms = mk_rawtree_array(8, a);
+    size_t start = bytecount(is);
 
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
@@ -317,9 +318,9 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
     if (result != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Stream failure."),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Stream failure."),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     } else {
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
@@ -333,6 +334,8 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
 
             current = (RawTree) {
                 .type = RawBranch,
+                .range.start = start,
+                .range.end = bytecount(is),
                 .branch.hint = HNone,
                 .branch.nodes = children,
             };
@@ -340,7 +343,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
 
         out = (ParseResult) {
             .type = ParseSuccess,
-            .data.result = current,
+            .result = current,
         };
     }
     return out;
@@ -384,9 +387,9 @@ ParseResult parse_number(IStream* is, Allocator* a) {
     if (just_negation) {
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = ASymbol,
-            .data.result.atom.symbol = string_to_symbol(mv_string("-")),
+            .result.type = RawAtom,
+            .result.atom.type = ASymbol,
+            .result.atom.symbol = string_to_symbol(mv_string("-")),
         };
     }
 
@@ -394,9 +397,9 @@ ParseResult parse_number(IStream* is, Allocator* a) {
     if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Stream failure"),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Stream failure"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
@@ -420,9 +423,9 @@ ParseResult parse_number(IStream* is, Allocator* a) {
 
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = AFloating,
-            .data.result.atom.float_64 = dlhs + drhs,
+            .result.type = RawAtom,
+            .result.atom.type = AFloating,
+            .result.atom.float_64 = dlhs + drhs,
         };
     } else {
         int64_t int_result = 0;
@@ -435,9 +438,9 @@ ParseResult parse_number(IStream* is, Allocator* a) {
 
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = AIntegral,
-            .data.result.atom.int_64 = int_result,
+            .result.type = RawAtom,
+            .result.atom.type = AIntegral,
+            .result.atom.int_64 = int_result,
         };
     }
 }
@@ -457,18 +460,18 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
 
     if (result != StreamSuccess) {
         out.type = ParseFail;
-        out.data.error.message = mv_string("Stream failed");
-        out.data.error.range.start = bytecount(is);
-        out.data.error.range.end = bytecount(is);
+        out.error.message = mv_string("Stream failed");
+        out.error.range.start = bytecount(is);
+        out.error.range.end = bytecount(is);
     } else if (arr.len == 0) {
         char cstr[2] = {prefix, '\0'};
         String str = mv_string(cstr);
         Symbol sym_result = string_to_symbol(str);
 
         out.type = ParseSuccess;
-        out.data.result.type = RawAtom;
-        out.data.result.atom.type = ASymbol;
-        out.data.result.atom.symbol = sym_result;
+        out.result.type = RawAtom;
+        out.result.atom.type = ASymbol;
+        out.result.atom.symbol = sym_result;
 
     } else {
         char cstr[2] = {prefix, '\0'};
@@ -493,7 +496,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
         push_rawtree(field, &nodes);
 
         out.type = ParseSuccess;
-        out.data.result = (RawTree) {
+        out.result = (RawTree) {
             .type = RawBranch,
             .branch.hint = HNone,
             .branch.nodes = nodes,
@@ -517,18 +520,18 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Stream failed"),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Stream failed"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
     next(is, &codepoint); // consume token (")
     return (ParseResult) {
         .type = ParseSuccess,
-        .data.result.type = RawAtom,
-        .data.result.atom.type = AString,
-        .data.result.atom.string = string_from_UTF_32(arr, a),
+        .result.type = RawAtom,
+        .result.atom.type = AString,
+        .result.atom.string = string_from_UTF_32(arr, a),
     };
 }
 
@@ -541,18 +544,18 @@ ParseResult parse_char(IStream* is) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.error.message = mv_string("Stream failed"),
-            .data.error.range.start = bytecount(is),
-            .data.error.range.end = bytecount(is),
+            .error.message = mv_string("Stream failed"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
     //next(is, &codepoint); // consume token (")
     return (ParseResult) {
         .type = ParseSuccess,
-        .data.result.type = RawAtom,
-        .data.result.atom.type = AIntegral,
-        .data.result.atom.int_64 = codepoint,
+        .result.type = RawAtom,
+        .result.atom.type = AIntegral,
+        .result.atom.int_64 = codepoint,
     };
 }
 

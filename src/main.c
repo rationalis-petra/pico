@@ -30,33 +30,6 @@ typedef struct {
     bool interactive;
 } IterOpts;
 
-void display_error(IStream *is, OStream* cout, String error, Range range, Allocator* a) {
-    String* buffer = get_captured_buffer(is);
-    if (buffer) {
-        String s1 = substring(0, range.start, *buffer, a);
-        // TODO (BUG) '+1' won't work with UTF-8!
-        String err = substring(range.start, range.end, *buffer, a);
-        String s2 = substring(range.end, buffer->memsize, *buffer, a);;
-
-        write_string(s1, cout);
-
-        start_coloured_text(colour(200, 0, 0));
-        write_string(err, cout);
-        end_coloured_text();
-
-        write_string(s2, cout);
-
-        delete_string(s1, a);
-        delete_string(err, a);
-        delete_string(s2, a);
-
-        write_string(mv_string("\n"), cout);
-        write_string(error, cout);
-    } else {
-        write_string(error, cout);
-    }
-    write_string(mv_string("\n"), cout);
-}
 
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
@@ -83,6 +56,9 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
     if (opts.interactive) {
         String* name = get_name(module);
         if (name) write_string(*name, cout);
@@ -96,7 +72,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         goto on_exit;
     }
     if (res.type == ParseFail) {
-        display_error(cin, cout, res.data.error.message, res.data.error.range, a);
+        display_error(res.error, cin, cout, a);
         release_arena_allocator(arena);
         return true;
     }
@@ -109,7 +85,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     Document* doc;
     if (opts.debug_print) {
-        doc = pretty_rawtree(res.data.result, &arena);
+        doc = pretty_rawtree(res.result, &arena);
         write_string(mv_string("Pretty printing raw syntax\n"), cout);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
@@ -119,7 +95,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.data.result, env, &arena, &point);
+    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
@@ -177,6 +153,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         write_string(mv_string("\n"), cout);
     }
 
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    return true;
+
+ on_pi_error:
+    display_error(pi_point.error, cin, cout, &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);

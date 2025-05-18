@@ -14,7 +14,7 @@
 
 #include "pico/stdlib/helpers.h"
 
-void compile_toplevel(const char *string, Module *module, ErrorPoint *final_point, Allocator *a) {
+void compile_toplevel(const char *string, Module *module, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -39,6 +39,9 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
     ParseResult res = parse_rawtree(sin, &arena);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
@@ -55,7 +58,7 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.data.result, env, &arena, &point);
+    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     type_check(&abs, env, &arena, &point);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
     pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
@@ -64,6 +67,12 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
     return;
+
+ on_pi_error:
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    throw_pi_error(final_pi_point, pi_point.error);
 
  on_error:
     delete_assembler(gen_target.target);

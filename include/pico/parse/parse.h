@@ -2,6 +2,7 @@
 #define __PICO_PARSE_PARSE_H
 
 #include "data/stream.h"
+#include "pico/data/error.h"
 #include "pico/syntax/concrete.h"
 
 typedef enum ParseResult_t {
@@ -10,17 +11,12 @@ typedef enum ParseResult_t {
     ParseFail
 } ParseResult_t;
 
-typedef struct {
-    String message;
-    Range range;
-} ParseError;
-
 typedef struct ParseResult {
     ParseResult_t type;
     union {
-        ParseError error;
+        PicoError error;
         RawTree result;
-    } data;
+    };
 } ParseResult;
 
 ParseResult parse_rawtree(IStream* is, Allocator* a);

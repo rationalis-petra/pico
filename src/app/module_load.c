@@ -29,14 +29,16 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
     // Step 1: Parse Module header, get the result (ph_res)
     // TODO (BUG) header & module (below) will be uninitialized if parse fails.
     ParseResult ph_res = parse_rawtree(in, &arena);
     if (ph_res.type == ParseNone) goto on_exit;
 
     if (ph_res.type == ParseFail) {
-        write_string(ph_res.data.error.message, serr);
-        write_string(mv_string("\n"), serr);
+        display_error(ph_res.error, in, serr, a);
         release_arena_allocator(arena);
         return;
     }
@@ -44,7 +46,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     // Step 2: check / abstract module header
     // • module_header header = parse_module_header
     // Note: volatile is to protect from clobbering by longjmp
-    header = abstract_header(ph_res.data.result, &arena, &point);
+    header = abstract_header(ph_res.result, &arena, &pi_point);
 
     // Step 3:
     //  • Create new module
@@ -67,8 +69,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            write_string(res.data.error.message, serr);
-            write_string(mv_string("\n"), serr);
+            display_error(ph_res.error, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
@@ -82,7 +83,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.data.result, env, &arena, &point);
+        TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -113,9 +114,16 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     release_executable_allocator(exec);
     return;
 
+ on_pi_error:
+    display_error(ph_res.error, in, serr, a);
+    goto on_error_generic;
+
  on_error:
     write_string(point.error_message, serr);
     write_string(mv_string("\n"), serr);
+    goto on_error_generic;
+    
+ on_error_generic:
     if (module) delete_module(module);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
@@ -136,6 +144,9 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
     bool next_iter = true;
     while (next_iter) {
         // Prep the arena for another round
@@ -150,8 +161,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            write_string(res.data.error.message, serr);
-            write_string(mv_string("\n"), serr);
+            display_error(res.error, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
@@ -165,7 +175,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.data.result, env, &arena, &point);
+        TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -197,9 +207,16 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     release_executable_allocator(exec);
     return;
 
+ on_pi_error:
+    display_error(pi_point.error, in, serr, &arena);
+    goto on_error_generic;
+
  on_error:
     write_string(point.error_message, serr);
     write_string(mv_string("\n"), serr);
+ goto on_error_generic;
+
+ on_error_generic:
     delete_assembler(target.target);
     delete_assembler(target.code_aux);
     sdelete_u8_array(*target.data_aux);
