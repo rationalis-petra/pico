@@ -38,7 +38,7 @@ bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
 ParseResult parse_main(IStream* is, Allocator* a) {
-    return parse_expr(is, a, '0');
+    return parse_expr(is, a, '\0');
 }
 
 ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
@@ -123,11 +123,14 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 // We couldn't do a parse!
                 next(is, &point);
 
+                String char_string = string_from_codepoint(point, a);
+                String message = string_cat(mv_string("Unexpected character: "), char_string, a);
+
                 out = (ParseResult) {
                     .type = ParseFail,
                     .data.error.range.start = bytecount(is),
                     .data.error.range.end = bytecount(is),
-                    .data.error.message = mv_string("Unexpected character: "),
+                    .data.error.message = message,
                 };
                 running = false;
                 break;
@@ -153,6 +156,8 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
 
         if (out.type == ParseSuccess) {
             push_rawtree(out.data.result, &terms);
+        } else if (out.type == ParseFail) {
+            running = false;
         }
     }
 

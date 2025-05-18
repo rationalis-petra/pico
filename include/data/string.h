@@ -12,6 +12,7 @@ typedef struct String {
 
 String mk_string(const char* str, Allocator* a);
 String mv_string(const char* str);
+String string_from_codepoint(uint32_t codepoint, Allocator* a);
 
 void delete_string(String str, Allocator* a);
 String copy_string(const String str, Allocator* a);

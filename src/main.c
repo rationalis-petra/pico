@@ -58,13 +58,14 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     }
 
     ParseResult res = parse_rawtree(cin, &arena);
+
     if (res.type == ParseNone) {
         write_string(mv_string("\n"), cout);
         goto on_exit;
     }
-
     if (res.type == ParseFail) {
-        write_string(mv_string("Parse Failed :(\n"), cout);
+        write_string(res.data.error.message, cout);
+        write_string(mv_string("\n"), cout);
         release_arena_allocator(arena);
         return true;
     }

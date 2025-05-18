@@ -1176,13 +1176,15 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 static int id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
 
-PiType* unwrap_type(PiType *ty) {
+PiType* unwrap_type(PiType *ty, Allocator* a) {
     bool unwrapping = true;
     while (unwrapping) {
         if (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
             ty = ty->distinct.type;
         } else if (ty->sort == TNamed) {
-            ty = ty->named.type;
+            SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
+            sym_ptr_bind(ty->named.name, ty, &binds);
+            ty = pi_type_subst(ty->named.type, binds, a);
         } else {
             unwrapping = false;
         }
@@ -1585,8 +1587,22 @@ PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body) {
     return out;
 }
 
+PiType* unwind_type(PiType *ty) {
+    bool unwrapping = true;
+    while (unwrapping) {
+        if (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
+            ty = ty->distinct.type;
+        } else if (ty->sort == TNamed) {
+            ty = ty->named.type;
+        } else {
+            unwrapping = false;
+        }
+    }
+    return ty;
+}
+
 PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
-    PiType* lhs = unwrap_type(fam);
+    PiType* lhs = unwind_type(fam);
 
     va_list args;
     va_start(args, fam);

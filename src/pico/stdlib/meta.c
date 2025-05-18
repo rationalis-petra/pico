@@ -7,6 +7,19 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
 
+void build_mk_name_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType string_ctype = mk_struct_ctype(a, 2,
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                         "bytes", mk_voidptr_ctype(a));
+
+    CType name_ctype = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
+
+    CType fn_ctype = mk_fn_ctype(a, 1, "name", string_ctype, name_ctype);
+
+    convert_c_fn(string_to_name, &fn_ctype, type, ass, a, point); 
+}
+
 void build_mk_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
     CType string_ctype = mk_struct_ctype(a, 2,
@@ -101,6 +114,14 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
     Segments prepped;
+
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, UInt_64));
+    build_mk_name_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("mk-name"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     typep = mk_proc_type(a, 1, mk_string_type(a), copy_pi_type_p(get_symbol_type(), a));
     build_mk_symbol_fn(typep, ass, a, &point);

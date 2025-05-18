@@ -383,7 +383,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SConstructor: {
         // Typecheck variant
         untyped->ptype = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        PiType* enum_type = unwrap_type(untyped->ptype);
+        PiType* enum_type = unwrap_type(untyped->ptype, a);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -414,7 +414,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SVariant: {
         // Typecheck variant
         untyped->ptype = eval_type(untyped->variant.enum_type, env, a, gen, point);
-        PiType* enum_type = unwrap_type(untyped->ptype);
+        PiType* enum_type = unwrap_type(untyped->ptype, a);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Variant must be of enum type."));
@@ -451,7 +451,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->match.val, env, gen, a, point);
 
         PiType* enum_type = untyped->match.val->ptype;
-        enum_type = unwrap_type(enum_type);
+        enum_type = unwrap_type(enum_type, a);
 
         if (enum_type->sort != TEnum) {
             throw_error(point, mv_string("Match expects value to have an enum type."));
@@ -509,7 +509,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SStructure: {
         untyped->ptype = eval_type(untyped->structure.ptype, env, a, gen, point);
-        PiType* struct_type = unwrap_type(untyped->ptype);
+        PiType* struct_type = unwrap_type(untyped->ptype, a);
 
         if (struct_type->sort != TStruct) {
             throw_error(point, mv_string("Structure type invalid"));
@@ -532,7 +532,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, gen, a, point);
-        PiType source_type = *unwrap_type(untyped->projector.val->ptype);
+        PiType source_type = *unwrap_type(untyped->projector.val->ptype, a);
 
         if (source_type.sort == TStruct) {
             // search for field

@@ -24,6 +24,14 @@ String mv_string(const char* str) {
     return out;
 }
 
+String string_from_codepoint(uint32_t codepoint, Allocator *a) {
+    U32Array arr = mk_u32_array(1, a);
+    push_u32(codepoint, &arr);
+    String out = string_from_UTF_32(arr, a);
+    sdelete_u32_array(arr);
+    return out;
+}
+
 void delete_string(String str, Allocator* a) {
     mem_free(str.bytes, a);
 }

@@ -468,8 +468,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
             case SysVMemory:
                 break;
             }
-            if (pass_return_in_memory) break;
         }
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
     }
     build_nullary_op(ass, Ret, a, point);
 
