@@ -35,7 +35,8 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     if (ph_res.type == ParseNone) goto on_exit;
 
     if (ph_res.type == ParseFail) {
-        write_string(mv_string("Parse Failed :(\n"), serr);
+        write_string(ph_res.data.error.message, serr);
+        write_string(mv_string("\n"), serr);
         release_arena_allocator(arena);
         return;
     }
@@ -66,7 +67,8 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            write_string(mv_string("Parse Failed :(\n"), serr);
+            write_string(res.data.error.message, serr);
+            write_string(mv_string("\n"), serr);
             release_arena_allocator(arena);
             return;
         }
@@ -148,7 +150,8 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            write_string(mv_string("Parse Failed :(\n"), serr);
+            write_string(res.data.error.message, serr);
+            write_string(mv_string("\n"), serr);
             release_arena_allocator(arena);
             return;
         }

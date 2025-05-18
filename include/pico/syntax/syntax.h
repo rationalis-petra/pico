@@ -93,6 +93,9 @@ typedef enum {
     // Should be moved to macros!(?)
     SReinterpret,
     SConvert,
+
+    // Meta/reflection
+    STypeOf,
 } Syntax_t;
 
 
@@ -369,6 +372,8 @@ struct Syntax {
 
         SynReinterpret reinterpret;
         SynConvert convert;
+
+        Syntax* type_of;
     };
     PiType* ptype;
 };

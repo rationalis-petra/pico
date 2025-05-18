@@ -95,9 +95,9 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     // ------------------------------------------------------------------------
     // Term Formers
     // ------------------------------------------------------------------------
-    /* former = FDefine; */
-    /* sym = string_to_symbol(mv_string("document")); */
-    /* add_def(module, sym, type, &former, null_segments, NULL); */
+    former = FTypeOf;
+    sym = string_to_symbol(mv_string("type-of"));
+    add_def(module, sym, type, &former, null_segments, NULL);
 
     /* former = FDefine; */
     /* sym = string_to_symbol(mv_string("declare")); */

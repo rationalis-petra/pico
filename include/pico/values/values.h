@@ -101,7 +101,7 @@ typedef enum TermFormer {
     FAllType,
     FFamily,
 
-    // The C type former is somewhat special, as it 
+    // The C type former is somewhat special, as it
     // is more explicit about taking in a *value* in the form of a c-type.
     // It may be part of the furture, moving towards a more 'dependent-types'
     // style typechecker.
@@ -112,6 +112,9 @@ typedef enum TermFormer {
     FReinterpretRelic,
     FConvertNative,
     FConvertRelic,
+
+    // Formers for the meta module
+    FTypeOf,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

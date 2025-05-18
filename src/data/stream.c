@@ -72,10 +72,10 @@ IStream* get_stdin_stream(void) {
 }
 
 IStream* open_file_istream(String filename, Allocator* a) {
-    IStream* ifile = mem_alloc(sizeof(IStream), a);
-
     FILE* cfile = fopen((char*)filename.bytes, "r");
+    if (!cfile) return NULL;
 
+    IStream* ifile = mem_alloc(sizeof(IStream), a);
     *ifile = (IStream) {
      .type = IStreamFile,
      .impl.file_istream.peeked = false,
@@ -302,10 +302,10 @@ OStream* get_stdout_stream() {
 }
 
 OStream* open_file_ostream(String filename, Allocator* a) {
-    OStream* ofile = mem_alloc(sizeof(OStream), a);
-
     FILE* cfile = fopen((char*)filename.bytes, "w");
+    if (!cfile) return NULL;
 
+    OStream* ofile = mem_alloc(sizeof(OStream), a);
     *ofile = (OStream) {
         .type = OStreamFile,
         .impl.file_ostream.file_ptr = cfile,

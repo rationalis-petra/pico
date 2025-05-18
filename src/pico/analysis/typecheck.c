@@ -1151,6 +1151,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         break;
     }
+    case STypeOf: {
+        type_infer_i(untyped->type_of, env, gen, a, point);
+        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        *untyped->ptype = (PiType) {.sort = TKind, .kind.nargs = 0};
+        break;
+    }
 
     }
     if (untyped->ptype == NULL) {
@@ -1466,6 +1472,10 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         instantiate_implicits(syn->convert.type, env, a, point);
         instantiate_implicits(syn->convert.body, env, a, point);
         break;
+    case STypeOf: {
+        instantiate_implicits(syn->type_of, env, a, point);
+        break;
+    }
     }
 }
 
@@ -1724,6 +1734,10 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         squash_types(typed->convert.type, a, point);
         squash_types(typed->convert.body, a, point);
         break;
+    case STypeOf: {
+        squash_types(typed->type_of, a, point);
+        break;
+    }
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));
         break;

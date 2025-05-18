@@ -381,6 +381,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FConvertRelic:
         out = mk_str_doc(mv_string("::convert-relic"), a);
         break;
+    case FTypeOf:
+        out = mk_str_doc(mv_string("::type-of"), a);
+        break;
     }
 
     if (out == NULL) {

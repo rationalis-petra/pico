@@ -585,7 +585,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
                 };
                 return res;
             } else {
-                throw_error(point, mv_string("Field not found in module!"));
+                String error_message =
+                    string_cat(mv_string("Field not found in module: "),
+                               *symbol_to_string(msym.atom.symbol), a);
+                throw_error(point, error_message);
             }
         } else {
             *res = (Syntax) {
@@ -1436,7 +1439,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
     case FConvertNative:
     case FConvertRelic: {
         if (raw.branch.nodes.len < 3) {
-            throw_error(point, mk_string("Convert term former requires at least 2 arguments!", a));
+            throw_error(point, mk_string("convert term former requires at least 2 arguments!", a));
         }
 
         Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
@@ -1454,6 +1457,24 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Er
             .convert.from_native = former == FConvertNative,
             .convert.type = type, 
             .convert.body = body,
+        };
+        return res;
+    }
+    case FTypeOf: {
+        if (raw.branch.nodes.len < 2) {
+            throw_error(point, mk_string("type-of term former requires at least 2 arguments!", a));
+        }
+        RawTree* raw_term = (raw.branch.nodes.len == 2)
+            ? &raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1, a);
+
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = STypeOf,
+            .ptype = NULL,
+            .type_of = body,
         };
         return res;
     }

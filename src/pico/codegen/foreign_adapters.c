@@ -852,10 +852,32 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         // TODO (FEATURE): change tag size based on number of enum vals 
         PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
         if (!can_reinterpret(ctype->structure.fields.data[0].val, &tag_type)) return false;
-            
+        
         CType* cunion = ctype->structure.fields.data[1].val;
-        if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) return false;
-        // TODO (FEATURE): add ability for c type to not need union/struct if
+
+
+        if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) {
+            // Special case: consider what an `Enum :none [:some A]` might look lie
+            // in C: struct Option { tag present; A val; }. We thus make an
+            // exception for cases where the enum has only one value branch.
+
+
+            size_t selected_index = 0;
+            size_t number_populated_branches = 0;
+            for (size_t i = 0; i < ptype->enumeration.variants.len; i++) {
+                PtrArray* variant = ptype->enumeration.variants.data[i].val;
+                if (variant->len != 0) number_populated_branches++;
+                selected_index = i;
+                if (number_populated_branches > 1) return false;
+            }
+
+            
+            PtrArray* variant = ptype->enumeration.variants.data[selected_index].val;
+            if (variant->len != 1) return false;
+            return can_reinterpret(cunion, variant->data[0]);
+        }
+
+        // TODO (FEATURE): Add ability for C type to not need union/struct if
         // variants empty.
 
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {

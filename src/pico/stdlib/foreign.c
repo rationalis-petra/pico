@@ -123,7 +123,6 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
 }
 
 void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
-    Allocator arena = mk_arena_allocator(4096, a);
 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -154,6 +153,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     };
 
     // Now that we have setup appropriately, override the allocator
+    Allocator arena = mk_arena_allocator(4096, a);
     a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
@@ -206,7 +206,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         // TODO: replace u64 with symbol
         PiType *c_type =
             mk_named_type(a, "CType",
-                          mk_enum_type(a, 5,
+                          mk_enum_type(a, 6,
                                        "void", 0,
                                        "prim-int", 1, prim_type,
                                        "float", 0,

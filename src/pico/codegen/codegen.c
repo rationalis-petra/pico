@@ -1597,6 +1597,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
            
         break;
     }
+    case STypeOf: {
+        build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), a, point);
+        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        address_stack_grow(env, pi_size_of(*syn.ptype));
+        break;
+    }
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
