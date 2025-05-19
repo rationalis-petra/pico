@@ -465,8 +465,8 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
     build_binary_op(ass, Mov, reg(RDI, sz_64), imm64(var.name), a, point);
     build_binary_op(ass, Mov, reg(RSI, sz_64), imm64(var.did), a, point);
 #elif ABI == WIN_64
-    build_binary_op(ass, Push, imm32(var.did), a, point);
-    build_binary_op(ass, Push, imm32(var.name), a, point);
+    build_unary_op(ass, Push, imm32(var.did), a, point);
+    build_unary_op(ass, Push, imm32(var.name), a, point);
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
 
     build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(0x20), a, point);
