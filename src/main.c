@@ -37,7 +37,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
 
-    cin = mv_capturing_istream(cin, &arena);
+    cin = mk_capturing_istream(cin, &arena);
     reset_bytecount(cin);
 
     Target gen_target = {

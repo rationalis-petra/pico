@@ -35,7 +35,8 @@ IStream* mv_string_istream(String contents, Allocator* a);
 // A capturing istream - an istream which stores process bytes into a buffer.
 // This buffer can be retrieved with get_captured_bufffer. Calling get_captured_buffer
 // on an istream that is non-capturing will return NULL.
-IStream* mv_capturing_istream(IStream* stream, Allocator* a);
+// the capturing istream is NOT responsible for the cleanup of its inner stream
+IStream* mk_capturing_istream(IStream* stream, Allocator* a);
 String* get_captured_buffer(IStream* contents);
 
 OStream* get_stdout_stream();

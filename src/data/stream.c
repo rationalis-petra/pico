@@ -55,7 +55,7 @@ struct IStream {
     } impl;
 };
 
-IStream *mv_capturing_istream(IStream *stream, Allocator *a) {
+IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
     IStream* outer_stream = mem_alloc(sizeof(IStream), a);
     String buffer = (String) {
         .memsize = 1024,
@@ -160,7 +160,7 @@ void delete_istream(IStream* stream, Allocator* a) {
         break;
     }
     case IStreamCapturing: {
-        delete_istream(stream->impl.capturing_istream.inner, a);
+        mem_free(stream->impl.capturing_istream.buffer.bytes, a);
         mem_free(stream, a);
         break;
     }
@@ -297,6 +297,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 new_buffer.bytes = mem_alloc(new_buffer.memsize, cis->gpa);
                 memcpy(new_buffer.bytes, cis->buffer.bytes, cis->used_buffer);
                 memset(new_buffer.bytes + cis->used_buffer, 0, new_buffer.memsize - cis->used_buffer);
+                mem_free(cis->buffer.bytes, cis->gpa);
                 cis->buffer = new_buffer;
             }
             uint8_t *base = cis->buffer.bytes + cis->used_buffer;

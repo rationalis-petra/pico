@@ -55,6 +55,11 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     module = mk_module(*header, package, parent, a);
 
     // Step 4:
+    // Setup error reporting
+    in = mk_capturing_istream(in, &arena);
+    reset_bytecount(in);
+
+    // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
     while (next_iter) {
@@ -125,6 +130,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     
  on_error_generic:
     if (module) delete_module(module);
+    delete_istream(in, a);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
@@ -146,6 +152,9 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
+
+    in = mk_capturing_istream(in, a);
+    reset_bytecount(in);
 
     bool next_iter = true;
     while (next_iter) {
@@ -202,6 +211,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     delete_assembler(target.target);
     delete_assembler(target.code_aux);
     sdelete_u8_array(*target.data_aux);
+    delete_istream(in, a);
     mem_free(target.data_aux, a);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
@@ -219,6 +229,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
  on_error_generic:
     delete_assembler(target.target);
     delete_assembler(target.code_aux);
+    delete_istream(in, a);
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
     release_arena_allocator(arena);

@@ -1,6 +1,9 @@
 #include "data/stream.h"
 #include "platform/io/terminal.h"
 
+#include "pretty/document.h"
+#include "pretty/stream_printer.h"
+#include "pretty/standard_types.h"
 #include "pico/data/error.h"
 
 void throw_pi_error(PiErrorPoint* point, PicoError err) {
@@ -8,13 +11,60 @@ void throw_pi_error(PiErrorPoint* point, PicoError err) {
     long_jump(point->buf, 1);
 }
 
+const size_t max_prev_line_numbers = 5;
+
 void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
     String* buffer = get_captured_buffer(is);
     if (buffer) {
-        String s1 = substring(0, error.range.start, *buffer, a);
+        // Get the line number of the affected area, and the start position of at most 
+        // the previous max_prev_line_numbers lines
+        size_t current_start = 0;
+        U64Array prev_line_starts = mk_u64_array(max_prev_line_numbers, a);
+        prev_line_starts.len = max_prev_line_numbers;
+        size_t line_number = 0;
+        size_t prev_line = 0;
+        for (size_t i = 0; i < error.range.start; i++) {
+          if (buffer->bytes[i] == '\n') {
+              prev_line_starts.data[prev_line] = current_start;
+              line_number++;
+              prev_line = (prev_line + 1) % 5;
+              current_start = i + 1;
+          }
+        }
+        size_t affected_line_end = buffer->memsize;
+        for (size_t i = error.range.end; i < buffer->memsize; i++) {
+          if (buffer->bytes[i] == '\n') {
+              affected_line_end = i;
+              break;
+          }
+        }
+        
+        // Now, gather the past n lines
+        const size_t num_prev_lines = line_number < max_prev_line_numbers ? line_number : max_prev_line_numbers;
+        for (size_t i = 0; i < num_prev_lines; i++) {
+            size_t line_start = prev_line_starts.data[(prev_line + i) % 5];
+            size_t next_line_start = (i + 1 == num_prev_lines)
+                ? current_start
+                : prev_line_starts.data[(prev_line + i + 1) % 5];
+
+            Document* doc = pretty_u64(line_number - (5 - i), a);
+            write_doc(doc, cout);
+            delete_doc(doc, a);
+            write_string(mv_string(" | "), cout);
+            String str = substring(line_start, next_line_start, *buffer, a);
+            write_string(str, cout);
+            delete_string(str, a);
+        }
+
+        Document* doc = pretty_u64(line_number, a);
+        write_doc(doc, cout);
+        delete_doc(doc, a);
+        write_string(mv_string(" | "), cout);
+
+        String s1 = substring(current_start, error.range.start, *buffer, a);
         // TODO (BUG) '+1' won't work with UTF-8!
         String err = substring(error.range.start, error.range.end, *buffer, a);
-        String s2 = substring(error.range.end, buffer->memsize, *buffer, a);;
+        String s2 = substring(error.range.end, affected_line_end, *buffer, a);;
 
         write_string(s1, cout);
 
