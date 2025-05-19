@@ -19,12 +19,12 @@
 #include "pico/eval/call.h"
 
 // forward declarations
-void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
-void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
-void instantiate_implicits(Syntax* untyped, TypeEnv* env, Allocator* a, ErrorPoint* point);
+void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
+void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
+void instantiate_implicits(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 
 // Check a toplevel expression
-void type_check(TopLevel* top, Environment* env, Allocator* a, ErrorPoint* point) {
+void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* point) {
     // If this is a definition, lookup the type to check against 
     TypeEnv *t_env = mk_type_env(env, a);
     UVarGenerator* gen = mk_gen(a);
@@ -56,24 +56,24 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, ErrorPoint* point
 }
 
 // Forward declarations for implementation (internal declarations)
-void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
-void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point);
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, ErrorPoint* point);
-void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, ErrorPoint* point);
-void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, ErrorPoint* point);
-void squash_types(Syntax* untyped, Allocator* a, ErrorPoint* point);
+void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
+void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
+PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, PiErrorPoint* point);
+void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, PiErrorPoint* point);
+void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
 
 // -----------------------------------------------------------------------------
 // Interface
 // -----------------------------------------------------------------------------
-void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
+void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point) {
     type_infer_i (untyped, env, gen, a, point);
     squash_types(untyped, a, point);
 }
 
-void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
+void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point) {
     type_check_i (untyped, &type, env, gen, a, point);
     squash_types(untyped, a, point);
 }
@@ -107,15 +107,22 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* 
 //
 // -----------------------------------------------------------------------------
 
-void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
+void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point) {
     type_infer_i(untyped, env, gen, a, point);
     Result out = unify(type, untyped->ptype, a);
-    if (out.type == Err)
-        throw_error(point, out.error_message);
+    if (out.type == Err) {
+        PicoError err = (PicoError) {
+            .range = untyped->range,
+            .message = out.error_message,
+        };
+        throw_pi_error(point, err);
+    }
 }
 
 // "internal" type inference. Destructively mutates types.
-void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, ErrorPoint* point) {
+void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point) {
+    PicoError err;
+    err.range = untyped->range;
     // Sometimes we go back and typecheck a term again, e.g. checking an
     // Application to an All generates a new term and typecheckes that.
     if (untyped->ptype) return;
@@ -145,7 +152,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         TypeEntry te = type_env_lookup(untyped->variable, env);
         if (te.type != TENotFound) {
             if (te.is_module) {
-                throw_error(point, mv_string("Unexpected module."));
+                err.message = mv_string("Unexpected module.");
+                throw_pi_error(point, err);
             }
 
             // Note: if type is unification var...
@@ -157,8 +165,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             }
         } else {
             String* sym = symbol_to_string(untyped->variable);
-            String msg = string_cat(mv_string("Couldn't find type of variable: "), *sym, a);
-            throw_error(point, msg);
+            err.message = string_cat(mv_string("Couldn't find type of variable: "), *sym, a);
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -182,7 +190,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             if (arg.val) {
                 aty = eval_type(arg.val, env, a, gen, point);
                 if (aty->sort != TTraitInstance) {
-                    throw_error(point, mv_string("Instance procedure argument does not have instance type."));
+                    err.message = mv_string("Instance procedure argument does not have instance type.");
+                    throw_pi_error(point, err);
                 }
             } else  {
                 aty = mk_uvar(gen, a);
@@ -264,7 +273,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                throw_error(point, mk_string("Incorrect number of function arguments", a));
+                err.message = mk_string("Incorrect number of function arguments", a);
+                throw_pi_error(point, err);
             }
 
             for (size_t i = 0; i < fn_type.proc.args.len; i++) {
@@ -299,7 +309,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             type_infer_i(untyped, env, gen, a, point);
         } else if (fn_type.sort == TKind) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
-                throw_error(point, mk_string("Incorrect number of family arguments", a));
+                err.message = mk_string("Incorrect number of family arguments", a);
+                throw_pi_error(point, err);
             }
 
             PiType* kind = mem_alloc(sizeof(PiType), a);
@@ -313,7 +324,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             PtrArray arr = mk_ptr_array(2, a);
             push_ptr(mv_str_doc(mv_string("Expected LHS of application to be a function or kind. Was actually:"), a), &arr);
             push_ptr(pretty_type(&fn_type, a), &arr);
-            throw_error(point, doc_to_str(mv_sep_doc(arr, a), a));
+            err.message = doc_to_str(mv_sep_doc(arr, a), a);
+            throw_pi_error(point, err);
         }
         
         break;
@@ -323,10 +335,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         PiType all_type = *untyped->all_application.function->ptype;
         if (all_type.sort == TUVar) {
-            throw_error(point, mk_string("Expected LHS of all application must be known (not currently inferrable)", a));
+            err.message = mv_string("Expected LHS of all application must be known (not currently inferrable)");
+            throw_pi_error(point, err);
         }
         else if (all_type.sort != TAll) {
-            throw_error(point, mk_string("Expected LHS of all application to be an all", a));
+            err.message = mv_string("Expected LHS of all application to be an all");
+            throw_pi_error(point, err);
         }
         
         if (all_type.binder.vars.len != untyped->all_application.types.len) {
@@ -335,7 +349,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
             push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
             push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
-            throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
+            err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+            throw_pi_error(point, err);
         }
 
         if (all_type.binder.body->sort != TProc) {
@@ -367,7 +382,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 push_ptr(pretty_u64(proc_type->proc.args.len, a), &nodes);
                 push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
                 push_ptr(pretty_u64(untyped->all_application.args.len, a), &nodes);
-                throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
+                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                throw_pi_error(point, err);
             }
 
             for (size_t i = 0; i < proc_type->proc.args.len; i++) {
@@ -386,7 +402,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* enum_type = unwrap_type(untyped->ptype, a);
 
         if (enum_type->sort != TEnum) {
-            throw_error(point, mv_string("Variant must be of enum type."));
+            err.message = mv_string("Variant must be of enum type.");
+            throw_pi_error(point, err);
         }
 
         bool found_variant = false;
@@ -398,7 +415,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 // Generate variant has no args
                 PtrArray* args = enum_type->enumeration.variants.data[i].val;
                 if (args->len != 0) {
-                    throw_error(point, mv_string("Incorrect number of args to variant constructor"));
+                    err.message = mv_string("Incorrect number of args to variant constructor");
+                    throw_pi_error(point, err);
                 }
                 break;
             }
@@ -407,7 +425,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         if (!found_variant) {
             String msg_origin = mv_string("Could not find variant tag: ");
             String data = *symbol_to_string(untyped->variant.tagname);
-            throw_error(point, string_cat(msg_origin, data, a));
+            err.message = string_cat(msg_origin, data, a);
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -417,7 +436,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* enum_type = unwrap_type(untyped->ptype, a);
 
         if (enum_type->sort != TEnum) {
-            throw_error(point, mv_string("Variant must be of enum type."));
+            err.message = mv_string("Variant must be of enum type.");
+            throw_pi_error(point, err);
         }
 
         bool found_variant = false;
@@ -429,7 +449,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 // Generate variant has no args
                 PtrArray* args = enum_type->enumeration.variants.data[i].val;
                 if (args->len != untyped->variant.args.len) {
-                    throw_error(point, mv_string("Incorrect number of args to variant constructor"));
+                    err.message = mv_string("Incorrect number of args to variant constructor");
+                    throw_pi_error(point, err);
                 }
 
                 for (size_t i = 0; i < args->len; i++) {
@@ -442,7 +463,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         if (!found_variant) {
             String msg_origin = mv_string("Could not find variant tag: ");
             String data = *symbol_to_string(untyped->variant.tagname);
-            throw_error(point, string_cat(msg_origin, data, a));
+            err.message = string_cat(msg_origin, data, a);
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -454,7 +476,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         enum_type = unwrap_type(enum_type, a);
 
         if (enum_type->sort != TEnum) {
-            throw_error(point, mv_string("Match expects value to have an enum type."));
+            err.message = mv_string("Match expects value to have an enum type.");
+            throw_pi_error(point, err);
         }
 
         // Typecheck each variant, ensure they are the same
@@ -472,20 +495,23 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                     found_tag = true;
                     clause->tag = j;
                     if (used_indices.data[j] != 0) {
-                        throw_error(point, mv_string("Same tag occurs twice in match body."));
+                        err.message = mv_string("Same tag occurs twice in match body.");
+                        throw_pi_error(point, err);
                     }
                     used_indices.data[j] = 1;
                 }
             }
 
             if (!found_tag) {
-                throw_error(point, mv_string("Unable to find variant tag in match"));
+                err.message = mv_string("Unable to find variant tag in match");
+                throw_pi_error(point, err);
             }
 
             // Now we've found the tag, typecheck the body
             PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
             if (types_to_bind->len != clause->vars.len) {
-                throw_error(point,  mv_string("Bad number of binds!"));
+                err.message = mv_string("Bad number of binds!");
+                throw_pi_error(point, err);
             }
 
             for (size_t j = 0; j < types_to_bind->len; j++) {
@@ -503,7 +529,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         for (size_t i = 0; i < used_indices.len; i++) all_indices &= used_indices.data[i];
         
         if (!all_indices) {
-            throw_error(point, mv_string("Not all enumerations used in match expression"));
+            err.message = mv_string("Not all enumerations used in match expression");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -512,11 +539,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PiType* struct_type = unwrap_type(untyped->ptype, a);
 
         if (struct_type->sort != TStruct) {
-            throw_error(point, mv_string("Structure type invalid"));
+            err.message = mv_string("Structure type invalid");
+            throw_pi_error(point, err);
         }
 
         if (untyped->structure.fields.len != struct_type->structure.fields.len) {
-            throw_error(point, mv_string("Structure must have exactly n fields."));
+            err.message = mv_string("Structure must have exactly n fields.");
+            throw_pi_error(point, err);
         }
 
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
@@ -525,7 +554,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 PiType* field_ty = struct_type->structure.fields.data[i].val;
                 type_check_i(*field_syn, field_ty, env, gen, a, point);
             } else {
-                throw_error(point, mv_string("Structure is missing a field"));
+                err.message = mv_string("Structure is missing a field");
+                throw_pi_error(point, err);
             }
         }
         break;
@@ -543,7 +573,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 }
             }
             if (ret_ty == NULL) {
-                throw_error(point, mv_string("Field not found in struct!"));
+                err.message = mv_string("Field not found in struct!");
+                throw_pi_error(point, err);
             }
             untyped->ptype = ret_ty;
 
@@ -556,12 +587,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 }
             }
             if (ret_ty == NULL) {
-                throw_error(point, mv_string("Field not found in instance!"));
+                err.message = mv_string("Field not found in instance!");
+                throw_pi_error(point, err);
             }
             untyped->ptype = ret_ty;
 
         } else {
-            throw_error(point, mv_string("Projection only works on structs and traits."));
+            err.message = mv_string("Projection only works on structs and traits.");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -595,11 +628,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         *ty = *eval_type(untyped->instance.constraint, env, a, gen, point);
 
         if (ty->sort != TTraitInstance) {
-            throw_error(point, mv_string("Instance type invalid"));
+            err.message = mv_string("Instance type invalid");
+            throw_pi_error(point, err);
         }
 
         if (untyped->instance.fields.len != ty->trait.fields.len) {
-            throw_error(point, mv_string("Instance must have exactly n fields."));
+            err.message = mv_string("Instance must have exactly n fields.");
+            throw_pi_error(point, err);
         }
 
         for (size_t i = 0; i < ty->instance.fields.len; i++) {
@@ -608,7 +643,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 PiType* field_ty = ty->instance.fields.data[i].val;
                 type_check_i(*field_syn, field_ty, env, gen, a, point);
             } else {
-                throw_error(point, mv_string("Trait instance is missing a field"));
+                err.message = mv_string("Trait instance is missing a field");
+                throw_pi_error(point, err);
             }
         }
 
@@ -630,7 +666,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->dynamic, env, gen, a, point);
         PiType* dyn_type = untyped->dynamic->ptype; 
         if (dyn_type->sort != TDynamic) {
-            throw_error(point, mv_string("use on non-dynamic type!"));
+            err.message = mv_string("use on non-dynamic type!");
+            throw_pi_error(point, err);
         }
         untyped->ptype = dyn_type->dynamic;
         break;
@@ -686,7 +723,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         PtrArray* args = lookup_label(untyped->go_to.label, env);
         if (args) {
             if (args->len != untyped->go_to.args.len) {
-                throw_error(point, mv_string("Error in go-to: wrong number of args!"));
+                err.message = mv_string("Error in go-to: wrong number of args!");
+                throw_pi_error(point, err);
             }
 
             for (size_t i = 0; i < args->len; i++) {
@@ -697,7 +735,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             PiType* t = mk_uvar(gen, a);
             untyped->ptype = t;
         } else {
-            throw_error(point, mv_string("Error in go-to: Label Not found!"));
+            err.message = mv_string("Error in go-to: Label Not found!");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -826,11 +865,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SInTo: {
         PiType* distinct_type = eval_type(untyped->is.type, env, a, gen, point);
         if (distinct_type->sort != TDistinct) {
-            throw_error(point, mv_string("into must move a value into a distinct type!"));
+            err.message = mv_string("into must move a value into a distinct type!");
+            throw_pi_error(point, err);
         }
         Module* current = get_std_current_module();
         if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
-            throw_error(point, mv_string("into for opaque types can only be used in the same module!"));
+            err.message = mv_string("into for opaque types can only be used in the same module!");
+            throw_pi_error(point, err);
         }
 
         type_check_i(untyped->into.val,
@@ -842,11 +883,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SOutOf: {
         PiType* distinct_type = eval_type(untyped->out_of.type, env, a, gen, point);
         if (distinct_type->sort != TDistinct) {
-            throw_error(point, mv_string("out-of must move a value out of a distinct type!"));
+            err.message = mv_string("out-of must move a value out of a distinct type!");
+            throw_pi_error(point, err);
         }
         Module* current = get_std_current_module();
         if ((distinct_type->distinct.source_module != NULL) && (distinct_type->distinct.source_module != current)) {
-            throw_error(point, mv_string("out-of for opaque types can only be used in the same module!"));
+            err.message = mv_string("out-of for opaque types can only be used in the same module!");
+            throw_pi_error(point, err);
         }
 
         type_check_i(untyped->is.val,
@@ -858,7 +901,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SName: {
         PiType* named_type = eval_type(untyped->name.type, env, a, gen, point);
         if (named_type->sort != TNamed) {
-            throw_error(point, mv_string("name must name a value with a named type!"));
+            err.message = mv_string("name must name a value with a named type!");
+            throw_pi_error(point, err);
         }
 
         type_check_i(untyped->name.val,
@@ -871,7 +915,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->unname, env, gen, a, point);
 
         if (untyped->unname->ptype->sort != TNamed) {
-            throw_error(point, mv_string("Unname expects inner term to be named."));
+            err.message = mv_string("Unname expects inner term to be named.");
+            throw_pi_error(point, err);
         }
         untyped->ptype = untyped->unname->ptype->named.type;
         break;
@@ -1015,7 +1060,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
 
         untyped->ptype = untyped->named_type.body->ptype;
         if (untyped->ptype->sort != TKind) {
-            throw_error(point, mv_string("Named expects types and families as arguments!"));
+            err.message = mv_string("Named expects types and families as arguments!");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -1023,7 +1069,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->distinct_type, env, gen, a, point);
         untyped->ptype= untyped->distinct_type->ptype;
         if (untyped->ptype->sort != TKind) {
-            throw_error(point, mv_string("Distinct expects types and families as arguments!"));
+            err.message = mv_string("Distinct expects types and families as arguments!");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -1050,7 +1097,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         type_infer_i(untyped->distinct_type, env, gen, a, point);
         untyped->ptype= untyped->distinct_type->ptype;
         if (untyped->ptype->sort != TKind) {
-            throw_error(point, mv_string("Opaque expects types and families as arguments!"));
+            err.message = mv_string("Opaque expects types and families as arguments!");
+            throw_pi_error(point, err);
         }
         break;
     }
@@ -1068,10 +1116,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // • Expect the body to be a c value
             // • expect the type to be a pico type
             if (untyped->reinterpret.body->ptype->sort != TCType) {
-                throw_error(point, mv_string("reinterpret-native input value to be a c value, was not!"));
+                err.message = mv_string("reinterpret-native input value to be a c value, was not!");
+                throw_pi_error(point, err);
             }
             if (untyped->reinterpret.type->ptype->sort != TKind) {
-                throw_error(point, mv_string("reinterpret-native expected output type to be a relic type, was not!"));
+                err.message = mv_string("reinterpret-native expected output type to be a relic type, was not!");
+                throw_pi_error(point, err);
             }
 
             // Evaluate the output type, check that can reinterpret.
@@ -1079,27 +1129,31 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             CType* c_type = &untyped->reinterpret.body->ptype->c_type;
 
             if (!can_reinterpret(c_type, pico_type)) {
-                throw_error(point, mv_string("Cannot reinterpret c value as relic value."));
+                err.message = mv_string("Cannot reinterpret c value as relic value.");
+                throw_pi_error(point, err);
             }
             untyped->ptype = pico_type;
         } else {
             // • Expect the body to be a pico value (which all values are, so skip check)
             // • Expect the type to be a c type
             if (untyped->reinterpret.type->ptype->sort != TKind) {
-                throw_error(point, mv_string("reinterpret-relic expected output type to be a type, was not!"));
+                err.message = mv_string("reinterpret-relic expected output type to be a type, was not!");
+                throw_pi_error(point, err);
             }
 
             // Evaluate the output type, check that can reinterpret.
             PiType* type_val = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, a, point);
             if (type_val->sort != TCType) {
-                throw_error(point, mv_string("reinterpret-relic expected output type to be a c type, was not!"));
+                err.message = mv_string("reinterpret-relic expected output type to be a c type, was not!");
+                throw_pi_error(point, err);
             }
 
             CType* c_type = &type_val->c_type;
             PiType* pico_type = untyped->reinterpret.body->ptype;
 
             if (!can_reinterpret(c_type, pico_type)) {
-                throw_error(point, mv_string("Cannot reinterpret relic value as c value."));
+                err.message = mv_string("Cannot reinterpret relic value as c value.");
+                throw_pi_error(point, err);
             }
             untyped->ptype = type_val;
         }
@@ -1113,10 +1167,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // • Expect the body to be a c value
             // • expect the type to be a pico type
             if (untyped->convert.body->ptype->sort != TCType) {
-                throw_error(point, mv_string("convert-native input value to be a c value, was not!"));
+                err.message = mv_string("convert-native input value to be a c value, was not!");
+                throw_pi_error(point, err);
             }
             if (untyped->convert.type->ptype->sort != TKind) {
-                throw_error(point, mv_string("convert-native expected output type to be a relic type, was not!"));
+                err.message = mv_string("convert-native expected output type to be a relic type, was not!");
+                throw_pi_error(point, err);
             }
 
             // Evaluate the output type, check that can convert.
@@ -1124,27 +1180,31 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             CType* c_type = &untyped->convert.body->ptype->c_type;
 
             if (!can_convert(c_type, pico_type)) {
-                throw_error(point, mv_string("Cannot convert c value as relic value."));
+                err.message = mv_string("Cannot convert c value as relic value.");
+                throw_pi_error(point, err);
             }
             untyped->ptype = pico_type;
         } else {
             // • Expect the body to be a pico value (which all values are, so skip check)
             // • Expect the type to be a c type
             if (untyped->convert.type->ptype->sort != TKind) {
-                throw_error(point, mv_string("convert-relic expected output type to be a type, was not!"));
+                err.message = mv_string("convert-relic expected output type to be a type, was not!");
+                throw_pi_error(point, err);
             }
 
             // Evaluate the output type, check that can convert.
             PiType* type_val = *(PiType**)eval_typed_expr(untyped->convert.type, env, a, point);
             if (type_val->sort != TCType) {
-                throw_error(point, mv_string("convert-relic expected output type to be a c type, was not!"));
+                err.message = mv_string("convert-relic expected output type to be a c type, was not!");
+                throw_pi_error(point, err);
             }
 
             CType* c_type = &type_val->c_type;
             PiType* pico_type = untyped->convert.body->ptype;
 
             if (!can_convert(c_type, pico_type)) {
-                throw_error(point, mv_string("Cannot convert relic value as c value."));
+                err.message = mv_string("Cannot convert relic value as c value.");
+                throw_pi_error(point, err);
             }
             untyped->ptype = type_val;
         }
@@ -1164,7 +1224,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
 }
 
-void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* point) {
+void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+    PicoError err;
+    err.range = syn->range;
     switch (syn->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
@@ -1215,14 +1277,16 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         }
 
         if (syn->application.implicits.len != 0) {
-            throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
+            err.message = mk_string("Implicit instantiation assumes no implicits are already present!", a);
+            throw_pi_error(point, err);
         }
         PiType fn_type = *syn->application.function->ptype;
         if (fn_type.sort == TProc) {
             for (size_t i = 0; i < fn_type.proc.implicits.len; i++) {
                 PiType* arg_ty = fn_type.proc.implicits.data[i];
                 if (arg_ty->sort != TTraitInstance) {
-                    throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+                    err.message = mk_string("Implicit arguments must have type trait instance!", a);
+                    throw_pi_error(point, err);
                 }
 
                 InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
@@ -1238,9 +1302,11 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
                     break;
                 }
                 case IENotFound:
-                    throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+                    err.message = mk_string("Implicit argument cannot be instantiated - instance not found!", a);
+                    throw_pi_error(point, err);
                 case IEAmbiguous:
-                    throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+                    err.message = mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a);
+                    throw_pi_error(point, err);
                 default:
                     panic(mv_string("Invalid instance entry type!"));
                 }
@@ -1257,7 +1323,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         }
 
         if (syn->all_application.implicits.len != 0) {
-            throw_error(point, mk_string("Implicit instantiation assumes no implicits are already present!", a));
+            err.message = mk_string("Implicit instantiation assumes no implicits are already present!", a);
+            throw_pi_error(point, err);
         }
 
         // Given, e.g. an application (a {I64 Bool} x y), with a : All [A B] t, perform a
@@ -1278,7 +1345,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
         for (size_t i = 0; i < proc_type->proc.implicits.len; i++) {
             PiType* arg_ty = proc_type->proc.implicits.data[i];
             if (arg_ty->sort != TTraitInstance) {
-                throw_error(point, mk_string("Implicit arguments must have type trait instance!", a));
+                err.message = mk_string("Implicit arguments must have type trait instance!", a);
+                throw_pi_error(point, err);
             }
 
             InstanceEntry e = type_instance_lookup(arg_ty->instance.instance_of, arg_ty->instance.args, env);
@@ -1294,9 +1362,11 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
                 break;
             }
             case IENotFound:
-                throw_error(point, mk_string("Implicit argument cannot be instantiated - instance not found!", a));
+                err.message = mk_string("Implicit argument cannot be instantiated - instance not found!", a);
+                throw_pi_error(point, err);
             case IEAmbiguous:
-                throw_error(point, mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a));
+                err.message = mk_string("Implicit argument cannot be instantiated - ambiguous instances!", a);
+                throw_pi_error(point, err);
             default:
                 panic(mv_string("Invalid instance entry type!"));
             }
@@ -1350,7 +1420,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
             if (field_syn) {
                 instantiate_implicits(*field_syn, env, a, point);
             } else {
-                throw_error(point, mv_string("Trait instance is missing a field"));
+                err.message = mv_string("Trait instance is missing a field");
+                throw_pi_error(point, err);
             }
         }
 
@@ -1482,7 +1553,9 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, ErrorPoint* 
 // This function recursively descends into a term and squashes all types.
 // In this case, to squash a type removes all unification vars from 
 // the type. (see squash_type in unify.h)
-void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
+void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
+    PicoError err;
+    err.range = typed->range;
     switch (typed->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
@@ -1625,12 +1698,14 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
             squash_type(typed->with_reset.in_arg_ty);
         } else {
-            throw_error(point, mv_string("reset argument type not instantiated"));
+            err.message = mv_string("reset argument type not instantiated");
+            throw_pi_error(point, err);
         }
         if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
             squash_type(typed->with_reset.cont_arg_ty);
         } else {
-            throw_error(point, mv_string("resume argument type not instantiated"));
+            err.message = mv_string("resume argument type not instantiated");
+            throw_pi_error(point, err);
         }
         break;
     case SResetTo:
@@ -1755,11 +1830,12 @@ void squash_types(Syntax* typed, Allocator* a, ErrorPoint* point) {
         push_ptr(mk_str_doc(mv_string("Type:"), a), &nodes);
         push_ptr(pretty_type(typed->ptype, a), &nodes);
 
-        throw_error(point, doc_to_str(mv_vsep_doc(nodes, a), a));
+        err.message = doc_to_str(mv_vsep_doc(nodes, a), a);
+        throw_pi_error(point, err);
     }
 }
 
-void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, ErrorPoint* point) {
+void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     Allocator exalloc = mk_executable_allocator(a);
     
     // Catch error here; so can cleanup after self before further unwinding.
@@ -1787,10 +1863,13 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, ErrorPoint* poi
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_executable_allocator(exalloc);
-    throw_error(point, cleanup_point.error_message);
+    PicoError err;
+    err.range = typed->range;
+    err.message = cleanup_point.error_message;
+    throw_pi_error(point, err);
 }
 
-void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, ErrorPoint* point) {
+void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, PiErrorPoint* point) {
     type_infer_i(untyped, env, gen, a, point);
     return eval_typed_expr(untyped, env, a, point);
 }
@@ -1798,11 +1877,15 @@ void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen,
 // TODO (BUG LOGIC UB): evaluation may produce a function pointer (or an object
 // with a function pointer) that points to generated code. This method currently
 // provides no means to capture that assembly.
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, ErrorPoint* point) {
+PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, UVarGenerator* gen, PiErrorPoint* point) {
     type_infer_i(untyped, env, gen, a, point);
 
     if (untyped->ptype->sort != TKind) {
-        throw_error(point, mv_string("Value expected to be type, was not!"));
+        PicoError err = (PicoError) {
+            .range = untyped->range,
+            .message = mv_string("Value expected to be type, was not!"),
+        };
+        throw_pi_error(point, err);
     }
 
     PiType** result = eval_typed_expr(untyped, env, a, point);

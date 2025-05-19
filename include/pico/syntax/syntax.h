@@ -3,6 +3,7 @@
 
 #include "platform/memory/allocator.h"
 
+#include "pico/data/range.h"
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/symbol_array.h"
@@ -376,6 +377,7 @@ struct Syntax {
         Syntax* type_of;
     };
     PiType* ptype;
+    Range range;
 };
 
 /* Other instances */

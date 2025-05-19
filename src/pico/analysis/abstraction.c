@@ -298,6 +298,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* 
         *res = (Syntax) {
             .type = SVariant,
             .ptype = NULL,
+            .range = raw.range,
             .variant.enum_type = fn_syn->constructor.enum_type,
             .variant.tagname = fn_syn->constructor.tagname,
             .variant.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
@@ -315,6 +316,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* 
         *res = (Syntax) {
             .type = SAllApplication,
             .ptype = NULL,
+            .range = raw.range,
             .all_application.function = mem_alloc(sizeof(Syntax), a),
             .all_application.types = mk_ptr_array(typelist.branch.nodes.len, a),
             .all_application.implicits = mk_ptr_array(0, a),
@@ -335,6 +337,7 @@ Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* 
         *res = (Syntax) {
             .type = SApplication,
             .ptype = NULL,
+            .range = raw.range,
             .application.function = mem_alloc(sizeof(Syntax), a),
             .application.implicits = mk_ptr_array(0, a),
             .application.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
@@ -407,6 +410,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SProcedure,
             .ptype = NULL,
+            .range = raw.range,
             .procedure.args = arguments,
             .procedure.implicits = implicits, 
             .procedure.body = body
@@ -441,6 +445,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SAll,
             .ptype = NULL,
+            .range = raw.range,
             .all.args = arguments,
             .all.body = body,
         };
@@ -459,6 +464,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SMacro,
             .ptype = NULL,
+            .range = raw.range,
             .transformer = transformer,
         };
         return res;
@@ -480,12 +486,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             if (symbol_eq(lit, string_to_symbol(mv_string("true")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = true,};
+                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .range = raw.range, .boolean = true,};
                 return res;
             }
             else if (symbol_eq(lit, string_to_symbol(mv_string("false")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .boolean = false,};
+                *res = (Syntax) {.type = SLitBool, .ptype = NULL,  .range = raw.range, .boolean = false,};
                 return res;
             } else {
                 err.range = msym.range;
@@ -514,6 +520,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             *res = (Syntax) {
                 .type = SConstructor,
                 .ptype = NULL,
+                .range = raw.range,
                 .constructor.enum_type = var_type,
                 .constructor.tagname = msym.atom.symbol,
             };
@@ -590,6 +597,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SMatch,
             .ptype = NULL,
+            .range = raw.range,
             .match.val = sval,
             .match.clauses = clauses,
         };
@@ -638,6 +646,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SStructure,
             .ptype = NULL,
+            .range = raw.range,
             .structure.ptype = stype,
             .structure.fields = fields,
         };
@@ -672,6 +681,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 *res = (Syntax) {
                     .type = SAbsVariable,
                     .ptype = &e->type,
+                    .range = raw.range,
                     .abvar.index = 0,
                     .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
                 };
@@ -686,6 +696,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             *res = (Syntax) {
                 .type = SProjector,
                 .ptype = NULL,
+                .range = raw.range,
                 .projector.field = msym.atom.symbol,
                 .projector.val = source,
             };
@@ -771,6 +782,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SInstance,
             .ptype = NULL,
+            .range = raw.range,
             .instance.params = params,
             .instance.implicits = implicits,
             .instance.constraint = constraint,
@@ -791,6 +803,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDynamic,
             .ptype = NULL,
+            .range = raw.range,
             .dynamic = dynamic,
         };
         return res;
@@ -807,6 +820,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDynamicUse,
             .ptype = NULL,
+            .range = raw.range,
             .use = use,
         };
         return res;
@@ -861,6 +875,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SLet,
             .ptype = NULL,
+            .range = raw.range,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
         };
@@ -911,6 +926,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDynamicLet,
             .ptype = NULL,
+            .range = raw.range,
             .dyn_let_expr.bindings = bindings,
             .dyn_let_expr.body = body,
         };
@@ -932,6 +948,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SIf,
             .ptype = NULL,
+            .range = raw.range,
             .if_expr.condition = terms.data[0],
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
@@ -997,6 +1014,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SLabels,
             .ptype = NULL,
+            .range = raw.range,
             .labels.entry = entry,
             .labels.terms = terms,
         };
@@ -1025,6 +1043,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SGoTo,
             .ptype = NULL,
+            .range = raw.range,
             .go_to.label = label->atom.symbol,
             .go_to.args = args,
         };
@@ -1070,6 +1089,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SWithReset,
             .ptype = NULL,
+            .range = raw.range,
             .with_reset.point_sym = reset_point_sym,
             .with_reset.expr = expr,
             .with_reset.in_sym = in_sym,
@@ -1091,6 +1111,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SResetTo,
             .ptype = NULL,
+            .range = raw.range,
             .reset_to.point = rpoint,
             .reset_to.arg = rarg,
         };
@@ -1134,6 +1155,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SSequence,
             .ptype = NULL,
+            .range = raw.range,
             .sequence.elements = elements,
         };
         return res;
@@ -1156,6 +1178,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SIs,
             .ptype = NULL,
+            .range = raw.range,
             .is = {.val = term, .type = type},
         };
         return res;
@@ -1174,6 +1197,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SInTo,
             .ptype = NULL,
+            .range = raw.range,
             .into = {.val = term, .type = type},
         };
         return res;
@@ -1192,6 +1216,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SOutOf,
             .ptype = NULL,
+            .range = raw.range,
             .into = {.val = term, .type = type},
         };
         return res;
@@ -1210,6 +1235,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SName,
             .ptype = NULL,
+            .range = raw.range,
             .name = {.val = term, .type = type},
         };
         return res;
@@ -1227,6 +1253,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SUnName,
             .ptype = NULL,
+            .range = raw.range,
             .unname = term,
         };
         return res;
@@ -1244,6 +1271,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDynAlloc,
             .ptype = NULL,
+            .range = raw.range,
             .size = term,
         };
         return res;
@@ -1261,6 +1289,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SSizeOf,
             .ptype = NULL,
+            .range = raw.range,
             .size = term,
         };
         return res;
@@ -1278,6 +1307,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SAlignOf,
             .ptype = NULL,
+            .range = raw.range,
             .size = term,
         };
         return res;
@@ -1310,6 +1340,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SProcType,
             .ptype = NULL,
+            .range = raw.range,
             .proc_type.args = arg_types,
             .proc_type.return_type = return_type,
         };
@@ -1349,6 +1380,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SStructType,
             .ptype = NULL,
+            .range = raw.range,
             .struct_type.fields = field_types,
         };
         return res;
@@ -1393,6 +1425,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SEnumType,
             .ptype = NULL,
+            .range = raw.range,
             .enum_type.variants = enum_variants,
         };
         return res;
@@ -1410,6 +1443,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SResetType,
             .ptype = NULL,
+            .range = raw.range,
             .reset_type.in = in_ty,
             .reset_type.out = out_ty,
         };
@@ -1428,6 +1462,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDynamicType,
             .ptype = NULL,
+            .range = raw.range,
             .dynamic_type = dyn_ty,
         };
         return res;
@@ -1454,6 +1489,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SNamedType,
             .ptype = NULL,
+            .range = raw.range,
             .named_type.name = name,
             .named_type.body = rec_body,
         };
@@ -1472,6 +1508,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SDistinctType,
             .ptype = NULL,
+            .range = raw.range,
             .distinct_type = distinct,
         };
         return res;
@@ -1489,6 +1526,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SOpaqueType,
             .ptype = NULL,
+            .range = raw.range,
             .opaque_type = opaque,
         };
         return res;
@@ -1545,6 +1583,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = STraitType,
             .ptype = NULL,
+            .range = raw.range,
             .trait.vars = vars,
             .trait.fields = fields,
         };
@@ -1579,6 +1618,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SAllType,
             .ptype = NULL,
+            .range = raw.range,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
@@ -1611,6 +1651,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = STypeFamily,
             .ptype = NULL,
+            .range = raw.range,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
@@ -1625,6 +1666,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SLiftCType,
             .ptype = NULL,
+            .range = raw.range,
             .c_type = c_type,
         };
         return res;
@@ -1649,6 +1691,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SReinterpret,
             .ptype = NULL,
+            .range = raw.range,
             .reinterpret.from_native = former == FReinterpretNative,
             .reinterpret.type = type, 
             .reinterpret.body = body,
@@ -1675,6 +1718,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = SConvert,
             .ptype = NULL,
+            .range = raw.range,
             .convert.from_native = former == FConvertNative,
             .convert.type = type, 
             .convert.body = body,
@@ -1697,6 +1741,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         *res = (Syntax) {
             .type = STypeOf,
             .ptype = NULL,
+            .range = raw.range,
             .type_of = body,
         };
         return res;
@@ -1718,6 +1763,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             *res = (Syntax) {
                 .type = SVariable,
                 .ptype = NULL,
+                .range = raw.range,
                 .variable = raw.atom.symbol,
             };
             break;
@@ -1726,6 +1772,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             *res = (Syntax) {
                 .type = SLitUntypedIntegral,
                 .ptype = NULL,
+                .range = raw.range,
                 .integral.value = raw.atom.int_64,
             };
             break;
@@ -1734,6 +1781,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             *res = (Syntax) {
                 .type = SLitUntypedFloating,
                 .ptype = NULL,
+                .range = raw.range,
                 .floating.value = raw.atom.float_64,
             };
             break;
@@ -1742,6 +1790,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             *res = (Syntax) {
                 .type = SLitBool,
                 .ptype = NULL,
+                .range = raw.range,
                 .boolean = (bool) raw.atom.int_64,
             };
             break;
@@ -1750,6 +1799,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             *res = (Syntax) {
                 .type = SLitString,
                 .ptype = NULL,
+                .range = raw.range,
                 .string = raw.atom.string,
             };
             break;

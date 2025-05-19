@@ -110,7 +110,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    type_check(&abs, env, &arena, &point);
+    type_check(&abs, env, &arena, &pi_point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Inferred Type\n"), cout);

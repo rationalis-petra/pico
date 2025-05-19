@@ -91,7 +91,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        type_check(&abs, env, &arena, &point);
+        type_check(&abs, env, &arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Code Generation
@@ -183,7 +183,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        type_check(&abs, env, &arena, &point);
+        type_check(&abs, env, &arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Code Generation
