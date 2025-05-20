@@ -494,22 +494,23 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Now, move them into the space allocated in reverse order
         PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
-        size_t src_stack_offset = variant_size - tag_size;
-        size_t dest_stack_offset = variant_size;
+
+        // Note, as we are reversing the order, we start at the top of the stack (last enum element),
+        // which gets copied to the end of the enum
+        size_t src_stack_offset = 0;
+        size_t dest_stack_offset = (2 * variant_size) - tag_size;
         for (size_t i = 0; i < syn.variant.args.len; i++) {
-            // We now both the source_offset and dest_offset. These are both
+            // We now have both the source_offset and dest_offset. These are both
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
             
             size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
-            src_stack_offset -= field_size;
 
-            // Now, move the data.
+            dest_stack_offset -= field_size;
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+            src_stack_offset += field_size;
 
-            // Now, increase the amount of data we have used
-            dest_stack_offset += field_size;
         }
 
         // Remove the space occupied by the temporary values 

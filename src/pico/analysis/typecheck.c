@@ -1116,10 +1116,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // • Expect the body to be a c value
             // • expect the type to be a pico type
             if (untyped->reinterpret.body->ptype->sort != TCType) {
+                err.range = untyped->reinterpret.body->range;
                 err.message = mv_string("reinterpret-native input value to be a c value, was not!");
                 throw_pi_error(point, err);
             }
             if (untyped->reinterpret.type->ptype->sort != TKind) {
+                err.range = untyped->reinterpret.type->range;
                 err.message = mv_string("reinterpret-native expected output type to be a relic type, was not!");
                 throw_pi_error(point, err);
             }
@@ -1137,6 +1139,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // • Expect the body to be a pico value (which all values are, so skip check)
             // • Expect the type to be a c type
             if (untyped->reinterpret.type->ptype->sort != TKind) {
+                err.range = untyped->reinterpret.type->range;
                 err.message = mv_string("reinterpret-relic expected output type to be a type, was not!");
                 throw_pi_error(point, err);
             }
@@ -1144,6 +1147,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             // Evaluate the output type, check that can reinterpret.
             PiType* type_val = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, a, point);
             if (type_val->sort != TCType) {
+                err.range = untyped->reinterpret.type->range;
                 err.message = mv_string("reinterpret-relic expected output type to be a c type, was not!");
                 throw_pi_error(point, err);
             }

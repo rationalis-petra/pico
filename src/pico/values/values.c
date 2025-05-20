@@ -366,7 +366,7 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::Family"), a);
         break;
     case FLiftCType:
-        out = mk_str_doc(mv_string("::CType"), a);
+        out = mk_str_doc(mv_string("::LiftCType"), a);
         break;
 
     case FReinterpretNative:
