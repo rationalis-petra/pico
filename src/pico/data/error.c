@@ -14,6 +14,9 @@ void throw_pi_error(PiErrorPoint* point, PicoError err) {
 const size_t max_prev_line_numbers = 5;
 
 void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
+    // TODO (FEAT): As user code can produce source positions, we should ensure
+    // that we the (start, end) range in the error to avoid segfaults and provide
+    // friendlier errors.
     String* buffer = get_captured_buffer(is);
     if (buffer) {
         // Get the line number of the affected area, and the start position of at most 
