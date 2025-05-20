@@ -1856,7 +1856,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "push %%r15       \n"
                                          "push %%r14       \n"
                                          "push %%r13       \n"
-                                         // Push output ptr & sizeof (Syntax), resp
+                                         // Push output ptr & sizeof (RawTree), resp
                                          "push %6          \n"
                                          "push %7          \n"
 
@@ -1881,17 +1881,18 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          // expect a Syntax to be atop the stack:
 #if ABI == SYSTEM_V_64
                                          // memcpy (dest = rdi, src = rsi, size = rdx)
-                                         // retval = rax
-                                         "mov 0x30(%%rsp), %%rdx   \n"
-                                         "mov 0x38(%%rsp), %%rdi   \n"
+                                         // retval = rax 
+                                         // Note: 0x40 = sizeof(RawTree)
+                                         "mov 0x40(%%rsp), %%rdx   \n"
+                                         "mov 0x48(%%rsp), %%rdi   \n"
                                          "mov %%rsp, %%rsi         \n"
                                          "call memcpy              \n"
 
 #elif ABI == WIN_64
                                          // memcpy (dest = rcx, src = rdx, size = r8)
                                          // retval = rax
-                                         "mov 0x30(%%rsp), %%r8    \n"
-                                         "mov 0x38(%%rsp), %%rcx   \n"
+                                         "mov 0x40(%%rsp), %%r8    \n"
+                                         "mov 0x48(%%rsp), %%rcx   \n"
                                          "mov %%rsp, %%rdx         \n"
                                          "sub $0x20, %%rsp         \n"
                                          "call memcpy              \n"
@@ -1900,7 +1901,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #error "Unknown calling convention"
 #endif
                                          // pop value from stack 
-                                         "mov 0x30(%%rsp), %%rax   \n"
+                                         "mov 0x40(%%rsp), %%rax   \n"
                                          "add %%rax, %%rsp         \n"
                                          // pop stashed size & dest from stack
                                          "add $0x10, %%rsp          \n"

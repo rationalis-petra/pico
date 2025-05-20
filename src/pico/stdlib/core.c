@@ -630,14 +630,19 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
+        PiType* range_type = mk_struct_type(a, 2, "start", mk_prim_type(a, UInt_64), "end", mk_prim_type(a, UInt_64));
+        type_data = range_type;
+        sym = string_to_symbol(mv_string("Range"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
         PiType* syn_name_ty = mk_var_type(a, "Syntax");
         PiType* syn_array = mk_app_type(a, array_type, syn_name_ty);
         delete_pi_type_p(syn_name_ty, a);
 
         type_val = mk_named_type(a, "Syntax",
                                  mk_enum_type(a, 2,
-                                              "atom", 1, atom_type,
-                                              "node", 2, hint_type, syn_array));
+                                              "atom", 2, range_type, atom_type,
+                                              "node", 3, copy_pi_type_p(range_type, a), hint_type, syn_array));
 
         type_data = type_val;
         sym = string_to_symbol(mv_string("Syntax"));

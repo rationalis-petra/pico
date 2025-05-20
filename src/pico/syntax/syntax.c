@@ -670,6 +670,13 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case STypeOf: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("type-of"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->type_of, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     }
 
     if (out == NULL)  {
