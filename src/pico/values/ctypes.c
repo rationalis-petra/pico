@@ -3,8 +3,11 @@
 #include "platform/signals.h"
 #include "pretty/document.h"
 #include "pretty/standard_types.h"
+#include "data/meta/assoc_impl.h"
 
 #include "pico/values/ctypes.h"
+
+ASSOC_IMPL(Name, CType, name_ctype, NameCType);
 
 Document* pretty_cprim(CPrimInt prim, Allocator* a) {
     PtrArray nodes = mk_ptr_array(2, a);
@@ -67,7 +70,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         // ret_ty name (n1 a1, n2 a2, ...)
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(pretty_ctype(type->proc.ret, a), &main_nodes);
-        if (type->proc.named) {
+        if (!type->proc.named_tag) {
             push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
         }
 
@@ -75,7 +78,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(mk_str_doc(*name_to_string(type->proc.args.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
-            push_ptr(pretty_ctype(type->proc.args.data[i].val, a), &arg_nodes);
+            push_ptr(pretty_ctype(&type->proc.args.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
                 push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
             }
@@ -87,7 +90,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         // struct name { name : var, n2 : var2 }
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("struct"), a), &main_nodes);
-        if (type->proc.named) {
+        if (!type->proc.named_tag) {
             push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
         }
 
@@ -394,9 +397,9 @@ void delete_c_type(CType t, Allocator* a) {
         break;
     case CSProc:
         for (size_t i = 0; i < t.proc.args.len; i++) {
-            delete_c_type_p(t.proc.args.data[i].val, a);
+            delete_c_type(t.proc.args.data[i].val, a);
         }
-        sdelete_name_ptr_assoc(t.proc.args);
+        sdelete_name_ctype_assoc(t.proc.args);
         delete_c_type_p(t.proc.ret, a);
         break;
     case CSStruct:
@@ -438,9 +441,9 @@ CType copy_c_type(CType t, Allocator* a) {
         out.enumeration.vals = scopy_name_i64_assoc(t.enumeration.vals, a);
         break;
     case CSProc:
-        out.proc.args = scopy_name_ptr_assoc(t.proc.args, a);
+        out.proc.args = scopy_name_ctype_assoc(t.proc.args, a);
         for (size_t i = 0; i < t.proc.args.len; i++) {
-            out.proc.args.data[i].val = copy_c_type_p(t.proc.args.data[i].val, a);
+            out.proc.args.data[i].val = copy_c_type(t.proc.args.data[i].val, a);
         }
         out.proc.ret = copy_c_type_p(t.proc.ret, a);
         break;
@@ -494,12 +497,11 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...) {
     va_list args;
     va_start(args, nargs);
 
-    NamePtrAssoc pargs = mk_name_ptr_assoc(nargs, a);
+    NameCTypeAssoc pargs = mk_name_ctype_assoc(nargs, a);
     for (size_t i = 0; i < nargs; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
-        CType* arg = mem_alloc(sizeof(CType), a);
-        *arg = va_arg(args, CType);
-        name_ptr_bind(name, arg, &pargs);
+        CType arg = va_arg(args, CType);
+        name_ctype_bind(name, arg, &pargs);
     }
 
     CType* ret = mem_alloc(sizeof(CType), a);
@@ -508,7 +510,7 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...) {
 
     return (CType) {
         .sort = CSProc,
-        .proc.named = false,
+        .proc.named_tag = 1,
         .proc.args = pargs,
         .proc.ret= ret,
     };

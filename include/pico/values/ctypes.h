@@ -1,11 +1,13 @@
 #ifndef __PICO_VALUES_CTYPES_H
 #define __PICO_VALUES_CTYPES_H
 
-#include "pico/data/name_ptr_assoc.h"
+#include "data/meta/assoc_header.h"
 #include "pico/data/name_i64_assoc.h"
 #include "pico/data/name_ptr_amap.h"
 
 typedef struct CType CType;
+
+ASSOC_HEADER_NOCELL(Name, CType, name_ctype, NameCType)
 
 typedef enum {
     CSVoid,
@@ -40,9 +42,9 @@ typedef struct {
 } CPrimInt;
 
 typedef struct {
-    bool named;
+    uint64_t named_tag;
     Name name;
-    NamePtrAssoc args;
+    NameCTypeAssoc args;
     CType* ret;
 } CProc;
 
@@ -77,6 +79,8 @@ struct CType {
         Name incomplete;
     };
 };
+
+ASSOC_HEADER_CELL(Name, CType, name_cty, NameCType)
 
 Document* pretty_cprimint(CPrimInt prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);

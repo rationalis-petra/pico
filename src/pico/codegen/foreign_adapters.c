@@ -254,16 +254,16 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
-        CType* c_arg = ctype->proc.args.data[i].val;
+        CType c_arg = ctype->proc.args.data[i].val;
         PiType* p_arg = ptype->proc.args.data[i];
-        if (!can_reinterpret(c_arg, p_arg)) {
+        if (!can_reinterpret(&c_arg, p_arg)) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
             panic(mv_string("Attempted to do invalid conversion"));
         }
         
         // Get the classes associated with an argument.  
         // If there are multiple classes, each class in the array corresponds to an eightbyte of the argument.
-        U8Array classes = system_v_arg_classes(c_arg, a);
+        U8Array classes = system_v_arg_classes(&c_arg, a);
 
         unsigned char saved_integer_register = current_integer_register;
         size_t assembler_pos = get_pos(ass);
@@ -320,7 +320,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         if (pass_in_memory) {
             push_u64(i, &in_memory_args);
-            input_area_size += c_size_of(*c_arg);
+            input_area_size += c_size_of(c_arg);
         }
 
         sdelete_u8_array(classes);
@@ -670,7 +670,7 @@ bool can_convert(CType *ctype, PiType *ptype) {
         }
 
         for (size_t i = 0; i < ctype->proc.args.len; i++) {
-            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
                 return false;
             }
         }
@@ -825,7 +825,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
-            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
                 return false;
         }
         return can_reinterpret(ctype->proc.ret, ptype->proc.ret);
