@@ -1591,6 +1591,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SConvert: {
         if (syn.convert.from_native) {
             void** cfn = const_fold(syn.convert.body, env, target, links, a, point);
+            void* proc_address = get_instructions(target.code_aux).data;
+            proc_address += get_instructions(target.code_aux).len;
+
+            // Generate procedure value (push the address onto the stack)
+            AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+            backlink_code(target, out.backlink, links);
+            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+            // Now, change the target and the assembler, such that code is now
+            // generated in the 'code segment'. Then, generate the function body
+            ass = target.code_aux;
+            target.target = target.code_aux;
+
             convert_c_fn(cfn, &syn.convert.body->ptype->c_type, syn.ptype, ass, a, point);
         } else {
             panic(mv_string("Cannot yet convert pico value to c value."));

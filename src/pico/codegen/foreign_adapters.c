@@ -812,8 +812,10 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TPrim: {
         if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
-        } else if ((ctype->sort == CSPtr && ptype->prim == Address)
-                   || (ctype->sort == CSVoid && ptype->prim == Unit)) {
+        } else if (ptype->prim == Address) {
+            // if the ctype could be converted to/from void*
+            return ctype->sort == CSPtr || ctype->sort == CSProc;
+        } else if (ctype->sort == CSVoid && ptype->prim == Unit) {
             return true;
         } else {
             return false;

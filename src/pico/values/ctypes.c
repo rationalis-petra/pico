@@ -187,7 +187,11 @@ Document* pretty_cval(CType* type, void* data, Allocator* a) {
         return mk_str_doc(mv_string("pretty_cval not implemented for enum"), a);
     }
     case CSProc: {
-        return mk_str_doc(mv_string("pretty_cval not implemented for function"), a);
+        void** addr = (void**) data;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("c-fun"), a), &nodes);
+        push_ptr(pretty_ptr(*addr, a), &nodes);
+        return mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
     }
     case CSStruct: {
         return mk_str_doc(mv_string("pretty_cval not implemented for struct"), a);
