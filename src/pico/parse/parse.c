@@ -381,6 +381,7 @@ ParseResult parse_number(IStream* is, Allocator* a) {
     bool is_positive = true;
     bool just_negation = true;
     bool floating = false;
+    size_t start = bytecount(is);
 
     result = peek(is, &codepoint);
     if (result == StreamSuccess && codepoint == '-') {
@@ -412,6 +413,8 @@ ParseResult parse_number(IStream* is, Allocator* a) {
         return (ParseResult) {
             .type = ParseSuccess,
             .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
             .result.atom.type = ASymbol,
             .result.atom.symbol = string_to_symbol(mv_string("-")),
         };
@@ -448,6 +451,8 @@ ParseResult parse_number(IStream* is, Allocator* a) {
         return (ParseResult) {
             .type = ParseSuccess,
             .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
             .result.atom.type = AFloating,
             .result.atom.float_64 = dlhs + drhs,
         };
@@ -463,6 +468,8 @@ ParseResult parse_number(IStream* is, Allocator* a) {
         return (ParseResult) {
             .type = ParseSuccess,
             .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
             .result.atom.type = AIntegral,
             .result.atom.int_64 = int_result,
         };
@@ -541,6 +548,7 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token (")
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
@@ -561,6 +569,8 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     return (ParseResult) {
         .type = ParseSuccess,
         .result.type = RawAtom,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
         .result.atom.type = AString,
         .result.atom.string = string_from_UTF_32(arr, a),
     };
@@ -569,6 +579,7 @@ ParseResult parse_string(IStream* is, Allocator* a) {
 ParseResult parse_char(IStream* is) {
     StreamResult result;
     uint32_t codepoint;
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token #)
     result = next(is, &codepoint);
 
@@ -585,6 +596,8 @@ ParseResult parse_char(IStream* is) {
     return (ParseResult) {
         .type = ParseSuccess,
         .result.type = RawAtom,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
         .result.atom.type = AIntegral,
         .result.atom.int_64 = codepoint,
     };

@@ -79,11 +79,11 @@ Document* pretty_ctype(CType* type, Allocator* a) {
             push_ptr(mk_str_doc(*name_to_string(type->proc.args.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
             push_ptr(pretty_ctype(&type->proc.args.data[i].val, a), &arg_nodes);
-            if (i - 1 != type->proc.args.len) {
+            if (i + 1 != type->proc.args.len) {
                 push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
             }
         }
-        push_ptr(mk_paren_doc("(", ")", mv_sep_doc(arg_nodes, a), a), &main_nodes);
+        push_ptr(mk_paren_doc("(", ")", mv_cat_doc(arg_nodes, a), a), &main_nodes);
         return mv_sep_doc(main_nodes, a);
     }
     case CSStruct: {
@@ -127,7 +127,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
     case CSPtr: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("*"), a) ,&nodes);
-        push_ptr(type->ptr.inner ,&nodes);
+        push_ptr(pretty_ctype(type->ptr.inner, a) ,&nodes);
         return mv_cat_doc(nodes, a);
     }
     case CSIncomplete:
