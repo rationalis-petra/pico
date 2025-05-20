@@ -270,9 +270,10 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
 
 ParseResult parse_atom(IStream* is, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
-     * These may be 'true' atoms such as num, + or foo. Strings separated by '.'
-     * and ':' are also considered by the parser as 'atoms' as these elements are not separated
-     * by spaces and bind tightly.
+     * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
+     * and ':' such as Maybe:none and foo.var are also considered by the parser
+     * as 'atoms'
+     * as these elements are not separated by spaces and bind tightly.
      * 
      * The general approach is as follows:
      */
@@ -292,29 +293,35 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
             next(is, &codepoint);
             push_u32(codepoint, &arr);
         } else if (codepoint == '.' || codepoint == ':') {
+            size_t op_start = bytecount(is);
             next(is, &codepoint);
+            size_t op_end = bytecount(is);
+
+            RawTree op = (RawTree) {
+                .type = RawAtom,
+                .range.start = op_start,
+                .range.end = op_end,
+                .atom.type = ASymbol,
+                .atom.symbol = codepoint == '.'
+                  ? string_to_symbol(mv_string("."))
+                  : string_to_symbol(mv_string(":")),
+            };
 
             // Store symbol
             String str = string_from_UTF_32(arr, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
                 .range.start = start,
-                .range.end = bytecount(is),
+                .range.end = op_start,
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
+            // new start bytecount(is)
+            start = op_end;
+
             push_rawtree(val, &terms);
             arr.len = 0; // reset array
 
-            RawTree op = (RawTree) {
-                .type = RawAtom,
-                .range.start = start,
-                .range.end = bytecount(is),
-                .atom.type = ASymbol,
-                .atom.symbol = codepoint == '.'
-                  ? string_to_symbol(mv_string("."))
-                  : string_to_symbol(mv_string(":")),
-            };
             push_rawtree(op, &terms);
         } else {
             String str = string_from_UTF_32(arr, a);
@@ -351,8 +358,8 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
 
             current = (RawTree) {
                 .type = RawBranch,
-                .range.start = start,
-                .range.end = bytecount(is),
+                .range.start = current.range.start,
+                .range.end = terms.data[i+1].range.end,
                 .branch.hint = HNone,
                 .branch.nodes = children,
             };

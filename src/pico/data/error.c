@@ -40,23 +40,40 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
         }
         
         // Now, gather the past n lines
-        const size_t num_prev_lines = line_number < max_prev_line_numbers ? line_number : max_prev_line_numbers;
-        for (size_t i = 0; i < num_prev_lines; i++) {
-            size_t line_start = prev_line_starts.data[(prev_line + i) % 5];
-            size_t next_line_start = (i + 1 == num_prev_lines)
-                ? current_start
-                : prev_line_starts.data[(prev_line + i + 1) % 5];
+        if (line_number < max_prev_line_numbers) {
+            for (size_t i = 0; i < line_number; i++) {
+                size_t line_start = prev_line_starts.data[i];
+                size_t next_line_start = (i + 1 == line_number)
+                    ? current_start
+                    : prev_line_starts.data[1 + i];
 
-            Document* doc = pretty_u64(line_number - (5 - i), a);
-            write_doc(doc, cout);
-            delete_doc(doc, a);
-            write_string(mv_string(" | "), cout);
-            String str = substring(line_start, next_line_start, *buffer, a);
-            write_string(str, cout);
-            delete_string(str, a);
+                Document* doc = pretty_u64(i + 1, a);
+                write_doc(doc, cout);
+                delete_doc(doc, a);
+                write_string(mv_string(" | "), cout);
+                String str = substring(line_start, next_line_start, *buffer, a);
+                write_string(str, cout);
+                delete_string(str, a);
+            }
+        }
+        else {
+            for (size_t i = 0; i < max_prev_line_numbers; i++) {
+                size_t line_start = prev_line_starts.data[(prev_line + i) % 5];
+                size_t next_line_start = (i + 1 == max_prev_line_numbers)
+                    ? current_start
+                    : prev_line_starts.data[(prev_line + 1 + i) % 5];
+
+                Document* doc = pretty_u64(line_number + 1 - (5 - i), a);
+                write_doc(doc, cout);
+                delete_doc(doc, a);
+                write_string(mv_string(" | "), cout);
+                String str = substring(line_start, next_line_start, *buffer, a);
+                write_string(str, cout);
+                delete_string(str, a);
+            }
         }
 
-        Document* doc = pretty_u64(line_number, a);
+        Document* doc = pretty_u64(line_number + 1, a);
         write_doc(doc, cout);
         delete_doc(doc, a);
         write_string(mv_string(" | "), cout);
