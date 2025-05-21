@@ -1665,7 +1665,7 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
         .data_aux = target.data_aux,
     };
 
-    generate(*syn, env, target, links, a, point);
+    generate(*syn, env, gen_target, links, a, point);
 
     void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), a, &cleanup_point);
 

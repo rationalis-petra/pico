@@ -4,17 +4,6 @@
 
 #include "pico/binding/type_env.h"
 
-typedef enum {
-    LQVar,
-    LVar,
-} LocalSort;
-
-typedef struct {
-    LocalSort sort;
-    PiType* type;
-} Local;
-
-ASSOC_HEADER(Symbol, Local, sym_local, SymLocal)
 ASSOC_CMP_IMPL(Symbol, Local, cmp_symbol, sym_local, SymLocal)
 
 struct TypeEnv {
@@ -137,13 +126,9 @@ void pop_labels(TypeEnv* env, size_t n) {
     sym_local_unbindn(n, &env->locals);
 }
 
-SymbolArray get_bound_vars(TypeEnv* env, Allocator* a) {
+SymLocalAssoc get_local_vars(TypeEnv* env) {
     // TODO (BUG LOGIC): how to handle labels?
-    SymbolArray out = mk_symbol_array(env->locals.len, a);
-    for (size_t i = 0; i < env->locals.len; i++) {
-        push_symbol(env->locals.data[i].key, &out);
-    }
-    return out;
+    return env->locals;
 }
 
 Environment* get_base(TypeEnv* env) {

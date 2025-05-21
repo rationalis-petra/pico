@@ -24,6 +24,7 @@ typedef enum {
     SADirect,
     SAIndirect,
     SATypeVar,
+    SAInaccessibleLocal,
     SASentinel,
     SALabel,
 } SAddr_t;
@@ -102,12 +103,16 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
 
 
     // NOTE: BELOW CODE IS EXTRACT FROM BIND_TYPE 
-    // ------------
-    SymbolArray syms = get_bound_vars(env, a);
+    // ------------------------------------------
+    SymLocalAssoc syms = get_local_vars(env);
     for (size_t i = 0; i < syms.len; i++) {
         SAddr value;
-        value.type = SATypeVar;
-        value.symbol = syms.data[i];
+        if (syms.data[i].val.type->sort == TKind) {
+            value.type = SATypeVar;
+            value.symbol = syms.data[i].key;
+        } else {
+            value.type = SAInaccessibleLocal;
+        }
         value.stack_offset = 0;
         // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
         push_saddr(value, &local->vars);
@@ -140,6 +145,11 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
+        if ((maddr.type == SAInaccessibleLocal) && symbol_eq(maddr.symbol, s)) {
+            return (AddressEntry) {
+                .type = ANotFound,
+            };
+        }
         if ((maddr.type == SADirect || maddr.type == SAIndirect) && symbol_eq(maddr.symbol, s)) {
             // TODO: Check if the offset can fit into an immediate
             return (AddressEntry) {

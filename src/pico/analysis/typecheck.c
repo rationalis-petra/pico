@@ -697,7 +697,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             PiType* ty = mk_uvar(gen, a);
 
             type_check_i(val, ty, env, gen, a, point);
-            // TODO: recursive bindings?
+            // TODO (FEAT): add support for recursive bindings (e.g. procedures)
             type_var(arg, ty, env);
         }
         type_infer_i(untyped->let_expr.body, env, gen, a, point);
@@ -1260,7 +1260,6 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         for (size_t i = 0; i < syn->all.args.len; i++) {
             Symbol arg = syn->all.args.data[i];
 
-            // TODO INVESTIGATE: could this cause issues??
             PiType* arg_ty = mem_alloc(sizeof(PiType), a);
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
@@ -1340,7 +1339,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
             Syntax* type = syn->all_application.types.data[i];
             sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
         }
-        // TODO (BUG): unwrap?!
+        // TODO (BUG): this type probably wants unwrapping
         PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
 
         // Early exit if we don't need to do any instantiation.
@@ -1390,7 +1389,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         for (size_t i = 0; i < syn->match.clauses.len; i++) {
             SynClause* clause = syn->match.clauses.data[i];
 
-            // TODO BUG: bind types from clause
+            // TODO BUG: bind types/vars from clause
             instantiate_implicits(clause->body, env, a, point);
         }
         break;

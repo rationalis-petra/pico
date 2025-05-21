@@ -34,6 +34,18 @@ typedef struct {
     AbsVariable abvar;
 } InstanceEntry;
 
+typedef enum {
+    LQVar,
+    LVar,
+} LocalSort;
+
+typedef struct {
+    LocalSort sort;
+    PiType* type;
+} Local;
+
+ASSOC_HEADER(Symbol, Local, sym_local, SymLocal)
+
 TypeEnv* mk_type_env(Environment* env, Allocator* a);
 // No delete, as we expect allocation via an arena allocator
 
@@ -50,7 +62,7 @@ PtrArray* lookup_label(Symbol s, TypeEnv* env);
 void add_labels (SymPtrAssoc labels, TypeEnv* env);
 void pop_labels(TypeEnv* env, size_t n);
 
-SymbolArray get_bound_vars(TypeEnv* env, Allocator* a);
+SymLocalAssoc get_local_vars(TypeEnv* env);
 Environment* get_base(TypeEnv* env);
 
 #endif
