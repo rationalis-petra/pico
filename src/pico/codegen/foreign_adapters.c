@@ -492,12 +492,12 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
       if (i < 4) {
-          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
           if (class == Win64LargeAggregate || class == Win64LargeAggregate) {
-              input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+              input_area_size += c_size_of(ctype->proc.args.data[i].val);
           }
       } else {
-          input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+          input_area_size += c_size_of(ctype->proc.args.data[i].val);
       }
     }
 
@@ -538,7 +538,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // rightmost argument is at the bottom of the stack. 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
       if (current_register < 4) {
-          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
           switch (class) {
           case Win64None: // Do nothing!
             break;
