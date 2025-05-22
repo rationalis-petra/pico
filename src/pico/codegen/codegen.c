@@ -1590,7 +1590,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SConvert: {
         if (syn.convert.from_native) {
-            void** cfn = const_fold(syn.convert.body, env, target, links, a, point);
+            void* cfn = *(void**)const_fold(syn.convert.body, env, target, links, a, point);
             void* proc_address = get_instructions(target.code_aux).data;
             proc_address += get_instructions(target.code_aux).len;
 
@@ -1608,7 +1608,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         } else {
             panic(mv_string("Cannot yet convert pico value to c value."));
         }
-           
         break;
     }
     case STypeOf: {
