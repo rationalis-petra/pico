@@ -649,7 +649,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push result onto stack
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        if (return_arg_size > 0) {
+            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        }
 
         // Push return address
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -665,6 +667,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 }
 
 bool can_convert(CType *ctype, PiType *ptype) {
+    ptype = strip_type(ptype);
+
     if (ctype->sort == CSProc && ptype->sort == TProc) {
         if (ctype->proc.args.len != ptype->proc.args.len) {
             return false;
@@ -760,7 +764,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_32: {
-        return (ctype.prim == CInt && ctype.prim == CLong) &&
+        return (ctype.prim == CInt || ctype.prim == CLong) &&
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_16: {

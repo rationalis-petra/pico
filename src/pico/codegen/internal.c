@@ -161,6 +161,32 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
     }
 }
 
+void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Align RSP to closest 16 bytes
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    
+#if ABI == WIN_64
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
+
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)cfn), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
+    
+    build_unary_op(ass, Pop, reg(RCX, sz_64),  a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+}
+
 void* tmp_malloc(uint64_t memsize) {
     return mem_alloc(memsize, get_std_tmp_allocator());
 }
@@ -170,17 +196,11 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     build_binary_op(ass, Mov, reg(RDI, sz_64), mem_size, a, point);
 #elif ABI == WIN_64
     build_binary_op(ass, Mov, reg(RCX, sz_64), mem_size, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&tmp_malloc), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
+    generate_c_call(tmp_malloc, ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);
@@ -212,29 +232,7 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
     #error "Unknown calling convention"
 #endif
 
-    // Align RSP to closest 16 bytes
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
-    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
-    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
-    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
-    
-#if ABI == WIN_64
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&internal_type_app), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
-    
-    build_unary_op(ass, Pop, reg(RCX, sz_64),  a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+    generate_c_call(internal_type_app, ass, a, point);
 
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(nfields * ADDRESS_SIZE), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -302,17 +300,11 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     build_binary_op(ass, Mov, reg(RCX, sz_64), nfields, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), data, a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), ret, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_proc_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
+    generate_c_call(mk_proc_ty, ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);

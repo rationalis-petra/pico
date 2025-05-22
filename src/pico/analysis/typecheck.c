@@ -361,6 +361,39 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 eval_type(type, env, a, gen, point);
                 sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
             }
+
+            if (all_type.binder.vars.len != untyped->all_application.types.len) {
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mk_str_doc(mv_string("Incorrect number of type arguments to all function - expected: "), a), &nodes);
+                push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
+                push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
+                push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                throw_pi_error(point, err);
+            }
+
+            // Now, check that args + implicits are empty
+            if (untyped->all_application.implicits.len != 0) {
+                PtrArray nodes = mk_ptr_array(4, a);
+                PtrArray implicits = untyped->all_application.implicits;
+                err.range.start = ((Syntax*)implicits.data[0])->range.start;
+                err.range.end = ((Syntax*)implicits.data[implicits.len - 1])->range.end;
+                push_ptr(mk_str_doc(mv_string("Incorrect number of implicit arguments to all function - expected: 0, got: "), a), &nodes);
+                push_ptr(pretty_u64(implicits.len, a), &nodes);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                throw_pi_error(point, err);
+            }
+
+            if (untyped->all_application.args.len != 0) {
+                PtrArray nodes = mk_ptr_array(4, a);
+                PtrArray arguments = untyped->all_application.args;
+                err.range.start = ((Syntax*)arguments.data[0])->range.start;
+                err.range.end = ((Syntax*)arguments.data[arguments.len - 1])->range.end;
+                push_ptr(mk_str_doc(mv_string("Incorrect number of arguments to all function - expected: 0, got: "), a), &nodes);
+                push_ptr(pretty_u64(arguments.len, a), &nodes);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                throw_pi_error(point, err);
+            }
             
             PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, a);
             untyped->ptype = ret_type;
