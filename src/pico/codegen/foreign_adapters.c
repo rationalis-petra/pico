@@ -92,13 +92,13 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
 
             // So, to determine which eightbyte a particular component is in, we
             // need size and alignment
-            CType* field_ty = type->structure.fields.data[i].val;
-            size_t field_sz = c_size_of(*field_ty);
-            size_t field_al = c_align_of(*field_ty);
+            CType field_ty = type->structure.fields.data[i].val;
+            size_t field_sz = c_size_of(field_ty);
+            size_t field_al = c_align_of(field_ty);
             offset = c_size_align(offset, field_al);
             
             // We need now to figure out get the eightbytes
-            populate_sysv_words(out, offset, field_ty, a);
+            populate_sysv_words(out, offset, &field_ty, a);
 
             offset += field_sz; 
         }
