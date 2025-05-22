@@ -208,6 +208,8 @@ RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
     RawTree* out = mem_alloc(sizeof(RawTree), a);
     *out = (RawTree) {
         .type = RawBranch,
+        .range.start = raw->branch.nodes.data[drop].range.start,
+        .range.end = raw->branch.nodes.data[raw->branch.nodes.len - 1].range.end,
         .branch.hint = raw->branch.hint,
         .branch.nodes.len = raw->branch.nodes.len - drop,
         .branch.nodes.size = raw->branch.nodes.size - drop,

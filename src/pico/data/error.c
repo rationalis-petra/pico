@@ -42,6 +42,8 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
           }
         }
         
+        // Colour for "irrelevant" code
+        start_coloured_text(colour(150, 150, 150));
         // Now, gather the past n lines
         if (line_number < max_prev_line_numbers) {
             for (size_t i = 0; i < line_number; i++) {
@@ -83,23 +85,28 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
 
         String s1 = substring(current_start, error.range.start, *buffer, a);
         // TODO (BUG) '+1' won't work with UTF-8!
-        String err = substring(error.range.start, error.range.end, *buffer, a);
+        String bad_code = substring(error.range.start, error.range.end, *buffer, a);
         String s2 = substring(error.range.end, affected_line_end, *buffer, a);;
 
         write_string(s1, cout);
 
-        start_coloured_text(colour(200, 0, 0));
-        write_string(err, cout);
+        start_coloured_text(colour(208, 105, 30));
+        write_string(bad_code, cout);
         end_coloured_text();
 
         write_string(s2, cout);
 
         delete_string(s1, a);
-        delete_string(err, a);
+        delete_string(bad_code, a);
         delete_string(s2, a);
 
+        // End of surrounding code
+        end_coloured_text();
+
         write_string(mv_string("\n"), cout);
+        start_coloured_text(colour(200, 20, 20));
         write_string(error.message, cout);
+        end_coloured_text();
     } else {
         write_string(error.message, cout);
     }

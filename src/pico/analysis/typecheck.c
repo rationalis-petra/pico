@@ -1217,7 +1217,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             CType* c_type = &untyped->convert.body->ptype->c_type;
 
             if (!can_convert(c_type, pico_type)) {
-                err.message = mv_string("Cannot convert c value as relic value.");
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_str_doc(mv_string("Cannot convert between C Type: "), a), &nodes);
+                push_ptr(pretty_ctype(c_type, a), &nodes);
+                push_ptr(mv_str_doc(mv_string("\nand Relic Type: "), a), &nodes);
+                push_ptr(pretty_type(pico_type, a), &nodes);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
                 throw_pi_error(point, err);
             }
             untyped->ptype = pico_type;

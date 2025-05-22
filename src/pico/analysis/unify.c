@@ -329,7 +329,23 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
                 .error_message = mk_string("Cannot Unify different type variables", a),
             };
         }
-        return (Result) {.type = Ok} ;
+        return (Result) {.type = Ok};
+        break;
+    }
+    case TAll: {
+        if (lhs->binder.vars.len != rhs->binder.vars.len) {
+            return (Result) {.type = Err};
+        }
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            SymPair syms = (SymPair){
+                .lhs = lhs->binder.vars.data[i],
+                .rhs = rhs->binder.vars.data[i]
+            };
+            push_sym_pair(syms, rename);
+        };
+        Result res = unify_internal(lhs->binder.body, rhs->binder.body, rename, a);
+        rename->len -= lhs->binder.vars.len;
+        return res;
         break;
     }
     default:  {
