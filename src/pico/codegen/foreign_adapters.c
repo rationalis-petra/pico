@@ -843,7 +843,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         }
 
         for (size_t i = 0; i < ptype->structure.fields.len; i++) {
-          if (!can_reinterpret(ctype->structure.fields.data[i].val,
+          if (!can_reinterpret(&ctype->structure.fields.data[i].val,
                                ptype->structure.fields.data[i].val)) {
               return false;
           }
@@ -858,9 +858,9 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         // check that the 0th struct field is reinterpretable as a 64-bit int
         // TODO (FEATURE): change tag size based on number of enum vals 
         PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
-        if (!can_reinterpret(ctype->structure.fields.data[0].val, &tag_type)) return false;
+        if (!can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
         
-        CType* cunion = ctype->structure.fields.data[1].val;
+        CType* cunion = &ctype->structure.fields.data[1].val;
 
 
         if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) {

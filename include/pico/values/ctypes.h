@@ -37,8 +37,15 @@ typedef enum {
 } CSigned;
 
 typedef struct {
-    CIntType prim;
-    CSigned is_signed;
+    // Padding is to ensure that the implementation matches the Relic types (where enums are 64 bit)
+    union {
+        CIntType prim;
+        uint64_t pad_1;
+    };
+    union {
+        CSigned is_signed;
+        uint64_t pad_2;
+    };
 } CPrimInt;
 
 typedef struct {
@@ -49,9 +56,9 @@ typedef struct {
 } CProc;
 
 typedef struct {
-    bool named;
+    uint64_t named_tag;
     Name name; 
-    NamePtrAMap fields;
+    NameCTypeAssoc fields;
 } CStruct;
 
 typedef struct {
@@ -68,7 +75,10 @@ typedef struct {
 } CPtr;
 
 struct CType {
-    CSort sort;
+    union {
+        CSort sort;
+        uint64_t pad; // To ensure that layout is same as Relic
+    };
     union {
         CPrimInt prim;
         CProc proc;

@@ -98,7 +98,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(mk_str_doc(*name_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
-            push_ptr(pretty_ctype(type->structure.fields.data[i].val, a), &arg_nodes);
+            push_ptr(pretty_ctype(&type->structure.fields.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
                 push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
             }
@@ -291,10 +291,10 @@ size_t c_size_of(CType type) {
         size_t align = 0;
         size_t max_align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            align = c_align_of(*(CType*)type.structure.fields.data[i].val);
+            align = c_align_of(type.structure.fields.data[i].val);
             max_align = max_align > align ? max_align : align;
             size = c_size_align(size, align);
-            size += c_size_of(*(CType*)type.structure.fields.data[i].val);
+            size += c_size_of(type.structure.fields.data[i].val);
         }
         return c_size_align(size, max_align);
     }
@@ -356,7 +356,7 @@ size_t c_align_of(CType type) {
         // The contents of any padding is undefined.
         size_t align = 0;
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            size_t tmp = c_align_of(*(CType*)type.structure.fields.data[i].val);
+            size_t tmp = c_align_of(type.structure.fields.data[i].val);
             align = align > tmp ? align : tmp;
         }
         return align;
@@ -408,10 +408,9 @@ void delete_c_type(CType t, Allocator* a) {
         break;
     case CSStruct:
         for (size_t i = 0; i < t.structure.fields.len; i++) {
-            CType* ty = t.structure.fields.data[i].val;
-            delete_c_type_p(ty, a);
+            delete_c_type(t.structure.fields.data[i].val, a);
         }
-        sdelete_name_ptr_amap(t.structure.fields);
+        sdelete_name_ctype_assoc(t.structure.fields);
         break;
     case CSUnion:
         for (size_t i = 0; i < t.cunion.fields.len; i++) {
@@ -452,9 +451,9 @@ CType copy_c_type(CType t, Allocator* a) {
         out.proc.ret = copy_c_type_p(t.proc.ret, a);
         break;
     case CSStruct:
-        out.structure.fields = scopy_name_ptr_amap(t.structure.fields, a);
+        out.structure.fields = scopy_name_ctype_assoc(t.structure.fields, a);
         for (size_t i = 0; i < t.structure.fields.len; i++) {
-            out.structure.fields.data[i].val = copy_c_type_p(t.structure.fields.data[i].val, a);
+            out.structure.fields.data[i].val = copy_c_type(t.structure.fields.data[i].val, a);
         }
         break;
     case CSUnion:
@@ -525,17 +524,15 @@ CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    NamePtrAMap fields = mk_name_ptr_amap(nfields, a);
+    NameCTypeAssoc fields = mk_name_ctype_assoc(nfields, a);
     for (size_t i = 0; i < nfields; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
-        CType* arg = mem_alloc(sizeof(CType), a);
-        *arg = va_arg(args, CType);
-        name_ptr_insert(name, arg, &fields);
+        name_ctype_bind(name, va_arg(args, CType), &fields);
     }
 
     return (CType) {
         .sort = CSStruct,
-        .structure.named = false,
+        .structure.named_tag = 1, // None
         .structure.fields = fields,
     };
 }
