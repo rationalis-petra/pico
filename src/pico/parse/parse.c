@@ -254,6 +254,9 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     } else if (res.type == ParseFail) {
         out = res;
     } else {
+        // consume closing ')'
+        next(is, &codepoint);
+
         out.type = ParseSuccess;
         out.result = (RawTree) {
             .type = RawBranch,
@@ -262,8 +265,6 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
             .branch.hint = hint,
             .branch.nodes = nodes,
         };
-        // consume closing ')'
-        next(is, &codepoint);
     }
     return out;
 }
