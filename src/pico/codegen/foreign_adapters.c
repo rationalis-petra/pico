@@ -220,7 +220,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
         size_t idx = arg_offsets.len - (i + 1);
         arg_offsets.data[idx] = offset;
-        offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
+        offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
     }
     arg_offsets.data[0] = offset;
 
@@ -428,6 +428,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
+        // The -0x8 accounts for the fact that we just popped the return address! 
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push registers onto stack
