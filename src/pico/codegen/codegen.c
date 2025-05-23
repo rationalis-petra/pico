@@ -290,7 +290,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Storage of function output 
         size_t ret_size = pi_size_of(*syn.procedure.body->ptype);
-        build_binary_op(ass, Mov, reg(R9, sz_64),  rref8(RBP, 16, sz_64), a, point);
+
+        // Note: R9, R14, RBP 
+        build_binary_op(ass, Mov, reg(R12, sz_64),  rref8(RBP, 16, sz_64), a, point);
         build_binary_op(ass, Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), a, point);
         build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
 
@@ -300,7 +302,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(args_size + 3 * ADDRESS_SIZE), a, point);
 
         // push return address 
-        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        build_unary_op(ass, Push, reg(R12, sz_64), a, point);
         build_nullary_op(ass, Ret, a, point);
         break;
     }
@@ -1619,25 +1621,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
-    }
-}
-
-void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
-
-    // first, assert that size_t is divisible by 8 ( we use rax for copies )
-    /* if (size % 8 != 0)  { */
-    /*     throw_error(point, mv_string("Error in generate_stack_move expected copy size to be divisible by 8")); */
-    /* }; */
-
-    if ((dest_stack_offset + size) > 255 || (src_stack_offset + size) > 255)  {
-        throw_error(point, mv_string("Error in generate_stack_move offsets + size must be smaller than 255!"));
-    };
-
-    // TODO: chekc if doing pi_stack_round is ok?
-    for (size_t i = 0; i < pi_stack_align(size) / 8; i++) {
-        build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), a, point);
-        build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), a, point);
     }
 }
 

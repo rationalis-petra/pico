@@ -545,6 +545,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 }
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    type = strip_type(type);
     switch (type->sort) {
     case TPrim:
     case TProc:
@@ -560,7 +561,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFFFFFFF), a, point);
             break;
         case ALocalIndirect:
-            panic(mv_string("cannot generate code for local indirect."));
+            panic(mv_string("Cannot generate code for local indirect."));
             break;
         case AGlobal:
             panic(mv_string("Unexpected type variable sort: Global."));
@@ -745,12 +746,6 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 }
 
 
-void stack_copy(char *dest, const char *src, size_t size) {
-  for (size_t i = size; i > 0; i--) {
-      dest[i - 1] = src[i - 1];
-  }
-}
-
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, dest, reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, src, reg(RSP, sz_64), a, point);
@@ -767,16 +762,9 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stack_copy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(stack_move,ass, a, point);
 }

@@ -123,7 +123,7 @@ void add_labels (SymPtrAssoc labels, TypeEnv* env) {
 }
 
 void pop_labels(TypeEnv* env, size_t n) {
-    sym_local_unbindn(n, &env->locals);
+    sym_ptr_unbindn(n, &env->labels);
 }
 
 SymLocalAssoc get_local_vars(TypeEnv* env) {

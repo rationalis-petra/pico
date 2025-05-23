@@ -24,6 +24,7 @@
 #include "pico/values/types.h"
 
 #include "app/command_line_opts.h"
+#include "app/module_load.h"
 
 typedef struct {
     bool debug_print;
@@ -225,15 +226,15 @@ int main(int argc, char** argv) {
         break;
     }
     case CScript: {
-        IterOpts opts = (IterOpts) {
-            .debug_print = false,
-            .interactive = false,
-        };
-
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
-        while (repl_iter(fin, cout, stdalloc, &exalloc, module, opts));
-        delete_istream(fin, stdalloc);
-
+        if (fin) {
+            run_script_from_istream(fin, cout, module, stdalloc);
+            delete_istream(fin, stdalloc);
+        } else {
+            write_string(mv_string("Failed to open file: "), cout);
+            write_string(command.script.filename, cout);
+            write_string(mv_string("\n"), cout);
+        }
         break;
     }
     case CEval: {

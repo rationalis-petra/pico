@@ -28,11 +28,15 @@ void backlink_code(Target target, size_t offset, InternalLinkData* links);
 void backlink_data(Target target, size_t offset, InternalLinkData* links);
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
 
+
+void stack_move(char *dest, const char *src, size_t size);
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 // Wrappers around c functions
+void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);

@@ -16,8 +16,8 @@ typedef enum {
     CSDouble,
     CSPtr,
     CSProc,
-    CSIncomplete,
     CSStruct,
+    CSIncomplete,
     CSUnion,
     CSCEnum,
 } CSort;
