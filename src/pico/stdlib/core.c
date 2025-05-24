@@ -267,6 +267,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("declare"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FOpen;
+    sym = string_to_symbol(mv_string("open"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FProcedure;
     sym = string_to_symbol(mv_string("proc"));
     add_def(module, sym, type, &former, null_segments, NULL);

@@ -21,6 +21,18 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         res.val.val = pico_run_expr(target, sz, a, point);
         break;
     }
+    case TLOpen: {
+        res.type = EROpen;
+        res.opened = top.open.syms;
+        for (size_t i = 0; i < top.open.syms.len; i++) {
+            ImportClause clause = (ImportClause) {
+                .type = ImportAll,
+                .name = top.open.syms.data[i],
+            };
+            add_import_clause(clause, module);
+        }
+        break;
+    }
     case TLDef: {
         // copy into module
         res = (EvalResult) {
@@ -142,6 +154,15 @@ Document* pretty_res(EvalResult res, Allocator* a) {
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
         push_ptr(pretty_type(res.def.type, a), &docs);
         out = mv_cat_doc(docs, a);
+        break;
+    }
+    case EROpen: {
+        PtrArray docs = mk_ptr_array(res.opened.len + 1, a);
+        push_ptr(mk_str_doc(mv_string("Opened:"), a), &docs);
+        for (size_t i = 0; i < res.opened.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(res.opened.data[i]), a), &docs);
+        }
+        out = mv_sep_doc(docs, a);
         break;
     }
     case ERValue:

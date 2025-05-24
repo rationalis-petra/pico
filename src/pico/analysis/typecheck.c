@@ -28,7 +28,6 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
     // If this is a definition, lookup the type to check against 
     TypeEnv *t_env = mk_type_env(env, a);
     UVarGenerator* gen = mk_gen(a);
-
     switch (top->type) {
     case TLDef: {
         PiType* check_against;
@@ -44,6 +43,20 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         type_check_expr(term, *check_against, t_env, gen, a, point);
         instantiate_implicits(term, t_env, a, point);
         pop_type(t_env);
+        break;
+    }
+    case TLOpen: {
+        for (size_t i = 0; i < top->open.syms.len; i++) {
+            Symbol symbol = top->open.syms.data[i];
+            EnvEntry entry = env_lookup(symbol, env);
+            if (entry.type != Ok || !entry.is_module) {
+                PicoError err = (PicoError) {
+                    .range = top->open.range,
+                    .message = mv_string("module does not exist"),
+                };
+                throw_pi_error(point, err);
+            }
+        }
         break;
     }
     case TLExpr: {

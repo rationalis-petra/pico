@@ -296,7 +296,6 @@ void address_start_poly(SymbolArray types, SymbolArray vars, AddressEnv* env, Al
                                   // old RBP.
     SAddr padding;
     padding.type = SASentinel;
-    // padding.symbol = 0;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 

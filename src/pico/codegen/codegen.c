@@ -55,6 +55,10 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
         delete_address_env(a_env, a);
         break;
     }
+    case TLOpen: {
+        // Do nothing; open only affects the environment
+        break;
+    }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
         generate(*top.expr, a_env, target, &links, a, point);
@@ -205,14 +209,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
-                size_t value_size = pi_size_of(*syn.ptype);
+                size_t value_size = pi_size_of(indistinct_type);
+                size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(value_size), a, point);
+                build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(stack_size), a, point);
 
-                // TODO (check if replace with stack copy)
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
                 throw_error(point,

@@ -268,6 +268,85 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    // Short-hand C types 
+    CType c_type;
+    CType* cdata = &c_type;
+
+    // Int
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-long-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unspecified});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-signed-long-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-unsigned-long-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unspecified});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-signed-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Signed});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-unsigned-long"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-int"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-signed-int"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Signed});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-unsigned-int"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-short"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unspecified});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-signed-short"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-unsigned-short"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unsigned});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-char"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unspecified});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-signed-char"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Signed});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
+
+    typep = get_c_type();
+    sym = string_to_symbol(mv_string("c-unsigned-char"));
+    c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
+    add_def(module, sym, *typep, cdata, null_segments, NULL);
 
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);

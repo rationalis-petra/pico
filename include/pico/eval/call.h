@@ -15,6 +15,7 @@
 typedef enum EvalResult_t  {
     ERValue,
     ERDef,
+    EROpen,
 } EvalResult_t;
 
 typedef struct EvalVal {
@@ -32,6 +33,7 @@ typedef struct EvalResult {
     union {
         EvalVal val;
         EvalDef def;
+        SymbolArray opened;
     };
 } EvalResult;
 

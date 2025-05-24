@@ -114,10 +114,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     type_check(&abs, env, &arena, &pi_point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-        doc = pretty_type(toplevel_type(abs), &arena);
-        write_doc(doc, cout);
-        write_string(mv_string("\n"), cout);
+        PiType* ty = toplevel_type(abs);
+        if (ty) {
+            write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
+            doc = pretty_type(ty, &arena);
+            write_doc(doc, cout);
+            write_string(mv_string("\n"), cout);
+        }
     }
 
     // -------------------------------------------------------------------------
