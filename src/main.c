@@ -3,6 +3,7 @@
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
+#include "platform/io/terminal.h"
 
 #include "data/string.h"
 #include "data/stream.h"
@@ -23,17 +24,22 @@
 #include "pico/values/types.h"
 
 #include "app/command_line_opts.h"
+#include "app/module_load.h"
 
 typedef struct {
     bool debug_print;
     bool interactive;
 } IterOpts;
 
+
 bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
+
+    cin = mk_capturing_istream(cin, &arena);
+    reset_bytecount(cin);
 
     Target gen_target = {
         .target = mk_assembler(exec),
@@ -51,6 +57,9 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
 
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
     if (opts.interactive) {
         String* name = get_name(module);
         if (name) write_string(*name, cout);
@@ -58,13 +67,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     }
 
     ParseResult res = parse_rawtree(cin, &arena);
+
     if (res.type == ParseNone) {
         write_string(mv_string("\n"), cout);
         goto on_exit;
     }
-
     if (res.type == ParseFail) {
-        write_string(mv_string("Parse Failed :(\n"), cout);
+        display_error(res.error, cin, cout, a);
         release_arena_allocator(arena);
         return true;
     }
@@ -77,7 +86,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     Document* doc;
     if (opts.debug_print) {
-        doc = pretty_rawtree(res.data.result, &arena);
+        doc = pretty_rawtree(res.result, &arena);
         write_string(mv_string("Pretty printing raw syntax\n"), cout);
         write_doc(doc, cout);
         write_string(mv_string("\n"), cout);
@@ -87,7 +96,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.data.result, env, &arena, &point);
+    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
@@ -102,7 +111,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    type_check(&abs, env, &arena, &point);
+    type_check(&abs, env, &arena, &pi_point);
 
     if (opts.debug_print) {
         write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
@@ -150,6 +159,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     release_arena_allocator(arena);
     return true;
 
+ on_pi_error:
+    display_error(pi_point.error, cin, cout, &arena);
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    return true;
+
  on_error:
     write_string(point.error_message, cout);
     write_string(mv_string("\n"), cout);
@@ -166,6 +182,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 }
 
 int main(int argc, char** argv) {
+
     // Setup
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
@@ -176,6 +193,7 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+    init_terminal(stdalloc);
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);
@@ -208,15 +226,15 @@ int main(int argc, char** argv) {
         break;
     }
     case CScript: {
-        IterOpts opts = (IterOpts) {
-            .debug_print = false,
-            .interactive = false,
-        };
-
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
-        while (repl_iter(fin, cout, stdalloc, &exalloc, module, opts));
-        delete_istream(fin, stdalloc);
-
+        if (fin) {
+            run_script_from_istream(fin, cout, module, stdalloc);
+            delete_istream(fin, stdalloc);
+        } else {
+            write_string(mv_string("Failed to open file: "), cout);
+            write_string(command.script.filename, cout);
+            write_string(mv_string("\n"), cout);
+        }
         break;
     }
     case CEval: {

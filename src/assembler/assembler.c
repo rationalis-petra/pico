@@ -39,12 +39,20 @@ struct Assembler {
 
 void clear_assembler(Assembler* assembler) {
     assembler->instructions.len = 0;
+    for (size_t i = 0; i < assembler->instructions.len; i++) {
+        assembler->instructions.data[i] = 0x90;
+    }
 }
                                             
 Assembler* mk_assembler(Allocator* a) {
     Assembler* out = (Assembler*)mem_alloc(sizeof(Assembler), a);
-    out->instructions = mk_u8_array(4096, a);
+    const size_t initial_capacity = 4096;
+
+    out->instructions = mk_u8_array(initial_capacity, a);
     out->gpa = a;
+    for (size_t i = 0; i < initial_capacity; i++) {
+        out->instructions.data[i] = 0x90;
+    }
     return out;
 }
 

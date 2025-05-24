@@ -3,7 +3,7 @@
 
 #include "data/meta/amap_header.h"
 #include "data/meta/array_header.h"
-#include "data/array.h"
+#include "pico/data/range.h"
 #include "platform/memory/allocator.h"
 #include "pretty/document.h"
 #include "pico/values/values.h"
@@ -52,9 +52,9 @@ typedef enum : uint64_t {
     RawBranch,
 } RawTree_t;
 
-
 typedef struct RawTree {
     RawTree_t type;
+    Range range;
     union {
         Atom atom;
         Branch branch;

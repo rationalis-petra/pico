@@ -102,9 +102,10 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "push %%rbp       \n" // Nonvolatile on System V + Win64
         "push %%rbx       \n" // Nonvolatile on System V + Win64
         "push %%rdi       \n" // Nonvolatile on Win 64
-        "push %%r15       \n"
-        "push %%r14       \n"
-        "push %%r13       \n"
+        "push %%r15       \n" // for dynamic vars
+        "push %%r14       \n" // for dynamic memory space
+        "push %%r13       \n" // for control/indexing memory space
+        "push %%r12       \n" // Nonvolatile on System V + Win64
         "mov %2, %%r15    \n"
         "mov %3, %%r14    \n"
         "mov %4, %%r13    \n"
@@ -112,6 +113,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP? Possibly to account
                               // for value on stack?
         "call *%1         \n"
+        "pop %%r12        \n"
         "pop %%r13        \n"
         "pop %%r14        \n"
         "pop %%r15        \n"

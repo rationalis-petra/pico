@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include "platform/memory/allocator.h"
 
-#define ASSOC_IMPL(key_t, val_t, fprefix, tprefix)                      \
+#define ASSOC_COMMON_IMPL(key_t, val_t, fprefix, tprefix)               \
     tprefix##Assoc mk_ ## fprefix ## _assoc(size_t capacity, Allocator* a) { \
         return (tprefix##Assoc) {                                       \
             .capacity = capacity,                                       \
@@ -35,15 +35,6 @@
         };                                                              \
     }                                                                   \
                                                                         \
-    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map) {            \
-        for (size_t i = map.len; i > 0; i--) {                          \
-            if (key == map.data[i - 1].key) {                           \
-                return &(map.data[i - 1].val);                          \
-            }                                                           \
-        }                                                               \
-        return NULL;                                                    \
-    }                                                                   \
-                                                                        \
     void fprefix##_bind(key_t key, val_t val, tprefix##Assoc* map) {    \
         if (map->len >= map->capacity) {                                \
             map->capacity = map->capacity == 0 ? 8 : map->capacity * 2; \
@@ -61,5 +52,28 @@
     void fprefix##_unbindn(size_t n, tprefix##Assoc* map) {             \
         map->len -= n;                                                  \
     }                                                                   \
+
+#define ASSOC_IMPL(key_t, val_t, fprefix, tprefix)                      \
+    ASSOC_COMMON_IMPL(key_t, val_t, fprefix, tprefix)                   \
+    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map) {           \
+        for (size_t i = map.len; i > 0; i--) {                          \
+            if (key == map.data[i - 1].key) {                           \
+                return &(map.data[i - 1].val);                          \
+            }                                                           \
+        }                                                               \
+        return NULL;                                                    \
+    }                                                                   \
+
+#define ASSOC_CMP_IMPL(key_t, val_t, cmpfun, fprefix, tprefix)  \
+    ASSOC_COMMON_IMPL(key_t, val_t, fprefix, tprefix)                   \
+    val_t* fprefix##_alookup(key_t key, tprefix##Assoc map) {           \
+        for (size_t i = map.len; i > 0; i--) {                          \
+            if (cmpfun(key, map.data[i - 1].key) == 0) {                \
+                return &(map.data[i - 1].val);                          \
+            }                                                           \
+        }                                                               \
+        return NULL;                                                    \
+    }                                                                   \
+                                                                        \
 
 #endif

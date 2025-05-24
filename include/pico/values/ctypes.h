@@ -1,11 +1,13 @@
 #ifndef __PICO_VALUES_CTYPES_H
 #define __PICO_VALUES_CTYPES_H
 
-#include "pico/data/sym_ptr_assoc.h"
-#include "pico/data/sym_i64_assoc.h"
-#include "pico/data/sym_ptr_amap.h"
+#include "data/meta/assoc_header.h"
+#include "pico/data/name_i64_assoc.h"
+#include "pico/data/name_ptr_amap.h"
 
 typedef struct CType CType;
+
+ASSOC_HEADER_NOCELL(Name, CType, name_ctype, NameCType)
 
 typedef enum {
     CSVoid,
@@ -14,8 +16,8 @@ typedef enum {
     CSDouble,
     CSPtr,
     CSProc,
-    CSIncomplete,
     CSStruct,
+    CSIncomplete,
     CSUnion,
     CSCEnum,
 } CSort;
@@ -35,30 +37,37 @@ typedef enum {
 } CSigned;
 
 typedef struct {
-    CIntType prim;
-    CSigned is_signed;
+    // Padding is to ensure that the implementation matches the Relic types (where enums are 64 bit)
+    union {
+        CIntType prim;
+        uint64_t pad_1;
+    };
+    union {
+        CSigned is_signed;
+        uint64_t pad_2;
+    };
 } CPrimInt;
 
 typedef struct {
-    bool named;
-    Symbol name;
-    SymPtrAssoc args;
+    uint64_t named_tag;
+    Name name;
+    NameCTypeAssoc args;
     CType* ret;
 } CProc;
 
 typedef struct {
-    bool named;
-    Symbol name; 
-    SymPtrAMap fields;
+    uint64_t named_tag;
+    Name name; 
+    NameCTypeAssoc fields;
 } CStruct;
 
 typedef struct {
     CPrimInt base;
-    SymI64Assoc vals;
+    NameI64Assoc vals;
 } CEnum;
 
 typedef struct {
-    SymPtrAMap fields;
+    NamePtrAMap fields;
 } CUnion;
 
 typedef struct {
@@ -66,7 +75,10 @@ typedef struct {
 } CPtr;
 
 struct CType {
-    CSort sort;
+    union {
+        CSort sort;
+        uint64_t pad; // To ensure that layout is same as Relic
+    };
     union {
         CPrimInt prim;
         CProc proc;
@@ -74,9 +86,11 @@ struct CType {
         CEnum enumeration;
         CUnion cunion;
         CPtr ptr;
-        Symbol incomplete;
+        Name incomplete;
     };
 };
+
+ASSOC_HEADER_CELL(Name, CType, name_cty, NameCType)
 
 Document* pretty_cprimint(CPrimInt prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);

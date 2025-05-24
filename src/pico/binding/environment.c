@@ -2,21 +2,22 @@
 
 #include "platform/signals.h"
 
-#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/name_ptr_amap.h"
+#include "pico/data/name_ptr_amap.h"
 
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
-    SymPtrAMap symbol_origins;
+    NamePtrAMap symbol_origins;
 
     // Map ids to arrays of implementations - each element of the  
     //  'implementation set' points to the relevant module.
-    SymPtrAMap instances;
+    NamePtrAMap instances;
 };
 
 Environment* env_from_module(Module* module, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
-    env->symbol_origins = mk_sym_ptr_amap(128, a);
-    env->instances = mk_sym_ptr_amap(128, a);
+    env->symbol_origins = mk_name_ptr_amap(128, a);
+    env->instances = mk_name_ptr_amap(128, a);
 
     // TODO (PERF): this is quite expensive every REPL iteration... possibly 
     // cache results?
@@ -34,7 +35,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
             // Currently, import is not a path, so we can guarantee it's a module
             // In the future, when paths are supported, this will need to be
             // updated to check
-            sym_ptr_insert(clause.name, root_module, &env->symbol_origins);
+            name_ptr_insert(clause.name.name, root_module, &env->symbol_origins);
             break;
         }
         case ImportAs:
@@ -48,22 +49,22 @@ Environment* env_from_module(Module* module, Allocator* a) {
             Module* importee = get_module(clause.name, package);
             SymbolArray syms = get_exported_symbols(importee, a);
             for (size_t i = 0; i < syms.len; i++ ) {
-                sym_ptr_insert(syms.data[i], importee, &env->symbol_origins);
+                name_ptr_insert(syms.data[i].name, importee, &env->symbol_origins);
             }
-            sdelete_u64_array(syms);
+            sdelete_symbol_array(syms);
 
             // Get all implicits
             PtrArray instances = get_exported_instances(importee, a);
             for (size_t i = 0; i < instances.len; i++ ) {
                 InstanceSrc* instance = instances.data[i];
 
-                PtrArray* p = (PtrArray*)sym_ptr_lookup(instance->id, env->instances);
+                PtrArray* p = (PtrArray*)name_ptr_lookup(instance->id, env->instances);
                 if (!p) {
                     p = mem_alloc(sizeof(PtrArray), a);
                     *p = mk_ptr_array(8, a);
                     // TODO: we know this isn't in the instances; could perhaps
                     // speed up the process?
-                    sym_ptr_insert(instance->id, p, &env->instances);
+                    name_ptr_insert(instance->id, p, &env->instances);
                 }
 
                 // Add this instance to the array
@@ -85,15 +86,15 @@ Environment* env_from_module(Module* module, Allocator* a) {
     // get loaded first
     SymbolArray arr = get_exported_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
-        sym_ptr_insert(arr.data[i], module, &(env->symbol_origins));
+        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
     }
-    sdelete_u64_array(arr);
+    sdelete_symbol_array(arr);
 
     // Get all implicits
     PtrArray instances = get_exported_instances(module, a);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
-        PtrArray** res = (PtrArray**)sym_ptr_lookup(instance->id, env->instances);
+        PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
         PtrArray* p;
         if (res) {
             p = *res;
@@ -102,7 +103,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
             *p = mk_ptr_array(8, a);
             // TODO: we know this isn't in the instances; could perhaps
             // speed up the process?
-            sym_ptr_insert(instance->id, p, &env->instances);
+            name_ptr_insert(instance->id, p, &env->instances);
         }
 
         // Add this instance to the array
@@ -113,13 +114,15 @@ Environment* env_from_module(Module* module, Allocator* a) {
 }
 
 void delete_env(Environment* env, Allocator* a) {
-    sdelete_sym_ptr_amap(env->symbol_origins);
+    sdelete_name_ptr_amap(env->symbol_origins);
     mem_free(env, a);
 }
 
 EnvEntry env_lookup(Symbol sym, Environment* env) {
+    if (sym.did != 0) return (EnvEntry) {.success = Err, };
+
     EnvEntry result;
-    Module** module = (Module**)sym_ptr_lookup(sym, env->symbol_origins);
+    Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
         ModuleEntry* mentry = get_def(sym, *module); 
         if (mentry != NULL) {
@@ -136,7 +139,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     return result;
 }
 
-PtrArray* env_implicit_lookup(uint64_t id, Environment* env) {
-    PtrArray** implicits = (PtrArray**)sym_ptr_lookup(id, env->instances);
+PtrArray* env_implicit_lookup(Name id, Environment* env) {
+    PtrArray** implicits = (PtrArray**)name_ptr_lookup(id, env->instances);
     return implicits ? *implicits : NULL;
 }

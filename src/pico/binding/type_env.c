@@ -4,29 +4,18 @@
 
 #include "pico/binding/type_env.h"
 
-typedef enum {
-    LQVar,
-    LVar,
-} LocalSort;
-
-typedef struct {
-    LocalSort sort;
-    PiType* type;
-} Local;
-
-ASSOC_HEADER(Symbol, Local, sym_local, SymLocal)
-ASSOC_IMPL(Symbol, Local, sym_local, SymLocal)
+ASSOC_CMP_IMPL(Symbol, Local, cmp_symbol, sym_local, SymLocal)
 
 struct TypeEnv {
     Environment* env;
     SymLocalAssoc locals; // TODO: reset locals on new proc!
-    SymbolArray labels;
+    SymPtrAssoc labels;
 };
 
 TypeEnv* mk_type_env(Environment* env, Allocator* a) {
     TypeEnv* t_env = (TypeEnv*)mem_alloc(sizeof(TypeEnv), a);
     t_env->locals = mk_sym_local_assoc(32, a);
-    t_env->labels= mk_u64_array(32, a);
+    t_env->labels = mk_sym_ptr_assoc(32, a);
     t_env->env = env;
     return t_env; 
 }
@@ -122,27 +111,24 @@ void pop_types(TypeEnv* env, size_t n) {
     sym_local_unbindn(n, &env->locals);
 }
 
-bool label_present(Symbol s, TypeEnv* env) {
-    return (find_u64(s, env->labels) != env->labels.len);
+PtrArray* lookup_label(Symbol s, TypeEnv* env) {
+    PtrArray** arr = (PtrArray**)sym_ptr_alookup(s, env->labels);
+    if (arr) return *arr; else return NULL;
 }
 
-void add_labels (SymbolArray labels, TypeEnv* env) {
+void add_labels (SymPtrAssoc labels, TypeEnv* env) {
     for (size_t i = 0; i < labels.len; i++) {
-        push_u64(labels.data[i], &env->labels);
+        sym_ptr_bind(labels.data[i].key, labels.data[i].val, &env->labels);
     }
 }
 
 void pop_labels(TypeEnv* env, size_t n) {
-    sym_local_unbindn(n, &env->locals);
+    sym_ptr_unbindn(n, &env->labels);
 }
 
-SymbolArray get_bound_vars(TypeEnv* env, Allocator* a) {
+SymLocalAssoc get_local_vars(TypeEnv* env) {
     // TODO (BUG LOGIC): how to handle labels?
-    SymbolArray out = mk_u64_array(env->locals.len, a);
-    for (size_t i = 0; i < env->locals.len; i++) {
-        push_u64(env->locals.data[i].key, &out);
-    }
-    return out;
+    return env->locals;
 }
 
 Environment* get_base(TypeEnv* env) {

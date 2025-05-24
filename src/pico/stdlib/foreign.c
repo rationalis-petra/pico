@@ -95,19 +95,6 @@ void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoin
     delete_c_type(fn_ctype, a);
 }
 
-void build_mk_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // Proc type
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
-    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-
-    convert_c_fn(string_to_symbol, &fn_ctype, type, ass, a, point); 
-
-    delete_c_type(fn_ctype, a);
-}
-
 void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
@@ -136,7 +123,6 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
 }
 
 void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
-    Allocator arena = mk_arena_allocator(4096, a);
 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -167,6 +153,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     };
 
     // Now that we have setup appropriately, override the allocator
+    Allocator arena = mk_arena_allocator(4096, a);
     a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
@@ -219,7 +206,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         // TODO: replace u64 with symbol
         PiType *c_type =
             mk_named_type(a, "CType",
-                          mk_enum_type(a, 5,
+                          mk_enum_type(a, 7,
                                        "void", 0,
                                        "prim-int", 1, prim_type,
                                        "float", 0,
@@ -229,6 +216,9 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
                                          mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
                                          mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
                                          mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
+                                       "struct", 2,
+                                         mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
+                                         mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
                                        "unspecified", 0));
         type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));
@@ -278,14 +268,6 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    str = mk_string_type(a);
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, UInt_64));
-    build_mk_symbol_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("mk-symbol"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
 
     add_module(string_to_symbol(mv_string("foreign")), module, base);
     sdelete_u8_array(null_segments.code);

@@ -46,25 +46,25 @@ bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out) {
     case 2: {
         *size = 2;
         codepoint = codepoint | (str[0] & 0x1F);
-        codepoint = codepoint << 5;
+        codepoint = codepoint << 6;
         codepoint = codepoint | (str[1] & 127);
     } break;
     case 3: {
         *size = 3;
         codepoint = codepoint | (str[0] & 0xF);
-        codepoint = codepoint << 4;
+        codepoint = codepoint << 6;
         codepoint = codepoint | (str[1] & 127);
-        codepoint = codepoint << 7;
+        codepoint = codepoint << 6;
         codepoint = codepoint | (str[2] & 127);
     } break;
     case 4: {
         *size = 4;
         codepoint = codepoint | (str[0] & 0x7);
-        codepoint = codepoint << 3;
+        codepoint = codepoint << 6;
         codepoint = codepoint | (str[1] & 127);
-        codepoint = codepoint << 7;
+        codepoint = codepoint << 6;
         codepoint = codepoint | (str[2] & 127);
-        codepoint = codepoint << 7;
+        codepoint = codepoint << 6;
         codepoint = str[3] & 127;
     } break;
     default:
@@ -75,20 +75,23 @@ bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out) {
 }
 
 char num_bytes_utf8(uint8_t head) {
-    // # 128 = 10000000
-    if ((head & 128) == 0) {
+    // head = 0bbbbbbb => head & 10000000 = 0
+    if ((head & 0x80) == 0) {
         return 1;
     }
-    // # (128 + 64) = 11000000
-    else if (head & (128 + 64)) {
+    // head = 110bbbbb => ((head ^ 0b001bbbbb) & 0b11100000) 
+    // # 0b00100000 = 0x20, 1110000 = 0xE0
+    else if (((head ^ 0x20) & 0xE0) == 0xE0) {
         return 2;
     }
-    // # (128 + 64 + 32) = 11100000
-    else if (head & (128 + 64 + 32)) {
+    // head = 1110bbbb => ~(head ^ 0x00010000 & 11110000)
+    // # 0x00010000 = 0x10, 11110000 = 0xF0
+    else if (((head ^ 0x10) & 0xF0) == 0xF0) {
         return 3;
     }
-    // # (128 + 64 + 32 + 16) = 11110000
-    else if (head & (128 + 64 + 32 + 16)) {
+    // head = 11110bbb => (head ^ 00001000) & 11111000
+    // # 00001000 = 8, 11111000 = 0xF8
+    else if (((head ^ 0x8) & 0xF8) == 0xF8) {
         return 4;
     }
     // indicate error occured

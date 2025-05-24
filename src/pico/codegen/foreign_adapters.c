@@ -92,13 +92,13 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
 
             // So, to determine which eightbyte a particular component is in, we
             // need size and alignment
-            CType* field_ty = type->structure.fields.data[i].val;
-            size_t field_sz = c_size_of(*field_ty);
-            size_t field_al = c_align_of(*field_ty);
+            CType field_ty = type->structure.fields.data[i].val;
+            size_t field_sz = c_size_of(field_ty);
+            size_t field_al = c_align_of(field_ty);
             offset = c_size_align(offset, field_al);
             
             // We need now to figure out get the eightbytes
-            populate_sysv_words(out, offset, field_ty, a);
+            populate_sysv_words(out, offset, &field_ty, a);
 
             offset += field_sz; 
         }
@@ -220,7 +220,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
         size_t idx = arg_offsets.len - (i + 1);
         arg_offsets.data[idx] = offset;
-        offset += pi_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
+        offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
     }
     arg_offsets.data[0] = offset;
 
@@ -254,16 +254,16 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
-        CType* c_arg = ctype->proc.args.data[i].val;
+        CType c_arg = ctype->proc.args.data[i].val;
         PiType* p_arg = ptype->proc.args.data[i];
-        if (!can_reinterpret(c_arg, p_arg)) {
+        if (!can_reinterpret(&c_arg, p_arg)) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
             panic(mv_string("Attempted to do invalid conversion"));
         }
         
         // Get the classes associated with an argument.  
         // If there are multiple classes, each class in the array corresponds to an eightbyte of the argument.
-        U8Array classes = system_v_arg_classes(c_arg, a);
+        U8Array classes = system_v_arg_classes(&c_arg, a);
 
         unsigned char saved_integer_register = current_integer_register;
         size_t assembler_pos = get_pos(ass);
@@ -320,7 +320,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         if (pass_in_memory) {
             push_u64(i, &in_memory_args);
-            input_area_size += c_size_of(*c_arg);
+            input_area_size += c_size_of(c_arg);
         }
 
         sdelete_u8_array(classes);
@@ -428,6 +428,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
+        // The -0x8 accounts for the fact that we just popped the return address! 
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push registers onto stack
@@ -442,10 +443,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                     pass_return_in_memory = true; // this breaks us out of the loop
                 } else {
                     Regname next_reg = return_integer_registers[current_return_register++];
-                    // I8 max = 127
-                    if (arg_offsets.data[i + 1] > 127) {
-                        throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
-                    }
                     // Push from registers into memory
                     build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
                 }
@@ -472,8 +469,8 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
             case SysVMemory:
                 break;
             }
-            if (pass_return_in_memory) break;
         }
+        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
     }
     build_nullary_op(ass, Ret, a, point);
 
@@ -496,12 +493,12 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     }
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
       if (i < 4) {
-          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
           if (class == Win64LargeAggregate || class == Win64LargeAggregate) {
-              input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+              input_area_size += c_size_of(ctype->proc.args.data[i].val);
           }
       } else {
-          input_area_size += c_size_of(*(CType*)ctype->proc.args.data[i].val);
+          input_area_size += c_size_of(ctype->proc.args.data[i].val);
       }
     }
 
@@ -542,7 +539,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // rightmost argument is at the bottom of the stack. 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
       if (current_register < 4) {
-          Win64ArgClass class = win_64_arg_class(ctype->proc.args.data[i].val);
+          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
           switch (class) {
           case Win64None: // Do nothing!
             break;
@@ -652,7 +649,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push result onto stack
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        if (return_arg_size > 0) {
+            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        }
 
         // Push return address
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -668,13 +667,15 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 }
 
 bool can_convert(CType *ctype, PiType *ptype) {
+    ptype = strip_type(ptype);
+
     if (ctype->sort == CSProc && ptype->sort == TProc) {
         if (ctype->proc.args.len != ptype->proc.args.len) {
             return false;
         }
 
         for (size_t i = 0; i < ctype->proc.args.len; i++) {
-            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
                 return false;
             }
         }
@@ -763,7 +764,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_32: {
-        return (ctype.prim == CInt && ctype.prim == CLong) &&
+        return (ctype.prim == CInt || ctype.prim == CLong) &&
             (ctype.is_signed == Signed || ctype.is_signed == Unspecified); 
     }
     case Int_16: {
@@ -816,8 +817,10 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TPrim: {
         if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
-        } else if ((ctype->sort == CSPtr && ptype->prim == Address)
-                   || (ctype->sort == CSVoid && ptype->prim == Unit)) {
+        } else if (ptype->prim == Address) {
+            // if the ctype could be converted to/from void*
+            return ctype->sort == CSPtr || ctype->sort == CSProc;
+        } else if (ctype->sort == CSVoid && ptype->prim == Unit) {
             return true;
         } else {
             return false;
@@ -829,7 +832,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
-            if (!can_reinterpret(ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
                 return false;
         }
         return can_reinterpret(ctype->proc.ret, ptype->proc.ret);
@@ -840,7 +843,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         }
 
         for (size_t i = 0; i < ptype->structure.fields.len; i++) {
-          if (!can_reinterpret(ctype->structure.fields.data[i].val,
+          if (!can_reinterpret(&ctype->structure.fields.data[i].val,
                                ptype->structure.fields.data[i].val)) {
               return false;
           }
@@ -855,11 +858,33 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         // check that the 0th struct field is reinterpretable as a 64-bit int
         // TODO (FEATURE): change tag size based on number of enum vals 
         PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
-        if (!can_reinterpret(ctype->structure.fields.data[0].val, &tag_type)) return false;
+        if (!can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
+        
+        CType* cunion = &ctype->structure.fields.data[1].val;
+
+
+        if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) {
+            // Special case: consider what an `Enum :none [:some A]` might look lie
+            // in C: struct Option { tag present; A val; }. We thus make an
+            // exception for cases where the enum has only one value branch.
+
+
+            size_t selected_index = 0;
+            size_t number_populated_branches = 0;
+            for (size_t i = 0; i < ptype->enumeration.variants.len; i++) {
+                PtrArray* variant = ptype->enumeration.variants.data[i].val;
+                if (variant->len != 0) number_populated_branches++;
+                selected_index = i;
+                if (number_populated_branches > 1) return false;
+            }
+
             
-        CType* cunion = ctype->structure.fields.data[1].val;
-        if (cunion->sort != CSUnion || cunion->cunion.fields.len != ptype->enumeration.variants.len) return false;
-        // TODO (FEATURE): add ability for c type to not need union/struct if
+            PtrArray* variant = ptype->enumeration.variants.data[selected_index].val;
+            if (variant->len != 1) return false;
+            return can_reinterpret(cunion, variant->data[0]);
+        }
+
+        // TODO (FEATURE): Add ability for C type to not need union/struct if
         // variants empty.
 
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {

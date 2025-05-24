@@ -5,24 +5,19 @@
 
 #include "pico/stdlib/core.h"
 
-static PiType* array_type;
-PiType* get_array_type() {
-    return array_type;
-}
-
 static PiType* ptr_type;
 PiType* get_ptr_type() {
     return ptr_type;
 }
 
+static PiType* array_type;
+PiType* get_array_type() {
+    return array_type;
+}
+
 static PiType* maybe_type;
 PiType* get_maybe_type() {
     return maybe_type;
-}
-
-static PiType* syntax_type;
-PiType* get_syntax_type() {
-    return syntax_type;
 }
 
 static PiType* either_type;
@@ -35,11 +30,21 @@ PiType* get_pair_type() {
     return pair_type;
 }
 
+static PiType* symbol_type;
+PiType* get_symbol_type() {
+    return symbol_type;
+}
+
+static PiType* syntax_type;
+PiType* get_syntax_type() {
+    return syntax_type;
+}
+
 PiType build_store_fn_ty(Allocator* a) {
     PiType* proc_ty  = mk_proc_type(a, 2, mk_prim_type(a, Address), mk_var_type(a, "A"), mk_prim_type(a, Unit));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -118,8 +123,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType build_load_fn_ty(Allocator* a) {
     PiType* proc_ty = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_var_type(a, "A"));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -414,8 +419,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("Family"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FCType;
-    sym = string_to_symbol(mv_string("CType"));
+    former = FLiftCType;
+    sym = string_to_symbol(mv_string("LiftCType"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
@@ -483,15 +488,17 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("F64"));
     add_def(module, sym, type, &type_data, null_segments, NULL);
 
-    // Syntax Type : components and definition 
+    // All standard library types: components and definition 
+    // These are aggregated here, even if they are present in other modules, 
+    // as some core types 
     {
         PiType *type_val;
         SymbolArray vars;
         ModuleEntry* e;
 
         // Ptr Type 
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = mk_named_type(a, "Ptr", mk_type_family(a,
                                                           vars,
@@ -520,8 +527,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         
         // Array Type 
         // Make a ptr
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = 
             mk_named_type(a, "Array",
@@ -541,8 +548,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         array_type = e->value;
         
         // Maybe Type 
-        vars = mk_u64_array(1, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_symbol_array(1, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = mk_named_type(a, "Maybe", mk_type_family(a,
                                                       vars,
@@ -558,9 +565,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         maybe_type = e->value;
 
         // Either Type 
-        vars = mk_u64_array(2, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
-        push_u64(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_symbol_array(2, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        push_symbol(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
         type_val = mk_named_type(a, "Either", mk_type_family(a,
@@ -577,9 +584,9 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         either_type = e->value;
 
         // Pair Type 
-        vars = mk_u64_array(2, a);
-        push_u64(string_to_symbol(mv_string("A")), &vars);
-        push_u64(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_symbol_array(2, a);
+        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        push_symbol(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
         type_val = mk_named_type(a, "Pair", mk_type_family(a,
@@ -597,10 +604,22 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
         type.kind.nargs = 0;
 
+        symbol_type = mk_named_type(a, "Symbol",
+                                  mk_struct_type(a, 2,
+                                                 "name", mk_prim_type(a, UInt_64), 
+                                                 "did", mk_prim_type(a, UInt_64)));
+        type_data = symbol_type;
+        sym = string_to_symbol(mv_string("Symbol"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_data, a);
+
+        e = get_def(sym, module);
+        symbol_type = e->value;
+
         PiType* atom_type = mk_enum_type(a, 4,
                                         "bool", 1, mk_prim_type(a, Bool),
                                         "integral", 1, mk_prim_type(a, Int_64),
-                                        "symbol", 1,  mk_prim_type(a, Int_64),
+                                        "symbol", 1,  copy_pi_type_p(symbol_type, a),
                                         "string", 1, mk_string_type(a));
         type_data = atom_type;
         sym = string_to_symbol(mv_string("Atom"));
@@ -611,14 +630,19 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
+        PiType* range_type = mk_struct_type(a, 2, "start", mk_prim_type(a, UInt_64), "end", mk_prim_type(a, UInt_64));
+        type_data = range_type;
+        sym = string_to_symbol(mv_string("Range"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
         PiType* syn_name_ty = mk_var_type(a, "Syntax");
         PiType* syn_array = mk_app_type(a, array_type, syn_name_ty);
         delete_pi_type_p(syn_name_ty, a);
 
         type_val = mk_named_type(a, "Syntax",
                                  mk_enum_type(a, 2,
-                                              "atom", 1, atom_type,
-                                              "node", 2, hint_type, syn_array));
+                                              "atom", 2, range_type, atom_type,
+                                              "node", 3, copy_pi_type_p(range_type, a), hint_type, syn_array));
 
         type_data = type_val;
         sym = string_to_symbol(mv_string("Syntax"));

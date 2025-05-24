@@ -3,8 +3,10 @@
 
 #include "platform/memory/allocator.h"
 
+#include "pico/data/range.h"
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/data/symbol_array.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -83,7 +85,7 @@ typedef enum {
     SAllType,
     SExistsType,
     STypeFamily,
-    SCType,
+    SLiftCType,
 
     SCheckedType,
 
@@ -92,6 +94,9 @@ typedef enum {
     // Should be moved to macros!(?)
     SReinterpret,
     SConvert,
+
+    // Meta/reflection
+    STypeOf,
 } Syntax_t;
 
 
@@ -183,12 +188,18 @@ typedef struct {
 } SynInstance;
 
 typedef struct {
+    SymPtrAssoc args;
+    Syntax* body;
+} SynLabelBranch;
+
+typedef struct {
     Syntax* entry;
     SymPtrAssoc terms;
 } SynLabels;
 
 typedef struct {
     Symbol label;
+    PtrArray args;
 } SynGoTo;
 
 typedef struct {
@@ -362,8 +373,11 @@ struct Syntax {
 
         SynReinterpret reinterpret;
         SynConvert convert;
+
+        Syntax* type_of;
     };
     PiType* ptype;
+    Range range;
 };
 
 /* Other instances */

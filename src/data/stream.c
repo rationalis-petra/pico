@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "platform/signals.h"
 #include "data/stream.h"
@@ -11,12 +12,14 @@
 typedef enum {
     IStreamFile,
     IStreamString,
+    IStreamCapturing,
 } IStreamType;
 
 typedef struct {
     FILE* file_ptr;
     bool owns;
     bool peeked;
+    uint8_t peeked_bytes;
     Encoding encoding;
 
     uint32_t peek_codepoint;
@@ -27,6 +30,7 @@ typedef struct {
     String string;
     bool owns;
     bool peeked;
+    uint8_t peeked_bytes;
     Encoding encoding;
     size_t index;
 
@@ -34,13 +38,46 @@ typedef struct {
     StreamResult peek_result;
 } StringIStream;
 
+typedef struct  {
+    IStream* inner;
+    String buffer;
+    size_t used_buffer;
+    Allocator* gpa;
+} CapturingIStream;
+
 struct IStream {
     IStreamType type;
+    size_t bytecount;
     union {
         FileIStream file_istream;
         StringIStream string_istream;
+        CapturingIStream capturing_istream;
     } impl;
 };
+
+IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
+    IStream* outer_stream = mem_alloc(sizeof(IStream), a);
+    String buffer = (String) {
+        .memsize = 1024,
+        .bytes = mem_alloc(1024 * sizeof(uint8_t), a),
+    };
+
+    *outer_stream = (IStream) {
+        .type = IStreamCapturing,
+        .bytecount = stream->bytecount,
+        .impl.capturing_istream.inner = stream,
+        .impl.capturing_istream.buffer = buffer,
+        .impl.capturing_istream.used_buffer = 0,
+        .impl.capturing_istream.gpa = a,
+    };
+    memset(buffer.bytes, 0, buffer.memsize);
+    return outer_stream;
+}
+
+String* get_captured_buffer(IStream* stream) {
+    if (stream->type != IStreamCapturing) return NULL;
+    return &stream->impl.capturing_istream.buffer;
+}
 
 // Constructors
 IStream* get_stdin_stream(void) {
@@ -48,11 +85,14 @@ IStream* get_stdin_stream(void) {
     static IStream cin;
 
     if (!initialized) {
-        cin.type = IStreamFile;
-        cin.impl.file_istream.peeked = false;
-        cin.impl.file_istream.file_ptr = stdin;
-        cin.impl.file_istream.owns = false;
-        cin.impl.file_istream.encoding = UTF_8;
+        cin = (IStream) {
+            .type = IStreamFile,
+            .bytecount = 0,
+            .impl.file_istream.peeked = false,
+            .impl.file_istream.file_ptr = stdin,
+            .impl.file_istream.owns = false,
+            .impl.file_istream.encoding = UTF_8,
+        };
         initialized = false;
     }
 
@@ -60,10 +100,10 @@ IStream* get_stdin_stream(void) {
 }
 
 IStream* open_file_istream(String filename, Allocator* a) {
-    IStream* ifile = mem_alloc(sizeof(IStream), a);
-
     FILE* cfile = fopen((char*)filename.bytes, "r");
+    if (!cfile) return NULL;
 
+    IStream* ifile = mem_alloc(sizeof(IStream), a);
     *ifile = (IStream) {
      .type = IStreamFile,
      .impl.file_istream.peeked = false,
@@ -79,6 +119,7 @@ IStream* mv_string_istream(String string, Allocator* a) {
 
     *istring = (IStream) {
      .type = IStreamString,
+     .bytecount = 0,
      .impl.string_istream.peeked = false,
      .impl.string_istream.string = string,
      .impl.string_istream.index = 0,
@@ -93,6 +134,7 @@ IStream* mk_string_istream(String string, Allocator* a) {
 
     *istring = (IStream) {
      .type = IStreamString,
+     .bytecount = 0,
      .impl.string_istream.peeked = false,
      .impl.string_istream.string = copy_string(string, a),
      .impl.string_istream.index = 0,
@@ -115,6 +157,12 @@ void delete_istream(IStream* stream, Allocator* a) {
             delete_string(stream->impl.string_istream.string, a);
         }
         mem_free(stream, a);
+        break;
+    }
+    case IStreamCapturing: {
+        mem_free(stream->impl.capturing_istream.buffer.bytes, a);
+        mem_free(stream, a);
+        break;
     }
     }
 }
@@ -129,7 +177,12 @@ StreamResult peek(IStream* stream, uint32_t* out) {
             return stream->impl.file_istream.peek_result;
         }
         else {
+            // This is a peek: don't adjust bytecount!
+            size_t old_bytecount = stream->bytecount;
             StreamResult result = next(stream, &(stream->impl.file_istream.peek_codepoint));
+            stream->impl.file_istream.peeked_bytes = stream->bytecount - old_bytecount;
+            stream->bytecount = old_bytecount;
+
             stream->impl.file_istream.peeked = true;
             *out = stream->impl.file_istream.peek_codepoint;
             stream->impl.file_istream.peek_result = result;
@@ -143,13 +196,21 @@ StreamResult peek(IStream* stream, uint32_t* out) {
             return stream->impl.string_istream.peek_result;
         }
         else {
+            // This is a peek: don't adjust bytecount!
+            size_t old_bytecount = stream->bytecount;
             StreamResult result = next(stream, &(stream->impl.string_istream.peek_codepoint));
+            stream->impl.string_istream.peeked_bytes = stream->bytecount - old_bytecount;
+            stream->bytecount = old_bytecount;
+
             stream->impl.string_istream.peeked = true;
             *out = stream->impl.string_istream.peek_codepoint;
             stream->impl.string_istream.peek_result = result;
             return result;
         }
     } break;
+    case IStreamCapturing: {
+        return peek(stream->impl.capturing_istream.inner, out);
+    }
     default:
         panic(mv_string("Invalid istream provided to next!"));
     }
@@ -179,6 +240,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 in_bytes[i] = (uint8_t)next_byte;
             }
             if (decode_point_utf8(&num_bytes, in_bytes, out)) {
+                stream->bytecount += num_bytes;
                 return StreamSuccess;
             }
             else {
@@ -187,11 +249,12 @@ StreamResult next(IStream* stream, uint32_t* out) {
         }
         else {
             stream->impl.file_istream.peeked = false;
+            stream->bytecount += stream->impl.file_istream.peeked_bytes;
             *out = stream->impl.file_istream.peek_codepoint;
             return stream->impl.file_istream.peek_result;
         }
         break;
-    } 
+    }
     case IStreamString: {
         if (stream->impl.string_istream.peeked == false) {
             size_t* index = &stream->impl.string_istream.index;
@@ -201,13 +264,11 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 return StreamEnd;
             };
 
-            //int next_int = fgetc(stream->impl.string_istream.file_ptr);
-            bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out);
-
             // Assume utf-8 encoding (may be wrong!!)
             uint8_t num_bytes;
             if (decode_point_utf8(&num_bytes, string->bytes + *index, out)) {
                 *index += num_bytes;
+                stream->bytecount += num_bytes;
                 return StreamSuccess;
             }
             else {
@@ -216,14 +277,51 @@ StreamResult next(IStream* stream, uint32_t* out) {
         }
         else {
             stream->impl.string_istream.peeked = false;
+            stream->bytecount += stream->impl.string_istream.peeked_bytes;
             *out = stream->impl.string_istream.peek_codepoint;
             return stream->impl.string_istream.peek_result;
         }
         break;
     }
+    case IStreamCapturing: {
+        StreamResult res = next(stream->impl.capturing_istream.inner, out);
+        if (res == StreamSuccess) {
+            stream->bytecount = stream->impl.capturing_istream.inner->bytecount;
+
+            uint8_t bytes[4];
+            uint8_t size;
+            encode_point_utf8(bytes, &size, *out);
+            CapturingIStream* cis = &stream->impl.capturing_istream;
+            if (cis->used_buffer + size >= cis->buffer.memsize) {
+                String new_buffer = (String) {.memsize = 2 * cis->buffer.memsize * sizeof(uint8_t)};
+                new_buffer.bytes = mem_alloc(new_buffer.memsize, cis->gpa);
+                memcpy(new_buffer.bytes, cis->buffer.bytes, cis->used_buffer);
+                memset(new_buffer.bytes + cis->used_buffer, 0, new_buffer.memsize - cis->used_buffer);
+                mem_free(cis->buffer.bytes, cis->gpa);
+                cis->buffer = new_buffer;
+            }
+            uint8_t *base = cis->buffer.bytes + cis->used_buffer;
+            for (size_t i = 0; i < size; i++) {
+                base[i] = bytes[i];
+            }
+            cis->used_buffer += size;
+        }
+        return res;
+        break;
+    }
     default:
         panic(mv_string("Invalid istream provided to next!"));
     }
+}
+
+size_t bytecount(IStream *stream) {
+    return stream->bytecount;
+}
+void reset_bytecount(IStream *stream) {
+    if (stream->type == IStreamCapturing) {
+        reset_bytecount(stream->impl.capturing_istream.inner);
+    }
+    stream->bytecount = 0;
 }
 
 //string get_n(istream* stream, size_t nchars);
@@ -266,10 +364,10 @@ OStream* get_stdout_stream() {
 }
 
 OStream* open_file_ostream(String filename, Allocator* a) {
-    OStream* ofile = mem_alloc(sizeof(OStream), a);
-
     FILE* cfile = fopen((char*)filename.bytes, "w");
+    if (!cfile) return NULL;
 
+    OStream* ofile = mem_alloc(sizeof(OStream), a);
     *ofile = (OStream) {
         .type = OStreamFile,
         .impl.file_ostream.file_ptr = cfile,

@@ -626,7 +626,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SCType: {
+    case SLiftCType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("C-Type"), a), &nodes);
 
@@ -667,6 +667,13 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(pretty_syntax(syntax->convert.type, a), &nodes);
         push_ptr(pretty_syntax(syntax->convert.body, a), &nodes);
 
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case STypeOf: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("type-of"), a), &nodes);
+        push_ptr(pretty_syntax(syntax->type_of, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }

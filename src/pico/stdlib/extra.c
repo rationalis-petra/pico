@@ -4,8 +4,11 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/signals.h"
+#include "platform/memory/arena.h"
 
 #include "pico/stdlib/extra.h"
+#include "pico/codegen/foreign_adapters.h"
 
 #include "app/module_load.h"
 
@@ -175,8 +178,8 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 PiType* build_panic_fn_ty(Allocator* a) {
     PiType* proc_ty = mk_proc_type(a, 1, mk_string_type(a), mk_var_type(a, "A"));
 
-    SymbolArray types = mk_u64_array(1, a);
-    push_u64(string_to_symbol(mv_string("A")), &types);
+    SymbolArray types = mk_symbol_array(1, a);
+    push_symbol(string_to_symbol(mv_string("A")), &types);
 
     PiType* out_ty = mem_alloc(sizeof(PiType), a);
     *out_ty =  (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
@@ -276,59 +279,37 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op (ass, Ret, a, point);
 }
 
-void run_script_c_fun(String filename) {
+Result run_script_c_fun(String filename) {
     // (ann load-module String → Unit) : load the module/code located in file! 
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
+    if (!sfile) {
+      return (Result) {
+        .type = Err, .error_message = mv_string("failed to open file!"),
+      };
+    }
     Module* current_module = get_std_current_module();
     run_script_from_istream(sfile, current_ostream, current_module, a);
     delete_istream(sfile, a);
+    return (Result) {.type = Ok};
 }
 
-void build_run_script_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // (ann load-module String → Unit) : load the module/code located in file! 
+void build_run_script_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType string_ctype = mk_struct_ctype(a, 2,
+                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                         "bytes", mk_voidptr_ctype(a));
 
-#if ABI == SYSTEM_V_64
-    // load_module_c_fun ({.memsize = rcx, .bytes = rdi, .allocator = rcx = NULL})
-    // pass in platform/memory/on stack(?)
-    build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
-    // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
+    // TODO: this does not accurately represent the result type!
+    CType result_ctype = mk_struct_ctype(a, 2,
+                                         "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                         "error_message", copy_c_type(string_ctype, a));
 
-#elif ABI == WIN_64
-    // load_module_c_fun: push struct
-    // pass in platform/memory/on stack(?)
-    build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
-    // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
 
-    // store ptr to struct in rcx
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
-#else
-#error "Unknown calling convention"
-#endif
+    CType fn_ctype = mk_fn_ctype(a, 1, "filename", string_ctype, result_ctype);
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&run_script_c_fun), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
-
-    // To return:
-    // + pop argument we pushed onto stack
-    // + stash ret addr
-    // + pop argument we were called with
-    // + push ret addr & return
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(24), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(16), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    convert_c_fn(run_script_c_fun, &fn_ctype, type, ass, a, point); 
 }
 
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
@@ -358,6 +339,9 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
         .code = mk_u8_array(0, a),
         .data = mk_u8_array(0, a),
     };
+
+    Allocator arena = mk_arena_allocator(4096, a);
+    a = &arena;
     
     // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
     std_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
@@ -369,7 +353,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sym = string_to_symbol(mv_string("allocator"));
     add_def(module, sym, *typep, &std_allocator, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     void* nul = NULL;
     std_tmp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
@@ -379,7 +362,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sym = string_to_symbol(mv_string("temp-allocator"));
     add_def(module, sym, *typep, &std_tmp_allocator, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // C Wrappers!
     Segments fn_segments = {.data = mk_u8_array(0, a),};
@@ -393,7 +375,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // panic : All [A] Proc [String] A
     typep = build_panic_fn_ty(a);
@@ -403,7 +384,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // malloc : Proc [U64] Address
     typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address));
@@ -413,7 +393,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // realloc : Proc (Address U64) Address
     typep = mk_proc_type(a, 2, mk_prim_type(a, Address),
@@ -425,7 +404,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // realloc : Proc [String] Unit
     typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit));
@@ -435,7 +413,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // print : Proc [String] Unit
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
@@ -445,7 +422,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // print : Proc [String] Unit
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
@@ -455,21 +431,20 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     // run-script : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_run_script_fun(ass, a, &point);
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_enum_type(a, 2, "Ok", 0, "Err", 1, mk_string_type(a)));
+    build_run_script_fun(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("run-script"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
 
     add_module(string_to_symbol(mv_string("extra")), module, base);
 
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(fn_segments.data);
+    release_arena_allocator(arena);
 }

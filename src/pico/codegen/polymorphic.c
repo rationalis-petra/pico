@@ -23,16 +23,16 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     SymbolArray vars;
     Syntax body;
     if (syn.type == SProcedure) {
-        vars = mk_u64_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
+        vars = mk_symbol_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            push_u64(syn.procedure.implicits.data[i].key, &vars);
+            push_symbol(syn.procedure.implicits.data[i].key, &vars);
         }
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            push_u64(syn.procedure.args.data[i].key, &vars);
+            push_symbol(syn.procedure.args.data[i].key, &vars);
         }
         body = *syn.procedure.body;
     } else {
-        vars = mk_u64_array(0, a);
+        vars = mk_symbol_array(0, a);
         body = syn;
     }
 
@@ -379,7 +379,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         bool labels_match = true;
         const size_t len = struct_type->structure.fields.len;
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            if (struct_type->structure.fields.data[len - (i + 1)].key != syn.structure.fields.data[i].key) {
+            if (!symbol_eq(struct_type->structure.fields.data[len - (i + 1)].key, syn.structure.fields.data[i].key)) {
                 labels_match = false;
                 break;
             }
@@ -412,7 +412,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
                 }
 
-                if (source_type->structure.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
                     break;
 
                 // Push the size into RAX; this is then added to the value at
@@ -465,7 +465,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
                 }
 
-                if (source_type->instance.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
                     break;
                 // Push the size into RAX; this is then added to the top of the stack  
                 generate_size_of(RAX, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
@@ -545,6 +545,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 }
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    type = strip_type(type);
     switch (type->sort) {
     case TPrim:
     case TProc:
@@ -560,7 +561,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             build_binary_op(ass, And, reg(dest, sz_64), imm32(0xFFFFFFF), a, point);
             break;
         case ALocalIndirect:
-            panic(mv_string("cannot generate code for local indirect."));
+            panic(mv_string("Cannot generate code for local indirect."));
             break;
         case AGlobal:
             panic(mv_string("Unexpected type variable sort: Global."));
@@ -745,12 +746,6 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 }
 
 
-void stack_copy(char *dest, const char *src, size_t size) {
-  for (size_t i = size; i > 0; i--) {
-      dest[i - 1] = src[i - 1];
-  }
-}
-
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, dest, reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, src, reg(RSP, sz_64), a, point);
@@ -767,16 +762,9 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&stack_copy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(stack_move,ass, a, point);
 }

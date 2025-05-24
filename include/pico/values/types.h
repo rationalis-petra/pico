@@ -7,6 +7,7 @@
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_ptr_assoc.h"
+#include "pico/data/symbol_array.h"
 #include "pico/values/ctypes.h"
 
 /* Basic types in pico typesystem */
@@ -158,7 +159,7 @@ struct PiType {
         DistinctType distinct;
 
         // From System Fω: variables, application, abstraction (exists, forall, lambda)
-        uint64_t var;
+        Symbol var;
         TAppType app;
         TypeBinder binder;
 
@@ -203,11 +204,12 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 // Generate distinct id
 uint64_t distinct_id();
 
-// Recursively extracts the inner type from both named and distinct types.
-// Does not unwrap opaque types
-PiType* unwrap_type(PiType* ty);
+// Recursively extracts the inner type from distinct types (but not opaque)
+// Upon encountering a named type, it will substitute the name for the 
+// (wrapped) named type within the type, then contine descending.
+PiType* unwrap_type(PiType *ty, Allocator* a);
 
-// Like unwrap_type, but also unwraps opaque types
+// Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 

@@ -24,6 +24,14 @@ String mv_string(const char* str) {
     return out;
 }
 
+String string_from_codepoint(uint32_t codepoint, Allocator *a) {
+    U32Array arr = mk_u32_array(1, a);
+    push_u32(codepoint, &arr);
+    String out = string_from_UTF_32(arr, a);
+    sdelete_u32_array(arr);
+    return out;
+}
+
 void delete_string(String str, Allocator* a) {
     mem_free(str.bytes, a);
 }
@@ -106,5 +114,13 @@ String string_ncat(Allocator* a, size_t n, ...) {
         index += sn.memsize - 1;
     }
     va_end(args);
+    return out;
+}
+
+String substring(size_t start, size_t end, const String source, Allocator *a) {
+    String out = (String) {.memsize = (end - start) + 1};
+    out.bytes = mem_alloc(out.memsize, a);
+    memcpy(out.bytes, source.bytes + start, out.memsize - 1);
+    out.bytes[out.memsize - 1] = '\0';
     return out;
 }

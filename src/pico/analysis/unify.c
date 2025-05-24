@@ -23,9 +23,10 @@ typedef struct {
     Symbol rhs;
 } SymPair;
 
-uint64_t cmp_sym_pair(SymPair s1, SymPair s2) {
-    uint64_t r1 = s1.lhs - s2.lhs;
-    return r1 == 0 ? s1.rhs - s2.rhs : r1;
+int64_t cmp_sym_pair(SymPair s1, SymPair s2) {
+    int64_t r1 = cmp_symbol(s1.lhs, s2.lhs);
+
+    return r1 == 0 ? cmp_symbol(s1.rhs, s2.rhs) : r1;
 }
 
 ARRAY_HEADER(SymPair, sym_pair, SymPair)
@@ -112,15 +113,15 @@ bool var_eq(Symbol lhs, Symbol rhs, SymPairArray *rename) {
     // bound
     for (size_t i = 0; i < rename->len; i++) {
         size_t idx = rename->len - (i + 1);
-        if (lhs == rename->data[idx].lhs && rhs == rename->data[idx].rhs) {
+        if (symbol_eq(lhs, rename->data[idx].lhs) && symbol_eq(rhs, rename->data[idx].rhs)) {
             return true;
-        } else if (lhs == rename->data[idx].lhs || rhs == rename->data[idx].rhs) {
+        } else if (symbol_eq(lhs, rename->data[idx].lhs) || symbol_eq(rhs, rename->data[idx].rhs)) {
             return false;
         } 
     }
 
     // unbound
-    return lhs == rhs;
+    return symbol_eq(lhs, rhs);
 }
 
 Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
@@ -182,7 +183,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
             Symbol rhs_sym = rhs->structure.fields.data[i].key;
             PiType* rhs_ty = rhs->structure.fields.data[i].val;
 
-            if (rhs_sym != lhs_sym) {
+            if (!symbol_eq(rhs_sym, lhs_sym)) {
                 return (Result) {
                     .type = Err,
                     .error_message = mk_string("Unification failed: RHS and LHS structures must have matching field-names.", a)
@@ -211,7 +212,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
             Symbol rhs_sym = lhs->structure.fields.data[i].key;
             PtrArray rhs_args = *(PtrArray*) lhs->structure.fields.data[i].val;
 
-            if (rhs_sym != lhs_sym) {
+            if (!symbol_eq(rhs_sym, lhs_sym)) {
                 return (Result) {
                     .type = Err,
                     .error_message = mk_string("Unification failed: RHS and LHS enums must have matching variant-names.", a)
@@ -328,7 +329,23 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
                 .error_message = mk_string("Cannot Unify different type variables", a),
             };
         }
-        return (Result) {.type = Ok} ;
+        return (Result) {.type = Ok};
+        break;
+    }
+    case TAll: {
+        if (lhs->binder.vars.len != rhs->binder.vars.len) {
+            return (Result) {.type = Err};
+        }
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            SymPair syms = (SymPair){
+                .lhs = lhs->binder.vars.data[i],
+                .rhs = rhs->binder.vars.data[i]
+            };
+            push_sym_pair(syms, rename);
+        };
+        Result res = unify_internal(lhs->binder.body, rhs->binder.body, rename, a);
+        rename->len -= lhs->binder.vars.len;
+        return res;
         break;
     }
     default:  {

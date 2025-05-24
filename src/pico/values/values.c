@@ -14,12 +14,14 @@
 static StrU64AMap symbol_table;
 static PtrArray symbol_names;
 static Allocator* symbol_allocator;
+static uint64_t distinct_counter;
 
 // Helper functions
 void init_symbols(Allocator* a) {
     symbol_allocator = a;
     symbol_table = mk_str_u64_amap(1024, a);
     symbol_names = mk_ptr_array(1024, a);
+    distinct_counter = 0;
 }
 
 void delete_string_pointer(String* ptr, Allocator* a) {
@@ -28,20 +30,31 @@ void delete_string_pointer(String* ptr, Allocator* a) {
 }
 
 String* symbol_to_string(Symbol symbol) {
-    return symbol_names.data[symbol];
+    return symbol_names.data[symbol.name];
 }
 
-Symbol string_to_symbol(String str) {
-    uint64_t new_symbol_id = symbol_names.len;
-    Symbol* sym = str_u64_lookup(str, symbol_table);
-    if (!sym) {
+Symbol string_to_symbol(String string) {
+    return (Symbol){ .name = string_to_name(string), .did = 0 };
+}
+
+Symbol string_to_unique_symbol(String string) {
+    return (Symbol){ .name = string_to_name(string), .did = distinct_counter++ };
+}
+
+Name string_to_name(String string) {
+    Name new_name_id = symbol_names.len;
+    Name* name = str_u64_lookup(string, symbol_table);
+    if (!name) {
         String* map_str = mem_alloc(sizeof(String), symbol_allocator);
-        *map_str = copy_string(str, symbol_allocator);
+        *map_str = copy_string(string, symbol_allocator);
         push_ptr(map_str, &symbol_names);
-        str_u64_insert(*map_str, new_symbol_id, &symbol_table);
-        sym = &new_symbol_id;
+        str_u64_insert(*map_str, new_name_id, &symbol_table);
+        name = &new_name_id;
     }
-    return *sym;
+    return *name;
+}
+String* name_to_string(Name name) {
+    return symbol_names.data[name];
 }
 
 void clear_symbols() {
@@ -54,10 +67,21 @@ void clear_symbols() {
     sdelete_str_u64_amap(symbol_table);
 }
 
+bool symbol_eq(Symbol lhs, Symbol rhs) {
+    return lhs.name == rhs.name && lhs.did == rhs.did;
+}
+
+int64_t cmp_symbol(Symbol lhs, Symbol rhs) {
+    int64_t r1 = lhs.name - rhs.name;
+    return r1 == 0 ? (int64_t)(lhs.did - rhs.did) : r1;
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 void delete_symbol(Symbol s) {};
 Symbol copy_symbol(Symbol s, Allocator* a) { return s; };
+void delete_name(Name n) {};
+Name copy_name(Name n, Allocator* a) { return n; };
 #pragma GCC diagnostic pop
 
 // Helper functions for dynamic variables
@@ -341,8 +365,8 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);
         break;
-    case FCType:
-        out = mk_str_doc(mv_string("::CType"), a);
+    case FLiftCType:
+        out = mk_str_doc(mv_string("::LiftCType"), a);
         break;
 
     case FReinterpretNative:
@@ -356,6 +380,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FConvertRelic:
         out = mk_str_doc(mv_string("::convert-relic"), a);
+        break;
+    case FTypeOf:
+        out = mk_str_doc(mv_string("::type-of"), a);
         break;
     }
 

@@ -290,7 +290,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Storage of function output 
         size_t ret_size = pi_size_of(*syn.procedure.body->ptype);
-        build_binary_op(ass, Mov, reg(R9, sz_64),  rref8(RBP, 16, sz_64), a, point);
+
+        // Note: R9, R14, RBP 
+        build_binary_op(ass, Mov, reg(R12, sz_64),  rref8(RBP, 16, sz_64), a, point);
         build_binary_op(ass, Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), a, point);
         build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
 
@@ -300,7 +302,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(args_size + 3 * ADDRESS_SIZE), a, point);
 
         // push return address 
-        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        build_unary_op(ass, Push, reg(R12, sz_64), a, point);
         build_nullary_op(ass, Ret, a, point);
         break;
     }
@@ -494,22 +496,23 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Now, move them into the space allocated in reverse order
         PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
-        size_t src_stack_offset = variant_size - tag_size;
-        size_t dest_stack_offset = variant_size;
+
+        // Note, as we are reversing the order, we start at the top of the stack (last enum element),
+        // which gets copied to the end of the enum
+        size_t src_stack_offset = 0;
+        size_t dest_stack_offset = (2 * variant_size) - tag_size;
         for (size_t i = 0; i < syn.variant.args.len; i++) {
-            // We now both the source_offset and dest_offset. These are both
+            // We now have both the source_offset and dest_offset. These are both
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
             
             size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
-            src_stack_offset -= field_size;
 
-            // Now, move the data.
+            dest_stack_offset -= field_size;
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+            src_stack_offset += field_size;
 
-            // Now, increase the amount of data we have used
-            dest_stack_offset += field_size;
         }
 
         // Remove the space occupied by the temporary values 
@@ -633,6 +636,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // ------------
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
+        size_t source_region_size = 0;
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
+        }
         size_t dest_offset = 0;
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
 
@@ -646,7 +653,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                     throw_error(point, mv_string("Error code-generating for structure: field not found."));
                 }
 
-                if (syn.structure.fields.data[j].key == struct_type->structure.fields.data[i].key) {
+                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
                     break; // offset is correct, end the loop
                 }
             }
@@ -655,20 +662,20 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
-            size_t src_stack_offset = struct_size - src_offset;
-            size_t dest_stack_offset = struct_size + dest_offset;
+            size_t src_stack_offset = source_region_size - src_offset;
+            size_t dest_stack_offset = source_region_size + dest_offset;
             size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
 
             // Compute dest_offset for next loop
-            dest_offset += pi_size_of(*(PiType*)syn.ptype->structure.fields.data[i].val);
+            dest_offset += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(struct_size), a, point);
-        address_stack_shrink(env, struct_size);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(source_region_size), a, point);
+        address_stack_shrink(env, source_region_size);
         break;
     }
     case SProjector: {
@@ -689,7 +696,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // for this, we need the struct size + offset of field in the struct
             size_t offset = 0;
             for (size_t i = 0; i < source_type->structure.fields.len; i++) {
-                if (source_type->structure.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
                     break;
                 offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
             }
@@ -708,7 +715,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t offset = 0;
             for (size_t i = 0; i < source_type->instance.fields.len; i++) {
                 offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
-                if (source_type->instance.fields.data[i].key == syn.projector.field)
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
                     break;
                 offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
             }
@@ -993,9 +1000,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         //  3.1 Mark Beginning of label expression
         //  3.2 Generate label expressions
         // 4. Backlink all labels.
-        SymbolArray labels = mk_u64_array(syn.labels.terms.len, a);
+        SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
         for (size_t i = 0; i < syn.labels.terms.len; i++) 
-            push_u64(syn.labels.terms.data[i].key, &labels);
+            push_symbol(syn.labels.terms.data[i].key, &labels);
 
         address_start_labels(labels, env);
 
@@ -1004,6 +1011,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
 
+        size_t out_size = pi_size_of(*syn.ptype);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
             SymPtrACell cell = syn.labels.terms.data[i];
 
@@ -1011,10 +1019,41 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t pos = get_pos(ass);
             sym_size_bind(cell.key, pos, &label_points);
 
-            generate(*(Syntax*)cell.val, env, target, links, a, point);
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            
+            SynLabelBranch* branch = cell.val;
+
+            // Bind Label Vars 
+            size_t arg_total = 0;
+            SymSizeAssoc arg_sizes = mk_sym_size_assoc(branch->args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                size_t arg_size = pi_size_of(*(PiType*)branch->args.data[i].val);
+                sym_size_bind(branch->args.data[i].key, arg_size, &arg_sizes);
+                arg_total += arg_size;
+            }
+
+            address_stack_grow(env,arg_total);
+            address_bind_label_vars(arg_sizes, env);
+            generate(*branch->body, env, target, links, a, point);
+            address_unbind_label_vars(env);
+
+            LabelEntry lble = label_env_lookup(cell.key, env);
+            if (lble.type == Err)
+                throw_error(point, mv_string("Label not found during codegen!!"));
+            address_stack_shrink(env, lble.stack_offset);
+
+            // Copy the result down the stack
+            generate_stack_move(arg_total, 0, out_size, ass, a, point);
+
+            // ensure the stack is at the sam epoint for the next iteration! 
+            address_stack_shrink(env,out_size);
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
+
+        // The final iteration will have shrunk the stack "too much", so add the
+        // result back in.
+        address_stack_grow(env,out_size);
 
         size_t label_end = get_pos(ass);
 
@@ -1025,14 +1064,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Step 1: make the end of the label jump to the end of the expression.
             {
                 size_t backlink = label_jumps.data[i].val;
-                size_t origin = backlink + 1;
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
                 size_t dest = label_end;
 
                 int64_t amt = dest - origin;
-                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
-                *loc = (int8_t) amt;
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
             }
 
 
@@ -1042,13 +1082,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             for (size_t i = 0; i < arr->len; i++) {
                 size_t backlink = arr->data[i];
-                size_t origin = backlink + 1;
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
 
                 int64_t amt = dest - origin;
-                if (amt < INT8_MIN || amt > INT8_MAX) panic(mv_string("Label jump too large!"));
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc = (int8_t*) get_instructions(ass).data + backlink;
-                *loc = (int8_t) amt;
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
             }
         }
 
@@ -1057,17 +1098,31 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SGoTo: {
         // Generating code for a goto:
-        // 1. Backlink the label
-        //throw_error(point, mv_string("Codegen is not implemented for this syntactic form: 'go-to'"));
+        // 1. Generate args
+        size_t arg_total = 0;
+        for (size_t i = 0; i < syn.go_to.args.len; i++) {
+            Syntax* expr = syn.go_to.args.data[i];
+            arg_total += pi_size_of(*expr->ptype);
+            generate(*expr, env, target, links, a, point);
+        }
+
+        // 2. Backlink the label
         LabelEntry lble = label_env_lookup(syn.go_to.label, env);
         if (lble.type == Ok) {
-            if (lble.stack_offset != 0) {
+            size_t delta = lble.stack_offset - arg_total;
+            generate_stack_move(delta, 0, arg_total, ass, a, point);
+            if (delta != 0) {
                 // jump up stack
                 // TODO handle dynamic variable unbinding (if needed!)
-                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(lble.stack_offset), a, point);
+                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(delta), a, point);
             }
 
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            // Stack sould "pretend" it pushed a value of type syn.ptype and
+            // consumed all args
+            address_stack_shrink(env, arg_total);
+            address_stack_grow(env, pi_size_of(*syn.ptype));
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
         } else {
@@ -1339,13 +1394,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SStructType:
         // Generate struct type: for each element of the struct type
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 3 * ADDRESS_SIZE), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
         for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
             SymPtrCell field = syn.struct_type.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1358,10 +1414,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
-            // Now, incremenet index by 2 (to account for struct size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            // Now, incremenet index by 3 (to account for struct size!)
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type
@@ -1372,13 +1428,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SEnumType:
         // Generate enum type: malloc array for enum
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 3 * ADDRESS_SIZE), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
         for (size_t i = 0; i < syn.enum_type.variants.len; i++) {
             SymPtrCell field = syn.enum_type.variants.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & variant (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1415,10 +1472,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
             address_stack_shrink(env, 2*ADDRESS_SIZE);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
-            // Now, incremenet index by 2 (to account for ptr + symbol)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            // Now, incremenet index by 3 (to account for ptr + symbol)
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type
@@ -1457,7 +1514,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
-    case SCType:
+    case SLiftCType:
         generate(*syn.c_type, env, target, links, a, point);
         gen_mk_c_ty(ass,a, point);
         // Now, the type lies atop the stack, and we must pop the ctype out from
@@ -1473,9 +1530,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        address_stack_grow(env, sizeof(Symbol));
         generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        address_stack_shrink(env, sizeof(Symbol));
         gen_mk_named_ty(ass, a, point);
         address_pop(env);
         break;
@@ -1494,14 +1556,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // First, malloc enough data for the array:
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * 2 * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
 
 
         for (size_t i = 0; i < syn.trait.fields.len; i++) {
             SymPtrCell field = syn.trait.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
@@ -1514,10 +1577,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
             // Now, incremenet index by 2 (to account for trait size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(2), a, point);
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
         }
 
         // Finally, generate function call to make type
@@ -1533,34 +1596,35 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SConvert: {
         if (syn.convert.from_native) {
-            void** cfn = const_fold(syn.convert.body, env, target, links, a, point);
+            void* cfn = *(void**)const_fold(syn.convert.body, env, target, links, a, point);
+            void* proc_address = get_instructions(target.code_aux).data;
+            proc_address += get_instructions(target.code_aux).len;
+
+            // Generate procedure value (push the address onto the stack)
+            AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+            backlink_code(target, out.backlink, links);
+            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+            // Now, change the target and the assembler, such that code is now
+            // generated in the 'code segment'. Then, generate the function body
+            ass = target.code_aux;
+            target.target = target.code_aux;
+
             convert_c_fn(cfn, &syn.convert.body->ptype->c_type, syn.ptype, ass, a, point);
         } else {
             panic(mv_string("Cannot yet convert pico value to c value."));
         }
-           
+        break;
+    }
+    case STypeOf: {
+        build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), a, point);
+        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        address_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
-    }
-}
-
-void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // first, assert that size_t is divisible by 8 ( we use rax for copies )
-    /* if (size % 8 != 0)  { */
-    /*     throw_error(point, mv_string("Error in generate_stack_move expected copy size to be divisible by 8")); */
-    /* }; */
-
-    if ((dest_stack_offset + size) > 255 || (src_stack_offset + size) > 255)  {
-        throw_error(point, mv_string("Error in generate_stack_move offsets + size must be smaller than 255!"));
-    };
-
-    // TODO: chekc if doing pi_stack_round is ok?
-    for (size_t i = 0; i < pi_stack_align(size) / 8; i++) {
-        build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), a, point);
-        build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), a, point);
     }
 }
 
@@ -1587,7 +1651,7 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
         .data_aux = target.data_aux,
     };
 
-    generate(*syn, env, target, links, a, point);
+    generate(*syn, env, gen_target, links, a, point);
 
     void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), a, &cleanup_point);
 

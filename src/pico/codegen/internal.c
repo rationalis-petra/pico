@@ -69,6 +69,67 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
     push_size(offset, sarr);
 }
 
+// The stack move can count on all values being 8-byte aligned!
+// therefore, uint64_t* pointers are ok :)
+void stack_move(char *dest, const char *src, size_t size) {
+    for (size_t i = size; i > 0; i--) {
+        dest[i - 1] = src[i - 1];
+    }
+}
+
+void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
+
+    if ((dest_stack_offset + size) > 127 || (src_stack_offset + size) > 127)  {
+        // TODO: check to ensure offsets don't exceed 32 bit max
+
+#if ABI == SYSTEM_V_64
+        // stack_move (dest = rdi, src = rsi, size = rdx)
+        // copy size into RDX
+        build_binary_op(ass, Mov, reg(RDI, sz_64), imm32(dest_stack_offset), a, point);
+        build_binary_op(ass, Add, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(src_stack_offset), a, point);
+        build_binary_op(ass, Add, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(size), a, point);
+
+#elif ABI == WIN_64
+        // stack_move (dest = rcx, src = rdx, size = r8)
+        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(dest_stack_offset), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(src_stack_offset), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(R8, sz_64), imm32(size), a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+        generate_c_call(stack_move, ass, a, point);
+    } else  {
+        // Using 8-bit immediate is ok
+        size_t leftover = size % 8;
+        if (leftover >= 4) {
+            build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(RSP, src_stack_offset + (size / 8), sz_32), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_32), reg(RAX, sz_32), a, point);
+            leftover -= 4;
+        }
+        if (leftover >= 2) {
+            build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(RSP, src_stack_offset + (size / 8), sz_16), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_16), reg(RAX, sz_16), a, point);
+            leftover -= 2;
+        }
+        if (leftover >= 1) {
+            build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(RSP, src_stack_offset + (size / 8), sz_8), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_8), reg(RAX, sz_8), a, point);
+            leftover -= 1;
+        }
+
+        for (size_t i = 0; i < size / 8; i++) {
+            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), a, point);
+        }
+    }
+}
+
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Like a monomorphic copy, except that we start at the 'end' and go backwards
     const Regname src = RSP;
@@ -90,9 +151,14 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
         leftover -= 1;
     }
 
-    // First, assert that size_t is divisible by 8 ( we use rax for copies )
-    if (size > 255)  {
-        throw_error(point, mv_string("Error in generate_stack_copy: copy size must be smaller than 255!"));
+    // first, assert that size_t is divisible by 8 (as we generally expect 8-byte alignment to be maintained on the stack at all times.)
+    if (size > 127)  {
+        throw_error(point, mv_string("Error in generate_stack_copy expected copy size to be divisible by 8"));
+    };
+
+    // Then, check that using an 8-bit immediate offset is ok
+    if (size > 127)  {
+        throw_error(point, mv_string("Error in generate_stack_copy: copy size must be smaller than 127!"));
     };
 
     if (src == RAX || dest == RAX)  {
@@ -108,8 +174,8 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
-    if (size > 255)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_copy: copy size must be smaller than 255!"));
+    if (size > 127)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_copy: copy size must be smaller than 127!"));
     };
 
     if (src == RAX || dest == RAX)  {
@@ -145,8 +211,8 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
         throw_error(point, mv_string("Error in generate_monomorphic_swap expected copy size to be divisible by 8"));
     };
 
-    if (size > 255)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_swap copy size must be smaller than 255!"));
+    if (size > 127)  {
+        throw_error(point, mv_string("Error in generate_monomorphic_swap copy size must be smaller than 127!"));
     };
 
     if (loc1 == RDI || loc2 == RDI || loc1 == RSI || loc2 == RSI)  {
@@ -161,6 +227,32 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
     }
 }
 
+void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Align RSP to closest 16 bytes
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    
+#if ABI == WIN_64
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
+
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)cfn), a, point);
+    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+#endif 
+    
+    build_unary_op(ass, Pop, reg(RCX, sz_64),  a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+}
+
 void* tmp_malloc(uint64_t memsize) {
     return mem_alloc(memsize, get_std_tmp_allocator());
 }
@@ -170,17 +262,11 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     build_binary_op(ass, Mov, reg(RDI, sz_64), mem_size, a, point);
 #elif ABI == WIN_64
     build_binary_op(ass, Mov, reg(RCX, sz_64), mem_size, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&tmp_malloc), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
+    generate_c_call(tmp_malloc, ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);
@@ -212,29 +298,7 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
     #error "Unknown calling convention"
 #endif
 
-    // Align RSP to closest 16 bytes
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
-    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
-    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
-    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
-    
-#if ABI == WIN_64
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&internal_type_app), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
-    
-    build_unary_op(ass, Pop, reg(RCX, sz_64),  a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+    generate_c_call(internal_type_app, ass, a, point);
 
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(nfields * ADDRESS_SIZE), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -302,17 +366,11 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     build_binary_op(ass, Mov, reg(RCX, sz_64), nfields, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), data, a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), ret, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_proc_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif 
+    generate_c_call(mk_proc_ty, ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);
@@ -460,21 +518,24 @@ void* mk_type_var(Symbol var) {
 }
 
 void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // TODO (BUG) 
 #if ABI == SYSTEM_V_64
-    build_binary_op(ass, Mov, reg(RDI, sz_64), imm64(var), a, point);
+    build_binary_op(ass, Mov, reg(RDI, sz_64), imm64(var.name), a, point);
+    build_binary_op(ass, Mov, reg(RSI, sz_64), imm64(var.did), a, point);
 #elif ABI == WIN_64
-    build_binary_op(ass, Mov, reg(RCX, sz_64), imm64(var), a, point);
+    build_unary_op(ass, Push, imm32(var.did), a, point);
+    build_unary_op(ass, Push, imm32(var.name), a, point);
+    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
 
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(0x20), a, point);
 #else 
     #error "Unknown calling convention"
 #endif
-
     build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_type_var), a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x30), a, point);
 #endif 
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 }
@@ -761,3 +822,4 @@ void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location
         build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);
     }
 }
+

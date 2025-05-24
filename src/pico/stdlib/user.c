@@ -19,6 +19,11 @@ void add_user_module(Package* base, Allocator* a) {
         &imports.clauses);
     push_import_clause((ImportClause) {
             .type = Import,
+            .name = string_to_symbol(mv_string("meta")),
+        },
+        &imports.clauses);
+    push_import_clause((ImportClause) {
+            .type = Import,
             .name = string_to_symbol(mv_string("foreign")),
         },
         &imports.clauses);

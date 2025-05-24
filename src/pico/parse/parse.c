@@ -11,13 +11,10 @@
 
 
 // The 'actual' parser funciton
-ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a);
+ParseResult parse_main(IStream* is, Allocator* a);
 
 ParseResult parse_rawtree(IStream* is, Allocator* a) {
-    SourcePos start_state;
-    start_state.col = 0;
-    start_state.row = 0;
-    return parse_main(is, &start_state, a);
+    return parse_main(is, a);
 }
 
 // The three main parsing functions, which parse:
@@ -25,31 +22,31 @@ ParseResult parse_rawtree(IStream* is, Allocator* a) {
 // + numbers
 // + symbols
 // The 'main' parser does lookahead to dispatch on the appropriate parsing function.
-ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected);
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a);
-ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a);
-ParseResult parse_char(IStream* is, SourcePos* parse_state);
+ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected);
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a);
+ParseResult parse_atom(IStream* is, Allocator* a);
+ParseResult parse_number(IStream* is, Allocator* a);
+ParseResult parse_prefix(char prefix, IStream* is, Allocator* a);
+ParseResult parse_string(IStream* is, Allocator* a);
+ParseResult parse_char(IStream* is);
 
 // Helper functions
-StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state);
-StreamResult consume_whitespace(IStream* is, SourcePos* parse_state);
+StreamResult consume_until(uint32_t stop, IStream* is);
+StreamResult consume_whitespace(IStream* is);
 bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
-ParseResult parse_main(IStream* is, SourcePos* parse_state, Allocator* a) {
-    return parse_expr(is, parse_state, a, '0');
+ParseResult parse_main(IStream* is, Allocator* a) {
+    return parse_expr(is, a, '\0');
 }
 
-ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32_t expected) {
+ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
     // default if we never enter loop body 
     ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
 
-    consume_whitespace(is, parse_state);
+    consume_whitespace(is);
     StreamResult result;
     RawTreeArray terms = mk_rawtree_array(8, a);
     bool running = true;
@@ -58,24 +55,27 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         switch (peek(is, &point)) {
         case StreamSuccess:
             if (point == '(') {
-                out = parse_list(is, parse_state, ')', HExpression, a);
+                out = parse_list(is, ')', HExpression, a);
             }
             else if (point == '[') {
-                out = parse_list(is, parse_state, ']', HSpecial, a);
+                out = parse_list(is, ']', HSpecial, a);
             }
             else if (point == '{') {
-                out = parse_list(is, parse_state, '}', HImplicit, a);
+                out = parse_list(is, '}', HImplicit, a);
             }
             else if (point == ':') {
                 if (terms.len == 0) {
-                    out = parse_prefix(':', is, parse_state, a);
+                    out = parse_prefix(':', is, a);
                 } else {
+                    size_t start = bytecount(is);
                     next(is, &point);
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
-                        .data.result = (RawTree) {
+                        .result = (RawTree) {
                             .type = RawAtom,
+                            .range.start = start,
+                            .range.end = bytecount(is),
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(":")),
                         }
@@ -84,14 +84,17 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
             }
             else if (point == '.') {
                 if (terms.len == 0) {
-                    out = parse_prefix('.', is, parse_state, a);
+                    out = parse_prefix('.', is, a);
                 } else {
+                    size_t start = bytecount(is);
                     next(is, &point);
 
                     out = (ParseResult) {
                         .type = ParseSuccess,
-                        .data.result = (RawTree) {
+                        .result = (RawTree) {
                             .type = RawAtom,
+                            .range.start = start,
+                            .range.end = bytecount(is),
                             .atom.type = ASymbol,
                             .atom.symbol = string_to_symbol(mv_string(".")),
                         }
@@ -99,13 +102,13 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 }
             }
             else if (point == '"') {
-                out = parse_string(is, parse_state, a);
+                out = parse_string(is, a);
             }
             else if (point == '#') {
-                out = parse_char(is, parse_state);
+                out = parse_char(is);
             }
             else if (is_numchar(point) || point == '-') {
-                out = parse_number(is, parse_state, a);
+                out = parse_number(is, a);
             }
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -116,7 +119,7 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 break;
             }
             else if (is_symchar(point)){
-                out = parse_atom(is, parse_state, a);
+                out = parse_atom(is, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
                 out.type = ParseNone;
@@ -124,11 +127,24 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
                 break;
             } else {
                 // We couldn't do a parse!
+                size_t range_start = bytecount(is);
                 next(is, &point);
 
-                out.type = ParseFail;
-                out.data.range.start = *parse_state;
-                out.data.range.end = *parse_state;
+                String actual_string = string_from_codepoint(point, a);
+                String expected_string = string_from_codepoint(expected, a);
+                String message = string_ncat(a, 5,
+                                             mv_string("Unexpected character: '"),
+                                             actual_string,
+                                             mv_string("', expected: '"),
+                                             expected_string,
+                                             mv_string("'"));
+
+                out = (ParseResult) {
+                    .type = ParseFail,
+                    .error.range.start = range_start,
+                    .error.range.end = bytecount(is),
+                    .error.message = message,
+                };
                 running = false;
                 break;
             }
@@ -143,15 +159,18 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         default: {
             out = (ParseResult) {
                 .type = ParseFail,
-                .data.range.start = *parse_state,
-                .data.range.end = *parse_state,
+                .error.message = mv_string("Stream result was in unexpected state."),
+                .error.range.start = bytecount(is),
+                .error.range.end = bytecount(is),
             };
             running = false;
         } break;
         }
 
         if (out.type == ParseSuccess) {
-            push_rawtree(out.data.result, &terms);
+            push_rawtree(out.result, &terms);
+        } else if (out.type == ParseFail) {
+            running = false;
         }
     }
 
@@ -160,15 +179,16 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
         out.type = ParseNone;
     } else if (out.type == ParseNone && terms.len == 1) {
         out.type = ParseSuccess;
-        out.data.result = terms.data[0];
+        out.result = terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
         // Check that there is an appropriate (odd) number of terms for infix operator
         // unrolling to function
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .error.message = mv_string("Inappropriate number of terms for infix-operator: "),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
           };
           return out;
         }
@@ -184,6 +204,8 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
 
             current = (RawTree) {
                 .type = RawBranch,
+                .range.start = terms.data[0].range.start,
+                .range.end = current.range.end,
                 .branch.hint = HNone,
                 .branch.nodes = children,
             };
@@ -191,61 +213,68 @@ ParseResult parse_expr(IStream* is, SourcePos* parse_state, Allocator* a, uint32
 
         out = (ParseResult) {
             .type = ParseSuccess,
-            .data.result = current,
+            .result = current,
         };
     }
     return out;
 }
 
-ParseResult parse_list(IStream* is, SourcePos* parse_state, uint32_t terminator, SyntaxHint hint, Allocator* a) {
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a) {
     ParseResult res;
     res.type = ParseSuccess;
-    res.data.range.start = *parse_state;
     ParseResult out;
     RawTreeArray nodes = mk_rawtree_array(8, a);
     uint32_t codepoint;
 
     // Assume '(' is next character
+    size_t start = bytecount(is);
     next(is, &codepoint);
-    consume_whitespace(is, parse_state);
+    consume_whitespace(is);
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_expr(is, parse_state, a, terminator);
+        res = parse_expr(is, a, terminator);
 
         if (res.type == ParseFail) {
             out = res;
             break;
         } else {
-            push_rawtree(res.data.result, &nodes);
+            push_rawtree(res.result, &nodes);
         }
-        consume_whitespace(is, parse_state);
+        consume_whitespace(is);
     }
 
     if (sres != StreamSuccess) {
-        out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
+        out = (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_string("Input stream failure"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
+        };
     } else if (res.type == ParseFail) {
         out = res;
     } else {
+        // consume closing ')'
+        next(is, &codepoint);
+
         out.type = ParseSuccess;
-        out.data.result = (RawTree) {
+        out.result = (RawTree) {
             .type = RawBranch,
+            .range.start = start,
+            .range.end = bytecount(is),
             .branch.hint = hint,
             .branch.nodes = nodes,
         };
-        // consume closing ')'
-        next(is, &codepoint);
     }
     return out;
 }
 
-ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_atom(IStream* is, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
-     * These may be 'true' atoms such as num, + or foo. Strings separated by '.'
-     * and ':' are also considered by the parser as 'atoms' as these elements are not separated
-     * by spaces and bind tightly.
+     * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
+     * and ':' such as Maybe:none and foo.var are also considered by the parser
+     * as 'atoms'
+     * as these elements are not separated by spaces and bind tightly.
      * 
      * The general approach is as follows:
      */
@@ -255,6 +284,7 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     U32Array arr = mk_u32_array(16, a);
 
     RawTreeArray terms = mk_rawtree_array(8, a);
+    size_t start = bytecount(is);
 
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
@@ -264,30 +294,42 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
             next(is, &codepoint);
             push_u32(codepoint, &arr);
         } else if (codepoint == '.' || codepoint == ':') {
+            size_t op_start = bytecount(is);
             next(is, &codepoint);
-
-            // Store symbol
-            String str = string_from_UTF_32(arr, a);
-            RawTree val = (RawTree) {
-                .type = RawAtom,
-                .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(str),
-            };
-            push_rawtree(val, &terms);
-            arr.len = 0; // reset array
+            size_t op_end = bytecount(is);
 
             RawTree op = (RawTree) {
                 .type = RawAtom,
+                .range.start = op_start,
+                .range.end = op_end,
                 .atom.type = ASymbol,
                 .atom.symbol = codepoint == '.'
                   ? string_to_symbol(mv_string("."))
                   : string_to_symbol(mv_string(":")),
             };
+
+            // Store symbol
+            String str = string_from_UTF_32(arr, a);
+            RawTree val = (RawTree) {
+                .type = RawAtom,
+                .range.start = start,
+                .range.end = op_start,
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(str),
+            };
+            // new start bytecount(is)
+            start = op_end;
+
+            push_rawtree(val, &terms);
+            arr.len = 0; // reset array
+
             push_rawtree(op, &terms);
         } else {
             String str = string_from_UTF_32(arr, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
+                .range.start = start,
+                .range.end = bytecount(is),
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
@@ -301,8 +343,9 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .error.message = mv_string("Stream failure."),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     } else {
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
@@ -316,6 +359,8 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 
             current = (RawTree) {
                 .type = RawBranch,
+                .range.start = current.range.start,
+                .range.end = terms.data[i+1].range.end,
                 .branch.hint = HNone,
                 .branch.nodes = children,
             };
@@ -323,13 +368,13 @@ ParseResult parse_atom(IStream* is, SourcePos* parse_state, Allocator* a) {
 
         out = (ParseResult) {
             .type = ParseSuccess,
-            .data.result = current,
+            .result = current,
         };
     }
     return out;
 }
 
-ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_number(IStream* is, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -337,6 +382,7 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     bool is_positive = true;
     bool just_negation = true;
     bool floating = false;
+    size_t start = bytecount(is);
 
     result = peek(is, &codepoint);
     if (result == StreamSuccess && codepoint == '-') {
@@ -367,9 +413,11 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (just_negation) {
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = ASymbol,
-            .data.result.atom.symbol = string_to_symbol(mv_string("-")),
+            .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
+            .result.atom.type = ASymbol,
+            .result.atom.symbol = string_to_symbol(mv_string("-")),
         };
     }
 
@@ -377,8 +425,9 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .error.message = mv_string("Stream failure"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
@@ -402,9 +451,11 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
 
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = AFloating,
-            .data.result.atom.float_64 = dlhs + drhs,
+            .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
+            .result.atom.type = AFloating,
+            .result.atom.float_64 = dlhs + drhs,
         };
     } else {
         int64_t int_result = 0;
@@ -417,19 +468,22 @@ ParseResult parse_number(IStream* is, SourcePos* parse_state, Allocator* a) {
 
         return (ParseResult) {
             .type = ParseSuccess,
-            .data.result.type = RawAtom,
-            .data.result.atom.type = AIntegral,
-            .data.result.atom.int_64 = int_result,
+            .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
+            .result.atom.type = AIntegral,
+            .result.atom.int_64 = int_result,
         };
     }
 }
 
-ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     ParseResult out;
     U32Array arr = mk_u32_array(10, a);
 
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
@@ -439,17 +493,18 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
 
     if (result != StreamSuccess) {
         out.type = ParseFail;
-        out.data.range.start = *parse_state;
-        out.data.range.end = *parse_state;
+        out.error.message = mv_string("Stream failed");
+        out.error.range.start = bytecount(is);
+        out.error.range.end = bytecount(is);
     } else if (arr.len == 0) {
         char cstr[2] = {prefix, '\0'};
         String str = mv_string(cstr);
         Symbol sym_result = string_to_symbol(str);
 
         out.type = ParseSuccess;
-        out.data.result.type = RawAtom;
-        out.data.result.atom.type = ASymbol;
-        out.data.result.atom.symbol = sym_result;
+        out.result.type = RawAtom;
+        out.result.atom.type = ASymbol;
+        out.result.atom.symbol = sym_result;
 
     } else {
         char cstr[2] = {prefix, '\0'};
@@ -457,6 +512,8 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
         Symbol sym_result = string_to_symbol(str);
         RawTree proj = (RawTree) {
             .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
             .atom.type = ASymbol,
             .atom.symbol = sym_result,
         };
@@ -465,6 +522,8 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
         sym_result = string_to_symbol(str);
         RawTree field = (RawTree) {
             .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
             .atom.type = ASymbol,
             .atom.symbol = sym_result,
         };
@@ -474,8 +533,10 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
         push_rawtree(field, &nodes);
 
         out.type = ParseSuccess;
-        out.data.result = (RawTree) {
+        out.result = (RawTree) {
             .type = RawBranch,
+            .range.start = start,
+            .range.end = bytecount(is),
             .branch.hint = HNone,
             .branch.nodes = nodes,
         };
@@ -484,10 +545,11 @@ ParseResult parse_prefix(char prefix, IStream* is, SourcePos* parse_state, Alloc
     return out;
 }
 
-ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
+ParseResult parse_string(IStream* is, Allocator* a) {
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token (")
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
@@ -498,44 +560,51 @@ ParseResult parse_string(IStream* is, SourcePos* parse_state, Allocator* a) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .error.message = mv_string("Stream failed"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
     next(is, &codepoint); // consume token (")
     return (ParseResult) {
         .type = ParseSuccess,
-        .data.result.type = RawAtom,
-        .data.result.atom.type = AString,
-        .data.result.atom.string = string_from_UTF_32(arr, a),
+        .result.type = RawAtom,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
+        .result.atom.type = AString,
+        .result.atom.string = string_from_UTF_32(arr, a),
     };
 }
 
-ParseResult parse_char(IStream* is, SourcePos* parse_state) {
+ParseResult parse_char(IStream* is) {
     StreamResult result;
     uint32_t codepoint;
+    size_t start = bytecount(is);
     next(is, &codepoint); // consume token #)
     result = next(is, &codepoint);
 
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .data.range.start = *parse_state,
-            .data.range.end = *parse_state,
+            .error.message = mv_string("Stream failed"),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
         };
     }
 
     //next(is, &codepoint); // consume token (")
     return (ParseResult) {
         .type = ParseSuccess,
-        .data.result.type = RawAtom,
-        .data.result.atom.type = AIntegral,
-        .data.result.atom.int_64 = codepoint,
+        .result.type = RawAtom,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
+        .result.atom.type = AIntegral,
+        .result.atom.int_64 = codepoint,
     };
 }
 
-StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
+StreamResult consume_until(uint32_t stop, IStream* is) {
     uint32_t codepoint;
     StreamResult result;
 
@@ -545,7 +614,6 @@ StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (codepoint != stop) {
             // TODO: Check if newline!
-            parse_state->col++;
             result = next(is, &codepoint);
         }
         else {
@@ -555,16 +623,15 @@ StreamResult consume_until(uint32_t stop, IStream* is, SourcePos* parse_state) {
     return result;
 }
 
-StreamResult consume_whitespace(IStream* is, SourcePos* parse_state) {
+StreamResult consume_whitespace(IStream* is) {
     uint32_t codepoint;
     StreamResult result;
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (is_whitespace(codepoint) ) {
             // TODO: Check if newline!
-            parse_state->col++;
             result = next(is, &codepoint);
         } else if (codepoint == ';') {
-            result = consume_until('\n', is, parse_state);
+            result = consume_until('\n', is);
         } else {
             break;
         }
