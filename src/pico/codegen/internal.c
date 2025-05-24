@@ -123,7 +123,7 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
             leftover -= 1;
         }
 
-        for (size_t i = 0; i < pi_stack_align(size) / 8; i++) {
+        for (size_t i = 0; i < size / 8; i++) {
             build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), a, point);
             build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), a, point);
         }

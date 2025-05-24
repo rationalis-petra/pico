@@ -636,6 +636,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // ------------
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
+        size_t source_region_size = 0;
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
+        }
         size_t dest_offset = 0;
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
 
@@ -658,8 +662,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
-            size_t src_stack_offset = struct_size - src_offset;
-            size_t dest_stack_offset = struct_size + dest_offset;
+            size_t src_stack_offset = source_region_size - src_offset;
+            size_t dest_stack_offset = source_region_size + dest_offset;
             size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
@@ -670,8 +674,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(struct_size), a, point);
-        address_stack_shrink(env, struct_size);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(source_region_size), a, point);
+        address_stack_shrink(env, source_region_size);
         break;
     }
     case SProjector: {
