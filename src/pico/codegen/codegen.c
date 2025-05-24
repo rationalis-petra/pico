@@ -112,7 +112,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         int32_t immediate = (int32_t)syn.integral.value;
         build_unary_op(ass, Push, imm32(immediate), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitUntypedFloating: 
@@ -122,7 +122,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         int64_t immediate = *(int64_t*)raw;
         build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
         build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitBool: {
@@ -333,12 +333,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t args_size = 0;
             for (size_t i = 0; i < syn.application.implicits.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.implicits.data[i];
-                args_size += pi_size_of(*arg->ptype);
+                args_size += pi_stack_size_of(*arg->ptype);
                 generate(*arg, env, target, links, a, point);
             }
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
-                args_size += pi_size_of(*arg->ptype);
+                args_size += pi_stack_size_of(*arg->ptype);
                 generate(*arg, env, target, links, a, point);
             }
 
@@ -353,14 +353,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             address_stack_shrink(env, args_size + ADDRESS_SIZE);
 
             // Update as pushed the final value onto the stac
-            address_stack_grow(env, pi_size_of(*syn.ptype));
+            address_stack_grow(env, pi_stack_size_of(*syn.ptype));
 
         // Is a type family 
         } else {
             size_t args_size = 0;
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
-                args_size += pi_size_of(*arg->ptype);
+                args_size += pi_stack_size_of(*arg->ptype);
                 generate(*arg, env, target, links, a, point);
             }
 
@@ -372,8 +372,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             address_stack_shrink(env, args_size + ADDRESS_SIZE);
 
             // Update as pushed the final value onto the stac
-            address_stack_grow(env, pi_size_of(*syn.ptype));
-
+            address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         }
         break;
     }
@@ -430,12 +429,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t args_size = 0;
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            args_size += pi_size_of(*arg->ptype);
+            args_size += pi_stack_size_of(*arg->ptype);
             generate(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
-            args_size += pi_size_of(*arg->ptype);
+            args_size += pi_stack_size_of(*arg->ptype);
             generate(*arg, env, target, links, a, point);
         }
 
@@ -452,9 +451,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Pop the function into RCX; call the function
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
         build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
-        // Update for popping all values off the stack
-        // TODO: make sure this gets done!
-        //address_stack_shrink(env, args_size);
 
         // Update as popped args from stack
         address_stack_shrink(env, args_size + ADDRESS_SIZE);
@@ -951,7 +947,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Pop the bool into R9; compare with 0
         build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
         build_binary_op(ass, Cmp, reg(R9, sz_64), imm32(0), a, point);
-        address_stack_shrink(env, pi_size_of((PiType) {.sort = TPrim, .prim = Bool}));
+        address_stack_shrink(env, pi_stack_size_of((PiType) {.sort = TPrim, .prim = Bool}));
 
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
@@ -1112,13 +1108,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t delta = lble.stack_offset - arg_total;
             generate_stack_move(delta, 0, arg_total, ass, a, point);
             if (delta != 0) {
-                // jump up stack
+                // Adjust the stack so it has the same value that one would have
+                // going into a labels expression.
                 // TODO handle dynamic variable unbinding (if needed!)
                 build_binary_op(ass, Add, reg(RSP, sz_64), imm32(delta), a, point);
             }
 
             // Stack sould "pretend" it pushed a value of type syn.ptype and
-            // consumed all args
+            // consumed all args. This is so that, e.g. if this go-to is inside
+            // a seq or if, the other branches of the if or the rest of the seq
+            // generates assuming the correct stack offset.
             address_stack_shrink(env, arg_total);
             address_stack_grow(env, pi_size_of(*syn.ptype));
 
@@ -1285,7 +1284,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             SeqElt* elt = syn.sequence.elements.data[i];
             generate(*elt->expr, env, target, links, a, point);
 
-            size_t sz = pi_size_of(*elt->expr->ptype);
+            size_t sz = pi_stack_size_of(*elt->expr->ptype);
             if (elt->is_binding) {
                 num_bindings++;
                 binding_size += i + 1 == syn.sequence.elements.len ? 0 : sz;
