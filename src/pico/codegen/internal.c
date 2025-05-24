@@ -95,9 +95,9 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
 #elif ABI == WIN_64
         // stack_move (dest = rcx, src = rdx, size = r8)
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(dest_stack_offset), a, point);
-        build_binary_op(ass, Add, reg(RCI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
         build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(src_stack_offset), a, point);
-        build_binary_op(ass, Add, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
         build_binary_op(ass, Mov, reg(R8, sz_64), imm32(size), a, point);
 #else
 #error "Unknown calling convention"
