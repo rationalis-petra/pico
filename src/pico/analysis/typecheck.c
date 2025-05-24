@@ -1511,7 +1511,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         break;
     case SSequence:
         for (size_t i = 0; i < syn->sequence.elements.len; i++) {
-            instantiate_implicits(syn->sequence.elements.data[i], env, a, point);
+            SeqElt* elt = syn->sequence.elements.data[i];
+            instantiate_implicits(elt->expr, env, a, point);
         }
         break;
     case SWithReset:
