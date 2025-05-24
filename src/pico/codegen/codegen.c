@@ -264,7 +264,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t args_size = 0;
         SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            size_t arg_size = pi_size_of(*(PiType*)syn.ptype->proc.implicits.data[i]);
+            size_t arg_size = pi_stack_size_of(*(PiType*)syn.ptype->proc.implicits.data[i]);
             args_size += pi_stack_align(arg_size);
             sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
         }
@@ -289,7 +289,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // + return to stashed address
 
         // Storage of function output 
-        size_t ret_size = pi_size_of(*syn.procedure.body->ptype);
+        size_t ret_size = pi_stack_size_of(*syn.procedure.body->ptype);
 
         // Note: R9, R14, RBP 
         build_binary_op(ass, Mov, reg(R12, sz_64),  rref8(RBP, 16, sz_64), a, point);
@@ -464,7 +464,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SConstructor: {
         PiType* enum_type = strip_type(syn.constructor.enum_type->type_val);
-        size_t enum_size = pi_size_of(*enum_type);
+        size_t enum_size = pi_stack_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size - variant_size), a, point);
@@ -474,6 +474,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SVariant: {
+        // TODO (FEAT BUG): ensure this will correctly handle non-stack aligned
+        // enum tags, members and overall enums gracefully.
         const size_t tag_size = sizeof(uint64_t);
         PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
         size_t enum_size = pi_size_of(*enum_type);
@@ -519,6 +521,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SMatch: {
+        // TODO: check that the match handles stack alignment correctly
         // Generate code for the value
         Syntax* match_value = syn.match.val;
         PiType* enum_type = strip_type(syn.match.val->ptype);
@@ -675,6 +678,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SProjector: {
+        // TODO: check that the projector handles stack alignment correctly
         // First, allocate space on the stack for the value
         PiType* source_type = strip_type(syn.projector.val->ptype);
         size_t out_sz = pi_stack_size_of(*syn.ptype);
@@ -723,6 +727,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SInstance: {
+        // TODO: check that the instance handles stack alignment correctly
         /* Instances work as follows:
          * • Instances as values are expected to be passed as pointers and allocated temporarily. 
          * • Non-parametric instances are simply pointers : codegen generates a
@@ -793,6 +798,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamic: {
+        // TODO: check that the dynamic handles stack alignment correctly
         // Create a new dynamic variable, i.e. call the C function 
         // mk_dynamic_var(size_t size, void* default_val)
         generate(*syn.dynamic, env, target, links, a, point);
@@ -829,6 +835,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamicUse: {
+        // TODO: check that the dynamic use handles stack alignment correctly
         generate(*syn.use, env, target, links, a, point);
 
         // We now have a dynamic variable: get its' value as ptr
@@ -864,6 +871,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamicLet: {
+        // TODO: check that the dynamic let handles stack alignment correctly
 
         // Step 1: evaluate all dynamic bindings & bind them
         for (size_t i = 0; i < syn.dyn_let_expr.bindings.len; i++) {
@@ -924,6 +932,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SLet: {
+        // TODO: check that the let handles stack alignment correctly
         size_t bsize = 0;
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
             Syntax* sy = syn.let_expr.bindings.data[i].val;
@@ -1130,6 +1139,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SWithReset: {
+        // TODO: check that the with-reset handles stack alignment correctly
+        // TODO: make sure that with-reset and reset-to handle R13 and R14 correctly
+        //                (dynamic vars + index stack)
         // Overview of reset codegen
         // 1. Push as reset point onto the stack
         // 2. Push the ptr to reset point onto the stack - bind it
@@ -1340,17 +1352,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SSizeOf: {
         size_t sz = pi_size_of(*syn.size->type_val);
         build_unary_op(ass, Push, imm32(sz), a, point);
+        address_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SAlignOf: {
         size_t sz = pi_align_of(*syn.size->type_val);
         build_unary_op(ass, Push, imm32(sz), a, point);
+        address_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcType:
