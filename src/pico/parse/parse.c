@@ -244,7 +244,14 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
         consume_whitespace(is);
     }
 
-    if (sres != StreamSuccess) {
+    if (sres == StreamEnd) {
+        out = (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_string("Unexpected end of stream. List started here was still parsing"),
+            .error.range.start = start,
+            .error.range.end = start,
+        };
+    } else if (sres != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
             .error.message = mv_string("Input stream failure"),
