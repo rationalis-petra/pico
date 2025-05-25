@@ -882,9 +882,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         for (size_t i = 0; i < untyped->sequence.elements.len; i++) {
             SeqElt* elt = untyped->sequence.elements.data[i];
             if (elt->is_binding) {
-                PiType* type = mk_uvar(gen, a);
-                type_check_i(elt->expr, type, env, gen, a, point);
-                type_var (elt->symbol, type, env);
+                //PiType* type = mk_uvar(gen, a);
+                type_infer_i(elt->expr, env, gen, a, point);
+                type_var (elt->symbol, elt->expr->ptype, env);
                 num_binds++;
             } else {
                 type_infer_i(elt->expr, env, gen, a, point);

@@ -55,7 +55,7 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
     return res;
 }
 
-// Note: destructively modifies Assembler! probaly want a better solution in the future
+// TODO: current implementation destructively modifies the assembly of the expression. probaly want a better solution in the future
 void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
     /* result generated; */
@@ -63,7 +63,8 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* value = mem_alloc(rsize, a);
 
     // Generate Code which will: 
-    //  1. Copy the final value (on stack) into value
+    //  1. Copy the final value (on stack) into the memory allocated into the
+    //     'value' variable (above)
     //  2. Return to C
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)

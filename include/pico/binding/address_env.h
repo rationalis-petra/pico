@@ -25,6 +25,7 @@ typedef struct AddressEnv AddressEnv;
 typedef enum {
     ALocalDirect,
     ALocalIndirect,
+    ALocalIndexed,
     AGlobal,
     ATypeVar,
     ANotFound,
@@ -110,7 +111,11 @@ void address_start_labels(SymbolArray labels, AddressEnv* env);
 void address_end_labels(AddressEnv* env);
 
 // Inform the environment that values have been pushed/popped from the stack.
-void address_stack_grow(AddressEnv* env, size_t amount);
-void address_stack_shrink(AddressEnv* env, size_t amount);
+void data_stack_grow(AddressEnv* env, size_t amount);
+void data_stack_shrink(AddressEnv* env, size_t amount);
+
+// Inform the environment that values have been pushed/popped from the index.
+void index_stack_grow(AddressEnv* env, size_t num);
+void index_stack_shrink(AddressEnv* env, size_t num);
 
 #endif

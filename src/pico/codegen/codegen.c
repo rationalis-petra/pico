@@ -116,7 +116,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         int32_t immediate = (int32_t)syn.integral.value;
         build_unary_op(ass, Push, imm32(immediate), a, point);
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitUntypedFloating: 
@@ -126,13 +126,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         int64_t immediate = *(int64_t*)raw;
         build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
         build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(ass, Push, imm8(immediate), a, point);
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitString: {
@@ -150,7 +150,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SVariable: 
@@ -175,6 +175,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
         case ALocalIndirect:
             panic(mv_string("Monomorphic code does not expect address entries of type 'local indirect'"));
+            break;
+        case ALocalIndexed:
+            panic(mv_string("Monomorphic code does not expect address entries of type 'local indexed'"));
             break;
         case AGlobal: {
             PiType indistinct_type = *strip_type(syn.ptype);
@@ -241,7 +244,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             break;
         }
         }
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcedure: {
@@ -354,10 +357,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
             // Update for popping all values off the stack (also the function itself)
-            address_stack_shrink(env, args_size + ADDRESS_SIZE);
+            data_stack_shrink(env, args_size + ADDRESS_SIZE);
 
             // Update as pushed the final value onto the stac
-            address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
 
         // Is a type family 
         } else {
@@ -373,10 +376,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             gen_mk_family_app(syn.application.args.len, ass, a, point);
             // Update for popping all values off the stack (also the function itself)
-            address_stack_shrink(env, args_size + ADDRESS_SIZE);
+            data_stack_shrink(env, args_size + ADDRESS_SIZE);
 
             // Update as pushed the final value onto the stac
-            address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         }
         break;
     }
@@ -426,7 +429,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Store "Old" RBP (RBP to restore)
         build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
 
-        address_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
+        data_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
                                                 + syn.all_application.implicits.len
                                                 + syn.all_application.args.len + 2));
 
@@ -457,12 +460,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
 
         // Update as popped args from stack
-        address_stack_shrink(env, args_size + ADDRESS_SIZE);
-        address_stack_shrink(env, ADDRESS_SIZE * (syn.all_application.types.len
+        data_stack_shrink(env, args_size + ADDRESS_SIZE);
+        data_stack_shrink(env, ADDRESS_SIZE * (syn.all_application.types.len
                                                 + syn.all_application.implicits.len
                                                 + syn.all_application.args.len + 2));
         // Update as pushed the final value onto the stack
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
             
     }
@@ -474,7 +477,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size - variant_size), a, point);
         build_unary_op(ass, Push, imm32(syn.constructor.tag), a, point);
 
-        address_stack_grow(env, enum_size);
+        data_stack_grow(env, enum_size);
         break;
     }
     case SVariant: {
@@ -521,7 +524,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(variant_size - tag_size), a, point);
 
         // Grow the stack to account for the difference in enum & variant sizes
-        address_stack_grow(env, enum_size - variant_size);
+        data_stack_grow(env, enum_size - variant_size);
         break;
     }
     case SMatch: {
@@ -586,7 +589,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
 
             address_unbind_enum_vars(env);
-            address_stack_shrink(env, out_size);
+            data_stack_shrink(env, out_size);
         }
 
         // Finally, backlink all jumps from the bodies to the end.
@@ -607,8 +610,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(enum_size), a, point);
 
-        address_stack_shrink(env, enum_size);
-        address_stack_grow(env, out_size);
+        data_stack_shrink(env, enum_size);
+        data_stack_grow(env, out_size);
         break;
     }
     case SStructure: {
@@ -620,7 +623,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Step 1: Make room on the stack for our struct
         size_t struct_size = pi_stack_size_of(*struct_type);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
-        address_stack_grow(env, struct_size);
+        data_stack_grow(env, struct_size);
 
         // Step 2: evaluate each element/variable binding
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
@@ -678,7 +681,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Remove the space occupied by the temporary values 
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(source_region_size), a, point);
-        address_stack_shrink(env, source_region_size);
+        data_stack_shrink(env, source_region_size);
         break;
     }
     case SProjector: {
@@ -687,7 +690,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* source_type = strip_type(syn.projector.val->ptype);
         size_t out_sz = pi_stack_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(out_sz), a, point);
-        address_stack_grow(env, out_sz);
+        data_stack_grow(env, out_sz);
 
         // Second, generate the structure/instance object
         generate(*syn.projector.val, env, target, links, a, point);
@@ -709,10 +712,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // now, remove the original struct from the stack
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_sz), a, point);
 
-            address_stack_shrink(env, src_sz);
+            data_stack_shrink(env, src_sz);
         } else {
             // Pop the pointer to the instance from the stack - store in RSI
-            address_stack_shrink(env, pi_stack_align(src_sz));
+            data_stack_shrink(env, pi_stack_align(src_sz));
             build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
             // Now, calculate offset for field 
@@ -751,7 +754,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Grow by address size to account for the fact that the for loop
         // keeps a stack of the address, which is updated each iteration.
-        address_stack_grow(env, ADDRESS_SIZE);
+        data_stack_grow(env, ADDRESS_SIZE);
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
 
         // TODO (BUG): generate code that doesn't assume fields are in same order   
@@ -787,7 +790,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // Pop value from stack
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(offset)), a, point);
-            address_stack_shrink(env, offset);
+            data_stack_shrink(env, offset);
 
             // Override index with new value
             build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
@@ -834,8 +837,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         
-        address_stack_shrink(env, ADDRESS_SIZE);
-        address_stack_grow(env, val_size);
+        data_stack_shrink(env, ADDRESS_SIZE);
+        data_stack_grow(env, val_size);
         break;
     }
     case SDynamicUse: {
@@ -870,8 +873,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
         
-        address_stack_shrink(env, ADDRESS_SIZE);
-        address_stack_grow(env, val_size);
+        data_stack_shrink(env, ADDRESS_SIZE);
+        data_stack_grow(env, val_size);
         break;
     }
     case SDynamicLet: {
@@ -932,7 +935,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Step 4: cleanup: pop bindings
         generate_stack_move(offset_size, 0, val_size, ass, a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(offset_size), a, point);
-        address_stack_shrink(env, offset_size);
+        data_stack_shrink(env, offset_size);
         break;
     }
     case SLet: {
@@ -949,7 +952,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(bsize), a, point);
-        address_stack_shrink(env, bsize);
+        data_stack_shrink(env, bsize);
         address_pop_n(syn.let_expr.bindings.len, env);
         break;
     }
@@ -960,7 +963,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Pop the bool into R9; compare with 0
         build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
         build_binary_op(ass, Cmp, reg(R9, sz_64), imm32(0), a, point);
-        address_stack_shrink(env, pi_stack_size_of((PiType) {.sort = TPrim, .prim = Bool}));
+        data_stack_shrink(env, pi_stack_size_of((PiType) {.sort = TPrim, .prim = Bool}));
 
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
@@ -1040,7 +1043,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 arg_total += arg_size;
             }
 
-            address_stack_grow(env,arg_total);
+            data_stack_grow(env,arg_total);
             address_bind_label_vars(arg_sizes, env);
             generate(*branch->body, env, target, links, a, point);
             address_unbind_label_vars(env);
@@ -1048,13 +1051,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             LabelEntry lble = label_env_lookup(cell.key, env);
             if (lble.type == Err)
                 throw_error(point, mv_string("Label not found during codegen!!"));
-            address_stack_shrink(env, lble.stack_offset);
+            data_stack_shrink(env, lble.stack_offset);
 
             // Copy the result down the stack
             generate_stack_move(arg_total, 0, out_size, ass, a, point);
 
             // ensure the stack is at the sam epoint for the next iteration! 
-            address_stack_shrink(env,out_size);
+            data_stack_shrink(env,out_size);
 
             AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
@@ -1062,7 +1065,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // The final iteration will have shrunk the stack "too much", so add the
         // result back in.
-        address_stack_grow(env,out_size);
+        data_stack_grow(env,out_size);
 
         size_t label_end = get_pos(ass);
 
@@ -1131,8 +1134,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // consumed all args. This is so that, e.g. if this go-to is inside
             // a seq or if, the other branches of the if or the rest of the seq
             // generates assuming the correct stack offset.
-            address_stack_shrink(env, arg_total);
-            address_stack_grow(env, pi_size_of(*syn.ptype));
+            data_stack_shrink(env, arg_total);
+            data_stack_grow(env, pi_size_of(*syn.ptype));
 
             AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
 
@@ -1170,7 +1173,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Step 2.
         //-------
         build_unary_op(ass, Push, reg(RSP, sz_64), a, point);
-        address_stack_grow(env, 3*ADDRESS_SIZE);
+        data_stack_grow(env, 3*ADDRESS_SIZE);
         address_bind_relative(syn.with_reset.point_sym, 0, env);
 
         // Step 3.
@@ -1194,7 +1197,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(3 * ADDRESS_SIZE), a, point);
         generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
 
-        address_stack_shrink(env, 3*ADDRESS_SIZE + val_size);
+        data_stack_shrink(env, 3*ADDRESS_SIZE + val_size);
         address_pop(env);
 
         // Step 5.
@@ -1225,14 +1228,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Note: from reset-to, the stack now currently looks like
         // value 
         // Bind value + continuation mark
-        address_stack_grow(env, ADDRESS_SIZE + in_val_size);
+        data_stack_grow(env, ADDRESS_SIZE + in_val_size);
         address_bind_relative(syn.with_reset.cont_sym, 0, env);
         address_bind_relative(syn.with_reset.in_sym, 8, env);
         
         /* Symbol cont_sym; */
         /* Symbol in_sym; */
         generate(*syn.with_reset.handler, env, target, links, a, point);
-        address_stack_shrink(env, ADDRESS_SIZE + in_val_size);
+        data_stack_shrink(env, ADDRESS_SIZE + in_val_size);
         address_pop_n(2, env);
 
         // Step 7.
@@ -1287,8 +1290,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Call, reg(RDI, sz_64), a, point);
 
         // Address environment bookkeeping: shrink the stack appropriately
-        address_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        data_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
+        data_stack_grow(env, pi_size_of(*syn.ptype));
 
         break;
     }
@@ -1310,7 +1313,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 if (sz != 0) {
                     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(sz), a, point);
                 }
-                address_stack_shrink(env, sz);
+                data_stack_shrink(env, sz);
             }
 
             if (i + 1 == syn.sequence.elements.len) {
@@ -1321,7 +1324,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (binding_size != 0) {
             generate_stack_move(binding_size, 0, last_size, ass, a, point);
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(binding_size), a, point);
-            address_stack_shrink(env, binding_size);
+            data_stack_shrink(env, binding_size);
             address_pop_n(num_bindings, env);
         }
         break;
@@ -1356,19 +1359,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SSizeOf: {
         size_t sz = pi_size_of(*syn.size->type_val);
         build_unary_op(ass, Push, imm32(sz), a, point);
-        address_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
+        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SAlignOf: {
         size_t sz = pi_align_of(*syn.size->type_val);
         build_unary_op(ass, Push, imm32(sz), a, point);
-        address_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
+        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-        address_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcType:
@@ -1382,10 +1385,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-            address_stack_grow(env, 2*ADDRESS_SIZE);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*arg, env, target, links, a, point);
 
-            address_stack_shrink(env, 3*ADDRESS_SIZE);
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -1397,9 +1400,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
         // Stash RAX
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-        address_stack_grow(env, ADDRESS_SIZE);
+        data_stack_grow(env, ADDRESS_SIZE);
         generate(*syn.proc_type.return_type, env, target, links, a, point);
-        address_stack_shrink(env, 2*ADDRESS_SIZE);
+        data_stack_shrink(env, 2*ADDRESS_SIZE);
         build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
         build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
 
@@ -1423,10 +1426,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-            address_stack_grow(env, 2*ADDRESS_SIZE);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*(Syntax*)field.val, env, target, links, a, point);
 
-            address_stack_shrink(env, 3*ADDRESS_SIZE);
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -1457,7 +1460,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Second, generate & variant (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-            address_stack_grow(env, 2*ADDRESS_SIZE);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
 
             PtrArray variant = *(PtrArray*)field.val;
             generate_tmp_malloc(reg(RAX, sz_64), imm32(variant.len * ADDRESS_SIZE), ass, a, point);
@@ -1467,11 +1470,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
                 build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
                 build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-                address_stack_grow(env, 2*ADDRESS_SIZE);
+                data_stack_grow(env, 2*ADDRESS_SIZE);
 
                 generate(*(Syntax*)variant.data[i], env, target, links, a, point);
 
-                address_stack_shrink(env, 3*ADDRESS_SIZE);
+                data_stack_shrink(env, 3*ADDRESS_SIZE);
                 build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
                 build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
                 build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -1487,7 +1490,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-            address_stack_shrink(env, 2*ADDRESS_SIZE);
+            data_stack_shrink(env, 2*ADDRESS_SIZE);
 
             build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
 
@@ -1504,7 +1507,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         generate(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
         generate(*(Syntax*)syn.reset_type.out, env, target, links, a, point);
         gen_mk_reset_ty(ass, a, point);
-        address_stack_shrink(env, ADDRESS_SIZE);
+        data_stack_shrink(env, ADDRESS_SIZE);
         break;
     case SDynamicType:
         generate(*(Syntax*)syn.dynamic_type, env, target, links, a, point);
@@ -1543,7 +1546,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
 
-        address_stack_shrink(env, cts);
+        data_stack_shrink(env, cts);
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
@@ -1552,9 +1555,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 
-        address_stack_grow(env, sizeof(Symbol));
+        data_stack_grow(env, sizeof(Symbol));
         generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
-        address_stack_shrink(env, sizeof(Symbol));
+        data_stack_shrink(env, sizeof(Symbol));
         gen_mk_named_ty(ass, a, point);
         address_pop(env);
         break;
@@ -1586,10 +1589,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
             build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-            address_stack_grow(env, 2*ADDRESS_SIZE);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*(Syntax*)field.val, env, target, links, a, point);
 
-            address_stack_shrink(env, 3*ADDRESS_SIZE);
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
             build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
@@ -1636,7 +1639,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case STypeOf: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
-        address_stack_grow(env, pi_size_of(*syn.ptype));
+        data_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
     default: {
