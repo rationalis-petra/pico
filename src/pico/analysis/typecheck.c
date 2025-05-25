@@ -1892,6 +1892,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
 
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     squash_types(typed, a, point);
+    instantiate_implicits(typed, env, a, point);
     Allocator exalloc = mk_executable_allocator(a);
     
     // Catch error here; so can cleanup after self before further unwinding.
