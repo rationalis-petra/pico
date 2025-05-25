@@ -17,6 +17,8 @@ void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, 
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_stack_move(Location dest_offset, Location src_offset, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_control_push(Location src, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_control_pop(Location dest, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
@@ -331,9 +333,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
         // Pop the 'spare' RCX from the stack, stash the offset in the 'RCX stack'
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        // build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Mov, rref8(R13, 0, sz_64), reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(R13, sz_64), imm32(8), a, point);
+        generate_control_push(reg(RCX, sz_64), ass, a, point);
 
         // Reserve for return address
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), a, point);
@@ -359,8 +359,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_binary_op(ass, Mov, reg(RBP, sz_64), reg(RSP, sz_64), a, point);
         // Mov RBP, offset + ADDRESS_SIZE
         // mov offset into rcx
-        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(8), a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(R13, 0, sz_64), a, point);
+
+        generate_control_pop(reg(RCX, sz_64), ass, a, point);
         // add offset to RBP. Note that we use 'sub' because RCX = -offset, so
         // RBP - RCX = RBP - (- Offset) = RBP + Offset
         build_binary_op(ass, Sub, reg(RBP, sz_64), reg(RCX, sz_64), a, point);
@@ -376,24 +376,68 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SStructure: {
         PiType* struct_type = strip_type(syn.ptype);
 
-        bool labels_match = true;
-        const size_t len = struct_type->structure.fields.len;
+        // Reserve space on the stack for RAX
+        generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+        generate_control_push(reg(RAX, sz_64), ass, a, point);
+
+        for (size_t i = 0; i < syn.structure.fields.len; i++)
+        {
+            generate_polymorphic_i(*(Syntax *)syn.structure.fields.data[i].val, env, target, links, a, point);
+        }
+
+        // Now, generate stack moves to move the values into the 'correct' locations
+        // First, calculate the 'total' size of all values pushed to the stack
+        generate_control_push(imm32(0), ass, a, point);
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            if (!symbol_eq(struct_type->structure.fields.data[len - (i + 1)].key, syn.structure.fields.data[i].key)) {
-                labels_match = false;
-                break;
+            generate_size_of(RAX, struct_type->structure.fields.data[i].val, env, ass, a, point);
+            build_binary_op(ass, Add, rref8(R13, 0, sz_64), reg(RAX, sz_64), a, point);
+        }
+        generate_control_push(imm32(0), ass, a, point);
+        // (elt 1 control_stack) = source_region_size
+        // (elt 0 control_stack) = dest_offset
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            generate_control_push(imm32(0), ass, a, point);
+            // (elt 2 control_stack) = source_region_size
+            // (elt 1 control_stack) = dest_offset
+            // (elt 0 control_stack) = source_offset
+            for (size_t j = 0; j < syn.structure.fields.len; j++) {
+                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, struct_type->structure.fields);
+                if (t) {
+                    // source_offset = source_offset + stack_size_of(field)
+                    generate_stack_size_of(RAX, ((Syntax *)syn.structure.fields.data[j].val)->ptype, env, ass, a, point);
+                    build_binary_op(ass, Add, rref8(R13, 0, sz_64), reg(RAX, sz_64), a, point);
+                } else {
+                    throw_error(point, mv_string("Error code-generating for structure: field not found."));
+                }
+
+                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
+                    break; // offset is correct, end the loop
+                }
             }
+
+
+            // RSI: size_t src_stack_offset = source_region_size - src_offset;
+            build_binary_op(ass, Mov, reg(RSI, sz_64), rref8(R13, 0x10, sz_64), a, point);
+            build_binary_op(ass, Sub, reg(RSI, sz_64), rref8(R13, 0x00, sz_64), a, point);
+            // RDI: size_t dest_stack_offset = source_region_size + dest_offset;
+            build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(R13, 0x10, sz_64), a, point);
+            build_binary_op(ass, Add, reg(RDI, sz_64), rref8(R13, 0x80, sz_64), a, point);
+            // pop stack_offset
+            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(8), a, point);
+            generate_size_of(RCX, struct_type->structure.fields.data[i].val, env, ass, a, point);
+            generate_control_push(reg(RCX, sz_64), ass, a, point);
+
+            // Now, move the data.
+            generate_stack_move(RSI, RDI, RCX, ass, a, point);
+
+            // Compute dest_offset for next loop
+            // dest_offset += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
+            generate_control_pop(reg(RCX, sz_64), ass, a, point);
+            build_binary_op(ass, Add, rref8(R13, 0, sz_64), reg(RCX, sz_64), a, point);
         }
-
-        if (!labels_match)
-            throw_error(point, mv_string("Not implemented: out of order structures structure in all."));
-
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            generate_polymorphic_i(*(Syntax*)syn.structure.fields.data[i].val, env, target, links, a, point);
-        }
-
-        //generate_stack_size_of(RAX, struct_type, env, ass, a, point);
-        //build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+        // Lastly, pop the dest_offset and source_size from the control stack
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(0x10), a, point);
         break;
     }
     case SProjector: {
@@ -745,7 +789,6 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 #endif
 }
 
-
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Add, dest, reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, src, reg(RSP, sz_64), a, point);
@@ -767,4 +810,14 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
 #endif
 
     generate_c_call(stack_move,ass, a, point);
+}
+
+void generate_control_push(Location src, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_binary_op(ass, Add, reg(R13, sz_64), imm8(8), a, point);
+    build_binary_op(ass, Mov, reg(R13, sz_64), src, a, point);
+}
+
+void generate_control_pop(Location dest, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_binary_op(ass, Mov, dest, reg(R13, sz_64), a, point);
+    build_binary_op(ass, Sub, reg(R13, sz_64), imm8(8), a, point);
 }
