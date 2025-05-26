@@ -638,6 +638,162 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         *jmp_loc = (uint8_t)(end_pos - start_pos);
         break;
     }
+    case SLabels: {
+        // Labels: The code-generation for labels is as follows: 
+        // 1. Add labels to environment
+        // 2. Generate expression
+        // 3. For each expression:
+        //  3.1 Mark Beginning of label expression
+        //  3.2 Generate label expressions
+        // 4. Backlink all labels.
+        SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
+        for (size_t i = 0; i < syn.labels.terms.len; i++) 
+            push_symbol(syn.labels.terms.data[i].key, &labels);
+
+        // Push the current value of $RSP onto the indexing stack
+        generate_index_push(reg(RSP, sz_64), ass, a, point);
+        index_stack_grow(env, 1);
+
+        address_start_labels(labels, env);
+
+        generate_polymorphic_i(*syn.labels.entry, env, target, links, a, point);
+
+        SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
+        SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
+
+        for (size_t i = 0; i < syn.labels.terms.len; i++) {
+            SymPtrACell cell = syn.labels.terms.data[i];
+
+            // Mark Label
+            size_t pos = get_pos(ass);
+            sym_size_bind(cell.key, pos, &label_points);
+            
+            SynLabelBranch* branch = cell.val;
+
+            // Bind Label Vars 
+            SymSizeAssoc arg_sizes = mk_sym_size_assoc(branch->args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                generate_size_of(RAX, branch->args.data[i].val, env, ass, a, point);
+                generate_index_push(reg(RAX, sz_64), ass, a, point);
+                sym_size_bind(branch->args.data[i].key, i, &arg_sizes);
+            }
+
+            index_stack_grow(env, branch->args.len);
+            address_bind_label_vars(arg_sizes, env);
+            generate_polymorphic_i(*branch->body, env, target, links, a, point);
+            address_unbind_label_vars(env);
+
+            LabelEntry lble = label_env_lookup(cell.key, env);
+            if (lble.type == Err)
+                throw_error(point, mv_string("Label not found during codegen!!"));
+
+            index_stack_shrink(env, branch->args.len + 1);
+            // TODO (possible bug: use Sub or Add and + or - ?)
+            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(lble.stack_offset + ADDRESS_SIZE), a, point);
+
+            // Copy the result down the stack. To do this, we need
+            // the size (RAX)
+            // The destination (initial RSP - size)
+            // The source offset (0)
+            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_binary_op(ass, Mov, reg(R9, sz_64), imm8(0), a, point);
+            build_binary_op(ass, Mov, reg(R10, sz_64), rref8(R13, 0, sz_64), a, point);
+            generate_index_push(reg(RAX, sz_64), ass, a, point);
+
+            build_binary_op(ass, Sub, reg(R10, sz_64), reg(RAX, sz_64), a, point);
+            generate_poly_stack_move(reg(R10, sz_64), reg(RAX, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            // Ensure the stack is at the same point for the next iteration! 
+            generate_index_pop(reg(RAX, sz_64), ass, a, point);
+            generate_index_pop(reg(RSP, sz_64), ass, a, point);
+            build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+            sym_size_bind(cell.key, out.backlink, &label_jumps);
+        }
+
+        // The final iteration will have shrunk the stack "too much", so add the
+        // result back in.
+        index_stack_grow(env, 1);
+
+        size_t label_end = get_pos(ass);
+
+        for (size_t i = 0; i < label_points.len; i++)  {
+            Symbol sym = label_points.data[i].key;
+            size_t dest = label_points.data[i].val;
+
+            // Step 1: make the end of the label jump to the end of the expression.
+            {
+                size_t backlink = label_jumps.data[i].val;
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
+                size_t dest = label_end;
+
+                int64_t amt = dest - origin;
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
+                
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
+            }
+
+
+            // Step 2: fill out each jump to this label.
+            SizeArray* arr = sym_sarr_lookup(sym, links->gotolinks);
+            if (!arr) panic(mv_string("Can't find size array when backlinking label!"));
+
+            for (size_t i = 0; i < arr->len; i++) {
+                size_t backlink = arr->data[i];
+                size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
+
+                int64_t amt = dest - origin;
+                if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
+                
+                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
+                int32_t* loc = (int32_t*)loc_byte;
+                *loc = (int32_t) amt;
+            }
+        }
+
+        address_end_labels(env);
+        break;
+    }
+    case SGoTo: {
+        // Generating code for a goto:
+        // 1. Generate args
+        size_t arg_total = 0;
+        for (size_t i = 0; i < syn.go_to.args.len; i++) {
+            Syntax* expr = syn.go_to.args.data[i];
+            arg_total += pi_size_of(*expr->ptype);
+            generate_polymorphic_i(*expr, env, target, links, a, point);
+        }
+
+        // 2. Backlink the label
+        LabelEntry lble = label_env_lookup(syn.go_to.label, env);
+        if (lble.type == Ok) {
+            size_t delta = lble.stack_offset - arg_total;
+            generate_stack_move(delta, 0, arg_total, ass, a, point);
+            if (delta != 0) {
+                // Adjust the stack so it has the same value that one would have
+                // going into a labels expression.
+                // TODO handle dynamic variable unbinding (if needed!)
+                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(delta), a, point);
+            }
+
+            // Stack sould "pretend" it pushed a value of type syn.ptype and
+            // consumed all args. This is so that, e.g. if this go-to is inside
+            // a seq or if, the other branches of the if or the rest of the seq
+            // generates assuming the correct stack offset.
+            data_stack_shrink(env, arg_total);
+            data_stack_grow(env, pi_size_of(*syn.ptype));
+
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+
+            backlink_goto(syn.go_to.label, out.backlink, links, a);
+        } else {
+            throw_error(point, mv_string("Label not found during codegen!!"));
+        }
+        break;
+    }
     case SSequence: {
         size_t binding_size = 0;
         size_t num_bindings = 0;
