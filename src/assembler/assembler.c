@@ -1098,12 +1098,12 @@ void build_unary_opcode_table() {
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x74,};
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x84,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x84,};
 
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x75,};
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x85,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x85,};
 
     unary_opcode_table[JMP][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0xEB,};

@@ -974,7 +974,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
         size_t start_pos = get_pos(ass);
 
-        uint32_t* jmp_loc = (uint32_t*)get_instructions(ass).data + out.backlink;
+        int32_t* jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
@@ -990,8 +990,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         } 
 
         // backlink
-        *jmp_loc = (end_pos - start_pos);
-        jmp_loc = (uint32_t*)(get_instructions(ass).data + out.backlink);
+        *jmp_loc = end_pos - start_pos;
+        jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
         start_pos = get_pos(ass);
 
 
@@ -1004,7 +1004,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
-        *jmp_loc = (uint8_t)(end_pos - start_pos);
+        *jmp_loc = end_pos - start_pos;
         break;
     }
     case SLabels: {
