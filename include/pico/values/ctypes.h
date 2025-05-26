@@ -38,14 +38,8 @@ typedef enum {
 
 typedef struct {
     // Padding is to ensure that the implementation matches the Relic types (where enums are 64 bit)
-    union {
-        CIntType prim;
-        uint64_t pad_1;
-    };
-    union {
-        CSigned is_signed;
-        uint64_t pad_2;
-    };
+    uint64_t prim;
+    uint64_t is_signed;
 } CPrimInt;
 
 typedef struct {

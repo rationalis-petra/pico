@@ -53,6 +53,7 @@ typedef enum TermFormer {
     // Top Level Former
     FDefine,
     FDeclare,
+    FOpen,
 
     // Term Formers: value construction/destruction
     FProcedure,

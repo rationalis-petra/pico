@@ -69,8 +69,6 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
 
     PiType type;
     PiType* typep;
-    PiType type_val;
-    PiType* type_data = &type_val;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);
@@ -126,6 +124,14 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     typep = mk_proc_type(a, 1, mk_string_type(a), copy_pi_type_p(get_symbol_type(), a));
     build_mk_symbol_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("mk-symbol"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(a, 1, mk_string_type(a), copy_pi_type_p(get_symbol_type(), a));
+    build_mk_unique_symbol_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("mk-unique-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -243,6 +243,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDeclare:
         out = mk_str_doc(mv_string("::declare"), a);
         break;
+    case FOpen:
+        out = mk_str_doc(mv_string("::open"), a);
+        break;
 
     case FApplication:
         out = mk_str_doc(mv_string("::application"), a);

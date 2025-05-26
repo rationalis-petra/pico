@@ -380,19 +380,15 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
         push_ptr(mv_str_doc((mk_string("struct", a)), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            PtrArray fd_nodes = mk_ptr_array(4, a);
-            Document* pre = mk_str_doc(mv_string("[."), a);
+            PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
             PiType* ftype = type->structure.fields.data[i].val;
 
             Document* arg = pretty_pi_value(val + current_offset, ftype, a);
-            Document* post = mk_str_doc(mv_string("]"), a);
 
-            push_ptr(pre,   &fd_nodes);
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
-            push_ptr(post,  &fd_nodes);
-            Document* fd_doc = mv_sep_doc(fd_nodes, a);
+            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
             push_ptr(fd_doc, &nodes);
             current_offset += pi_size_of(*ftype);
@@ -404,21 +400,32 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TEnum: {
         uint64_t tagidx = *(uint64_t*)val;
 
-        PtrArray variant_types = *(PtrArray*)type->enumeration.variants.data[tagidx].val;
-        PtrArray nodes = mk_ptr_array(1 + variant_types.len, a);
+        if (tagidx >= type->enumeration.variants.len) {
+            out = mk_str_doc(mv_string("Enum value has bad tag"), a);
+        } else {
+            PtrArray variant_types = *(PtrArray*)type->enumeration.variants.data[tagidx].val;
 
-        // Symbol 
-        Symbol tagname = type->enumeration.variants.data[tagidx].key;
-        push_ptr(mk_str_doc( *symbol_to_string(tagname), a), &nodes);
+            // Symbol 
+            Symbol tagname = type->enumeration.variants.data[tagidx].key;
+            if (variant_types.len == 0) {
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mk_str_doc( mv_string(":"), a), &nodes); 
+                push_ptr(mk_str_doc( *symbol_to_string(tagname), a), &nodes); 
+                out = mv_cat_doc(nodes, a);
+            } else {
+                PtrArray nodes = mk_ptr_array(1 + variant_types.len, a);
+                push_ptr(mk_str_doc( *symbol_to_string(tagname), a), &nodes); 
 
-        size_t current_offset = sizeof(uint64_t); // Start after current tag
-        for (size_t i = 0; i < variant_types.len; i++) {
-            PiType* ftype = variant_types.data[i];
-            Document* arg = pretty_pi_value(val + current_offset, ftype, a);
-            push_ptr(arg, &nodes);
-            current_offset += pi_size_of(*ftype);
+                size_t current_offset = sizeof(uint64_t); // Start after current tag
+                for (size_t i = 0; i < variant_types.len; i++) {
+                    PiType* ftype = variant_types.data[i];
+                    Document* arg = pretty_pi_value(val + current_offset, ftype, a);
+                    push_ptr(arg, &nodes);
+                    current_offset += pi_size_of(*ftype);
+                }
+                out = mk_paren_doc("[:", "]", mv_sep_doc(nodes, a), a);
+            }
         }
-        out = mk_paren_doc("[:", "]", mv_sep_doc(nodes, a), a);
         break;
     }
     case TReset: {

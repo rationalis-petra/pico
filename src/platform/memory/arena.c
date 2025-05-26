@@ -35,13 +35,23 @@ void* arena_malloc(size_t memsize, void* vctx) {
 
     // if attempting to allocate more than a block of memory
     // allocate a larger than usual block
-    if (alloc_size > ctx->blocksize) {
-        // allocate new block
+    // the '+ sizeof(size_t)' accounts for the fact that all memory has a short
+    // prefix that denotes it's storage location
+    if (alloc_size + sizeof(size_t) > ctx->blocksize) {
+        // Allocate new (full) block for the large memory
+        ArenaBlock data_block;
+        data_block.bmp = alloc_size + sizeof(size_t);
+        data_block.data = mem_alloc(alloc_size + sizeof(size_t), ctx->internal_allocator);
+        push_block(data_block, &ctx->memory_blocks);
+        *(size_t*)data_block.data = alloc_size; 
+
+        // Allocate a new (empty) block for future (small) allocations.
         ArenaBlock new_block;
         new_block.bmp = 0;
-        new_block.data = mem_alloc(alloc_size, ctx->internal_allocator);
+        new_block.data = mem_alloc(ctx->blocksize, ctx->internal_allocator);
         push_block(new_block, &ctx->memory_blocks);
-        return new_block.data;
+
+        return data_block.data + sizeof(size_t);
     } else {
         // Attempt to allocate in the currently free arena.
         // Note: the len-1 is safe as there is always at least 1 block (and thus len - 1 > 0)

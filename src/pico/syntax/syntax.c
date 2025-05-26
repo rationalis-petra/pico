@@ -700,6 +700,14 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     case TLDef:
         out = pretty_def(&toplevel->def, a);
         break;
+    case TLOpen: {
+        PtrArray docs = mk_ptr_array(toplevel->open.syms.len, a);
+        for (size_t i = 0; i < toplevel->open.syms.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(toplevel->open.syms.data[i]), a), &docs);
+        }
+        out = mk_paren_doc("(open ", ")", mv_sep_doc(docs, a), a);
+        break;
+    }
     case TLExpr:
         out = pretty_syntax(toplevel->expr, a);
         break;
@@ -712,6 +720,9 @@ PiType* toplevel_type(TopLevel top) {
     switch (top.type) {
     case TLExpr:
         out = top.expr->ptype;
+        break;
+    case TLOpen:
+        out = NULL;
         break;
     case TLDef:
         out = top.def.value->ptype;
