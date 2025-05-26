@@ -19,6 +19,7 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 void generate_poly_stack_move(Location dest_offset, Location src_offset, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_index_push(Location src, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_index_pop(Location dest, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
@@ -570,7 +571,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SConstructor: {
-        throw_error(point, mv_string("Not implemented: constructor in forall."));
+        PiType* enum_type = strip_type(syn.constructor.enum_type->type_val);
+
+        generate_stack_size_of(RAX, enum_type, env, ass, a, point);
+        generate_variant_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
+
+        build_binary_op(ass, Sub, reg(RAX, sz_64), reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+        build_unary_op(ass, Push, imm32(syn.constructor.tag), a, point);
+        break;
     }
     case SVariant: {
         throw_error(point, mv_string("Not implemented: variant in forall."));
@@ -583,7 +592,51 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SIf: {
-        throw_error(point, mv_string("Not implemented: if in forall."));
+        // Generate the condition
+        generate_polymorphic_i(*syn.if_expr.condition, env, target, links, a, point);
+
+        // Pop the bool into R9; compare with 0
+        build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
+        build_binary_op(ass, Cmp, reg(R9, sz_64), imm32(0), a, point);
+
+        // ---------- CONDITIONAL JUMP ----------
+        // compare the value to 0
+        // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
+        AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
+        size_t start_pos = get_pos(ass);
+
+        uint8_t* jmp_loc = get_instructions(ass).data + out.backlink;
+
+        // ---------- TRUE BRANCH ----------
+        // now, generate the code to run (if true)
+        generate_polymorphic_i(*syn.if_expr.true_branch, env, target, links, a, point);
+
+        // Generate jump to end of false branch to be backlinked later
+        out = build_unary_op(ass, JMP, imm8(0), a, point);
+
+        // calc backlink offset
+        size_t end_pos = get_pos(ass);
+        if (end_pos - start_pos > INT8_MAX) {
+            throw_error(point, mk_string("Jump in conditional too large", a));
+        } 
+
+        // backlink
+        *jmp_loc = (end_pos - start_pos);
+        jmp_loc = get_instructions(ass).data + out.backlink;
+        start_pos = get_pos(ass);
+
+
+        // ---------- FALSE BRANCH ----------
+        // Generate code for the false branch
+        generate_polymorphic_i(*syn.if_expr.false_branch, env, target, links, a, point);
+
+        // calc backlink offset
+        end_pos = get_pos(ass);
+        if (end_pos - start_pos > INT8_MAX) {
+            throw_error(point, mk_string("Jump in conditional too large", a));
+        } 
+        *jmp_loc = (uint8_t)(end_pos - start_pos);
+        break;
     }
     case SSequence: {
         size_t binding_size = 0;
@@ -765,6 +818,21 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
     }
 }
 
+void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Tag size
+    size_t sz = sizeof(uint64_t);
+    for (size_t i = 0; i < types->len; i++) {
+      size_t out;
+      Result_t sz_res = pi_maybe_size_of(*(PiType*)types->data[i], &out);
+      if (sz_res == Ok) {
+          sz += sz_res;
+      } else {
+          panic(mv_string("Not yet implemeted: codegen for generat_variant_size_of"));
+      }
+    }
+    build_binary_op(ass, Mov, reg(dest, sz_64), imm32(sz), a, point);
+}
+
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
     size_t sz; 
     Result_t sz_res = pi_maybe_size_of(*type, &sz);
@@ -844,7 +912,6 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
 
     //build_binary_op(ass, Mov, reg(sz_reg, sz_64), reg(R9, sz_64), a, point); 
 }
-
 
 
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
