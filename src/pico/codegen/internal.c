@@ -69,14 +69,6 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
     push_size(offset, sarr);
 }
 
-// The stack move can count on all values being 8-byte aligned!
-// therefore, uint64_t* pointers are ok :)
-void stack_move(char *dest, const char *src, size_t size) {
-    for (size_t i = size; i > 0; i--) {
-        dest[i - 1] = src[i - 1];
-    }
-}
-
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
 
@@ -103,7 +95,7 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
 #error "Unknown calling convention"
 #endif
 
-        generate_c_call(stack_move, ass, a, point);
+        generate_c_call(memmove, ass, a, point);
     } else  {
         // Using 8-bit immediate is ok
         size_t leftover = size % 8;

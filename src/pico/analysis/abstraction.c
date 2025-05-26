@@ -400,7 +400,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
 
         // TODO (BUG): shadow the arguments!
-        SymbolArray to_shadow = mk_symbol_array(8, a);
+        SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
+        for (size_t i = 0; i < arguments.len; i++) {
+            push_symbol(arguments.data[i].key, &to_shadow);
+        }
         shadow_vars(to_shadow, env);
 
         RawTree* raw_term;

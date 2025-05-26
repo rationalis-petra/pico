@@ -483,9 +483,31 @@ void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
         padding.stack_offset = stack_offset + REGISTER_SIZE;
         push_saddr(padding, &locals->vars);
         break;
-    } 
+    }
     case LPolymorphic: {
-        panic(mv_string("Polymorphic enum bind not implemented"));
+        SAddr padding;
+        padding.type = SASentinel;
+
+        // padding.symbol = 0;
+        padding.stack_offset = stack_offset;
+        push_saddr(padding, &locals->vars);
+
+        // Variables are in reverse order!
+        // due to how the stack pushes/pops args.
+
+        for (size_t i = 0; i < vars.len; i++) {
+            SAddr local;
+            local.type = SAIndexed;
+
+            local.symbol = vars.data[i].key;
+            local.stack_offset = stack_offset;
+            stack_offset += 1;
+
+            push_saddr(local, &locals->vars);
+        }
+
+        padding.stack_offset = stack_offset + REGISTER_SIZE;
+        push_saddr(padding, &locals->vars);
         break;
     }
     }

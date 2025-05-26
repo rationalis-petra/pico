@@ -196,6 +196,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             } else if (indistinct_type.sort == TPrim) {
                 size_t prim_size = pi_size_of(indistinct_type);
                 AsmResult out;
+                /* if (prim_size == 0) { */
+                /*     // Do nothing, unit value */
+                /* } else */
                 if (prim_size == 1) {
                     out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), a, point);
                 } else if (prim_size == 2) {
@@ -968,27 +971,27 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
         // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
-        AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
+        AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
         size_t start_pos = get_pos(ass);
 
-        uint8_t* jmp_loc = get_instructions(ass).data + out.backlink;
+        uint32_t* jmp_loc = (uint32_t*)get_instructions(ass).data + out.backlink;
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
         generate(*syn.if_expr.true_branch, env, target, links, a, point);
 
         // Generate jump to end of false branch to be backlinked later
-        out = build_unary_op(ass, JMP, imm8(0), a, point);
+        out = build_unary_op(ass, JMP, imm32(0), a, point);
 
         // calc backlink offset
         size_t end_pos = get_pos(ass);
-        if (end_pos - start_pos > INT8_MAX) {
+        if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
 
         // backlink
         *jmp_loc = (end_pos - start_pos);
-        jmp_loc = get_instructions(ass).data + out.backlink;
+        jmp_loc = (uint32_t*)(get_instructions(ass).data + out.backlink);
         start_pos = get_pos(ass);
 
 
@@ -998,7 +1001,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // calc backlink offset
         end_pos = get_pos(ass);
-        if (end_pos - start_pos > INT8_MAX) {
+        if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
         *jmp_loc = (uint8_t)(end_pos - start_pos);
@@ -1114,7 +1117,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t arg_total = 0;
         for (size_t i = 0; i < syn.go_to.args.len; i++) {
             Syntax* expr = syn.go_to.args.data[i];
-            arg_total += pi_size_of(*expr->ptype);
+            arg_total += pi_stack_size_of(*expr->ptype);
             generate(*expr, env, target, links, a, point);
         }
 
