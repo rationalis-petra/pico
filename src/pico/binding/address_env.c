@@ -244,8 +244,10 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
         if (maddr.type == SALabel && symbol_eq(maddr.symbol, s)) {
             // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
-                .type = Ok,
-                .stack_offset = maddr.stack_offset - current_head ,
+              .type = Ok,
+              .stack_offset = locals.type == LMonomorphic
+                              ? (maddr.stack_offset - current_head)
+                              : (current_head - maddr.stack_offset),
             };
         };
     }
