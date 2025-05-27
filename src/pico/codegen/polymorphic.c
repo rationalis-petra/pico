@@ -1148,17 +1148,17 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
-    build_binary_op(ass, Mov, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RSI, sz_64), src, a, point);
-    build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), size, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, Add, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
 #else
 #error "Unknown calling convention"
