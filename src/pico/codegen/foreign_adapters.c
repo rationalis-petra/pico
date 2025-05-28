@@ -432,20 +432,16 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
 
         // Now, push registers onto stack
-        size_t current_return_register = 0;
+        size_t current_return_register = return_classes.len - 1;
         const Regname return_integer_registers[2] = {RAX, RDX};
-        size_t assembler_pos = get_pos(ass);
-        for (size_t i = 0; i < return_classes.len; i++) {
+        if (return_classes.len > 2) panic(mv_string("Generating foreign adapter for System-V: Expected at most 2 return classes"));
+        for (size_t ctr = 0; ctr < return_classes.len; ctr++) {
+            size_t i = return_classes.len - (ctr + 1);
             switch (return_classes.data[i]) {
             case SysVInteger: {
-                if (current_return_register >= 2) {
-                    set_pos(ass, assembler_pos);
-                    pass_return_in_memory = true; // this breaks us out of the loop
-                } else {
-                    Regname next_reg = return_integer_registers[current_return_register++];
-                    // Push from registers into memory
-                    build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
-                }
+                Regname next_reg = return_integer_registers[current_return_register--];
+                // Push from registers into memory
+                build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
                 break;
             }
             case SysVSSE:

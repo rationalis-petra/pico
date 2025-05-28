@@ -111,7 +111,7 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 CType mk_struct_ctype(Allocator* a, size_t nfields, ...);
-
+ 
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
 CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 

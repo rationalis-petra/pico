@@ -340,7 +340,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
 
     typep = get_c_type();
     sym = string_to_symbol(mv_string("c-signed-char"));
-    c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Signed});
+    c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
     add_def(module, sym, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();

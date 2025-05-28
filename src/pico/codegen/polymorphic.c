@@ -839,7 +839,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 build_binary_op(ass, Add, rref8(R13, -i * 8, sz_64), reg(RSP, sz_64), a, point);
             }
 
-            // Now, shrink the address tack appropriately 
+            // Now, shrink the address stack appropriately 
             generate_index_stack_move(delta, 0, syn.go_to.args.len * 8, ass, a, point);
             build_binary_op(ass, Sub, reg(R13, sz_64), imm32(delta), a, point);
 
