@@ -911,6 +911,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         } else {
             // Pop old RSP from index stack 
             build_binary_op(ass, Sub, reg(R13, sz_64), imm32(ADDRESS_SIZE), a, point);
+            index_stack_shrink(env, 1);
         }
         break;
     }
