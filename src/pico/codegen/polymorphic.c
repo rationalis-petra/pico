@@ -713,7 +713,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             index_stack_shrink(env, branch->args.len + 1);
             // TODO (possible bug: use Sub or Add and + or - ?)
-            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(lble.stack_offset + ADDRESS_SIZE), a, point);
+            build_binary_op(ass, Sub, reg(R13, sz_64), imm32((lble.stack_offset + 1) * ADDRESS_SIZE), a, point);
 
             // Copy the result down the stack. To do this, we need
             // the size (RAX)
@@ -799,6 +799,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         LabelEntry lble = label_env_lookup(syn.go_to.label, env);
         if (lble.type == Ok) {
             int64_t delta = (lble.stack_offset - syn.go_to.args.len) * 8;
+            int64_t rsp_offset = lble.stack_offset * 8;
 
             // Sum the n prior entries in the stack
             // While doing so, update each stack entry to be an offset from the
@@ -820,7 +821,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Get the dest offset by taking the original RSP and
             // subtracting the new RSP and the size 
             build_binary_op(ass, Mov, reg(R11, sz_64), reg(R13, sz_64), a, point);
-            build_binary_op(ass, Sub, reg(R11, sz_64), imm32(delta + 8), a, point);
+            build_binary_op(ass, Sub, reg(R11, sz_64), imm32(rsp_offset), a, point);
             build_binary_op(ass, Mov, reg(R10, sz_64), rref8(R11, 0, sz_64), a, point);
             build_binary_op(ass, Sub, reg(R10, sz_64), reg(RSP, sz_64), a, point);
             build_binary_op(ass, Sub, reg(R10, sz_64), reg(R9, sz_64), a, point);
@@ -845,6 +846,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
+
+            index_stack_shrink(env, syn.go_to.args.len);
         } else {
             throw_error(point, mv_string("Label not found during codegen!!"));
         }
@@ -868,6 +871,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 index_stack_grow(env, 1);
                 address_bind_relative(elt->symbol, 0, env);
             }
+
+            // Remember: the LAST element of the sequence is the value of the
+            // entire sequence. Therefore, we do NOT pop it off the stack (all
+            // other values do get popped)
             else if (i + 1 != syn.sequence.elements.len) {
                 build_binary_op(ass, Add, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
             }
@@ -881,12 +888,14 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
             build_binary_op(ass, Sub, reg(RCX, sz_64), reg(RDX, sz_64), a, point);
 
-            index_stack_shrink(env, num_bindings + 1);
+            index_stack_shrink(env, num_bindings);
             address_pop_n(num_bindings, env);
 
             generate_poly_stack_move(reg(RCX, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(binding_size), a, point);
         }
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(ADDRESS_SIZE), a, point);
+        index_stack_shrink(env, 1);
         break;
     }
     case SIs:
@@ -1209,8 +1218,8 @@ void generate_index_stack_move(size_t dest_stack_offset, size_t src_stack_offset
         // Using 8-bit immediate is ok
 
         for (size_t i = 0; i < size / 8; i++) {
-            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(R13, src_stack_offset - (i * 8) , sz_64), a, point);
-            build_binary_op(ass, Mov, rref8(R13, dest_stack_offset - (i * 8), sz_64), reg(RAX, sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(R13, -src_stack_offset - (i * 8) , sz_64), a, point);
+            build_binary_op(ass, Mov, rref8(R13, -dest_stack_offset - (i * 8), sz_64), reg(RAX, sz_64), a, point);
         }
     }
 }
