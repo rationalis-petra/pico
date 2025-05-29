@@ -605,7 +605,79 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SVariant: {
-        throw_error(point, mv_string("Not implemented: variant in forall."));
+        // TODO (FEAT BUG): ensure this will correctly handle non-stack aligned
+        // enum tags, members and overall enums gracefully.
+        const size_t tag_size = sizeof(uint64_t);
+        PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
+        generate_stack_size_of(RCX, enum_type, env, ass, a, point);
+
+        // Make space to fit the (final) variant
+        build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+
+        // Set the tag
+        build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), a, point);
+
+        // Generate each argument
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+            generate_polymorphic_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
+        }
+
+        // Generate the variant size
+        generate_variant_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
+
+        generate_index_push(reg(RCX, sz_64), ass, a, point);
+        index_stack_grow(env, 1);
+
+        // TODO (BUG) : update so we add variant size & variant stack size!
+        // dest_stack_offset = RAX = (2 * variant_size) - tag_size
+        build_binary_op(ass, Mov, reg(RAX,sz_64), reg(RCX,sz_64), a, point);
+        build_binary_op(ass, SHR, reg(RAX,sz_64), imm8(1), a, point);
+        build_binary_op(ass, Sub, reg(RAX,sz_64), imm8(tag_size), a, point);
+
+        generate_index_push(reg(RCX, sz_64), ass, a, point);
+        generate_index_push(imm32(0), ass, a, point);
+        index_stack_grow(env, 2);
+
+        // Index Stack shape
+        // variant size
+        // dest offset
+        // src offset
+
+        // Now, move them into the space allocated in reverse order
+        PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
+
+        // Note, as we are reversing the order, we start at the top of the stack (last enum element),
+        // which gets copied to the end of the enum
+        for (size_t i = 0; i < syn.variant.args.len; i++) {
+            // We now have both the source_offset and dest_offset. These are both
+            // relative to the 'bottom' of their respective structures.
+            // Therefore, we now need to find their offsets relative to the `top'
+            // of the stack.
+            
+            generate_size_of(RAX,args.data[syn.variant.args.len - (i + 1)], env, ass, a, point);
+            // dest_stack_offset -= field_size
+            build_binary_op(ass, Sub, rref8(R13, -0x8, sz_64), reg(RAX, sz_64), a, point);
+
+            // RSI = dest offset, R9 = src offset
+            build_binary_op(ass, Mov, reg(RSI, sz_64), rref8(R13, -0x8, sz_64), a, point);
+            build_binary_op(ass, Mov, reg(R9, sz_64), rref8(R13, 0, sz_64), a, point);
+
+            generate_poly_stack_move(reg(RSI, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            //src_stack_offset += stack_size_of(field_size);
+            generate_stack_size_of(RAX,args.data[syn.variant.args.len - (i + 1)], env, ass, a, point);
+            build_binary_op(ass, Add, rref8(R13, 0, sz_64), reg(RAX, sz_64), a, point);
+        }
+
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(3 * ADDRESS_SIZE), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(R13, 8, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(RCX, sz_64), imm32(tag_size), a, point);
+
+        // Remove the space occupied by the temporary values 
+        build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+        index_stack_grow(env, 3);
+
+        break;
     }
     case SMatch: {
         throw_error(point, mv_string("Not implemented: match in forall."));
@@ -1148,7 +1220,6 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
 
     //build_binary_op(ass, Mov, reg(sz_reg, sz_64), reg(R9, sz_64), a, point); 
 }
-
 
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
 

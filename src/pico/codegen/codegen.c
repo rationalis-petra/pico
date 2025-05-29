@@ -490,9 +490,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+        size_t variant_stack_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         // Make space to fit the (final) variant
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size), a, point);
+        data_stack_grow(env, enum_size);
 
         // Set the tag
         build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), a, point);
@@ -508,7 +510,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Note, as we are reversing the order, we start at the top of the stack (last enum element),
         // which gets copied to the end of the enum
         size_t src_stack_offset = 0;
-        size_t dest_stack_offset = (2 * variant_size) - tag_size;
+        size_t dest_stack_offset = variant_size + variant_stack_size - tag_size;
         for (size_t i = 0; i < syn.variant.args.len; i++) {
             // We now have both the source_offset and dest_offset. These are both
             // relative to the 'bottom' of their respective structures.
@@ -519,15 +521,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             dest_stack_offset -= field_size;
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-            src_stack_offset += field_size;
-
+            src_stack_offset += pi_stack_align(field_size);
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(variant_size - tag_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(variant_stack_size - tag_size), a, point);
 
         // Grow the stack to account for the difference in enum & variant sizes
-        data_stack_grow(env, enum_size - variant_size);
+        data_stack_shrink(env, variant_stack_size - tag_size);
         break;
     }
     case SMatch: {
@@ -1655,6 +1656,14 @@ size_t calc_variant_size(PtrArray* types) {
     size_t total = sizeof(uint64_t);
     for (size_t i = 0; i < types->len; i++) {
         total += pi_size_of(*(PiType*)types->data[i]);
+    }
+    return total;
+}
+
+size_t calc_variant_stack_size(PtrArray* types) {
+    size_t total = sizeof(uint64_t);
+    for (size_t i = 0; i < types->len; i++) {
+        total += pi_stack_size_of(*(PiType*)types->data[i]);
     }
     return total;
 }
