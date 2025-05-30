@@ -536,8 +536,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Generate code for the value
         Syntax* match_value = syn.match.val;
         PiType* enum_type = strip_type(syn.match.val->ptype);
-        size_t enum_size = pi_size_of(*match_value->ptype);
-        size_t out_size = pi_size_of(*syn.ptype);
+        size_t enum_stack_size = pi_stack_size_of(*match_value->ptype);
+        size_t out_size = pi_stack_size_of(*syn.ptype);
 
         generate(*match_value, env, target, links, a, point);
 
@@ -550,7 +550,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         for (size_t i = 0; i < syn.match.clauses.len; i++) {
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
             build_binary_op(ass, Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), a, point);
-            AsmResult out = build_unary_op(ass, JE, imm8(0), a, point);
+            AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
             push_size(get_pos(ass), &back_positions);
             push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
         }
@@ -567,11 +567,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // calc backlink offset
             size_t body_pos = get_pos(ass);
-            if (body_pos - branch_pos > INT8_MAX) {
+            if (body_pos - branch_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
             } 
 
-            *branch_ref = (uint8_t)(body_pos - branch_pos);
+            *branch_ref = (int32_t)(body_pos - branch_pos);
 
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
             PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
@@ -587,8 +587,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             generate(*clause.body, env, target, links, a, point);
 
-            // Generate jump to end of false branch to be backlinked later
-            AsmResult out = build_unary_op(ass, JMP, imm8(0), a, point);
+            // Generate jump to end of match expression to be backlinked later
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
             push_size(get_pos(ass), &body_positions);
             push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
 
@@ -602,19 +602,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t body_pos = body_positions.data[i];
             uint8_t* body_ref = body_refs.data[i];
 
-            if (curr_pos - body_pos > INT8_MAX) {
+            if (curr_pos - body_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
             } 
 
-            *body_ref = (uint8_t)(curr_pos - body_pos);
+            *body_ref = (int32_t)(curr_pos - body_pos);
         }
 
 
-        generate_stack_move(out_size + (enum_size - out_size), 0, out_size, ass, a, point);
+        generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(enum_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(enum_stack_size), a, point);
 
-        data_stack_shrink(env, enum_size);
+        data_stack_shrink(env, enum_stack_size);
         data_stack_grow(env, out_size);
         break;
     }

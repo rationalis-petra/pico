@@ -190,6 +190,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SProcedure: {
+        // TODO (BUG): ensure that we appropriately check for captures, 
+        // as 'proc' does NOT support closures!
+
         // give each arg a unification variable type. 
         PiType* proc_ty = mem_alloc(sizeof(PiType), a);
         proc_ty->sort = TProc;

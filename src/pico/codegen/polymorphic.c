@@ -679,7 +679,102 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SMatch: {
-        throw_error(point, mv_string("Not implemented: match in forall."));
+        // TODO: check that the match handles stack alignment correctly
+        // Generate code for the value
+        Syntax* match_value = syn.match.val;
+        PiType* enum_type = strip_type(syn.match.val->ptype);
+
+        generate_polymorphic_i(*match_value, env, target, links, a, point);
+
+        SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
+        PtrArray back_refs = mk_ptr_array(syn.match.clauses.len, a);
+
+        // For each pattern match, generate two things 
+        // 1. A comparison/check that the pattern has been matched
+        // 2. A jump to the relevant location
+        for (size_t i = 0; i < syn.match.clauses.len; i++) {
+            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
+            build_binary_op(ass, Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), a, point);
+            AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
+            push_size(get_pos(ass), &back_positions);
+            push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
+        }
+
+        // The 'body positions' and 'body_refs' store the inidices we need to
+        // use to calculate jumps (and the bytes we need to update with those jumps)
+        SizeArray body_positions = mk_size_array(syn.match.clauses.len, a);
+        PtrArray body_refs = mk_ptr_array(syn.match.clauses.len, a);
+
+        for (size_t i = 0; i < syn.match.clauses.len; i++) {
+            // 1. Backpatch the jump so that it jumps to here
+            size_t branch_pos = back_positions.data[i];
+            uint8_t* branch_ref = back_refs.data[i];
+
+            // calc backlink offset
+            size_t body_pos = get_pos(ass);
+            if (body_pos - branch_pos > INT8_MAX) {
+                throw_error(point, mk_string("Jump in match too large", a));
+            } 
+
+            *branch_ref = (int32_t)(body_pos - branch_pos);
+
+            SynClause clause = *(SynClause*)syn.match.clauses.data[i];
+            PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
+
+            // Bind Clause Vars 
+            generate_index_push(reg(RSP, sz_64), ass, a, point);
+            index_stack_grow(env, 1);
+            // + tag size
+            build_binary_op(ass, Add, rref8(R13, 0, sz_64), imm8(sizeof(uint64_t)), a, point);
+            for (size_t i = 0; i < variant_types.len; i++) {
+                address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
+
+                generate_size_of(RAX, variant_types.data[i], env, ass, a, point);
+                build_binary_op(ass, Add, reg(RAX, sz_64), rref8(R13, 0, sz_64), a, point);
+
+                generate_index_push(reg(RAX, sz_64), ass, a, point);
+                index_stack_grow(env, 1);
+            }
+
+            generate_polymorphic_i(*clause.body, env, target, links, a, point);
+
+            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(variant_types.len), a, point);
+            address_pop_n(variant_types.len, env);
+            index_stack_shrink(env, variant_types.len);
+
+            // Generate jump to end of match expression to be backlinked later
+            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+            push_size(get_pos(ass), &body_positions);
+            push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
+        }
+
+        // Finally, backlink all jumps from the bodies to the end.
+        size_t curr_pos = get_pos(ass);
+        for (size_t i = 0; i < body_positions.len; i++) {
+            size_t body_pos = body_positions.data[i];
+            uint8_t* body_ref = body_refs.data[i];
+
+            if (curr_pos - body_pos > INT32_MAX) {
+                throw_error(point, mk_string("Jump in match too large", a));
+            } 
+
+            *body_ref = (int32_t)(curr_pos - body_pos);
+        }
+
+        //size_t enum_size = pi_size_of(*match_value->ptype);
+        //size_t out_size = pi_size_of(*syn.ptype);
+        generate_stack_size_of(RCX, enum_type, env, ass, a, point);
+        generate_index_push(reg(RCX, sz_64), ass, a, point);
+
+        generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+        generate_index_push(reg(RAX, sz_64), ass, a, point);
+
+        // Now, pop the enum off of the stack!
+        generate_poly_stack_move(reg(RCX, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), rref8(R13, -0x8, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(-0x16), a, point);
+        break;
     }
     case SLet: {
         // Store the (current) RSP on top of the stack.
@@ -699,7 +794,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // the topmost value.
 
         // Store size of value in RAX
-        generate_size_of(RAX, syn.ptype, env, ass, a, point);
+        generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
         // Pop all local bindings, leaving the old RSP on top of the index stack
         build_binary_op(ass, Sub, reg(R13, sz_64), imm32(ADDRESS_SIZE * syn.let_expr.bindings.len), a, point);
@@ -985,7 +1080,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // a) a binding (hence this is an else) 
             // b) the last value in the sequence (as this value is preserved)
             else if (i + 1 != syn.sequence.elements.len) {
-                generate_size_of(RAX, elt->expr->ptype, env, ass, a, point);
+                generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
                 build_binary_op(ass, Add, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
             }
             
@@ -995,7 +1090,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // the topmost value.
 
             // Store size of value in RAX
-            generate_size_of(RAX, syn.ptype, env, ass, a, point);
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
             // Pop all local bindings, leaving the old RSP on top of the index stack
             build_binary_op(ass, Sub, reg(R13, sz_64), imm32(ADDRESS_SIZE * num_bindings), a, point);
@@ -1112,6 +1207,30 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             }
             break;
         }
+        case TEnum: {
+            build_unary_op(ass, Push, imm32(0), a, point);
+            for (size_t i = 0; i < type->enumeration.variants.len; i++) {
+                PtrArray* types = type->enumeration.variants.data[i].val;
+
+                // Pick the larger of (old size) vs (current size)
+                generate_variant_size_of(R9, types, env, ass, a, point);
+                build_binary_op(ass, Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), a, point);
+                build_binary_op(ass, Cmp, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+                // Move R10 into R9 if R9 was below R10
+                build_binary_op(ass, CMovB, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+                // Store R9 on the top of the stack
+                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+            }
+            // pop into the destination register
+            build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
+            break;
+        }
+        case TNamed: {
+            generate_size_of(dest, type->named.type, env, ass, a, point);
+            break;
+        }
         default: {
             // TODO BUG: This seems to cause crashes!
             PtrArray nodes = mk_ptr_array(4, a);
@@ -1125,52 +1244,84 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
 }
 
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    switch (type->sort) {
-    case TPrim:
-    case TProc:
-    case TTraitInstance:
-        build_binary_op(ass, Mov, reg(dest, sz_64), imm32(pi_align_of(*type)), a, point);
-        break;
-    case TVar: {
-        // TODO (BUG UB VERY BAD) This is size - not alignment. Alignment
-        //   needs to be accounted for!
-        AddressEntry e = address_env_lookup(type->var, env);
-        switch (e.type) {
-        case ALocalDirect:
-            build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
-            build_binary_op(ass, SHR, reg(dest, sz_64), imm8(56), a, point);
+    type = strip_type(type);
+
+    size_t align; 
+    Result_t al_res = pi_maybe_align_of(*type, &align);
+    if (al_res == Ok) {
+        build_binary_op(ass, Mov, reg(dest, sz_64), imm32(align), a, point);
+    } else {
+        switch (type->sort) {
+        case TPrim:
+        case TProc:
+        case TTraitInstance:
+            build_binary_op(ass, Mov, reg(dest, sz_64), imm32(pi_align_of(*type)), a, point);
             break;
-        case ALocalIndirect:
-            panic(mv_string("Cannot generate align-of code for local indirect variable."));
-            break;
-        case ALocalIndexed:
-            panic(mv_string("cannot generate align-of code for local indexed variable."));
-            break;
-        case AGlobal:
-            panic(mv_string("Unexpected type variable sort: Global."));
-            break;
-        case ATypeVar:
-            panic(mv_string("Unexpected type variable sort: ATypeVar."));
-            break;
-        case ANotFound: {
-            panic(mv_string("Type Variable not found during codegen."));
+        case TVar: {
+            // TODO (BUG UB VERY BAD) This is size - not alignment. Alignment
+            //   needs to be accounted for!
+            AddressEntry e = address_env_lookup(type->var, env);
+            switch (e.type) {
+            case ALocalDirect:
+                build_binary_op(ass, Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
+                build_binary_op(ass, SHR, reg(dest, sz_64), imm8(56), a, point);
+                break;
+            case ALocalIndirect:
+                panic(mv_string("Cannot generate align-of code for local indirect variable."));
+                break;
+            case ALocalIndexed:
+                panic(mv_string("cannot generate align-of code for local indexed variable."));
+                break;
+            case AGlobal:
+                panic(mv_string("Unexpected type variable sort: Global."));
+                break;
+            case ATypeVar:
+                panic(mv_string("Unexpected type variable sort: ATypeVar."));
+                break;
+            case ANotFound: {
+                panic(mv_string("Type Variable not found during codegen."));
+                break;
+            }
+            case ATooManyLocals: {
+                throw_error(point, mk_string("Too Many Local variables!", a));
+                break;
+            }
+            }
             break;
         }
-        case ATooManyLocals: {
-            throw_error(point, mk_string("Too Many Local variables!", a));
+        case TEnum: {
+            build_unary_op(ass, Push, imm32(0), a, point);
+            for (size_t i = 0; i < type->enumeration.variants.len; i++) {
+                PtrArray* types = type->enumeration.variants.data[i].val;
+
+                // Pick the larger of (old size) vs (current size)
+                generate_variant_size_of(R9, types, env, ass, a, point);
+                build_binary_op(ass, Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), a, point);
+                build_binary_op(ass, Cmp, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+                // Move R10 into R9 if R9 was below R10
+                build_binary_op(ass, CMovB, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+                // Store R9 on the top of the stack
+                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+            }
+            // pop into the destination register
+            build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
             break;
         }
+        case TNamed: {
+            generate_align_of(dest, type->named.type, env, ass, a, point);
+            break;
         }
-        break;
-    }
-    default: {
-        // TODO BUG: This seems to cause crashes!
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc(mv_string("Unrecognized type provided to generate_align_of:"), a), &nodes);
-        push_ptr(pretty_type(type, a), &nodes);
-        Document* message = mk_sep_doc(nodes, a);
-        panic(doc_to_str(message, a));
-    }
+        default: {
+            // TODO BUG: This seems to cause crashes!
+            PtrArray nodes = mk_ptr_array(4, a);
+            push_ptr(mv_str_doc(mv_string("Unrecognized type provided to generate_align_of:"), a), &nodes);
+            push_ptr(pretty_type(type, a), &nodes);
+            Document* message = mk_sep_doc(nodes, a);
+            panic(doc_to_str(message, a));
+        }
+        }
     }
 }
 
@@ -1240,36 +1391,20 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
             }
             break;
         }
-        case TEnum: {
-            build_unary_op(ass, Push, imm32(0), a, point);
-            for (size_t i = 0; i < type->enumeration.variants.len; i++) {
-                PtrArray* types = type->enumeration.variants.data[i].val;
-
-                // Pick the larger of (old size) vs (current size)
-                generate_variant_size_of(R9, types, env, ass, a, point);
-                build_binary_op(ass, Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), a, point);
-                build_binary_op(ass, Cmp, reg(R9, sz_64), reg(R10, sz_64), a, point);
-
-                // Move R10 into R9 if R9 was below R10
-                build_binary_op(ass, CMovB, reg(R9, sz_64), reg(R10, sz_64), a, point);
-
-                // Store R9 on the top of the stack
-                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
-            }
-            // pop into the destination register
-            build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
-            break;
-        }
-        case TNamed: {
-            generate_stack_size_of(dest, type->named.type, env, ass, a, point);
-            break;
-        }
         default: {
-            PtrArray nodes = mk_ptr_array(4, a);
-            push_ptr(mv_str_doc(mv_string("generate_stack_size_of does not currently support type:"), a), &nodes);
-            push_ptr(pretty_type(type, a), &nodes);
-            Document* message = mk_sep_doc(nodes, a);
-            panic(doc_to_str(message, a));
+            U8Array inputs = mk_u8_array(4, a);
+            push_u8(dest, &inputs);
+            push_u8(RAX, &inputs);
+            push_u8(RCX, &inputs);
+            push_u8(RDX, &inputs);
+            U8Array regs = free_registers(inputs, a);
+
+            generate_size_of(regs.data[1], type, env, ass, a, point);
+            build_unary_op(ass, Push, reg(regs.data[0], sz_64), a, point);
+            generate_align_of(regs.data[1], type, env, ass, a, point);
+            build_unary_op(ass, Pop, reg(regs.data[0], sz_64), a, point);
+            generate_align_to(regs.data[0], regs.data[1], ass, a, point);
+            build_binary_op(ass, Mov, reg(dest, sz_64), reg(regs.data[0], sz_64), a, point);
         }
         }
     }
