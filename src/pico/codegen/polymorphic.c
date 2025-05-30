@@ -682,7 +682,47 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         throw_error(point, mv_string("Not implemented: match in forall."));
     }
     case SLet: {
-        throw_error(point, mv_string("Not implemented: let in forall."));
+        // Store the (current) RSP on top of the stack.
+        generate_index_push(reg(RSP, sz_64), ass, a, point);
+        index_stack_grow(env, 1);
+        for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
+            Syntax* sy = syn.let_expr.bindings.data[i].val;
+            generate_polymorphic_i(*sy, env, target, links, a, point);
+            generate_index_push(reg(RSP, sz_64), ass, a, point);
+            index_stack_grow(env, 1);
+            address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
+        }
+
+        generate_polymorphic_i(*syn.let_expr.body, env, target, links, a, point);
+
+        // The goal is to pop all bindings from the stack, while preserving
+        // the topmost value.
+
+        // Store size of value in RAX
+        generate_size_of(RAX, syn.ptype, env, ass, a, point);
+
+        // Pop all local bindings, leaving the old RSP on top of the index stack
+        build_binary_op(ass, Sub, reg(R13, sz_64), imm32(ADDRESS_SIZE * syn.let_expr.bindings.len), a, point);
+
+        // Move the old RSP into R8
+        build_binary_op(ass, Mov, reg(R8, sz_64), rref8(R13, 0, sz_64), a, point);
+
+        // We want the Dest offset RSP as (destined rsp - current rsp) = (old rsp - size - current rsp)
+        build_binary_op(ass, Sub, reg(R8, sz_64), reg(RAX, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(R8, sz_64), reg(RSP, sz_64), a, point);
+
+        // Store the dest offset in R13
+        build_binary_op(ass, Mov, rref8(R13, 0, sz_64), reg(R8, sz_64), a, point);
+
+        index_stack_shrink(env, syn.let_expr.bindings.len);
+        address_pop_n(syn.let_expr.bindings.len, env);
+
+        generate_poly_stack_move(reg(R8, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
+
+        // Pop offset from index stack & shrink data/control stack accordingly
+        generate_index_pop(reg(R8, sz_64), ass, a, point);
+        index_stack_shrink(env, 1);
+        build_binary_op(ass, Add, reg(RSP, sz_64), reg(R8, sz_64), a, point);
         break;
     }
     case SIf: {
