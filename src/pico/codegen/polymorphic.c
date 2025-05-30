@@ -18,6 +18,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 // movement
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
@@ -622,16 +623,16 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             generate_polymorphic_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
         }
 
-        // Generate the variant size
-        generate_variant_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
-
+        // Generate the variant stack size
+        generate_variant_stack_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
         generate_index_push(reg(RCX, sz_64), ass, a, point);
         index_stack_grow(env, 1);
 
-        // TODO (BUG) : update so we add variant size & variant stack size!
-        // dest_stack_offset = RAX = (2 * variant_size) - tag_size
-        build_binary_op(ass, Mov, reg(RAX,sz_64), reg(RCX,sz_64), a, point);
-        build_binary_op(ass, SHL, reg(RAX,sz_64), imm8(1), a, point);
+        generate_variant_size_of(RAX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
+
+
+        // dest_stack_offset = RAX = variant_size + variant_stack_size - tag_size
+        build_binary_op(ass, Add, reg(RAX,sz_64), rref8(R13, 0, sz_64), a, point);
         build_binary_op(ass, Sub, reg(RAX,sz_64), imm8(tag_size), a, point);
 
         generate_index_push(reg(RAX, sz_64), ass, a, point);
