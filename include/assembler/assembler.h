@@ -49,9 +49,11 @@ typedef enum {
     // ------------------
     //  Conditional Moves
     // ------------------
-    CMovE,
-    CMovL,
-    CMovG,
+    CMovE, 
+    CMovB, // Set below (unsigned)
+    CMovA, // Set above (unsigned)
+    CMovL, // Set lesser (signed)
+    CMovG, // Set greater (signed)
 
     // ------------------
     //  Meta

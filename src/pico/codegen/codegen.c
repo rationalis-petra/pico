@@ -1655,7 +1655,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 size_t calc_variant_size(PtrArray* types) {
     size_t total = sizeof(uint64_t);
     for (size_t i = 0; i < types->len; i++) {
-        total += pi_size_of(*(PiType*)types->data[i]);
+        size_t field_align;
+        Result_t res = pi_maybe_align_of(*(PiType*)types->data[i], &field_align);
+        if (res != Ok) return res;
+        total = pi_size_align(total, field_align);
+        size_t field_size;
+        res = pi_maybe_size_of(*(PiType*)types->data[i], &field_size);
+        if (res != Ok) return res;
+        total += field_size;
     }
     return total;
 }

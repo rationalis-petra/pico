@@ -908,6 +908,22 @@ size_t pi_stack_size_of(PiType type) {
     return pi_stack_align(pi_size_of(type));
 }
 
+Result_t pi_maybe_stack_size_of(PiType type, size_t* out) {
+    Result_t res = pi_maybe_size_of(type, out);
+    if (res != Ok) return res;
+    *out = pi_stack_align(*out);
+    return Ok;
+}
+
+size_t pi_size_of(PiType type) {
+    size_t out = 0;
+    Result_t result = pi_maybe_size_of(type, &out);
+    if (result == Err) {
+        panic(mv_string("pi_size_of called with invalid type!"));
+    }
+    return out;
+}
+
 Result_t pi_maybe_size_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:
@@ -954,11 +970,13 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         size_t align = 0;
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            size_t tmp_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
+            size_t tmp_align;
+            Result_t res = pi_maybe_align_of(*(PiType*)type.structure.fields.data[i].val, &tmp_align);
+            if (res != Ok) return res;
             align = align > tmp_align? align : tmp_align;
             total = pi_size_align(total, tmp_align);
             size_t field_size;
-            Result_t res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
+            res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
             if (res != Ok) return res;
             total += field_size;
         }
@@ -971,9 +989,12 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             size_t total = 0;
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
-                total = pi_size_align(total, pi_align_of(*(PiType*)types.data[i]));
+                size_t field_align;
+                Result_t res = pi_maybe_align_of(*(PiType*)types.data[i], &field_align);
+                if (res != Ok) return res;
+                total = pi_size_align(total, field_align);
                 size_t field_size;
-                Result_t res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
+                res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
                 total += field_size;
             }
@@ -994,14 +1015,11 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         *out = ADDRESS_SIZE;
         return Ok;
     case TNamed:
-        *out = pi_size_of(*type.named.type);
-        return Ok;
+        return pi_maybe_size_of(*type.named.type, out);
     case TDistinct:
-        *out =  pi_size_of(*type.distinct.type);
-        return Ok;
+        return pi_maybe_size_of(*type.distinct.type, out);
     case TTrait:
-        return Err;
-        break;
+        panic(mv_string("pi_maybe_size_of not implemented for sort: Trait."));
     case TTraitInstance:
         *out = ADDRESS_SIZE;
         return Ok;
@@ -1036,40 +1054,47 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     panic(mv_string("pi_maybe_size_of received invalid type."));
 }
 
-size_t pi_size_of(PiType type) {
+size_t pi_align_of(PiType type) {
     size_t out = 0;
-    Result_t result = pi_maybe_size_of(type, &out);
+    Result_t result = pi_maybe_align_of(type, &out);
     if (result == Err) {
-        panic(mv_string("pi_size_of called with invalid type!"));
+        panic(mv_string("pi_align_of called with invalid type!"));
     }
     return out;
 }
 
-size_t pi_align_of(PiType type) {
+Result_t pi_maybe_align_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:
         switch (type.prim) {
         case Unit:
-            return 0;
+            *out = 0;
+            return Ok;
         case Bool:
-            return sizeof(uint8_t);
+            *out = sizeof(uint8_t);
+            return Ok;
         case Address:
         case Int_64:
         case UInt_64:
-            return sizeof(int64_t);
+            *out = sizeof(int64_t);
+            return Ok;
         case Int_32:
         case UInt_32:
-            return sizeof(int32_t);
+            *out = sizeof(int32_t);
+            return Ok;
         case Int_16:
         case UInt_16:
-            return sizeof(int16_t);
+            *out = sizeof(int16_t);
+            return Ok;
         case Int_8:
         case UInt_8:
-            return sizeof(int8_t);
+            *out = sizeof(int8_t);
+            return Ok;
         case TFormer:
-            return sizeof(TermFormer);
+            *out = sizeof(TermFormer);
+            return Ok;
         default:
-            panic(mv_string("pi_align_of received invalid primitive"));
+            panic(mv_string("pi_maybe_align_of received invalid primitive"));
         }
         return sizeof(uint64_t);
     case TProc:
@@ -1077,64 +1102,70 @@ size_t pi_align_of(PiType type) {
     case TStruct: {
         size_t align = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
-            size_t field_align = pi_align_of(*(PiType*)type.structure.fields.data[i].val);
+            size_t field_align;
+            Result_t res = pi_maybe_align_of(*(PiType*)type.structure.fields.data[i].val, &field_align);
+            if (res != Ok) return res;
             // align = max(align, field_align)
             align = align > field_align ? align : field_align;
         }
-        return align;
+        *out = align;
+        return Ok;
     }
     case TEnum: {
         // Note: this will set it to max, maybe we should shrink the tag size (16 bits? variable bits?)
         size_t align = 8; 
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
-            for (size_t i = 0; i < types.len; i++) {
-                // Note: Data is padded to be 8-byte aligned!
-                // TODO (FEAT): Make generic on padding size?
-                size_t field_align = pi_align_of(*(PiType*)types.data[i]);
-                // accumulate max
-                // size_t padding = field_size % 8 == 0 ? 0 : 8 - (field_size % 8);
+            for (size_t j = 0; j < types.len; j++) {
+                size_t field_align;
+                Result_t res = pi_maybe_align_of(*(PiType*)types.data[j], &field_align);
+                if (res != Ok) return res;
+                // align = max(align, field_align)
                 align = field_align > align ? field_align : align;
             }
         }
-        return align;
+        *out = align;
+        return Ok;
     }
 
-    case TReset: {
+    case TReset:
     case TResumeMark: 
     case TDynamic:
-        return ADDRESS_ALIGN;
-    }
-    case TNamed: {
-        return pi_align_of(*type.named.type);
-    }
-    case TDistinct: {
-        return pi_align_of(*type.distinct.type);
-    }
+        *out = ADDRESS_ALIGN;
+        return Ok;
+    case TNamed:
+        return pi_maybe_align_of(*type.named.type, out);
+    case TDistinct:
+        return pi_maybe_align_of(*type.distinct.type, out);
     case TTrait:
-        panic(mv_string("pi_align_of received invalid type: Trait."));
-        break;
+        return Err;
     case TTraitInstance:
-        return ADDRESS_ALIGN;
+        *out = ADDRESS_ALIGN;
+        return Ok;
+    case TCType:
+        *out = c_align_of(type.c_type);
         break;
-    case TAll: {
-        return sizeof(void*);
-    }
-    case TFam: {
-        panic(mv_string("pi_align_of received invalid type: Family."));
-    }
+    case TVar:
+        return Err;
+    case TExists:
+        panic(mv_string("Need to implement: align-of ctype"));
+    case TAll:
+        *out = sizeof(void*);
+        return Ok;
+    case TFam:
+        return Err;
+    case TCApp:
+        panic(mv_string("Need to implement: align-of tc app"));
     case TKind: 
     case TConstraint: 
-        return sizeof(void*);
+        *out = sizeof(void*);
+        return Ok;
     case TUVar:
-        panic(mv_string("pi_align_of received invalid type: UVar."));
     case TUVarIntegral:
-        panic(mv_string("pi_align_of received invalid type: UVar with default integral."));
     case TUVarFloating:
-        panic(mv_string("pi_align_of received invalid type: UVar with default floating."));
-    default:
-        panic(mv_string("pi_align_of received invalid type."));
+        return Err;
     }
+    panic(mv_string("pi_maye_align_of received invalid type."));
 }
 
 PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {

@@ -667,13 +667,25 @@ void build_binary_opcode_table() {
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x44;
 
-    // 0F 4C
+    // CMovB = 0F 42
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x42;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x42;
+
+    // CMovA = 0F 47
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x47;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x47;
+
+    // CMovL = 0F 4C
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4C;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4C;
 
-    // 0F 4F
+    // CMovG = 0F 4F
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4F;
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
