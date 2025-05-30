@@ -35,4 +35,24 @@ void end_coloured_text() {
     }
 }
 
+void set_boldness(FondBoldness boldness) {
+    switch (boldness) {
+    case Normal:
+        printf("\x1b[22m");
+        break;
+    case Bold:
+        printf("\x1b[1m");
+        break;
+    case Dim:
+        printf("\x1b[2m");
+        break;
+    }
+}
 
+void start_italics() { printf("\x1b[3m"); }
+
+void end_italics() { printf("\x1b[23m"); }
+
+void start_underline() { printf("\x1b[4m"); }
+
+void end_underline() { printf("\x1b[24m"); }

@@ -25,6 +25,7 @@
 
 #include "app/command_line_opts.h"
 #include "app/module_load.h"
+#include "app/help_string.h"
 
 typedef struct {
     bool debug_print;
@@ -251,10 +252,15 @@ int main(int argc, char** argv) {
         delete_istream(sin, stdalloc);
         break;
     }
-    case CInvalid:
+    case CHelp: {
+        write_help_string(cout);
+        break;
+    }
+    case CInvalid: {
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
         break;
+    }
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
         write_string(mv_string("\n"), cout);
