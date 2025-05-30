@@ -18,10 +18,12 @@ const uint8_t esc_code = 0x1B;
 void init_terminal(Allocator *a) {
     terminal_allocator = a;
 
+#if OS_FAMILY == WINDOWS 
     HANDLE consoleHanlde = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleMode(consoleHanlde, ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     SetConsoleCP(65001);
     SetConsoleOutputCP(65001);
+#endif
 }
 
 Colour colour(uint8_t r, uint8_t g, uint8_t b) {
