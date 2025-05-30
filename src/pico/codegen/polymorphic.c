@@ -727,18 +727,20 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // + tag size
             build_binary_op(ass, Add, rref8(R13, 0, sz_64), imm8(sizeof(uint64_t)), a, point);
             for (size_t i = 0; i < variant_types.len; i++) {
-                address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
+                address_bind_relative(clause.vars.data[i], 0, env);
 
-                generate_size_of(RAX, variant_types.data[i], env, ass, a, point);
-                build_binary_op(ass, Add, reg(RAX, sz_64), rref8(R13, 0, sz_64), a, point);
+                if (i + 1 != variant_types.len) {
+                    generate_size_of(RAX, variant_types.data[i], env, ass, a, point);
+                    build_binary_op(ass, Add, reg(RAX, sz_64), rref8(R13, 0, sz_64), a, point);
 
-                generate_index_push(reg(RAX, sz_64), ass, a, point);
-                index_stack_grow(env, 1);
+                    generate_index_push(reg(RAX, sz_64), ass, a, point);
+                    index_stack_grow(env, 1);
+                }
             }
 
             generate_polymorphic_i(*clause.body, env, target, links, a, point);
 
-            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(variant_types.len), a, point);
+            build_binary_op(ass, Sub, reg(R13, sz_64), imm32(0x8 * variant_types.len), a, point);
             address_pop_n(variant_types.len, env);
             index_stack_shrink(env, variant_types.len);
 
@@ -1160,7 +1162,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     }
 }
 
+// Internal helper functions for movement 
 U8Array free_registers(U8Array inputs, Allocator* a);
+bool reg_conflict(Location loc, Regname reg) {
+    return (loc.type == Dest_Register && loc.reg == reg);
+}
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
     type = strip_type(type);
@@ -1448,6 +1454,10 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
+    if (reg_conflict(src, RDI) || reg_conflict(size, RDI) || reg_conflict(size, RSI)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
@@ -1455,6 +1465,10 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
     build_binary_op(ass, Mov, reg(RDX, sz_64), size, a, point);
 
 #elif ABI == WIN_64
+    if (reg_conflict(src, RCX) || reg_conflict(size, RDX) || reg_conflict(size, R8)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
@@ -1476,6 +1490,11 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #if ABI == SYSTEM_V_64
+    // Check that we don't accidentally overwrite any registers!
+    if (reg_conflict(src, RDI) || reg_conflict(size, RDI) || reg_conflict(size, RSI)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
@@ -1485,6 +1504,10 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
     build_binary_op(ass, Mov, reg(RDX, sz_64), size, a, point);
 
 #elif ABI == WIN_64
+    if (reg_conflict(src, RCX) || reg_conflict(size, RDX) || reg_conflict(size, R8)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);

@@ -190,6 +190,9 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
         };
     }
 
+    // TODO (BUG) this seemed to be returning ALocalIndirect 
+    // when no match was found??
+
     // Now search globally
     EnvEntry e = env_lookup(s, env->env);
     if (e.success == Err) {
