@@ -493,6 +493,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             }
             Symbol lit = msym.atom.symbol;
 
+            if (symbol_eq(lit, string_to_symbol(mv_string("unit")))) {
+                Syntax* res = mem_alloc(sizeof(Syntax), a);
+                *res = (Syntax) {.type = SLitUnit, .ptype = NULL, .range = raw.range, .boolean = true,};
+                return res;
+            }
             if (symbol_eq(lit, string_to_symbol(mv_string("true")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
                 *res = (Syntax) {.type = SLitBool, .ptype = NULL, .range = raw.range, .boolean = true,};

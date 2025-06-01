@@ -1133,18 +1133,28 @@ void build_unary_opcode_table() {
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
     unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
-    // TODO (BUG): when sz/8 becomes available for Deref, enable this!
+    unary_opcode_table[SetNE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x95,};
+    // TODO (FEAT): when sz/8 becomes available for Deref, enable this!
     /* unary_opcode_table[SetE][uindex(Deref, sz_64)] = */
     /*     (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,}; */
 
     unary_opcode_table[SetA][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x97,};
+    unary_opcode_table[SetAE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x93,};
     unary_opcode_table[SetB][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x92,};
+    unary_opcode_table[SetBE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x96,};
     unary_opcode_table[SetL][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9C,};
+    unary_opcode_table[SetLE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9E,};
     unary_opcode_table[SetG][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9F,};
+    unary_opcode_table[SetGE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9D,};
 
     // ------------------
     //  Arithmetic

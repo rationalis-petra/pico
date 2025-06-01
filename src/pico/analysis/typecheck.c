@@ -158,6 +158,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SLitBool:
         untyped->ptype = mk_prim_type(a, Bool);
         break;
+    case SLitUnit:
+        untyped->ptype = mk_prim_type(a, Unit);
+        break;
     case SLitString:
         untyped->ptype = mk_string_type(a);
         break;
@@ -1292,6 +1295,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
     case SLitTypedFloating:
     case SLitString:
     case SLitBool:
+    case SLitUnit:
     case SVariable:
     case SAbsVariable:
         break;
@@ -1620,6 +1624,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SLitUntypedFloating:
     case SLitTypedFloating:
     case SLitBool:
+    case SLitUnit:
     case SLitString:
     case SVariable:
     case SAbsVariable:

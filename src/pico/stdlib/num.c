@@ -242,6 +242,13 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    build_comp_fn(ass, is_signed ? SetLE : SetBE, sz, a, &point);
+    sym = string_to_symbol(mv_string("<="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
     build_comp_fn(ass, is_signed ? SetG : SetA, sz, a, &point);
     sym = string_to_symbol(mv_string(">"));
     fn_segments.code = get_instructions(ass);
@@ -249,8 +256,22 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    build_comp_fn(ass, is_signed ? SetGE : SetAE, sz, a, &point);
+    sym = string_to_symbol(mv_string(">="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
     build_comp_fn(ass, SetE, sz, a, &point);
     sym = string_to_symbol(mv_string("="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_comp_fn(ass, SetNE, sz, a, &point);
+    sym = string_to_symbol(mv_string("!="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

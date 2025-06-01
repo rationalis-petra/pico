@@ -33,6 +33,7 @@ typedef enum {
     SLitTypedFloating,
     SLitString,
     SLitBool,
+    SLitUnit,
     SVariable,
     SAbsVariable,
 

@@ -658,6 +658,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         //delete_pi_type_p(addr_array, a);
     }
 
+    // Unit value
+
+    /* type_data = type_val; */
+    /* sym = string_to_symbol(mv_string("unit")); */
+    /* add_def(module, sym, type, &type_data, null_segments, NULL); */
+    /* e = get_def(sym, module); */
+    /* syntax_type = e->value; */
+
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
     Segments prepped;
 

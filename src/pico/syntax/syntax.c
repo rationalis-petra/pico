@@ -50,6 +50,10 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         break;
     }
+    case SLitUnit: {
+        out = mk_str_doc(mv_string(":unit"), a);
+        break;
+    }
     case SLitString: {
         Document* delimiter = mk_str_doc(mv_string("\""), a);
         PtrArray nodes = mk_ptr_array(3, a);
@@ -404,12 +408,20 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(pretty_syntax(syntax->labels.entry, a), &nodes);
 
         for (size_t i = 0; i < syntax->labels.terms.len; i++) {
-            PtrArray label_nodes = mk_ptr_array(4, a);
+            PtrArray label_nodes = mk_ptr_array(5, a);
             SymPtrACell cell = syntax->labels.terms.data[i];
+            SynLabelBranch* branch = cell.val;
+
+            PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                Document* arg = mk_str_doc(*symbol_to_string(branch->args.data[i].key), a);
+                push_ptr(arg, &arg_nodes);
+            }
 
             push_ptr(mk_str_doc(mv_string("["), a), &label_nodes);
             push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &label_nodes);
-            push_ptr(pretty_syntax(cell.val, a), &label_nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &label_nodes);
+            push_ptr(pretty_syntax(branch->body, a), &label_nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &label_nodes);
 
             push_ptr(mv_sep_doc(label_nodes, a), &nodes);

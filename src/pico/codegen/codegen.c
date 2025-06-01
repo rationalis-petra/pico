@@ -135,6 +135,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
+    case SLitUnit: {
+        break;
+    }
     case SLitString: {
         String immediate = syn.string; 
         if (immediate.memsize > UINT32_MAX) 
