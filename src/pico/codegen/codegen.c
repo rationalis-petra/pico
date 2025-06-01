@@ -3,6 +3,8 @@
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
 
+#include "pretty/string_printer.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
 #include "pico/codegen/polymorphic.h"
@@ -1647,6 +1649,74 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
         data_stack_grow(env, pi_size_of(*syn.ptype));
+        break;
+    }
+    case SDescribe: {
+        Environment* base = get_addr_base(env);
+        EnvEntry entry = env_lookup(syn.to_describe, base);
+        String immediate;
+
+        if (entry.success == Ok) {
+          if (entry.is_module) {
+              immediate = mv_string("Not yet implemented: describing a module.\n");
+          } else {
+              PtrArray lines = mk_ptr_array(8, a);
+              {
+                  PtrArray header = mk_ptr_array(2, a);
+                  push_ptr(mk_str_doc(mv_string("Symbol: "), a), &header);
+                  push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe), a), &header);
+                  push_ptr(mv_sep_doc(header, a), &lines);
+              }
+              push_ptr(mk_str_doc(mv_string("──────────────────────"), a), &lines);
+              {
+                  PtrArray moduledesc = mk_ptr_array(2, a);
+                  String* module_name = get_name(entry.source);
+                  if (module_name) {
+                      push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
+                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
+                  } else {
+                      push_ptr(mk_str_doc(mv_string("Source Module is Nameless"), a), &moduledesc);
+                  }
+                  push_ptr(mv_sep_doc(moduledesc, a), &lines);
+              }
+              {
+                  PtrArray typedesc = mk_ptr_array(2, a);
+                  push_ptr(mk_str_doc(mv_string("Type: "), a), &typedesc);
+                  push_ptr(pretty_type(entry.type, a), &typedesc);
+                  push_ptr(mv_sep_doc(typedesc, a), &lines);
+              }
+              {
+                  PtrArray valdesc = mk_ptr_array(2, a);
+                  push_ptr(mk_str_doc(mv_string("Value: "), a), &valdesc);
+                  push_ptr(pretty_pi_value(entry.value, entry.type, a), &valdesc);
+                  push_ptr(mv_sep_doc(valdesc, a), &lines);
+              }
+
+              // end line
+              push_ptr(mk_str_doc(mv_string("──────────────────────\n"), a), &lines);
+
+              Document* doc = mv_vsep_doc(lines, a);
+              immediate = doc_to_str(doc, a);
+          }
+        } else {
+            immediate = mv_string("Local variable.");
+        }
+
+
+        if (immediate.memsize > UINT32_MAX) 
+            throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
+
+        // Push the u8
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+
+        // Backlink the data & copy the bytes into the data-segment.
+        backlink_data(target, out.backlink, links);
+        add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
+
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
+
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     default: {

@@ -359,6 +359,10 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
     mem_free(old_locals, a);
 }
 
+Environment *get_addr_base(AddressEnv *env) {
+    return env->env;
+}
+
 void address_bind_type(Symbol s, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 

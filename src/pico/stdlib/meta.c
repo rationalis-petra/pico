@@ -84,6 +84,10 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("type-of"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FDescribe;
+    sym = string_to_symbol(mv_string("describe"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     /* former = FDefine; */
     /* sym = string_to_symbol(mv_string("declare")); */
     /* add_def(module, sym, type, &former, null_segments, NULL); */

@@ -1768,9 +1768,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
         RawTree term = raw.branch.nodes.data[1];
         if (is_symbol(&term)) {
+            Syntax* res = mem_alloc(sizeof(Syntax), a);
+            *res = (Syntax) {
+                .type = SDescribe,
+                .to_describe = term.atom.symbol,
+            };
+            return res;
         } else {
-            err.range = raw.range;
-            err.message = mk_string("describe term former requires at least 2 arguments!", a);
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mk_string("describe expects argument to be a symbol!", a);
             throw_pi_error(point, err);
         }
     }
@@ -1872,7 +1878,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                     void* dynamic_memory_space = mem_alloc(4096, a);
                     void* offset_memory_space = mem_alloc(1024, a);
 
-                    Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
+                    Allocator* old_temp_alloc = set_std_temp_allocator(a);
 
                     int64_t out;
                     __asm__ __volatile__(
@@ -1949,7 +1955,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                            , "r" (&output)
                                            , "c" (sizeof(RawTree))) ;
 
-                    set_std_tmp_allocator(old_tmp_alloc);
+                    set_std_temp_allocator(old_temp_alloc);
                     mem_free(dynamic_memory_space, a);
                     return abstract_expr_i(output, env, a, point);
                 } else {

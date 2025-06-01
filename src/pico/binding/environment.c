@@ -130,6 +130,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
             result.is_module = mentry->is_module;
             result.value = mentry->value;
             result.type = mentry->is_module ? NULL : &mentry->type;
+            result.source = *module;
         } else {
             result.success = Err;
         }

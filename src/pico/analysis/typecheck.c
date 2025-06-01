@@ -1278,6 +1278,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         *untyped->ptype = (PiType) {.sort = TKind, .kind.nargs = 0};
         break;
     }
+    case SDescribe: {
+        TypeEntry te = type_env_lookup(untyped->to_describe, env);
+        if (te.type == TENotFound) {
+            String* sym = symbol_to_string(untyped->to_describe);
+            err.message = string_cat(mv_string("Couldn't find value of variable to describe: "), *sym, a);
+            throw_pi_error(point, err);
+        }
+        untyped->ptype = mk_string_type(a);
+        break;
+    }
 
     }
     if (untyped->ptype == NULL) {
@@ -1609,6 +1619,8 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         instantiate_implicits(syn->type_of, env, a, point);
         break;
     }
+    case SDescribe: 
+        break;
     }
 }
 
@@ -1876,6 +1888,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         squash_types(typed->type_of, a, point);
         break;
     }
+    case SDescribe:
+        break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));
         break;

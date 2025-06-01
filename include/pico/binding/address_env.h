@@ -78,6 +78,11 @@ void address_end_proc(AddressEnv* env, Allocator* a);
 void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
 
+// get_base is essentially only used by describe, when generating description
+// strings of values. 
+
+Environment* get_addr_base(AddressEnv* env);
+
 
 //------------------------------------------------------------------------------
 // Manipulate an (extant) local environment: push and pop ariables, or 
@@ -85,7 +90,6 @@ void address_end_poly(AddressEnv* env, Allocator* a);
 //------------------------------------------------------------------------------
 
 void address_bind_type(Symbol s, AddressEnv* env);
-
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
 void address_pop_n(size_t n, AddressEnv* env);
 void address_pop(AddressEnv* env);

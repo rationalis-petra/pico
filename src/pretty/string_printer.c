@@ -7,91 +7,55 @@ static size_t max(size_t a, size_t b) {
     return a < b ? b : a;
 }
 
-void doc_len(Document* doc, size_t* len);
-
-void str_doc_len(String str, void* ctx) {
-    size_t* sz = (size_t*)ctx;
-    *sz += str.memsize - 1; // subtrat null byte
-}
-
-void cat_doc_len(PtrArray docs, void* ctx) {
-    size_t* sz = (size_t*)ctx;
-    *sz += max(docs.len, 1) - 1;
-    for (size_t i = 0; i < docs.len; i++)
-        doc_len(docs.data[i], ctx);
-}
-
-void sep_doc_len(PtrArray docs, void* ctx) {
-    size_t* sz = (size_t*)ctx;
-    *sz += max(docs.len, 1) - 1;
-    for (size_t i = 0; i < docs.len; i++)
-        doc_len(docs.data[i], ctx);
-}
-
-void vsep_doc_len(PtrArray docs, void* ctx) {
-    size_t* sz = (size_t*)ctx;
-    // TODO: CRLF on windows? - 2 chars!
-    *sz += max(docs.len, 1) - 1;
-    for (size_t i = 0; i < docs.len; i++)
-        doc_len(docs.data[i], ctx);
-}
-
 void doc_len(Document* doc, size_t* len) {
-    DocumentVisitor len_visitor;
-    len_visitor.on_str_doc = str_doc_len;
-    len_visitor.on_cat_doc = cat_doc_len;
-    len_visitor.on_sep_doc = sep_doc_len;
-    len_visitor.on_vsep_doc = vsep_doc_len;
-    len_visitor.ctx = len;
-
-    visit_document(doc, &len_visitor);
-}
-
-void doc_str(Document* doc, uint8_t** data);
-
-void str_doc_str(String str, void* data) {
-    void** dptr = (void*)data;
-    memcpy(*dptr, str.bytes, str.memsize - 1);
-    *dptr += str.memsize - 1;
-}
-
-void cat_doc_str(PtrArray docs, void* ctx) {
-    for (size_t i = 0; i < docs.len; i++) {
-        doc_str(docs.data[i], ctx);
-    }
-}
-
-void sep_doc_str(PtrArray docs, void* ctx) {
-    uint8_t** cptr = (uint8_t**)ctx;
-    for (size_t i = 0; i < docs.len; i++) {
-        doc_str(docs.data[i], ctx);
-        if (i + 1 < docs.len) {
-            **cptr = ' '; 
-            *cptr += 1;
-        }
-    }
-}
-
-void vsep_doc_str(PtrArray docs, void* ctx) {
-    uint8_t** cptr = (uint8_t**)ctx;
-    for (size_t i = 0; i < docs.len; i++) {
-        doc_str(docs.data[i], ctx);
-        if (i + 1 < docs.len) {
-            **cptr = '\n'; 
-            *cptr += 1;
-        }
+    switch (doc->type) {
+    case StringDocument:
+        *len += doc->string.memsize - 1; // subtrat null byte
+        break;
+    case CatDocument:
+        for (size_t i = 0; i < doc->docs.len; i++)
+            doc_len(doc->docs.data[i], len);
+        break;
+    case SepDocument:
+    case VSepDocument:
+        // TODO (BUG): for vsep doc, account for newline = \r\n on Windows 
+        *len += max(doc->docs.len, 1) - 1;
+        for (size_t i = 0; i < doc->docs.len; i++)
+            doc_len(doc->docs.data[i], len);
+        break;
     }
 }
 
 void doc_str(Document* doc, uint8_t** data) {
-    DocumentVisitor str_visitor;
-    str_visitor.on_str_doc = str_doc_str;
-    str_visitor.on_cat_doc = cat_doc_str;
-    str_visitor.on_sep_doc = sep_doc_str;
-    str_visitor.on_vsep_doc = vsep_doc_str;
-    str_visitor.ctx = data;
-
-    visit_document(doc, &str_visitor);
+    switch (doc->type) {
+    case StringDocument:
+        memcpy(*data, doc->string.bytes, doc->string.memsize - 1);
+        *data += doc->string.memsize - 1;
+        break;
+    case CatDocument:
+        for (size_t i = 0; i < doc->docs.len; i++) {
+            doc_str(doc->docs.data[i], data);
+        }
+        break;
+    case SepDocument:
+        for (size_t i = 0; i < doc->docs.len; i++) {
+            doc_str(doc->docs.data[i], data);
+            if (i + 1 < doc->docs.len) {
+                **data = ' '; 
+                *data += 1;
+            }
+        }
+        break;
+    case VSepDocument:
+        for (size_t i = 0; i < doc->docs.len; i++) {
+            doc_str(doc->docs.data[i], data);
+            if (i + 1 < doc->docs.len) {
+                **data = '\n'; 
+                *data += 1;
+            }
+        }
+        break;
+    }
 }
 
 String doc_to_str(Document* doc, Allocator* a) {

@@ -106,7 +106,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* dynamic_memory_space = mem_alloc(4096, a);
     void* offset_memory_space = mem_alloc(1024, a);
 
-    Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
+    Allocator* old_temp_alloc = set_std_temp_allocator(a);
 
     int64_t out;
     __asm__ __volatile__(
@@ -140,7 +140,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         , "r" (dynamic_memory_space)
         , "r" (offset_memory_space)) ;
 
-    set_std_tmp_allocator(old_tmp_alloc);
+    set_std_temp_allocator(old_temp_alloc);
     mem_free(dynamic_memory_space, a);
     return value;
 }
