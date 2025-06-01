@@ -49,9 +49,11 @@ typedef enum {
     // ------------------
     //  Conditional Moves
     // ------------------
-    CMovE,
-    CMovL,
-    CMovG,
+    CMovE, 
+    CMovB, // Move if below (unsigned)
+    CMovA, // Move if above (unsigned)
+    CMovL, // Move if lesser (signed)
+    CMovG, // Move if greater (signed)
 
     // ------------------
     //  Meta
@@ -80,10 +82,15 @@ typedef enum {
     //  Set Byte based on flag 
     // ------------------------
     SetE,
-    SetB, // Set below   (unsigned)
-    SetA, // Set above   (unsigned)
-    SetL, // Set lesser  (signed)
-    SetG, // Set greater (signed)
+    SetNE,
+    SetB,  // Set below   (unsigned)
+    SetBE, // Set below or equal
+    SetA,  // Set above   (unsigned)
+    SetAE, // Set above or equal   
+    SetL,  // Set lesser  (signed)
+    SetLE, // Set lesser or equal
+    SetG,  // Set greater (signed)
+    SetGE, // Set greater or equal
 
     // ------------------
     //  Arithmetic

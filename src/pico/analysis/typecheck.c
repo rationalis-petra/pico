@@ -28,7 +28,6 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
     // If this is a definition, lookup the type to check against 
     TypeEnv *t_env = mk_type_env(env, a);
     UVarGenerator* gen = mk_gen(a);
-
     switch (top->type) {
     case TLDef: {
         PiType* check_against;
@@ -44,6 +43,20 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         type_check_expr(term, *check_against, t_env, gen, a, point);
         instantiate_implicits(term, t_env, a, point);
         pop_type(t_env);
+        break;
+    }
+    case TLOpen: {
+        for (size_t i = 0; i < top->open.syms.len; i++) {
+            Symbol symbol = top->open.syms.data[i];
+            EnvEntry entry = env_lookup(symbol, env);
+            if (entry.type != Ok || !entry.is_module) {
+                PicoError err = (PicoError) {
+                    .range = top->open.range,
+                    .message = mv_string("module does not exist"),
+                };
+                throw_pi_error(point, err);
+            }
+        }
         break;
     }
     case TLExpr: {
@@ -145,6 +158,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     case SLitBool:
         untyped->ptype = mk_prim_type(a, Bool);
         break;
+    case SLitUnit:
+        untyped->ptype = mk_prim_type(a, Unit);
+        break;
     case SLitString:
         untyped->ptype = mk_string_type(a);
         break;
@@ -177,6 +193,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         break;
     }
     case SProcedure: {
+        // TODO (BUG): ensure that we appropriately check for captures, 
+        // as 'proc' does NOT support closures!
+
         // give each arg a unification variable type. 
         PiType* proc_ty = mem_alloc(sizeof(PiType), a);
         proc_ty->sort = TProc;
@@ -869,9 +888,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         for (size_t i = 0; i < untyped->sequence.elements.len; i++) {
             SeqElt* elt = untyped->sequence.elements.data[i];
             if (elt->is_binding) {
-                PiType* type = mk_uvar(gen, a);
-                type_check_i(elt->expr, type, env, gen, a, point);
-                type_var (elt->symbol, type, env);
+                //PiType* type = mk_uvar(gen, a);
+                type_infer_i(elt->expr, env, gen, a, point);
+                type_var (elt->symbol, elt->expr->ptype, env);
                 num_binds++;
             } else {
                 type_infer_i(elt->expr, env, gen, a, point);
@@ -1276,6 +1295,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
     case SLitTypedFloating:
     case SLitString:
     case SLitBool:
+    case SLitUnit:
     case SVariable:
     case SAbsVariable:
         break;
@@ -1604,6 +1624,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SLitUntypedFloating:
     case SLitTypedFloating:
     case SLitBool:
+    case SLitUnit:
     case SLitString:
     case SVariable:
     case SAbsVariable:
@@ -1878,6 +1899,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
 }
 
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+    squash_types(typed, a, point);
+    instantiate_implicits(typed, env, a, point);
     Allocator exalloc = mk_executable_allocator(a);
     
     // Catch error here; so can cleanup after self before further unwinding.

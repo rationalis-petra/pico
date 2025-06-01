@@ -111,7 +111,10 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
 Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
 
 // Add a module definition in to the module's namespace. 
-Result add_module_def(Module* module, Symbol symbol, Module* child); 
+Result add_module_def(Module* module, Symbol symbol, Module* child);
+
+// Add an import clause into a module's namespace
+void add_import_clause(ImportClause clause, Module* module);
 
 ModuleEntry* get_def(Symbol symbol, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);

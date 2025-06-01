@@ -667,13 +667,25 @@ void build_binary_opcode_table() {
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x44;
 
-    // 0F 4C
+    // CMovB = 0F 42
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x42;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x42;
+
+    // CMovA = 0F 47
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x47;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
+    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x47;
+
+    // CMovL = 0F 4C
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4C;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4C;
 
-    // 0F 4F
+    // CMovG = 0F 4F
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4F;
     binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
@@ -1098,12 +1110,12 @@ void build_unary_opcode_table() {
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x74,};
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x84,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x84,};
 
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0x75,};
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x8F, .opcode = 0x85,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x85,};
 
     unary_opcode_table[JMP][uindex(Dest_Immediate, sz_8)] =
         (UnaryOpEntry) {.opcode = 0xEB,};
@@ -1121,18 +1133,28 @@ void build_unary_opcode_table() {
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
     unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
-    // TODO (BUG): when sz/8 becomes available for Deref, enable this!
+    unary_opcode_table[SetNE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x95,};
+    // TODO (FEAT): when sz/8 becomes available for Deref, enable this!
     /* unary_opcode_table[SetE][uindex(Deref, sz_64)] = */
     /*     (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,}; */
 
     unary_opcode_table[SetA][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x97,};
+    unary_opcode_table[SetAE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x93,};
     unary_opcode_table[SetB][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x92,};
+    unary_opcode_table[SetBE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x96,};
     unary_opcode_table[SetL][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9C,};
+    unary_opcode_table[SetLE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9E,};
     unary_opcode_table[SetG][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9F,};
+    unary_opcode_table[SetGE][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9D,};
 
     // ------------------
     //  Arithmetic

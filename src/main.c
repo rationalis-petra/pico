@@ -25,6 +25,7 @@
 
 #include "app/command_line_opts.h"
 #include "app/module_load.h"
+#include "app/help_string.h"
 
 typedef struct {
     bool debug_print;
@@ -114,10 +115,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     type_check(&abs, env, &arena, &pi_point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-        doc = pretty_type(toplevel_type(abs), &arena);
-        write_doc(doc, cout);
-        write_string(mv_string("\n"), cout);
+        PiType* ty = toplevel_type(abs);
+        if (ty) {
+            write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
+            doc = pretty_type(ty, &arena);
+            write_doc(doc, cout);
+            write_string(mv_string("\n"), cout);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -248,10 +252,15 @@ int main(int argc, char** argv) {
         delete_istream(sin, stdalloc);
         break;
     }
-    case CInvalid:
+    case CHelp: {
+        write_help_string(cout);
+        break;
+    }
+    case CInvalid: {
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
         break;
+    }
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
         write_string(mv_string("\n"), cout);

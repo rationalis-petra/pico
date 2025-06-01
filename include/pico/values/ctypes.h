@@ -38,14 +38,8 @@ typedef enum {
 
 typedef struct {
     // Padding is to ensure that the implementation matches the Relic types (where enums are 64 bit)
-    union {
-        CIntType prim;
-        uint64_t pad_1;
-    };
-    union {
-        CSigned is_signed;
-        uint64_t pad_2;
-    };
+    uint64_t prim;
+    uint64_t is_signed;
 } CPrimInt;
 
 typedef struct {
@@ -117,12 +111,14 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 CType mk_struct_ctype(Allocator* a, size_t nfields, ...);
-
+ 
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
 CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 
 // Sample usage: mk_union_type(a, 3, )
 CType mk_union_ctype(Allocator* a, size_t nfields, ...);
+
+CType mk_string_ctype(Allocator* a);
 
 void init_ctypes();
 

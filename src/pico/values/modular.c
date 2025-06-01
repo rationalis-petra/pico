@@ -67,7 +67,7 @@ Package* mk_package(Name name, Allocator* a) {
     // Setup for root module;
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("root-for-?")),
-        .imports = (Imports) {.clauses = mk_import_clause_array(0, a),},
+        .imports = (Imports) {.clauses = mk_import_clause_array(8, a),},
         .exports = (Exports) {
             .export_all = true,
             .clauses = mk_export_clause_array(0, a),
@@ -87,6 +87,10 @@ void delete_package(Package* package) {
 
 Result add_module(Symbol symbol, Module* module, Package* package) {
     return add_module_def(package->root_module, symbol, module); 
+}
+
+void add_import_clause(ImportClause clause, Module *module) {
+    push_import_clause(clause, &module->header.imports.clauses);
 }
 
 Module* get_module(Symbol symbol, Package* package) {

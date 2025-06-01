@@ -33,6 +33,7 @@ typedef enum {
     SLitTypedFloating,
     SLitString,
     SLitBool,
+    SLitUnit,
     SVariable,
     SAbsVariable,
 
@@ -389,6 +390,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 typedef enum {
     TLDef,
+    TLOpen,
     TLExpr,
 } TopLevel_t;
 
@@ -398,9 +400,15 @@ typedef struct {
 } Definition;
 
 typedef struct {
+    Range range;
+    SymbolArray syms;
+} OpenClause;
+
+typedef struct {
     TopLevel_t type;
     union {
         Definition def;
+        OpenClause open;
         Syntax* expr;
     };
 } TopLevel;

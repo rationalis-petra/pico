@@ -360,11 +360,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     switch (former) {
     case FDefine:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_string("'Define' not supported as inner-expression term former.");
+        err.message = mv_string("'Define' (def) not supported as inner-expression term former.");
         throw_pi_error(point, err);
     case FDeclare:
         err.range = raw.branch.nodes.data[0].range;
         err.message = mv_string("'Declare' not supported as inner-expression term former.");
+        throw_pi_error(point, err);
+    case FOpen:
+        err.range = raw.branch.nodes.data[0].range;
+        err.message = mv_string("'Open' (open) not supported as inner-expression term former.");
         throw_pi_error(point, err);
     case FProcedure: {
         if (raw.branch.nodes.len < 3) {
@@ -396,7 +400,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
 
         // TODO (BUG): shadow the arguments!
-        SymbolArray to_shadow = mk_symbol_array(8, a);
+        SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
+        for (size_t i = 0; i < arguments.len; i++) {
+            push_symbol(arguments.data[i].key, &to_shadow);
+        }
         shadow_vars(to_shadow, env);
 
         RawTree* raw_term;
@@ -486,6 +493,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             }
             Symbol lit = msym.atom.symbol;
 
+            if (symbol_eq(lit, string_to_symbol(mv_string("unit")))) {
+                Syntax* res = mem_alloc(sizeof(Syntax), a);
+                *res = (Syntax) {.type = SLitUnit, .ptype = NULL, .range = raw.range, .boolean = true,};
+                return res;
+            }
             if (symbol_eq(lit, string_to_symbol(mv_string("true")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
                 *res = (Syntax) {.type = SLitBool, .ptype = NULL, .range = raw.range, .boolean = true,};
@@ -1975,6 +1987,32 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
             .def.value = term,
         };
 
+        break;
+    }
+    case FOpen: {
+        if (raw.branch.nodes.len < 2) {
+            err.range = raw.range;
+            err.message = mk_string("Open expect at least 2 terms", a);
+            throw_pi_error(point, err);
+        }
+
+        SymbolArray syms = mk_symbol_array(raw.branch.nodes.len - 1, a);
+        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+            if (!is_symbol(&raw.branch.nodes.data[1])) {
+                err.range = raw.branch.nodes.data[1].range;
+                err.message = mk_string("All arguments to open should be a symbol", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol sym = raw.branch.nodes.data[i].atom.symbol;
+            push_symbol(sym, &syms);
+        }
+
+        res = (TopLevel) {
+            .type = TLOpen,
+            .open.range = raw.range,
+            .open.syms = syms,
+        };
         break;
     }
     default:

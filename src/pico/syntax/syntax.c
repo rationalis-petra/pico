@@ -50,6 +50,10 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         break;
     }
+    case SLitUnit: {
+        out = mk_str_doc(mv_string(":unit"), a);
+        break;
+    }
     case SLitString: {
         Document* delimiter = mk_str_doc(mv_string("\""), a);
         PtrArray nodes = mk_ptr_array(3, a);
@@ -404,12 +408,20 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(pretty_syntax(syntax->labels.entry, a), &nodes);
 
         for (size_t i = 0; i < syntax->labels.terms.len; i++) {
-            PtrArray label_nodes = mk_ptr_array(4, a);
+            PtrArray label_nodes = mk_ptr_array(5, a);
             SymPtrACell cell = syntax->labels.terms.data[i];
+            SynLabelBranch* branch = cell.val;
+
+            PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
+            for (size_t i = 0; i < branch->args.len; i++) {
+                Document* arg = mk_str_doc(*symbol_to_string(branch->args.data[i].key), a);
+                push_ptr(arg, &arg_nodes);
+            }
 
             push_ptr(mk_str_doc(mv_string("["), a), &label_nodes);
             push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &label_nodes);
-            push_ptr(pretty_syntax(cell.val, a), &label_nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &label_nodes);
+            push_ptr(pretty_syntax(branch->body, a), &label_nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &label_nodes);
 
             push_ptr(mv_sep_doc(label_nodes, a), &nodes);
@@ -700,6 +712,14 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     case TLDef:
         out = pretty_def(&toplevel->def, a);
         break;
+    case TLOpen: {
+        PtrArray docs = mk_ptr_array(toplevel->open.syms.len, a);
+        for (size_t i = 0; i < toplevel->open.syms.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(toplevel->open.syms.data[i]), a), &docs);
+        }
+        out = mk_paren_doc("(open ", ")", mv_sep_doc(docs, a), a);
+        break;
+    }
     case TLExpr:
         out = pretty_syntax(toplevel->expr, a);
         break;
@@ -712,6 +732,9 @@ PiType* toplevel_type(TopLevel top) {
     switch (top.type) {
     case TLExpr:
         out = top.expr->ptype;
+        break;
+    case TLOpen:
+        out = NULL;
         break;
     case TLDef:
         out = top.def.value->ptype;

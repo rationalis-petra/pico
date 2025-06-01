@@ -157,8 +157,8 @@ In this way, `go-to` is like a function call which never returns. Below, you can
 see labels being used 
 
 ```clojure
+;; A simple loop that counts from 1 to 10
 user > (def print-to proc [n]
-  ;; A simple loop that counts from 1 to n
   (labels (go-to loop 1)
     [loop [i] seq
       (print (u64.to-string i))
