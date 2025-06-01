@@ -66,20 +66,16 @@ SymbolResult wrap_dynlib_sym(DynLib* lib, String symbol) {
 void build_dynlib_open_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
     // DynLibResult
     CType dynlib_result = mk_struct_ctype(
         a, 2, "tag",
         mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
-                       "error_message", string_ctype,
+                       "error_message", mk_string_ctype(a),
                        "dynlib", mk_voidptr_ctype(a)));
 
     // Proc type
-    CType fn_ctype = mk_fn_ctype(a, 1, "path", copy_c_type(string_ctype, a), dynlib_result);
+    CType fn_ctype = mk_fn_ctype(a, 1, "path", mk_string_ctype(a), dynlib_result);
 
     convert_c_fn(wrap_dynlib_open, &fn_ctype, type, ass, a, point); 
 
@@ -98,22 +94,18 @@ void build_dynlib_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoin
 void build_dynlib_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // here, we use void pointers because we don't need the  
     // C API to check everything for us.
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
     // DynLibResult
     CType symbol_result = mk_struct_ctype(
         a, 2, "tag",
         mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), "data",
         mk_union_ctype(a, 2,
-                       "error_message", string_ctype,
+                       "error_message", mk_string_ctype(a),
                        "value", mk_voidptr_ctype(a)));
 
     // Proc type
     CType fn_ctype = mk_fn_ctype(a, 2,
                                  "lib", mk_voidptr_ctype(a),
-                                 "symbol", copy_c_type(string_ctype, a),
+                                 "symbol", mk_string_ctype(a),
                                  symbol_result);
 
     convert_c_fn(wrap_dynlib_sym, &fn_ctype, type, ass, a, point); 

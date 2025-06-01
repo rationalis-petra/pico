@@ -118,6 +118,8 @@ CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 // Sample usage: mk_union_type(a, 3, )
 CType mk_union_ctype(Allocator* a, size_t nfields, ...);
 
+CType mk_string_ctype(Allocator* a);
+
 void init_ctypes();
 
 #pragma GCC diagnostic push

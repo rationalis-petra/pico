@@ -195,33 +195,24 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 }
 
-void build_print_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
+void relic_print_fn(String s) {
+    fputs((char*)s.bytes, stdout);
+}
 
-#if ABI == SYSTEM_V_64
-    // puts (bytes = rdi)
-    build_binary_op (ass, Mov, reg(RDI, sz_64), rref8(RSP, 16, sz_64), a, point);
+void relic_println_fn(String s) {
+    puts((char*)s.bytes);
+}
 
-#elif ABI == WIN_64
-    // puts (bytes = rcx)
-    build_binary_op (ass, Mov, reg(RCX, sz_64), rref8(RSP, 16, sz_64), a, point);
+void build_print_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
+    convert_c_fn(relic_print_fn, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
 
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
-#else
-#error "Unknown calling convention"
-#endif
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&puts), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
-
-    // Store RSI, pop args & return
-    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(16), a, point);
-    build_unary_op(ass, Push, reg(RSI, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+void build_println_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
+    convert_c_fn(relic_println_fn, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
 }
 
 // C implementation (called from pico!)
@@ -297,17 +288,13 @@ Result run_script_c_fun(String filename) {
 
 void build_run_script_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
     // TODO: this does not accurately represent the result type!
     CType result_ctype = mk_struct_ctype(a, 2,
                                          "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "error_message", copy_c_type(string_ctype, a));
+                                         "error_message", copy_c_type(mk_string_ctype(a), a));
 
 
-    CType fn_ctype = mk_fn_ctype(a, 1, "filename", string_ctype, result_ctype);
+    CType fn_ctype = mk_fn_ctype(a, 1, "filename", mk_string_ctype(a), result_ctype);
 
     convert_c_fn(run_script_c_fun, &fn_ctype, type, ass, a, point); 
 }
@@ -416,14 +403,21 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
 
     // print : Proc [String] Unit
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_print_fun(ass, a, &point);
+    build_print_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("print"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // print : Proc [String] Unit
+    build_println_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("print-ln"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // load-module : Proc [String] Unit
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
     build_load_module_fun(ass, a, &point);
     sym = string_to_symbol(mv_string("load-module"));

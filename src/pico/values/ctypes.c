@@ -579,6 +579,12 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
     };
 }
 
+CType mk_string_ctype(Allocator *a) {
+    return mk_struct_ctype(a, 2,
+                    "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                    "bytes", mk_voidptr_ctype(a));
+}
+
 CType c_size_type;
 CType c_void;
 void init_ctypes() {

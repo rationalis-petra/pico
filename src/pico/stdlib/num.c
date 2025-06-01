@@ -163,12 +163,9 @@ void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* 
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
     }
 
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
     CType c_type = mk_fn_ctype(a, 1,
                                "num", mk_primint_ctype(cint),
-                               string_ctype);
+                               mk_string_ctype(a));
 
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 

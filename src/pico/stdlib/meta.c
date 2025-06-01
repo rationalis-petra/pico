@@ -7,45 +7,32 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
 
+
+CType mk_symbol_ctype(Allocator* a) {
+    return mk_struct_ctype(a, 2,
+                           "name", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "did", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+}
+
 void build_mk_name_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
     CType name_ctype = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
 
-    CType fn_ctype = mk_fn_ctype(a, 1, "name", string_ctype, name_ctype);
+    CType fn_ctype = mk_fn_ctype(a, 1, "name", mk_string_ctype(a), name_ctype);
 
     convert_c_fn(string_to_name, &fn_ctype, type, ass, a, point); 
 }
 
 void build_mk_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
-    CType symbol_ctype = mk_struct_ctype(a, 2,
-                                         "name", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "did", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-
-    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, symbol_ctype);
+    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", mk_string_ctype(a), mk_symbol_ctype(a));
 
     convert_c_fn(string_to_symbol, &fn_ctype, type, ass, a, point); 
 }
 
 void build_mk_unique_symbol_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType string_ctype = mk_struct_ctype(a, 2,
-                                         "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "bytes", mk_voidptr_ctype(a));
-
-    CType symbol_ctype = mk_struct_ctype(a, 2,
-                                         "name", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "did", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-
-    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", string_ctype, symbol_ctype);
+    CType fn_ctype = mk_fn_ctype(a, 1, "symbol", mk_string_ctype(a), mk_symbol_ctype(a));
 
     convert_c_fn(string_to_unique_symbol, &fn_ctype, type, ass, a, point); 
 }
