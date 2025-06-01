@@ -1760,6 +1760,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FDescribe:
+        if (raw.branch.nodes.len != 2) {
+            err.range = raw.range;
+            err.message = mk_string("describe term former requires at least 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+        RawTree term = raw.branch.nodes.data[1];
+        if (is_symbol(&term)) {
+        } else {
+            err.range = raw.range;
+            err.message = mk_string("describe term former requires at least 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
     }
     panic(mv_string("Invalid termformer provided to mk_term."));
 }

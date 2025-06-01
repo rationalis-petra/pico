@@ -98,6 +98,7 @@ typedef enum {
 
     // Meta/reflection
     STypeOf,
+    SDescribe,
 } Syntax_t;
 
 
@@ -317,7 +318,6 @@ typedef struct {
     Syntax* body;
 } SynConvert;
 
-
 struct Syntax {
     Syntax_t type;
     union {
@@ -376,6 +376,7 @@ struct Syntax {
         SynConvert convert;
 
         Syntax* type_of;
+        Symbol to_describe;
     };
     PiType* ptype;
     Range range;

@@ -387,6 +387,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FTypeOf:
         out = mk_str_doc(mv_string("::type-of"), a);
         break;
+    case FDescribe:
+        out = mk_str_doc(mv_string("::describe"), a);
+        break;
     }
 
     if (out == NULL) {

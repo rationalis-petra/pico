@@ -41,7 +41,7 @@ typedef struct {
 typedef struct  {
     IStream* inner;
     String buffer;
-    size_t used_buffer;
+    size_t total_bufsize;
     Allocator* gpa;
 } CapturingIStream;
 
@@ -57,9 +57,10 @@ struct IStream {
 
 IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
     IStream* outer_stream = mem_alloc(sizeof(IStream), a);
+    const size_t initial_memsize =  1024 * sizeof(uint8_t);
     String buffer = (String) {
-        .memsize = 1024,
-        .bytes = mem_alloc(1024 * sizeof(uint8_t), a),
+        .memsize = 1,
+        .bytes = mem_alloc(initial_memsize, a),
     };
 
     *outer_stream = (IStream) {
@@ -67,10 +68,10 @@ IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
         .bytecount = stream->bytecount,
         .impl.capturing_istream.inner = stream,
         .impl.capturing_istream.buffer = buffer,
-        .impl.capturing_istream.used_buffer = 0,
+        .impl.capturing_istream.total_bufsize = initial_memsize,
         .impl.capturing_istream.gpa = a,
     };
-    memset(buffer.bytes, 0, buffer.memsize);
+    memset(buffer.bytes, 0, initial_memsize);
     return outer_stream;
 }
 
@@ -292,19 +293,20 @@ StreamResult next(IStream* stream, uint32_t* out) {
             uint8_t size;
             encode_point_utf8(bytes, &size, *out);
             CapturingIStream* cis = &stream->impl.capturing_istream;
-            if (cis->used_buffer + size >= cis->buffer.memsize) {
-                String new_buffer = (String) {.memsize = 2 * cis->buffer.memsize * sizeof(uint8_t)};
+            if (cis->buffer.memsize + size >= cis->total_bufsize) {
+                String new_buffer = (String) {.memsize = cis->buffer.memsize + size};
                 new_buffer.bytes = mem_alloc(new_buffer.memsize, cis->gpa);
-                memcpy(new_buffer.bytes, cis->buffer.bytes, cis->used_buffer);
-                memset(new_buffer.bytes + cis->used_buffer, 0, new_buffer.memsize - cis->used_buffer);
+                memcpy(new_buffer.bytes, cis->buffer.bytes, cis->buffer.memsize);
+                memset(new_buffer.bytes + cis->buffer.memsize, 0, new_buffer.memsize - cis->buffer.memsize);
                 mem_free(cis->buffer.bytes, cis->gpa);
                 cis->buffer = new_buffer;
+                cis->total_bufsize = 2 * cis->buffer.memsize * sizeof(uint8_t);
             }
-            uint8_t *base = cis->buffer.bytes + cis->used_buffer;
+            uint8_t *base = cis->buffer.bytes + (cis->buffer.memsize - 1);
             for (size_t i = 0; i < size; i++) {
                 base[i] = bytes[i];
             }
-            cis->used_buffer += size;
+            cis->buffer.memsize += size;
         }
         return res;
         break;

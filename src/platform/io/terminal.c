@@ -31,10 +31,10 @@ Colour colour(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void start_coloured_text(Colour colour) {
-  if (colour_len == 128) {
+  if (++colour_len >= 128) {
       panic(mv_string("Don't support nesting of > 128 colours"));
   } else {
-      colours[colour_len++] = colour;
+      colours[colour_len] = colour;
       printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
   }
 }
@@ -44,6 +44,9 @@ void end_coloured_text() {
     colour_len--;
     if (colour_len == 0) {
         printf("\x1b[39m");
+    } else {
+        Colour colour = colours[colour_len];
+        printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
     }
 }
 

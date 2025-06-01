@@ -10,6 +10,7 @@ typedef enum {
     CScript,
     CEval,
     CHelp,
+    CVersion,
     CInvalid,
 } SubCommand_t;
 

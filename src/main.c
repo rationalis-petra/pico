@@ -252,15 +252,16 @@ int main(int argc, char** argv) {
         delete_istream(sin, stdalloc);
         break;
     }
-    case CHelp: {
+    case CHelp:
         write_help_string(cout);
         break;
-    }
-    case CInvalid: {
+    case CVersion:
+        write_string(mv_string("Pico Relic compiler - Version 0.0.3\n"), cout);
+        break;
+    case CInvalid:
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
         break;
-    }
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
         write_string(mv_string("\n"), cout);
