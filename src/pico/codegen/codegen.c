@@ -101,6 +101,20 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     generate(*syn, a_env, target, &links, a, point);
     delete_address_env(a_env, a);
 
+    // The data chunk may be moved around during code-generation via 'realloc'
+    // if it needs to grow. Thus, we backlink data here, to be safe.
+    // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
+    for (size_t i = 0; i < links.links.ed_links.len; i++) {
+        LinkMetaData link = links.links.ed_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+    for (size_t i = 0; i < links.links.cd_links.len; i++) {
+        LinkMetaData link = links.links.cd_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+
     return links.links;
 }
 
@@ -1780,6 +1794,20 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
     };
 
     generate(*syn, env, gen_target, links, a, point);
+    
+    // The data chunk may be moved around during code-generation via 'realloc'
+    // if it needs to grow. Thus, we backlink data here, to be safe.
+    // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
+    for (size_t i = 0; i < links->links.ed_links.len; i++) {
+        LinkMetaData link = links->links.ed_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+    for (size_t i = 0; i < links->links.cd_links.len; i++) {
+        LinkMetaData link = links->links.cd_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
 
     void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), a, &cleanup_point);
 
