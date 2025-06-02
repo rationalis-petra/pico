@@ -720,21 +720,23 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TNamed:  {
         if (show_named) {
-            PtrArray nodes = mk_ptr_array(6, a);
-            push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
+            PtrArray nodes = mk_ptr_array(2, a);
+            PtrArray name_group = mk_ptr_array(5, a);
+            push_ptr(mk_str_doc(mv_string("Named" ), a), &name_group);
 
             push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
-                     &nodes);
+                     &name_group);
 
             if (type->named.args) {
                 PtrArray args = mk_ptr_array(type->named.args->len, a);
                 for (size_t i = 0; i < type->named.args->len; i++) {
                     push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
-                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &name_group);
             }
 
             ctx.should_wrap = false;
+            push_ptr(mv_group_doc(mv_sep_doc(name_group, a), a), &nodes);
             push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.type, ctx, a), a), &nodes);
             out = mv_sep_doc(nodes, a);
             if (should_wrap) {
@@ -874,14 +876,16 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TFam: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("Family" ), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+        PtrArray head_group = mk_ptr_array(type->binder.vars.len + 1, a);
+        push_ptr(mk_str_doc(mv_string("Family" ), a), &head_group);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_paren_doc("[", "]", mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &head_group);
         }
-        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
+        push_ptr(mv_sep_doc(head_group, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 
-        out = mv_sep_doc(nodes, a);
+        out = mv_grouped_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }

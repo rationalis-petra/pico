@@ -505,11 +505,12 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         e = get_def(sym, module);
         ptr_type = e->value;
 
-        // Allocator Type 
-        PiType* alloc_type = mk_struct_type(a, 3,
-                                            "alloc", mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                            "realloc", mk_proc_type(a, 2, mk_prim_type(a, Address), mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                            "free", mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit)));
+        // Allocator Type
+        PiType *alloc_type = mk_named_type(a, "Allocator",
+                                           mk_struct_type(a, 3,
+                                                          "alloc", mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
+                                                          "realloc", mk_proc_type(a, 2, mk_prim_type(a, Address), mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
+                                                          "free", mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit))));
         type_data = alloc_type;
         sym = string_to_symbol(mv_string("Allocator"));
         type.kind.nargs = 0;

@@ -89,7 +89,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     if (opts.debug_print) {
         doc = pretty_rawtree(res.result, &arena);
         write_string(mv_string("Pretty printing raw syntax\n"), cout);
-        write_doc(doc, 80, cout);
+        write_doc(doc, 120, cout);
         write_string(mv_string("\n"), cout);
     }
 
@@ -102,7 +102,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     if (opts.debug_print) {
         write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
         doc = pretty_toplevel(&abs, &arena);
-        write_doc(doc, 80, cout);
+        write_doc(doc, 120, cout);
         write_string(mv_string("\n"), cout);
     }
 
@@ -119,7 +119,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         if (ty) {
             write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
             doc = pretty_type(ty, &arena);
-            write_doc(doc, 80, cout);
+            write_doc(doc, 120, cout);
             write_string(mv_string("\n"), cout);
         }
     }
@@ -134,10 +134,10 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
         write_string(mv_string("Pretty Printing Binary:\n"), cout);
         write_string(mv_string("Execute Assembly:\n"), cout);
         doc = pretty_assembler(gen_target.target, &arena);
-        write_doc(doc, 80, cout);
+        write_doc(doc, 120, cout);
         write_string(mv_string("\nCode Segment:\n"), cout);
         doc = pretty_assembler(gen_target.code_aux, &arena);
-        write_doc(doc, 80, cout);
+        write_doc(doc, 120, cout);
         write_string(mv_string("\nData Segment:\n"), cout);
         write_string(string_from_ASCII(*gen_target.data_aux, &arena), cout);
     }
@@ -153,8 +153,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     if (opts.debug_print || opts.interactive) {
         doc = pretty_res(call_res, &arena);
-
-        write_doc(doc, 80, cout);
+        write_doc(doc, 140, cout);
         write_string(mv_string("\n"), cout);
     }
 
