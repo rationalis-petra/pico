@@ -30,16 +30,6 @@ PiType* get_pair_type() {
     return pair_type;
 }
 
-static PiType* symbol_type;
-PiType* get_symbol_type() {
-    return symbol_type;
-}
-
-static PiType* syntax_type;
-PiType* get_syntax_type() {
-    return syntax_type;
-}
-
 PiType build_store_fn_ty(Allocator* a) {
     PiType* proc_ty  = mk_proc_type(a, 2, mk_prim_type(a, Address), mk_var_type(a, "A"), mk_prim_type(a, Unit));
 
@@ -606,56 +596,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         e = get_def(sym, module);
         pair_type = e->value;
 
-        type.kind.nargs = 0;
-
-        symbol_type = mk_named_type(a, "Symbol",
-                                  mk_struct_type(a, 2,
-                                                 "name", mk_prim_type(a, UInt_64), 
-                                                 "did", mk_prim_type(a, UInt_64)));
-        type_data = symbol_type;
-        sym = string_to_symbol(mv_string("Symbol"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_data, a);
-
-        e = get_def(sym, module);
-        symbol_type = e->value;
-
-        PiType* atom_type = mk_enum_type(a, 4,
-                                        "bool", 1, mk_prim_type(a, Bool),
-                                        "integral", 1, mk_prim_type(a, Int_64),
-                                        "symbol", 1,  copy_pi_type_p(symbol_type, a),
-                                        "string", 1, mk_string_type(a));
-        type_data = atom_type;
-        sym = string_to_symbol(mv_string("Atom"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        PiType* hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
-        type_data = hint_type;
-        sym = string_to_symbol(mv_string("Hint"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        PiType* range_type = mk_struct_type(a, 2, "start", mk_prim_type(a, UInt_64), "end", mk_prim_type(a, UInt_64));
-        type_data = range_type;
-        sym = string_to_symbol(mv_string("Range"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        PiType* syn_name_ty = mk_var_type(a, "Syntax");
-        PiType* syn_array = mk_app_type(a, array_type, syn_name_ty);
-        delete_pi_type_p(syn_name_ty, a);
-
-        type_val = mk_named_type(a, "Syntax",
-                                 mk_enum_type(a, 2,
-                                              "atom", 2, range_type, atom_type,
-                                              "node", 3, copy_pi_type_p(range_type, a), hint_type, syn_array));
-
-        type_data = type_val;
-        sym = string_to_symbol(mv_string("Syntax"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-        e = get_def(sym, module);
-        syntax_type = e->value;
-
-        delete_pi_type_p(type_val, a);
-        //delete_pi_type_p(addr_array, a);
     }
 
     // Unit value

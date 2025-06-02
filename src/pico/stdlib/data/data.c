@@ -28,7 +28,7 @@ void add_data_module(Assembler* ass, Package* base, Allocator* a) {
     add_either_module(ass, module, a);
     add_maybe_module(ass, module, a);
     add_pair_module(ass, module, a);
-    add_ptr_module(ass, module, a);
+    add_ptr_module(module, a);
 
     add_module(string_to_symbol(mv_string("data")), module, base);
 }

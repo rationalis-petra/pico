@@ -3,6 +3,6 @@
 
 #include "pico/values/modular.h"
 
-void add_ptr_module(Assembler* ass, Module* base, Allocator* a);
+void add_ptr_module(Module* base, Allocator* a);
 
 #endif

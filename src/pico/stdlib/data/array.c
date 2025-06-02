@@ -11,7 +11,7 @@
 
 void add_array_module(Module *data, Allocator *a) {
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(2, a),
+        .clauses = mk_import_clause_array(3, a),
     };
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");

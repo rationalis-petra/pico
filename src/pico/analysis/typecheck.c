@@ -10,13 +10,14 @@
 #include "pico/binding/type_env.h"
 #include "pico/analysis/unify.h"
 #include "pico/analysis/typecheck.h"
-#include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
-#include "pico/stdlib/foreign.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/eval/call.h"
+#include "pico/stdlib/core.h"
+#include "pico/stdlib/meta.h"
+#include "pico/stdlib/extra.h"
+#include "pico/stdlib/foreign.h"
 
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);

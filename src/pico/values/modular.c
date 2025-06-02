@@ -163,11 +163,7 @@ void delete_module(Module* module) {
         delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
-    for (size_t i = 0; i < module->header.imports.clauses.len; i++) {
-        sdelete_symbol_array(module->header.imports.clauses.data[i].path);
-    }
-    sdelete_import_clause_array(module->header.imports.clauses);
-    sdelete_export_clause_array(module->header.exports.clauses);
+    delete_module_header(module->header);
 
     release_executable_allocator(module->executable_allocator);
     mem_free(module, module->allocator);

@@ -152,7 +152,8 @@ void delete_istream(IStream* stream, Allocator* a) {
             fclose(stream->impl.file_istream.file_ptr);
         }
         mem_free(stream, a);
-    } break;
+        break;
+    } 
     case IStreamString: {
         if (stream->impl.string_istream.owns) {
             delete_string(stream->impl.string_istream.string, a);
