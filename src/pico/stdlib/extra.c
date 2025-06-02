@@ -344,7 +344,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
                                              "realloc", mk_prim_type(a, Address),
                                              "free", mk_prim_type(a, Address),
                                              "ctx", mk_prim_type(a, Address)));
-    sym = string_to_symbol(mv_string("allocator"));
+    sym = string_to_symbol(mv_string("perm-allocator"));
     add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
 
     std_current_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
@@ -353,7 +353,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
                                              "realloc", mk_prim_type(a, Address),
                                              "free", mk_prim_type(a, Address),
                                              "ctx", mk_prim_type(a, Address)));
-    sym = string_to_symbol(mv_string("allocator"));
+    sym = string_to_symbol(mv_string("current-allocator"));
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
     void* nul = NULL;
