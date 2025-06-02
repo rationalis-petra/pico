@@ -1282,6 +1282,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         TypeEntry te = type_env_lookup(untyped->to_describe, env);
         if (te.type == TENotFound) {
             String* sym = symbol_to_string(untyped->to_describe);
+            err.range = untyped->range;
             err.message = string_cat(mv_string("Couldn't find value of variable to describe: "), *sym, a);
             throw_pi_error(point, err);
         }

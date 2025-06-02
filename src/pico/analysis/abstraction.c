@@ -1771,6 +1771,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             Syntax* res = mem_alloc(sizeof(Syntax), a);
             *res = (Syntax) {
                 .type = SDescribe,
+                .ptype = NULL,
+                .range = raw.range,
                 .to_describe = term.atom.symbol,
             };
             return res;

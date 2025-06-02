@@ -1686,7 +1686,45 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         if (entry.success == Ok) {
           if (entry.is_module) {
-              immediate = mv_string("Not yet implemented: describing a module.\n");
+              SymbolArray syms = get_exported_symbols(entry.value, a);
+              PtrArray lines = mk_ptr_array(syms.len + 8, a);
+              {
+                  PtrArray moduledesc = mk_ptr_array(2, a);
+                  String* module_name = get_name(entry.value);
+                  if (module_name) {
+                      push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
+                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
+                  } else {
+                      push_ptr(mk_str_doc(mv_string("Anonymous Module"), a), &moduledesc);
+                  }
+                  push_ptr(mv_sep_doc(moduledesc, a), &lines);
+              }
+              push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
+
+              for (size_t i = 0; i < syms.len; i++) {
+                  Symbol symbol = syms.data[i];
+                  ModuleEntry* mentry = get_def(symbol, entry.value);
+                  if (mentry) {
+                      PtrArray desc = mk_ptr_array(3, a);
+                      if (mentry->is_module) {
+                          push_ptr(mk_str_doc(mv_string("Module"), a), &desc);
+                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                      } else {
+                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                          push_ptr(mk_str_doc(mv_string(":"), a), &desc);
+                          push_ptr(pretty_type(&mentry->type, a), &desc);
+                      }
+                      push_ptr(mv_sep_doc(desc, a), &lines);
+                  } else {
+                      // TODO: report error - exported symbol not in module?
+                  }
+              }
+
+              push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────\n"), a), &lines);
+
+              Document* doc = mv_vsep_doc(lines, a);
+              immediate = doc_to_str(doc, a);
+
           } else {
               PtrArray lines = mk_ptr_array(8, a);
               {
@@ -1695,7 +1733,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                   push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe), a), &header);
                   push_ptr(mv_sep_doc(header, a), &lines);
               }
-              push_ptr(mk_str_doc(mv_string("──────────────────────"), a), &lines);
+              push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
                   String* module_name = get_name(entry.source);
@@ -1721,7 +1759,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
               }
 
               // end line
-              push_ptr(mk_str_doc(mv_string("──────────────────────\n"), a), &lines);
+              push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────\n"), a), &lines);
 
               Document* doc = mv_vsep_doc(lines, a);
               immediate = doc_to_str(doc, a);

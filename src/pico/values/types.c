@@ -556,7 +556,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     return out;
 }
 
-Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
+typedef struct {
+    bool is_toplevel;
+} PrettyContext;
+
+Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
+    bool is_toplevel = ctx.is_toplevel;
+    ctx.is_toplevel = false;
+
     Document* out = NULL;
     switch (type->sort) {
     case TPrim:
@@ -614,18 +621,20 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         if (type->proc.implicits.len != 0) {
             PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
-                push_ptr(pretty_type_internal(type->proc.implicits.data[i], show_named, a), &arg_nodes);
+                push_ptr(pretty_type_internal(type->proc.implicits.data[i], ctx, a), &arg_nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(pretty_type_internal(type->proc.args.data[i], show_named, a), &arg_nodes);
+            push_ptr(pretty_type_internal(type->proc.args.data[i], ctx, a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-        push_ptr(pretty_type_internal(type->proc.ret, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->proc.ret, ctx, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TUVar:
@@ -643,7 +652,7 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, show_named, a);
+            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -651,7 +660,9 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
             push_ptr(fd_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TEnum: {
@@ -664,7 +675,7 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
             for (size_t j = 0; j < types->len; j++) {
-                Document* arg = pretty_type_internal((PiType*)types->data[j], show_named, a);
+                Document* arg = pretty_type_internal((PiType*)types->data[j], ctx, a);
                 push_ptr(arg, &ty_nodes);
             }
             Document* ptypes = mv_sep_doc(ty_nodes, a);
@@ -675,15 +686,18 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
             push_ptr(var_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TReset: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("Reset"), a), &nodes);
-        push_ptr(pretty_type_internal(type->reset.in, show_named, a), &nodes);
-        push_ptr(pretty_type_internal(type->reset.out, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->reset.in, ctx, a), &nodes);
+        push_ptr(pretty_type_internal(type->reset.out, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TResumeMark: {
@@ -693,12 +707,13 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
-        push_ptr(pretty_type_internal(type->dynamic, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->dynamic, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TNamed:  {
-        if (show_named) {
+        if (is_toplevel) {
             PtrArray nodes = mk_ptr_array(6, a);
             push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
 
@@ -708,12 +723,12 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             if (type->named.args) {
                 PtrArray args = mk_ptr_array(type->named.args->len, a);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
                 push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
             }
 
-            push_ptr(pretty_type_internal(type->named.type, false, a), &nodes);
+            push_ptr(pretty_type_internal(type->named.type, ctx, a), &nodes);
             out = mv_sep_doc(nodes, a);
         } else {
             Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
@@ -722,12 +737,15 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
                 PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
                 push_ptr(base, &args);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
                 out = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
             } else {
                 out = base;
             }
+        }
+        if (!is_toplevel) {
+            out = mk_paren_doc("(", ")", out, a);
         }
         break;
     }
@@ -742,13 +760,14 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
             for (size_t i = 0; i < type->distinct.args->len; i++) {
-                push_ptr(pretty_type_internal(type->distinct.args->data[i], show_named, a), &args);
+                push_ptr(pretty_type_internal(type->distinct.args->data[i], ctx, a), &args);
             }
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
-        push_ptr(pretty_type_internal(type->distinct.type, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTrait:  {
@@ -769,7 +788,7 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->trait.fields.data[i].val, show_named, a);
+            Document* arg = pretty_type_internal(type->trait.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -777,7 +796,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
             push_ptr(fd_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTraitInstance: {
@@ -788,7 +808,7 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, show_named, a);
+            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -797,7 +817,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(fd_doc, &nodes);
         }
 
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCType: {
@@ -815,9 +836,10 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TExists: {
@@ -827,18 +849,20 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCApp: {
         PtrArray nodes = mk_ptr_array(type->app.args.len + 1, a);
-        push_ptr(pretty_type_internal(type->app.fam, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->app.fam, ctx, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type_internal(type->app.args.data[i], show_named, a), &nodes);
+            push_ptr(pretty_type_internal(type->app.args.data[i], ctx, a), &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TFam: {
@@ -848,9 +872,10 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TKind: {
@@ -891,7 +916,10 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 }
 
 Document* pretty_type(PiType* type, Allocator* a) {
-    return pretty_type_internal(type, true, a);
+    PrettyContext ctx = (PrettyContext) {
+        .is_toplevel = true,
+    };
+    return pretty_type_internal(type, ctx, a);
 }
 
 size_t pi_size_align(size_t size, size_t align) {
@@ -1658,19 +1686,10 @@ PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
 }
 
 PiType* mk_string_type(Allocator* a) {
-    // Struct [.memsize U64] [.bytes Address]
-    PiType* memsize_type = mk_prim_type(a, UInt_64);
-    PiType* bytes_type = mk_prim_type(a, Address);
-
-    SymPtrAMap fields = mk_sym_ptr_amap(2, a);
-    sym_ptr_insert(string_to_symbol(mv_string("memsize")), memsize_type, &fields);
-    sym_ptr_insert(string_to_symbol(mv_string("bytes")), bytes_type, &fields);
-    
-    PiType* out = mem_alloc(sizeof(PiType), a);
-    *out = (PiType) {
-        .sort = TStruct,
-        .structure.fields = fields
-    };
-    return out;
+    // Named String Struct [.memsize U64] [.bytes Address]
+    return mk_named_type(a, "String",
+                         mk_struct_type(a, 2,
+                                        "memsize", mk_prim_type(a, UInt_64),
+                                        "bytes", mk_prim_type(a, Address)));
 }
 
