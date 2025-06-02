@@ -434,7 +434,7 @@ void write_impl(int char_literal, OStream* stream) {
     }
     case OStreamString: {
         // TODO (BUG): check char_literal < MAX_UINT8
-        fputc(char_literal, stream->impl.file_ostream.file_ptr);
+        push_u8(char_literal, &stream->impl.string_ostream.buffer);
         break;
     }
     }

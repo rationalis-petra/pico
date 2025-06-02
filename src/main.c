@@ -153,7 +153,7 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     if (opts.debug_print || opts.interactive) {
         doc = pretty_res(call_res, &arena);
-        write_doc(doc, 140, cout);
+        write_doc_formatted(doc, 140, get_formatted_stdout());
         write_string(mv_string("\n"), cout);
     }
 
@@ -252,7 +252,7 @@ int main(int argc, char** argv) {
         break;
     }
     case CHelp:
-        write_help_string(cout);
+        write_help_string(get_formatted_stdout());
         break;
     case CVersion:
         write_string(mv_string("Pico Relic compiler - Version 0.0.3\n"), cout);

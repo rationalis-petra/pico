@@ -13,7 +13,9 @@ void throw_pi_error(PiErrorPoint* point, PicoError err) {
 
 const size_t max_prev_line_numbers = 5;
 
-void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
+void display_error(PicoError error, IStream *is, OStream* os, Allocator* a) {
+    FormattedOStream* fos = mk_formatted_ostream(os, a);
+
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
@@ -43,7 +45,7 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
         }
         
         // Colour for "irrelevant" code
-        start_coloured_text(colour(150, 150, 150));
+        start_coloured_text(colour(150, 150, 150), fos);
         // Now, gather the past n lines
         if (line_number < max_prev_line_numbers) {
             for (size_t i = 0; i < line_number; i++) {
@@ -53,11 +55,11 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
                     : prev_line_starts.data[1 + i];
 
                 Document* doc = pretty_u64(i + 1, a);
-                write_doc(doc, 80, cout);
+                write_doc_formatted(doc, 80, fos);
                 delete_doc(doc, a);
-                write_string(mv_string(" | "), cout);
+                write_fstring(mv_string(" | "), fos);
                 String str = substring(line_start, next_line_start, *buffer, a);
-                write_string(str, cout);
+                write_fstring(str, fos);
                 delete_string(str, a);
             }
         }
@@ -69,46 +71,46 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
                     : prev_line_starts.data[(prev_line + 1 + i) % 5];
 
                 Document* doc = pretty_u64(line_number + 1 - (5 - i), a);
-                write_doc(doc, 80, cout);
+                write_doc_formatted(doc, 80, fos);
                 delete_doc(doc, a);
-                write_string(mv_string(" | "), cout);
+                write_fstring(mv_string(" | "), fos);
                 String str = substring(line_start, next_line_start, *buffer, a);
-                write_string(str, cout);
+                write_fstring(str, fos);
                 delete_string(str, a);
             }
         }
 
         Document* doc = pretty_u64(line_number + 1, a);
-        write_doc(doc, 80, cout);
+        write_doc_formatted(doc, 80, fos);
         delete_doc(doc, a);
-        write_string(mv_string(" | "), cout);
+        write_fstring(mv_string(" | "), fos);
 
         String s1 = substring(current_start, error.range.start, *buffer, a);
         // TODO (BUG) '+1' won't work with UTF-8!
         String bad_code = substring(error.range.start, error.range.end, *buffer, a);
         String s2 = substring(error.range.end, affected_line_end, *buffer, a);;
 
-        write_string(s1, cout);
+        write_fstring(s1, fos);
 
-        start_coloured_text(colour(208, 105, 30));
-        write_string(bad_code, cout);
-        end_coloured_text();
+        start_coloured_text(colour(208, 105, 30), fos);
+        write_fstring(bad_code, fos);
+        end_coloured_text(fos);
 
-        write_string(s2, cout);
+        write_fstring(s2, fos);
 
         delete_string(s1, a);
         delete_string(bad_code, a);
         delete_string(s2, a);
 
         // End of surrounding code
-        end_coloured_text();
+        end_coloured_text(fos);
 
-        write_string(mv_string("\n"), cout);
-        start_coloured_text(colour(200, 20, 20));
-        write_doc(error.message, 120, cout);
-        end_coloured_text();
+        write_fstring(mv_string("\n"), fos);
+        start_coloured_text(colour(200, 20, 20), fos);
+        write_doc_formatted(error.message, 120, fos);
+        end_coloured_text(fos);
     } else {
-        write_doc(error.message, 120, cout);
+        write_doc_formatted(error.message, 120, fos);
     }
-    write_string(mv_string("\n"), cout);
+    write_fstring(mv_string("\n"), fos);
 }

@@ -3,6 +3,7 @@
 
 #include "data/array.h"
 #include "data/string.h"
+#include "platform/io/terminal.h"
 
 
 /* The Document Interaface. */
@@ -18,7 +19,23 @@ typedef enum {
     // Utility/extra
     SepDocument,
     VSepDocument,
+
+    // Styling
+    StyledDocument,
 } DocumentType;
+
+typedef enum {
+    HasColour = 0x1,
+    HasBoldness = 0x2,
+    HasItalics = 0x4,
+    HasUnderline = 0x8,
+} StyleOptions;
+
+typedef struct {
+    StyleOptions options;
+    Colour colour;
+    FontBoldness boldnes;
+} DocStyle;
 
 typedef struct Document Document;
 
@@ -39,6 +56,11 @@ typedef struct {
     PtrArray* docs;
 } DocSeparated;
 
+typedef struct {
+    DocStyle style;
+    Document* inner;
+} DocStyled;
+
 struct Document {
     DocumentType type;
     DocRequirement requirement;
@@ -48,6 +70,7 @@ struct Document {
         DocNested nest;
         DocSeparated sep;
         PtrArray docs;
+        DocStyled styled;
     };
 };
 
@@ -70,6 +93,8 @@ Document* mk_sep_doc(const PtrArray docs, Allocator* a);
 Document* mv_vsep_doc(const PtrArray docs, Allocator* a);
 Document* mk_vsep_doc(const PtrArray docs, Allocator* a);
 
+Document* mv_style_doc(const DocStyle style, Document* inner, Allocator* a);
+
 // Smart constructors
 Document* mv_cstr_doc(const char* string, Allocator* a);
 Document* mk_cstr_doc(const char* string, Allocator* a);
@@ -78,5 +103,9 @@ Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Alloca
 
 /* The Document Destructor */
 void delete_doc(Document* Document, Allocator* a);
+
+// Styles
+static const DocStyle dstyle = (DocStyle){.options = 0};
+DocStyle scolour(Colour c, const DocStyle base);
 
 #endif

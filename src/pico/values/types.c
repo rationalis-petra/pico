@@ -567,60 +567,66 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     ctx.should_wrap = true;
     ctx.show_named = false;
 
+    DocStyle cstyle = scolour(colour(200, 100, 200), dstyle);
+    DocStyle vstyle = scolour(colour(208, 105, 30), dstyle);
+    DocStyle pstyle = scolour(colour(200, 20, 10), dstyle);
+    DocStyle fstyle = scolour(colour(255, 200, 0), dstyle);
+
     Document* out = NULL;
     switch (type->sort) {
     case TPrim:
         switch (type->prim) {
         case Int_64: 
-            out = mv_str_doc(mk_string("I64", a), a);
+            out = mk_cstr_doc("I64", a);
             break;
         case Int_32: 
-            out = mv_str_doc(mk_string("I32", a), a);
+            out = mk_cstr_doc("I32", a);
             break;
         case Int_16: 
-            out = mv_str_doc(mk_string("I16", a), a);
+            out = mk_cstr_doc("I16", a);
             break;
         case Int_8: 
-            out = mv_str_doc(mk_string("I8", a), a);
+            out = mk_cstr_doc("I8", a);
             break;
         case UInt_64: 
-            out = mv_str_doc(mk_string("U64", a), a);
+            out = mk_cstr_doc("U64", a);
             break;
         case UInt_32: 
-            out = mv_str_doc(mk_string("U32", a), a);
+            out = mk_cstr_doc("U32", a);
             break;
         case UInt_16: 
-            out = mv_str_doc(mk_string("U16", a), a);
+            out = mk_cstr_doc("U16", a);
             break;
         case UInt_8: 
-            out = mv_str_doc(mk_string("U8", a), a);
+            out = mk_cstr_doc("U8", a);
             break;
         case Float_32:
-            out = mv_str_doc(mk_string("F32", a), a);
+            out = mk_cstr_doc("F32", a);
             break;
         case Float_64: 
-            out = mv_str_doc(mk_string("F64", a), a);
+            out = mk_cstr_doc("F64", a);
             break;
         case Unit: 
-            out = mv_str_doc(mk_string("Unit", a), a);
+            out = mk_cstr_doc("Unit", a);
             break;
         case Bool: 
-            out = mv_str_doc(mk_string("Bool", a), a);
+            out = mk_cstr_doc("Bool", a);
             break;
         case Address: 
-            out = mv_str_doc(mk_string("Address", a), a);
+            out = mk_cstr_doc("Address", a);
             break;
         case TFormer: 
-            out = mv_str_doc(mk_string("Former", a), a);
+            out = mk_cstr_doc("Former", a);
             break;
         case TMacro: 
-            out = mv_str_doc(mk_string("Macro", a), a);
+            out = mk_cstr_doc("Macro", a);
             break;
         }
+        out = mv_style_doc(pstyle, out, a);
         break;
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &nodes);
         if (type->proc.implicits.len != 0) {
             PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
@@ -651,10 +657,10 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("Struct", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a), a);
             Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -670,10 +676,10 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TEnum: {
         PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
-        push_ptr(mv_str_doc((mk_string("Enum ", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum ", a)), a), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
@@ -722,9 +728,9 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         if (show_named) {
             PtrArray nodes = mk_ptr_array(2, a);
             PtrArray name_group = mk_ptr_array(5, a);
-            push_ptr(mk_str_doc(mv_string("Named" ), a), &name_group);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Named" ), a), a), &name_group);
 
-            push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a),
                      &name_group);
 
             if (type->named.args) {
@@ -743,7 +749,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 out = mk_paren_doc("(", ")", out, a);
             }
         } else {
-            Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
+            Document* base = mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a);
 
             if (type->named.args) {
                 PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
@@ -797,7 +803,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a), a);
             Document* arg = pretty_type_internal(type->trait.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -817,7 +823,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a), a);
             Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -836,7 +842,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TVar: {
-        out = mk_str_doc(*symbol_to_string(type->var), a);
+        out = mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->var), a), a);
         break;
     }
     case TAll: {
@@ -877,11 +883,13 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TFam: {
         PtrArray nodes = mk_ptr_array(2, a);
-        PtrArray head_group = mk_ptr_array(type->binder.vars.len + 1, a);
-        push_ptr(mk_str_doc(mv_string("Family" ), a), &head_group);
+        PtrArray head_group = mk_ptr_array(2, a);
+        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Family" ), a), a), &head_group);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_paren_doc("[", "]", mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &head_group);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &vars);
         }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_group);
         push_ptr(mv_sep_doc(head_group, a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 

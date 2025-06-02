@@ -123,6 +123,15 @@ Document* mk_vsep_doc(const PtrArray source, Allocator* a) {
     return mv_vsep_doc(copy, a);
 }
 
+Document *mv_style_doc(const DocStyle style, Document *inner, Allocator *a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
+    doc->type = StyledDocument;
+    doc->styled.style = style;
+    doc->styled.inner = inner;
+    doc->requirement = inner->requirement;
+    return doc;
+}
+
 Document *mv_cstr_doc(const char *string, Allocator *a) {
     return mv_str_doc(mv_string(string), a);
 }
@@ -164,6 +173,16 @@ void delete_doc(Document* doc, Allocator* a) {
         for (size_t i = 0; i < doc->docs.len; i++)
             delete_doc(doc->docs.data[i], a);
         break;
+    case StyledDocument:
+        delete_doc(doc->styled.inner, a);
+        break;
     }
     mem_free(doc, a);
+}
+
+DocStyle scolour(Colour c, const DocStyle base) {
+    DocStyle out = base;
+    out.options |= HasColour;
+    out.colour = c;
+    return out;
 }
