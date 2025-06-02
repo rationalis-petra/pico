@@ -18,6 +18,7 @@
                                                                         \
     void delete_ ## fprefix ## _array(tprefix##Array arr, void (*delete_elem)(type elem)); \
     void sdelete_ ## fprefix ## _array(tprefix##Array arr);             \
+    void reverse_ ## fprefix ## _array(tprefix##Array arr);             \
                                                                         \
     void push_ ## fprefix(type val, tprefix##Array* arr);               \
     type pop_ ## fprefix(tprefix##Array* arr);                          \

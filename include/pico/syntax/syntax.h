@@ -402,7 +402,7 @@ typedef struct {
 
 typedef struct {
     Range range;
-    SymbolArray syms;
+    PtrArray paths;
 } OpenClause;
 
 typedef struct {

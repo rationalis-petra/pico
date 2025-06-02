@@ -90,6 +90,7 @@ Result add_module(Symbol symbol, Module* module, Package* package) {
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
+    clause.path = scopy_symbol_array(clause.path, module->allocator);
     push_import_clause(clause, &module->header.imports.clauses);
 }
 
@@ -162,6 +163,9 @@ void delete_module(Module* module) {
         delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
+    for (size_t i = 0; i < module->header.imports.clauses.len; i++) {
+        sdelete_symbol_array(module->header.imports.clauses.data[i].path);
+    }
     sdelete_import_clause_array(module->header.imports.clauses);
     sdelete_export_clause_array(module->header.exports.clauses);
 

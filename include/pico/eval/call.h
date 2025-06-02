@@ -33,7 +33,7 @@ typedef struct EvalResult {
     union {
         EvalVal val;
         EvalDef def;
-        SymbolArray opened;
+        PtrArray opened;
     };
 } EvalResult;
 

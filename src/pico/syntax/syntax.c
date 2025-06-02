@@ -689,6 +689,13 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case SDescribe: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("describe"), a), &nodes);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->to_describe), a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     }
 
     if (out == NULL)  {
@@ -713,9 +720,18 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
         out = pretty_def(&toplevel->def, a);
         break;
     case TLOpen: {
-        PtrArray docs = mk_ptr_array(toplevel->open.syms.len, a);
-        for (size_t i = 0; i < toplevel->open.syms.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(toplevel->open.syms.data[i]), a), &docs);
+        PtrArray docs = mk_ptr_array(toplevel->open.paths.len, a);
+        for (size_t i = 0; i < toplevel->open.paths.len; i++) {
+            SymbolArray* syms = toplevel->open.paths.data[i];
+            PtrArray elts = mk_ptr_array(2 * syms->len, a);
+            for (size_t j = 0; j < syms->len; j++) {
+                push_ptr(mk_str_doc(*symbol_to_string(syms->data[j]), a), &elts);
+                if (j + 1 != syms->len) {
+                    push_ptr(mk_str_doc(mv_string("."), a), &elts);
+                }
+            }
+              
+            push_ptr(mv_cat_doc(elts, a), &docs);
         }
         out = mk_paren_doc("(open ", ")", mv_sep_doc(docs, a), a);
         break;

@@ -186,9 +186,9 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Inappropriate number of terms for infix-operator: "),
-            .error.range.start = bytecount(is),
-            .error.range.end = bytecount(is),
+            .error.message = mv_string("Inappropriate number of terms for infix-operator"),
+            .error.range.start = terms.data[0].range.start,
+            .error.range.end = terms.data[terms.len - 1].range.end,
           };
           return out;
         }

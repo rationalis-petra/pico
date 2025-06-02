@@ -5,7 +5,13 @@ int cmp_import_clauses(ImportClause lhs, ImportClause rhs) {
     // TODO: this doesn't account for renames!!
     int res = lhs.type - rhs.type;
     if (res) return res;
-    return cmp_symbol(lhs.name, rhs.name);
+    res = lhs.path.len - rhs.path.len;
+    if (res) return res;
+    for (size_t i = 0; i < lhs.path.len; i++) {
+        res = cmp_symbol(lhs.path.data[i], rhs.path.data[i]);
+        if (res) return res;
+    }
+    return 0;
 }
 
 int cmp_export_clauses(ExportClause lhs, ExportClause rhs) {

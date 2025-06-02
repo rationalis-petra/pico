@@ -15,12 +15,12 @@ typedef enum {
                   // module is not opened. Can also import values (import num.i32.+)
     ImportAs,     // import and rename, e.g. (import num.i32 as int-32) 
     ImportMany,   // Import many values from a module, e.g. (import num.i32.(+ - * /))
-    ImportAll,    // Import all values from a module, e.g. (import num.i32.*) 
+    ImportAll,    // Import all values from a module, e.g. (import num.i32 :all) 
 } ImportClause_t;
 
 typedef struct {
     ImportClause_t type;
-    Symbol name;
+    SymbolArray path;
     union {
         Symbol rename;
         Symbol member;

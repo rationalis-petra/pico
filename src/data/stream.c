@@ -294,13 +294,14 @@ StreamResult next(IStream* stream, uint32_t* out) {
             encode_point_utf8(bytes, &size, *out);
             CapturingIStream* cis = &stream->impl.capturing_istream;
             if (cis->buffer.memsize + size >= cis->total_bufsize) {
-                String new_buffer = (String) {.memsize = cis->buffer.memsize + size};
-                new_buffer.bytes = mem_alloc(new_buffer.memsize, cis->gpa);
+                size_t new_total_size = cis->total_bufsize * 2;
+                String new_buffer = (String) {.memsize = cis->buffer.memsize};
+                new_buffer.bytes = mem_alloc(new_total_size, cis->gpa);
                 memcpy(new_buffer.bytes, cis->buffer.bytes, cis->buffer.memsize);
-                memset(new_buffer.bytes + cis->buffer.memsize, 0, new_buffer.memsize - cis->buffer.memsize);
+                memset(new_buffer.bytes + cis->buffer.memsize, 0, new_total_size - cis->buffer.memsize);
                 mem_free(cis->buffer.bytes, cis->gpa);
                 cis->buffer = new_buffer;
-                cis->total_bufsize = 2 * cis->buffer.memsize * sizeof(uint8_t);
+                cis->total_bufsize = new_total_size;
             }
             uint8_t *base = cis->buffer.bytes + (cis->buffer.memsize - 1);
             for (size_t i = 0; i < size; i++) {

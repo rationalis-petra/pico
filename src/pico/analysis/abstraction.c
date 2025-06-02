@@ -22,6 +22,8 @@ bool eq_symbol(RawTree* raw, Symbol s);
 bool is_symbol(RawTree* raw);
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
+Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
+SymbolArray* try_get_path(Syntax* syn, Allocator* a);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -684,38 +686,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             throw_pi_error(point, err);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        Module* m = try_get_module(source, env);
-        if (m) {
-            // TODO (INVESTIGATION): do we have a better way to manage lookup
-            // Note: seems like having to check for the special case of
-            // Kind/Constraint is causing issues. 
-            ModuleEntry* e = get_def(msym.atom.symbol, m);
-            if (e) {
-                *res = (Syntax) {
-                    .type = SAbsVariable,
-                    .ptype = &e->type,
-                    .range = raw.range,
-                    .abvar.index = 0,
-                    .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
-                };
-                return res;
-            } else {
-                err.range = msym.range;
-                err.message = string_cat(mv_string("Field not found in module: "),
-                                         *symbol_to_string(msym.atom.symbol), a);
-                throw_pi_error(point, err);
-            }
-        } else {
-            *res = (Syntax) {
-                .type = SProjector,
-                .ptype = NULL,
-                .range = raw.range,
-                .projector.field = msym.atom.symbol,
-                .projector.val = source,
-            };
-            return res;
-        }
+        return resolve_module_projector(raw.range, source, &msym, env, a, point);
     }
     case FInstance: {
         SymbolArray params = mk_symbol_array(0, a);
@@ -2017,22 +1988,24 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
             throw_pi_error(point, err);
         }
 
-        SymbolArray syms = mk_symbol_array(raw.branch.nodes.len - 1, a);
+        PtrArray paths = mk_ptr_array(raw.branch.nodes.len - 1, a);
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            if (!is_symbol(&raw.branch.nodes.data[1])) {
-                err.range = raw.branch.nodes.data[1].range;
-                err.message = mk_string("All arguments to open should be a symbol", a);
+            Syntax* syn = abstract_expr_i(raw.branch.nodes.data[i], env, a, point);
+            SymbolArray* arr = try_get_path(syn, a);
+            if (arr) {
+                push_ptr(arr, &paths);
+            } else {
+                err.range = raw.branch.nodes.data[i].range;
+                err.message = mk_string("Open expects all arguments to be modules", a);
                 throw_pi_error(point, err);
             }
 
-            Symbol sym = raw.branch.nodes.data[i].atom.symbol;
-            push_symbol(sym, &syms);
         }
 
         res = (TopLevel) {
             .type = TLOpen,
             .open.range = raw.range,
-            .open.syms = syms,
+            .open.paths = paths,
         };
         break;
     }
@@ -2081,9 +2054,11 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     if (is_symbol(raw)) {
+        SymbolArray path = mk_symbol_array(1,a);
+        push_symbol(raw->atom.symbol, &path);
         return (ImportClause) {
             .type = Import,
-            .name = raw->atom.symbol,
+            .path = path,
         };
     } else if (raw->type == RawBranch) {
         // Possibilities:
@@ -2112,9 +2087,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 throw_pi_error(point, err);
             }
 
+            SymbolArray path = mk_symbol_array(1,a);
+            push_symbol(name, &path);
             return (ImportClause) {
                 .type = ImportAll,
-                .name = name,
+                .path = path,
             };
         } else if (raw->branch.nodes.len == 3) {
 
@@ -2135,9 +2112,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
 
                 RawTree raw_members = raw->branch.nodes.data[1];
                 if (is_symbol(&raw_members)) {
+                    SymbolArray path = mk_symbol_array(1,a);
+                    push_symbol(src, &path);
                     return (ImportClause) {
                         .type = Import,
-                        .name = src,
+                        .path = path,
                         .member = raw_members.atom.symbol,
                     };
                 } else if (raw_members.type == RawBranch) {
@@ -2147,9 +2126,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                         err.message = mv_string("Invalid import-. members");
                         throw_pi_error(point, err);
                     }
+                    SymbolArray path = mk_symbol_array(1,a);
+                    push_symbol(src, &path);
                     return (ImportClause) {
                         .type = ImportMany,
-                        .name = src,
+                        .path = path,
                         .members = members,
                     };
                 } else {
@@ -2183,9 +2164,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                     err.message = mv_string("Invalid import-as new name");
                     throw_pi_error(point, err);
                 }
+                SymbolArray path = mk_symbol_array(1,a);
+                push_symbol(name, &path);
                 return (ImportClause) {
                     .type = ImportAs,
-                    .name = name,
+                    .path = path,
                     .rename = rename,
                 };
             }
@@ -2265,10 +2248,89 @@ Module* try_get_module(Syntax* syn, ShadowEnv* env) {
         break;
     }
     case SProjector: {
-        panic(mv_string("TODO: implement try_get_module for sprojector"));
+        Module *module = try_get_module(syn->projector.val, env);
+        if (module) {
+            ModuleEntry* entry = get_def(syn->projector.field, module);
+            if (entry->is_module) { return entry->value; }
+            else { return NULL; }
+        } else {
+            return NULL;
+        }
     }
     default:
         return NULL;
     }
     return NULL;
+}
+
+SymbolArray* try_get_path(Syntax* syn, Allocator* a) {
+    SymbolArray arr = mk_symbol_array(8, a);
+    bool running = true;
+    while (running) {
+        switch (syn->type) {
+        case SVariable: {
+            push_symbol(syn->variable, &arr);
+            running = false;
+            break;
+        }
+        case SProjector: {
+            push_symbol(syn->projector.field, &arr);
+            syn = syn->projector.val;
+            break;
+        }
+        default:
+            return NULL;
+        }
+    }
+    reverse_symbol_array(arr);
+    SymbolArray* out = mem_alloc(sizeof(SymbolArray), a);
+    *out = arr;
+    return out;
+}
+
+Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point) {
+    Syntax* res = mem_alloc(sizeof(Syntax), a);
+    Module* m = try_get_module(source, env);
+    if (m) {
+        // TODO (INVESTIGATION): do we have a better way to manage lookup
+        // Note: seems like having to check for the special case of
+        // Kind/Constraint is causing issues. 
+        ModuleEntry* e = get_def(msym->atom.symbol, m);
+        if (e) {
+            if (e->is_module) {
+                *res = (Syntax) {
+                    .type = SProjector,
+                    .ptype = NULL,
+                    .range = range,
+                    .projector.field = msym->atom.symbol,
+                    .projector.val = source,
+                };
+            } else {
+                *res = (Syntax) {
+                    .type = SAbsVariable,
+                    .ptype = &e->type,
+                    .range = msym->range,
+                    .abvar.index = 0,
+                    .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                };
+            }
+            return res;
+        } else {
+            PicoError err = (PicoError) {
+                .range = msym->range,
+                .message = string_cat(mv_string("Field not found in module: "),
+                                      *symbol_to_string(msym->atom.symbol), a),
+            };
+            throw_pi_error(point, err);
+        }
+    } else {
+        *res = (Syntax) {
+            .type = SProjector,
+            .ptype = NULL,
+            .range = range,
+            .projector.field = msym->atom.symbol,
+            .projector.val = source,
+        };
+        return res;
+    }
 }
