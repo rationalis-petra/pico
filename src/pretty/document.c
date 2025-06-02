@@ -123,6 +123,14 @@ Document* mk_vsep_doc(const PtrArray source, Allocator* a) {
     return mv_vsep_doc(copy, a);
 }
 
+Document *mv_cstr_doc(const char *string, Allocator *a) {
+    return mv_str_doc(mv_string(string), a);
+}
+
+Document *mk_cstr_doc(const char *string, Allocator *a) {
+    return mk_str_doc(mv_string(string), a);
+}
+
 Document *mv_grouped_sep_doc(const PtrArray docs, Allocator *a) {
   for (size_t i = 0; i < docs.len; i++) {
       docs.data[i] = mv_group_doc(docs.data[i], a);

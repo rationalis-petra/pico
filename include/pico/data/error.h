@@ -2,13 +2,13 @@
 #define __PICO_DATA_ERROR_H
 
 #include "platform/jump.h"
-#include "data/string.h"
 #include "data/stream.h"
+#include "pretty/document.h"
 
 #include "pico/data/range.h"
 
 typedef struct {
-    String message;
+    Document* message;
     Range range;
 } PicoError;
 

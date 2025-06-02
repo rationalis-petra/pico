@@ -1,13 +1,7 @@
 #include "platform/signals.h"
+#include "pretty/string_printer.h"
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/array.h"
-
-
-// Interface
-// elt :: All [A] Proc [U64 (Array A)] A
-// map :: All [A B] Proc [(Proc [A] B) (Array A)] A
-// 
-
 
 void add_array_module(Module *data, Allocator *a) {
     Imports imports = (Imports) {
@@ -31,7 +25,7 @@ void add_array_module(Module *data, Allocator *a) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        panic(pi_point.error.message);
+        panic(doc_to_str(pi_point.error.message, 120, a));
     }
 
     ErrorPoint point;

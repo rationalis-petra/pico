@@ -71,8 +71,9 @@ Document* mv_vsep_doc(const PtrArray docs, Allocator* a);
 Document* mk_vsep_doc(const PtrArray docs, Allocator* a);
 
 // Smart constructors
+Document* mv_cstr_doc(const char* string, Allocator* a);
+Document* mk_cstr_doc(const char* string, Allocator* a);
 Document* mv_grouped_sep_doc(const PtrArray docs, Allocator* a);
-
 Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Allocator* a);
 
 /* The Document Destructor */

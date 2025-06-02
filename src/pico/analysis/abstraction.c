@@ -3,7 +3,6 @@
 #include "platform/signals.h"
 #include "data/result.h"
 #include "data/string.h"
-#include "pretty/string_printer.h"
 
 #include "pico/data/error.h"
 #include "pico/values/values.h"
@@ -28,7 +27,7 @@ SymbolArray* try_get_path(Syntax* syn, Allocator* a);
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point);
-ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point);
+ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator* a);
 
 //------------------------------------------------------------------------------
 // Interface Implementation
@@ -51,7 +50,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     if (raw.type != RawBranch) {
         err.range = raw.range;
-        err.message = mv_string("Expected module header to be list.");
+        err.message = mv_cstr_doc("Expected module header to be list.", a);
         throw_pi_error(point, err);
     }
 
@@ -62,31 +61,31 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     size_t idx = 0;
     if (raw.branch.nodes.len <= idx) {
         err.range = raw.range;
-        err.message = mv_string("Expecting keyword 'module' in module header. Got nothing!");
+        err.message = mv_cstr_doc("Expecting keyword 'module' in module header. Got nothing!", a);
         throw_pi_error(point, err);
     }
     if (raw.branch.nodes.len > 4) {
         err.range = raw.range;
-        err.message = mv_string("Too many parameters in module header.");
+        err.message = mv_cstr_doc("Too many parameters in module header.", a);
         throw_pi_error(point, err);
     }
 
     if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string("module")))) {
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_string("Expecting keyword 'module' in module header.");
+        err.message = mv_cstr_doc("Expecting keyword 'module' in module header.", a);
         throw_pi_error(point, err);
     }
 
     idx++;
     if (raw.branch.nodes.len <= idx)  {
         err.range = raw.range;
-        err.message = mv_string("Expecting parameter 'modulename' in module header. Got nothing!");
+        err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header. Got nothing!", a);
         throw_pi_error(point, err);
     }
 
     if (!is_symbol(&raw.branch.nodes.data[1])) {
         err.range = raw.branch.nodes.data[1].range;
-        err.message = mv_string("Expecting parameter 'modulename' in module header.");
+        err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header.", a);
         throw_pi_error(point, err);
     }
     Symbol module_name = raw.branch.nodes.data[1].atom.symbol;
@@ -104,12 +103,12 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         RawTree clauses_1 = raw.branch.nodes.data[2];
         if (clauses_1.type != RawBranch) {
             err.range = clauses_1.range;
-            err.message = mv_string("Expecting import/export list.");
+            err.message = mv_cstr_doc("Expecting import/export list.", a);
             throw_pi_error(point, err);
         }
         if (clauses_1.branch.nodes.len < 1) {
             err.range = clauses_1.range;
-            err.message = mv_string("Not enough elements in import/export list");
+            err.message = mv_cstr_doc("Not enough elements in import/export list", a);
             throw_pi_error(point, err);
         }
 
@@ -126,29 +125,29 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
             exports.clauses = mk_export_clause_array(clauses_1.branch.nodes.len - 1, a);
 
             for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-                ExportClause clause = abstract_export_clause(&clauses_1.branch.nodes.data[i], point);
+                ExportClause clause = abstract_export_clause(&clauses_1.branch.nodes.data[i], point, a);
                 push_export_clause(clause, &exports.clauses);
             }
         } else {
             err.range = clauses_1.range;
-            err.message = mv_string("Expecting import/export list header.");
+            err.message = mv_cstr_doc("Expecting import/export list header.", a);
             throw_pi_error(point, err);
         }
     } else {
         RawTree clauses_1 = raw.branch.nodes.data[2];
         if (clauses_1.type != RawBranch) {
             err.range = clauses_1.range;
-            err.message = mv_string("Expecting import list.");
+            err.message = mv_cstr_doc("Expecting import list.", a);
             throw_pi_error(point, err);
         }
         if (clauses_1.branch.nodes.len < 1) {
             err.range = clauses_1.range;
-            err.message = mv_string("Not enough elements in import list");
+            err.message = mv_cstr_doc("Not enough elements in import list", a);
             throw_pi_error(point, err);
         }
         if (!eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
             err.range = clauses_1.range;
-            err.message = mv_string("Expecting 'import' at head of import list");
+            err.message = mv_cstr_doc("Expecting 'import' at head of import list", a);
             throw_pi_error(point, err);
         }
 
@@ -161,17 +160,17 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         RawTree clauses_2 = raw.branch.nodes.data[3];
         if (clauses_2.type != RawBranch) {
             err.range = clauses_2.range;
-            err.message = mv_string("Expecting export list.");
+            err.message = mv_cstr_doc("Expecting export list.", a);
             throw_pi_error(point, err);
         }
         if (clauses_2.branch.nodes.len < 1) {
             err.range = clauses_2.range;
-            err.message = mv_string("Not enough elements in export list");
+            err.message = mv_cstr_doc("Not enough elements in export list", a);
             throw_pi_error(point, err);
         }
         if (!eq_symbol(&clauses_2.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
             err.range = clauses_2.branch.nodes.data[0].range;
-            err.message = mv_string("Expecting 'export' at head of export list");
+            err.message = mv_cstr_doc("Expecting 'export' at head of export list", a);
             throw_pi_error(point, err);
         }
 
@@ -362,20 +361,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     switch (former) {
     case FDefine:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_string("'Define' (def) not supported as inner-expression term former.");
+        err.message = mv_cstr_doc("'Define' (def) not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FDeclare:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_string("'Declare' not supported as inner-expression term former.");
+        err.message = mv_cstr_doc("'Declare' not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FOpen:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_string("'Open' (open) not supported as inner-expression term former.");
+        err.message = mv_cstr_doc("'Open' (open) not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FProcedure: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mv_string("Procedure term former requires at least 2 arguments!");
+            err.message = mv_cstr_doc("Procedure term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -387,7 +386,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             && raw.branch.nodes.data[args_index].branch.hint == HImplicit) {
             Result args_out = get_annotated_symbol_list(&implicits, raw.branch.nodes.data[args_index], env, a, point);
             err.range = raw.branch.nodes.data[args_index].range;
-            err.message = args_out.error_message;
+            err.message = mv_str_doc(args_out.error_message, a);
             if (args_out.type == Err) throw_pi_error(point, err);
             args_index++;
         }
@@ -396,7 +395,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             && raw.branch.nodes.data[args_index].branch.hint == HSpecial) {
             Result args_out = get_annotated_symbol_list(&arguments, raw.branch.nodes.data[args_index], env, a, point);
             err.range = raw.branch.nodes.data[args_index].range;
-            err.message = args_out.error_message;
+            err.message = mv_str_doc(args_out.error_message, a);
             if (args_out.type == Err) throw_pi_error(point, err);
             args_index++;
         }
@@ -431,14 +430,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FAll: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("all term former requires at least 2 arguments!", a);
+            err.message = mv_cstr_doc("all term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
         SymbolArray arguments = mk_symbol_array(2, a);
         if (!get_symbol_list(&arguments, raw.branch.nodes.data[1])) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_string("all term former requires first arguments to be a symbol-list!", a);
+            err.message = mv_cstr_doc("all term former requires first arguments to be a symbol-list!", a);
             throw_pi_error(point, err);
         }
 
@@ -465,7 +464,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FMacro: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_string("Malformed macro expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed macro expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -490,7 +489,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree msym = raw.branch.nodes.data[1];
             if (msym.type != RawAtom && msym.atom.type != ASymbol) {
                 err.range = msym.range;
-                err.message = mv_string("Argument to variant term former should be symbol");
+                err.message = mv_cstr_doc("Argument to variant term former should be symbol", a);
                 throw_pi_error(point, err);
             }
             Symbol lit = msym.atom.symbol;
@@ -511,13 +510,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 return res;
             } else {
                 err.range = msym.range;
-                err.message = mv_string("Variant term former needs two arguments!");
+                err.message = mv_cstr_doc("Variant term former needs two arguments!", a);
                 throw_pi_error(point, err);
             }
         }
         else if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Variant term former needs two arguments!");
+            err.message = mv_cstr_doc("Variant term former needs two arguments!", a);
             throw_pi_error(point, err);
         } else {
             // Get the Type portion of the projector 
@@ -528,7 +527,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree msym = raw.branch.nodes.data[1];
             if (msym.type != RawAtom && msym.atom.type != ASymbol) {
                 err.range = msym.range;
-                err.message = mv_string("First argument to projection term former should be symbol");
+                err.message = mv_cstr_doc("First argument to projection term former should be symbol", a);
                 throw_pi_error(point, err);
             };
 
@@ -558,7 +557,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree raw_clause = raw.branch.nodes.data[i];
             if (raw_clause.type != RawBranch || raw_clause.branch.nodes.len < 2) {
                 err.range = raw_clause.range;
-                err.message = mv_string("Match Clause has incorrect number of elements!");
+                err.message = mv_cstr_doc("Match Clause has incorrect number of elements!", a);
                 throw_pi_error(point, err);
             }
 
@@ -566,7 +565,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree raw_pattern = raw_clause.branch.nodes.data[0];
             if (raw_pattern.type != RawBranch) {
                 err.range = raw_pattern.range;
-                err.message = mv_string("Match Pattern should be a list!");
+                err.message = mv_cstr_doc("Match Pattern should be a list!", a);
                 throw_pi_error(point, err);
             }
 
@@ -579,7 +578,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
                 Document* doc = mv_sep_doc(nodes, a);
                 err.range = raw_clause.range;
-                err.message = doc_to_str(doc, 80, a);
+                err.message = doc;
                 throw_pi_error(point, err);
             }
 
@@ -588,7 +587,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 RawTree raw_name = raw_pattern.branch.nodes.data[s];
                 if (!is_symbol(&raw_name)) {
                     err.range = raw_clause.range;
-                    err.message = mv_string("Pattern binding was not a symbol!");
+                    err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
                     throw_pi_error(point, err);
                 }
                 push_symbol(raw_name.atom.symbol, &clause_binds); 
@@ -622,7 +621,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FStructure: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mk_string("Structure term former needs a structure type argument", a);
+            err.message = mv_cstr_doc("Structure term former needs a structure type argument", a);
             throw_pi_error(point, err);
         }
 
@@ -635,20 +634,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
-                err.message = mv_string("Structure expects all field descriptors to be lists.");
+                err.message = mv_cstr_doc("Structure expects all field descriptors to be lists.", a);
                 throw_pi_error(point, err);
             }
             
             if (fdesc.branch.nodes.len < 2) {
                 err.range = fdesc.range;
-                err.message = mv_string("Structure expects all field descriptors to have at least 2 elements.");
+                err.message = mv_cstr_doc("Structure expects all field descriptors to have at least 2 elements.", a);
                 throw_pi_error(point, err);
             }
 
             Symbol field;
             if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
-                err.message = mv_string("Structure has malformed field name.");
+                err.message = mv_cstr_doc("Structure has malformed field name.", a);
                 throw_pi_error(point, err);
             }
 
@@ -671,7 +670,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FProjector: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mk_string("Projection term former needs two arguments!", a);
+            err.message = mv_cstr_doc("Projection term former needs two arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -682,7 +681,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         RawTree msym = raw.branch.nodes.data[1];
         if (msym.type != RawAtom && msym.atom.type != ASymbol) {
             err.range = msym.range;
-            err.message = mv_string("Second argument to projection term former should be symbol");
+            err.message = mv_cstr_doc("Second argument to projection term former should be symbol", a);
             throw_pi_error(point, err);
         }
 
@@ -708,7 +707,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (!get_symbol_list(&params, current)) {
             err.range = current.range;
-            err.message = mv_string("Instance parameter list malformed.");
+            err.message = mv_cstr_doc("Instance parameter list malformed.", a);
             throw_pi_error(point, err);
         }
 
@@ -719,7 +718,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         case HImplicit: goto parse_implicits;
         case HSpecial:
             err.range = current.range;
-            err.message = mv_string("Invalid instance");
+            err.message = mv_cstr_doc("Invalid instance", a);
             throw_pi_error(point, err);
         default: panic(mv_string("invalid hint!"));
         }
@@ -740,20 +739,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
-                err.message = mv_string("Instance expects all field descriptors to be lists.");
+                err.message = mv_cstr_doc("Instance expects all field descriptors to be lists.", a);
                 throw_pi_error(point, err);
             }
             
             if (fdesc.branch.nodes.len < 2) {
                 err.range = fdesc.range;
-                err.message = mv_string("Instance expects all field descriptors to have at least 2 elements.");
+                err.message = mv_cstr_doc("Instance expects all field descriptors to have at least 2 elements.", a);
                 throw_pi_error(point, err);
             }
 
             Symbol field;
             if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
-                err.message = mv_string("Instance has malformed field name.");
+                err.message = mv_cstr_doc("Instance has malformed field name.", a);
                 throw_pi_error(point, err);
             }
 
@@ -778,7 +777,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDynamic: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_string("Malformed dynamic expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed dynamic expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -796,7 +795,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDynamicUse: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mv_string("Malformed use expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed use expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         Syntax* use = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
@@ -826,12 +825,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 Symbol sym;
                 if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
                     err.range = bind.range;
-                    err.message = mv_string("Malformed symbol binding in let-expression");
+                    err.message = mv_cstr_doc("Malformed symbol binding in let-expression", a);
                     throw_pi_error(point, err);
                 }
                 if (!get_label(&bind, &sym)) {
                     err.range = bind.range;
-                    err.message = mv_string("Expected symbol binding in let-expression");
+                    err.message = mv_cstr_doc("Expected symbol binding in let-expression", a);
                     throw_pi_error(point, err);
                 }
 
@@ -843,13 +842,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (index > raw.branch.nodes.len - 1) {
             err.range = raw.range;
-            err.message = mv_string("Let expression has no body!");
+            err.message = mv_cstr_doc("Let expression has no body!", a);
             throw_pi_error(point, err);
         }
 
         if (index < raw.branch.nodes.len - 1) {
             err.range = raw.range;
-            err.message = mv_string("Let expression multiple bodies!");
+            err.message = mv_cstr_doc("Let expression multiple bodies!", a);
             throw_pi_error(point, err);
         }
 
@@ -882,7 +881,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
                 if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
                     err.range = bind.range;
-                    err.message = mv_string("Malformed symbol binding in bind-expression");
+                    err.message = mv_cstr_doc("Malformed symbol binding in bind-expression", a);
                     throw_pi_error(point, err);
                 }
 
@@ -894,13 +893,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (index > raw.branch.nodes.len - 1) {
             err.range = raw.range;
-            err.message = mv_string("Bind expression has no body!");
+            err.message = mv_cstr_doc("Bind expression has no body!", a);
             throw_pi_error(point, err);
         }
 
         if (index < raw.branch.nodes.len - 1) {
             err.range = raw.range;
-            err.message = mv_string("Bind expression multiple bodies!");
+            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
             throw_pi_error(point, err);
         }
 
@@ -920,7 +919,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FIf: {
         if (raw.branch.nodes.len != 4) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'if' expects precisely 3 arguments!");
+            err.message = mv_cstr_doc("Term former 'if' expects precisely 3 arguments!", a);
             throw_pi_error(point, err);
         }
         SynArray terms = mk_ptr_array(3, a);
@@ -943,7 +942,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FLabels: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'labels' expects at least 1 argument!");
+            err.message = mv_cstr_doc("Term former 'labels' expects at least 1 argument!", a);
             throw_pi_error(point, err);
         }
 
@@ -955,13 +954,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree* label_expr = &raw.branch.nodes.data[i];
             if (!get_label(label_expr, &label)) {
                 err.range = label_expr->range;
-                err.message = mv_string("Each label must be of the form [label [args]? expr]. However, label is incorrect");
+                err.message = mv_cstr_doc("Each label must be of the form [label [args]? expr]. However, label is incorrect", a);
                 throw_pi_error(point, err);
             }
 
             if (label_expr->branch.nodes.len < 2) {
                 err.range = label_expr->range;
-                err.message = mv_string("Each label branch is expected to have at least 2 terms. However, this only has 1.");
+                err.message = mv_cstr_doc("Each label branch is expected to have at least 2 terms. However, this only has 1.", a);
                 throw_pi_error(point, err);
             }
             
@@ -972,14 +971,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], env, a, point);
                 if (args_out.type == Err) {
                     err.range = label_expr->branch.nodes.data[index].range;
-                    err.message = args_out.error_message;
+                    err.message = mv_str_doc(args_out.error_message, a);
                     throw_pi_error(point, err);
                 }
             }
 
             if (label_expr->branch.nodes.len < 1 + index) {
                 err.range = label_expr->range;
-                err.message = mv_string("Label branch missing body!");
+                err.message = mv_cstr_doc("Label branch missing body!", a);
                 throw_pi_error(point, err);
             }
 
@@ -1008,14 +1007,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FGoTo: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'go-to' expects at least one argument!");
+            err.message = mv_cstr_doc("Term former 'go-to' expects at least one argument!", a);
             throw_pi_error(point, err);
         }
         RawTree* label = &raw.branch.nodes.data[1]; 
 
         if (label->type != RawAtom && label->atom.type != ASymbol) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'go-to' expects first argument to be a symbol!");
+            err.message = mv_cstr_doc("Term former 'go-to' expects first argument to be a symbol!", a);
             throw_pi_error(point, err);
         }
 
@@ -1038,7 +1037,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         // with-reset [lbl] e [l1 l2] e
         if (raw.branch.nodes.len != 5) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'with-reset' expects exactly 5 arguments!");
+            err.message = mv_cstr_doc("Term former 'with-reset' expects exactly 5 arguments!", a);
             throw_pi_error(point, err);
         }
         SymbolArray reset_binds = mk_symbol_array(1, a);
@@ -1046,14 +1045,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (!get_symbol_list(&reset_binds, raw.branch.nodes.data[1]) || reset_binds.len != 1) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mv_string("Term former 'with-reset' 1st argument list malformed.");
+            err.message = mv_cstr_doc("Term former 'with-reset' 1st argument list malformed.", a);
             throw_pi_error(point, err);
         }
 
         Symbol reset_point_sym = reset_binds.data[0];
         if (reset_binds.len != 1) {
             err.range = raw.branch.nodes.data[0].range;
-            err.message = mv_string("Term former 'with-reset' expects exactly 5 arguments!");
+            err.message = mv_cstr_doc("Term former 'with-reset' expects exactly 5 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1061,7 +1060,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (!get_symbol_list(&handle_binds, raw.branch.nodes.data[3]) || handle_binds.len != 3) {
             err.range = raw.branch.nodes.data[3].range;
-            err.message = mv_string("Handler list malformed!");
+            err.message = mv_cstr_doc("Handler list malformed!", a);
             throw_pi_error(point, err);
         }
 
@@ -1086,7 +1085,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FResetTo: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'reset-to' expects two arguments!");
+            err.message = mv_cstr_doc("Term former 'reset-to' expects two arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1112,13 +1111,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                     || tree.branch.nodes.len != 3
                     || !eq_symbol(&tree.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                     err.range = tree.range;
-                    err.message = mv_string("Invalid let! binding in seq");
+                    err.message = mv_cstr_doc("Invalid let! binding in seq", a);
                     throw_pi_error(point, err);
                 }
                 RawTree rsym = tree.branch.nodes.data[1];
                 if (rsym.type != RawAtom || rsym.atom.type != ASymbol) {
                     err.range = tree.range;
-                    err.message = mv_string("Invalid let! binding in seq");
+                    err.message = mv_cstr_doc("Invalid let! binding in seq", a);
                     throw_pi_error(point, err);
                 }
                 
@@ -1147,12 +1146,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     }
     case FModule:
         err.range = raw.range;
-        err.message = mk_string("'Module' not supported as inner-expression term former.", a);
+        err.message = mk_cstr_doc("'Module' not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FIs: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'is' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'is' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1171,7 +1170,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FInTo: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'into' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'into' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1190,7 +1189,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FOutOf: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'out-of' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'out-of' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1209,7 +1208,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FName: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'name' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'name' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1228,7 +1227,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FUnName: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'unname' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'unname' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1246,7 +1245,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDynAlloc: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'dynamic-alloc' expects precisely 2 arguments!");
+            err.message = mv_cstr_doc("Term former 'dynamic-alloc' expects precisely 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1264,7 +1263,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FSizeOf: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'size-of' expects precisely 1 argument!");
+            err.message = mv_cstr_doc("Term former 'size-of' expects precisely 1 argument!", a);
             throw_pi_error(point, err);
         }
 
@@ -1282,7 +1281,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FAlignOf: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mv_string("Term former 'align-of' expects precisely 1 argument!");
+            err.message = mv_cstr_doc("Term former 'align-of' expects precisely 1 argument!", a);
             throw_pi_error(point, err);
         }
 
@@ -1300,14 +1299,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Wrong number of terms to proc type former.");
+            err.message = mv_cstr_doc("Wrong number of terms to proc type former.", a);
             throw_pi_error(point, err);
         }
 
         RawTree raw_args = raw.branch.nodes.data[1];
         if (raw_args.type != RawBranch) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mv_string("Procedure argument list should be list.");
+            err.message = mv_cstr_doc("Procedure argument list should be list.", a);
             throw_pi_error(point, err);
         }
         
@@ -1338,20 +1337,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
-                err.message = mv_string("Structure type expects all field descriptors to be lists.");
+                err.message = mv_cstr_doc("Structure type expects all field descriptors to be lists.", a);
                 throw_pi_error(point, err);
             };
             
             if (fdesc.branch.nodes.len < 2) {
                 err.range = fdesc.range;
-                err.message = mv_string("Structure type expects all field descriptors to have a type.");
+                err.message = mv_cstr_doc("Structure type expects all field descriptors to have a type.", a);
                 throw_pi_error(point, err);
             };
 
             Symbol field;
             if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
-                err.message = mv_string("Structure type has malformed field name.");
+                err.message = mv_cstr_doc("Structure type has malformed field name.", a);
                 throw_pi_error(point, err);
             };
 
@@ -1378,13 +1377,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             if (edesc.type != RawBranch) {
                 err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_string("Enumeration type expects all enum descriptors to be lists.");
+                err.message = mv_cstr_doc("Enumeration type expects all enum descriptors to be lists.", a);
                 throw_pi_error(point, err);
             };
             
             if (edesc.branch.nodes.len < 1) {
                 err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_string("Enumeration type expects all enum descriptors to have at least 1 elements.");
+                err.message = mv_cstr_doc("Enumeration type expects all enum descriptors to have at least 1 elements.", a);
                 throw_pi_error(point, err);
             };
 
@@ -1394,7 +1393,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             if (!get_fieldname(&edesc.branch.nodes.data[0], &tagname)) {
                 err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_string("Enum type has malformed field name.");
+                err.message = mv_cstr_doc("Enum type has malformed field name.", a);
                 throw_pi_error(point, err);
             };
 
@@ -1418,7 +1417,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FResetType: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_string("Reset type former expects exactly 2 arguments!");
+            err.message = mv_cstr_doc("Reset type former expects exactly 2 arguments!", a);
             throw_pi_error(point, err);
         }
         Syntax* in_ty = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
@@ -1437,7 +1436,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDynamicType: {
         if (raw.branch.nodes.len <= 1) {
             err.range = raw.range;
-            err.message = mv_string("Malformed Dynamic Type expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed Dynamic Type expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -1455,14 +1454,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FNamedType: {
         if (raw.branch.nodes.len <= 2) {
             err.range = raw.range;
-            err.message = mv_string("Malformed Named Type expression: expects at least 2 args.");
+            err.message = mv_cstr_doc("Malformed Named Type expression: expects at least 2 args.", a);
             throw_pi_error(point, err);
         }
 
         RawTree* rname = &raw.branch.nodes.data[1];
         if (!is_symbol(rname)) {
             err.range = raw.range;
-            err.message = mv_string("Malformed Named Type expression: 1st arg to be name.");
+            err.message = mv_cstr_doc("Malformed Named Type expression: 1st arg to be name.", a);
             throw_pi_error(point, err);
         }
         Symbol name = rname->atom.symbol;
@@ -1483,7 +1482,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDistinctType: {
         if (raw.branch.nodes.len <= 1) {
             err.range = raw.range;
-            err.message = mv_string("Malformed Distinct Type expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed Distinct Type expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -1501,7 +1500,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FOpaqueType: {
         if (raw.branch.nodes.len <= 1) {
             err.range = raw.range;
-            err.message = mv_string("Malformed Opaque Type expression: expects at least 1 arg.");
+            err.message = mv_cstr_doc("Malformed Opaque Type expression: expects at least 1 arg.", a);
             throw_pi_error(point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, a);
@@ -1519,7 +1518,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FTraitType: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_string("Wrong number of terms to trait type former.");
+            err.message = mv_cstr_doc("Wrong number of terms to trait type former.", a);
             throw_pi_error(point, err);
         }
 
@@ -1528,7 +1527,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         if (!get_symbol_list(&vars, raw_vars)) {
             err.range = raw_vars.range;
-            err.message = mv_string("Malformed Trait parameter list.");
+            err.message = mv_cstr_doc("Malformed Trait parameter list.", a);
             throw_pi_error(point, err);
         }
 
@@ -1537,20 +1536,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
-                err.message = mv_string("Trait expects all field descriptors to be lists.");
+                err.message = mv_cstr_doc("Trait expects all field descriptors to be lists.", a);
                 throw_pi_error(point, err);
             }
             
             if (fdesc.branch.nodes.len < 2) {
                 err.range = fdesc.range;
-                err.message = mv_string("Trait expects all field descriptors to have at least 2 elements.");
+                err.message = mv_cstr_doc("Trait expects all field descriptors to have at least 2 elements.", a);
                 throw_pi_error(point, err);
             }
 
             Symbol field;
             if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
-                err.message = mv_string("Trait has malformed field name.");
+                err.message = mv_cstr_doc("Trait has malformed field name.", a);
                 throw_pi_error(point, err);
             }
             Syntax* syn;
@@ -1577,14 +1576,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FAllType: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("All term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("All term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
         SymbolArray vars = mk_symbol_array(8, a);
         if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_string("All argument list malformed", a);
+            err.message = mk_cstr_doc("All argument list malformed", a);
             throw_pi_error(point, err);
         }
 
@@ -1612,14 +1611,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FFamily: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("Family term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("Family term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
         SymbolArray vars = mk_symbol_array(8, a);
         if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
             err.range = raw.range;
-            err.message = mk_string("All argument list malformed", a);
+            err.message = mk_cstr_doc("All argument list malformed", a);
             throw_pi_error(point, err);
         }
 
@@ -1660,7 +1659,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FReinterpretRelic: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("Reinterpret term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("Reinterpret term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1687,7 +1686,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FConvertRelic: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("convert term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("convert term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1713,7 +1712,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FTypeOf: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mk_string("type-of term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("type-of term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
         RawTree* raw_term = (raw.branch.nodes.len == 2)
@@ -1734,7 +1733,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDescribe:
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mk_string("describe term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("describe term former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
         RawTree term = raw.branch.nodes.data[1];
@@ -1749,7 +1748,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             return res;
         } else {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_string("describe expects argument to be a symbol!", a);
+            err.message = mk_cstr_doc("describe expects argument to be a symbol!", a);
             throw_pi_error(point, err);
         }
     }
@@ -1819,7 +1818,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
         // Currently, can only have function calls, so all Raw lists compile down to an application
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
-            err.message = mk_string("Raw Syntax must have at least one element!", a);
+            err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);
             throw_pi_error(point, err);
         }
 
@@ -1829,7 +1828,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             switch (entry.type) {
             case SErr:
                 err.range = raw.branch.nodes.data[0].range;
-                err.message = string_cat(mv_string("Can't find symbol: "), *symbol_to_string(sym) , a);
+                err.message = mv_str_doc(string_cat(mv_string("Can't find symbol: "), *symbol_to_string(sym) , a), a);
                 throw_pi_error(point, err);
                 break;
             case SShadowed: 
@@ -1837,7 +1836,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                 break;
             case SLocal: 
                 err.range = raw.branch.nodes.data[0].range;
-                err.message = mk_string("Higher kinded types not currently supported!", a);
+                err.message = mv_cstr_doc("Higher kinded types not currently supported!", a);
                 throw_pi_error(point, err);
                 break;
             case SGlobal:
@@ -1955,13 +1954,13 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
     case FDefine: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_string("Definitions expect at least 2 terms", a);
+            err.message = mv_cstr_doc("Definitions expect at least 2 terms", a);
             throw_pi_error(point, err);
         }
 
         if (!is_symbol(&raw.branch.nodes.data[1])) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_string("First argument to definitions should be a symbol", a);
+            err.message = mv_cstr_doc("First argument to definitions should be a symbol", a);
             throw_pi_error(point, err);
         }
 
@@ -1984,7 +1983,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
     case FOpen: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mk_string("Open expect at least 2 terms", a);
+            err.message = mv_cstr_doc("Open expect at least 2 terms", a);
             throw_pi_error(point, err);
         }
 
@@ -1996,7 +1995,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
                 push_ptr(arr, &paths);
             } else {
                 err.range = raw.branch.nodes.data[i].range;
-                err.message = mk_string("Open expects all arguments to be modules", a);
+                err.message = mv_cstr_doc("Open expects all arguments to be modules", a);
                 throw_pi_error(point, err);
             }
 
@@ -2069,7 +2068,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         if (raw->branch.nodes.len == 2) {
             if (!is_symbol(&raw->branch.nodes.data[0])) {
                 err.range = raw->branch.nodes.data[0].range;
-                err.message = mv_string("Invalid import clause: first element should be symbol");
+                err.message = mv_cstr_doc("Invalid import clause: first element should be symbol", a);
                 throw_pi_error(point, err);
             }
             Symbol name = raw->branch.nodes.data[0].atom.symbol;
@@ -2078,12 +2077,12 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
                 err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_string("Invalid import clause - expected :all");
+                err.message = mv_cstr_doc("Invalid import clause - expected :all", a);
                 throw_pi_error(point, err);
             }
             if (!symbol_eq(middle, string_to_symbol(mv_string("all")))) {
                 err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_string("Invalid import clause - expected :all");
+                err.message = mv_cstr_doc("Invalid import clause - expected :all", a);
                 throw_pi_error(point, err);
             }
 
@@ -2097,7 +2096,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
 
             if (!is_symbol(&raw->branch.nodes.data[0]) || !is_symbol(&raw->branch.nodes.data[2])) {
                 err.range = raw->range;
-                err.message = mv_string("Invalid import clause");
+                err.message = mv_cstr_doc("Invalid import clause", a);
                 throw_pi_error(point, err);
             }
 
@@ -2106,7 +2105,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 Symbol src;
                 if(!get_fieldname(&raw->branch.nodes.data[2], &src)) {
                     err.range = raw->branch.nodes.data[2].range;
-                    err.message = mv_string("Invalid import-. source");
+                    err.message = mv_cstr_doc("Invalid import-. source", a);
                     throw_pi_error(point, err);
                 }
 
@@ -2123,7 +2122,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                     SymbolArray members = mk_symbol_array(raw_members.branch.nodes.len, a);
                     if (!get_symbol_list(&members, raw_members)) {
                         err.range = raw->branch.nodes.data[2].range;
-                        err.message = mv_string("Invalid import-. members");
+                        err.message = mv_cstr_doc("Invalid import-. members", a);
                         throw_pi_error(point, err);
                     }
                     SymbolArray path = mk_symbol_array(1,a);
@@ -2135,7 +2134,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                     };
                 } else {
                     err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_string("Invalid import-. member(s)");
+                    err.message = mv_cstr_doc("Invalid import-. member(s)", a);
                     throw_pi_error(point, err);
                 }
 
@@ -2143,12 +2142,12 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 Symbol middle;
                 if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
                     err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_string("Invalid import clause");
+                    err.message = mv_cstr_doc("Invalid import clause", a);
                     throw_pi_error(point, err);
                 }
                 if (!symbol_eq(middle , string_to_symbol(mv_string("as")))) {
                     err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_string("Invalid import clause");
+                    err.message = mv_cstr_doc("Invalid import clause", a);
                     throw_pi_error(point, err);
                 }
 
@@ -2156,12 +2155,12 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 Symbol rename;
                 if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
                     err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_string("Invalid import-as name");
+                    err.message = mv_cstr_doc("Invalid import-as name", a);
                     throw_pi_error(point, err);
                 }
                 if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
                     err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_string("Invalid import-as new name");
+                    err.message = mv_cstr_doc("Invalid import-as new name", a);
                     throw_pi_error(point, err);
                 }
                 SymbolArray path = mk_symbol_array(1,a);
@@ -2174,17 +2173,17 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             }
         } else {
             err.range = raw->range;
-            err.message = mv_string("Invalid import clause - incorrect number of itesm");
+            err.message = mv_cstr_doc("Invalid import clause - incorrect number of itesm", a);
             throw_pi_error(point, err);
         }
     } else {
         err.range = raw->range;
-        err.message = mv_string("Invalid import clause - is atom!");
+        err.message = mv_cstr_doc("Invalid import clause - is atom!", a);
         throw_pi_error(point, err);
     }
 }
 
-ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point) {
+ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator* a) {
     PicoError err;
     if (is_symbol(raw)) {
         return (ExportClause) {
@@ -2197,19 +2196,19 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point) {
 
         if (raw->branch.nodes.len != 3) {
             err.range = raw->range;
-            err.message = mv_string("Invalid export clause");
+            err.message = mv_cstr_doc("Invalid export clause", a);
             throw_pi_error(point, err);
         }
 
         Symbol middle;
         if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
             err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_string("Invalid export clause");
+            err.message = mv_cstr_doc("Invalid export clause", a);
             throw_pi_error(point, err);
         }
         if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
             err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_string("Invalid export clause");
+            err.message = mv_cstr_doc("Invalid export clause", a);
             throw_pi_error(point, err);
         }
 
@@ -2217,12 +2216,12 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point) {
         Symbol rename;
         if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
             err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_string("Invalid export-as name");
+            err.message = mv_cstr_doc("Invalid export-as name", a);
             throw_pi_error(point, err);
         }
         if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
             err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_string("Invalid export-as new name");
+            err.message = mv_cstr_doc("Invalid export-as new name", a);
             throw_pi_error(point, err);
         }
 
@@ -2233,7 +2232,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point) {
         };
     } else {
         err.range = raw->range;
-        err.message = mv_string("Invalid export clause");
+        err.message = mv_cstr_doc("Invalid export clause", a);
         throw_pi_error(point, err);
     }
 }
@@ -2318,8 +2317,8 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Sha
         } else {
             PicoError err = (PicoError) {
                 .range = msym->range,
-                .message = string_cat(mv_string("Field not found in module: "),
-                                      *symbol_to_string(msym->atom.symbol), a),
+                .message = mv_str_doc(string_cat(mv_string("Field not found in module: "),
+                                                 *symbol_to_string(msym->atom.symbol), a), a)
             };
             throw_pi_error(point, err);
         }

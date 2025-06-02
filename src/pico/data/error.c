@@ -105,10 +105,10 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
 
         write_string(mv_string("\n"), cout);
         start_coloured_text(colour(200, 20, 20));
-        write_string(error.message, cout);
+        write_doc(error.message, 120, cout);
         end_coloured_text();
     } else {
-        write_string(error.message, cout);
+        write_doc(error.message, 120, cout);
     }
     write_string(mv_string("\n"), cout);
 }
