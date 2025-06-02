@@ -1722,7 +1722,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────\n"), a), &lines);
 
-              Document* doc = mv_vsep_doc(lines, a);
+              Document* doc = mv_grouped_vsep_doc(lines, a);
               immediate = doc_to_str(doc, 80, a);
 
           } else {
@@ -1761,8 +1761,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
               // end line
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────\n"), a), &lines);
 
-              Document* doc = mv_vsep_doc(lines, a);
-              immediate = doc_to_str(doc, 80, a);
+              Document* doc = mv_grouped_vsep_doc(lines, a);
+              immediate = doc_to_str(doc, 120, a);
           }
         } else {
             immediate = mv_string("Local variable.");

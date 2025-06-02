@@ -147,6 +147,13 @@ Document *mv_grouped_sep_doc(const PtrArray docs, Allocator *a) {
   return mv_sep_doc(docs, a);
 }
 
+Document *mv_grouped_vsep_doc(const PtrArray docs, Allocator *a) {
+  for (size_t i = 0; i < docs.len; i++) {
+      docs.data[i] = mv_group_doc(docs.data[i], a);
+  }
+  return mv_vsep_doc(docs, a);
+}
+
 Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Allocator* a) {
     PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mk_str_doc(mv_string(lhs), a), &nodes);
