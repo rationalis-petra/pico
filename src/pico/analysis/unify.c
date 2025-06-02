@@ -103,7 +103,7 @@ Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator*
 
         out = (Result) {
             .type = Err,
-            .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
+            .error_message = doc_to_str(mv_sep_doc(nodes, a), 80, a),
         };
     }
     return out;
@@ -138,7 +138,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
 
             return (Result) {
                 .type = Err,
-                .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
+                .error_message = doc_to_str(mv_sep_doc(nodes, a), 80, a),
             };
         }
         break;
@@ -354,7 +354,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
         push_ptr(pretty_type(lhs, a), &nodes);
         push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
         push_ptr(pretty_type(rhs, a), &nodes);
-        panic(doc_to_str(mv_sep_doc(nodes, a), a));
+        panic(doc_to_str(mv_sep_doc(nodes, a), 80, a));
     } 
     }
 }

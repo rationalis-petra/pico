@@ -362,7 +362,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             PtrArray arr = mk_ptr_array(2, a);
             push_ptr(mv_str_doc(mv_string("Expected LHS of application to be a function or kind. Was actually:"), a), &arr);
             push_ptr(pretty_type(&fn_type, a), &arr);
-            err.message = doc_to_str(mv_sep_doc(arr, a), a);
+            err.message = doc_to_str(mv_sep_doc(arr, a), 80, a);
             throw_pi_error(point, err);
         }
         
@@ -387,7 +387,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
             push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
             push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
             push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
-            err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+            err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
             throw_pi_error(point, err);
         }
 
@@ -406,7 +406,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
                 push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
                 push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
-                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
                 throw_pi_error(point, err);
             }
 
@@ -418,7 +418,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 err.range.end = ((Syntax*)implicits.data[implicits.len - 1])->range.end;
                 push_ptr(mk_str_doc(mv_string("Incorrect number of implicit arguments to all function - expected: 0, got: "), a), &nodes);
                 push_ptr(pretty_u64(implicits.len, a), &nodes);
-                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
                 throw_pi_error(point, err);
             }
 
@@ -429,7 +429,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 err.range.end = ((Syntax*)arguments.data[arguments.len - 1])->range.end;
                 push_ptr(mk_str_doc(mv_string("Incorrect number of arguments to all function - expected: 0, got: "), a), &nodes);
                 push_ptr(pretty_u64(arguments.len, a), &nodes);
-                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
                 throw_pi_error(point, err);
             }
             
@@ -453,7 +453,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 push_ptr(pretty_u64(proc_type->proc.args.len, a), &nodes);
                 push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
                 push_ptr(pretty_u64(untyped->all_application.args.len, a), &nodes);
-                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
                 throw_pi_error(point, err);
             }
 
@@ -1260,7 +1260,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
                 push_ptr(pretty_ctype(c_type, a), &nodes);
                 push_ptr(mv_str_doc(mv_string("\nand Relic Type: "), a), &nodes);
                 push_ptr(pretty_type(pico_type, a), &nodes);
-                err.message = doc_to_str(mv_cat_doc(nodes, a), a);
+                err.message = doc_to_str(mv_cat_doc(nodes, a), 80, a);
                 throw_pi_error(point, err);
             }
             untyped->ptype = pico_type;
@@ -1927,7 +1927,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         push_ptr(mk_str_doc(mv_string("Type:"), a), &nodes);
         push_ptr(pretty_type(typed->ptype, a), &nodes);
 
-        err.message = doc_to_str(mv_vsep_doc(nodes, a), a);
+        err.message = doc_to_str(mv_vsep_doc(nodes, a), 80, a);
         throw_pi_error(point, err);
     }
 }

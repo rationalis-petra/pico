@@ -4,6 +4,6 @@
 #include "pretty/document.h"
 #include "data/stream.h"
 
-void write_doc(Document* doc, OStream* os);
+void write_doc(Document* doc, uint16_t width, OStream* os);
 
 #endif 

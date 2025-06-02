@@ -3,8 +3,9 @@
 #include "platform/signals.h"
 #include "platform/memory/arena.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/data/range.h"
 #include "pico/values/modular.h"
+#include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
 
 static PiType* symbol_type;
@@ -16,6 +17,8 @@ static PiType* syntax_type;
 PiType* get_syntax_type() {
     return syntax_type;
 }
+
+static PiType* range_type;
 
 CType mk_symbol_ctype(Allocator* a) {
     return mk_struct_ctype(a, 2,
@@ -44,6 +47,26 @@ void build_mk_unique_symbol_fn(PiType* type, Assembler* ass, Allocator* a, Error
     CType fn_ctype = mk_fn_ctype(a, 1, "symbol", mk_string_ctype(a), mk_symbol_ctype(a));
 
     convert_c_fn(string_to_unique_symbol, &fn_ctype, type, ass, a, point); 
+}
+
+Range relic_range(uint64_t start, uint64_t end) {
+  return (Range) {
+      .start = start, .end = end
+  };
+}
+
+void build_range_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType range_type = mk_struct_ctype(a, 2, 
+                                 "start", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                       "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+
+    CType fn_ctype = mk_fn_ctype(a, 2,
+                                 "start", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 range_type);
+
+    convert_c_fn(relic_range, &fn_ctype, type, ass, a, point); 
 }
 
 void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
@@ -135,10 +158,13 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &typep, null_segments, NULL);
 
-        PiType* range_type = mk_struct_type(a, 2, "start", mk_prim_type(a, UInt_64), "end", mk_prim_type(a, UInt_64));
+        range_type = mk_struct_type(a, 2, "start", mk_prim_type(a, UInt_64), "end", mk_prim_type(a, UInt_64));
         typep = range_type;
         sym = string_to_symbol(mv_string("Range"));
         add_def(module, sym, type, &typep, null_segments, NULL);
+
+        e = get_def(sym, module);
+        range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(a, "Syntax");
         PiType* syn_array = mk_app_type(a, get_array_type(), syn_name_ty);
@@ -146,7 +172,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
 
         typep = mk_named_type(a, "Syntax",
                                  mk_enum_type(a, 2,
-                                              "atom", 2, range_type, atom_type,
+                                              "atom", 2, copy_pi_type_p(range_type, a), atom_type,
                                               "node", 3, copy_pi_type_p(range_type, a), hint_type, syn_array));
 
         sym = string_to_symbol(mv_string("Syntax"));
@@ -155,7 +181,6 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         syntax_type = e->value;
 
         delete_pi_type_p(typep, a);
-        //delete_pi_type_p(addr_array, a);
     }
 
     // ------------------------------------------------------------------------
@@ -197,6 +222,14 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     typep = mk_proc_type(a, 1, mk_string_type(a), copy_pi_type_p(get_symbol_type(), a));
     build_mk_unique_symbol_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("mk-unique-symbol"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(a, 2, mk_prim_type(a, UInt_64), mk_prim_type(a, UInt_64), copy_pi_type_p(range_type, a));
+    build_range_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

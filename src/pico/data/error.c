@@ -53,7 +53,7 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
                     : prev_line_starts.data[1 + i];
 
                 Document* doc = pretty_u64(i + 1, a);
-                write_doc(doc, cout);
+                write_doc(doc, 80, cout);
                 delete_doc(doc, a);
                 write_string(mv_string(" | "), cout);
                 String str = substring(line_start, next_line_start, *buffer, a);
@@ -69,7 +69,7 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
                     : prev_line_starts.data[(prev_line + 1 + i) % 5];
 
                 Document* doc = pretty_u64(line_number + 1 - (5 - i), a);
-                write_doc(doc, cout);
+                write_doc(doc, 80, cout);
                 delete_doc(doc, a);
                 write_string(mv_string(" | "), cout);
                 String str = substring(line_start, next_line_start, *buffer, a);
@@ -79,7 +79,7 @@ void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a) {
         }
 
         Document* doc = pretty_u64(line_number + 1, a);
-        write_doc(doc, cout);
+        write_doc(doc, 80, cout);
         delete_doc(doc, a);
         write_string(mv_string(" | "), cout);
 

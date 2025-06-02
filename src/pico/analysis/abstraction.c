@@ -579,7 +579,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
                 Document* doc = mv_sep_doc(nodes, a);
                 err.range = raw_clause.range;
-                err.message = doc_to_str(doc, a);
+                err.message = doc_to_str(doc, 80, a);
                 throw_pi_error(point, err);
             }
 

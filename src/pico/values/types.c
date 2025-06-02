@@ -394,7 +394,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             current_offset += pi_size_of(*ftype);
         }
 
-        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
+        out = mk_paren_doc("(",")", mv_grouped_sep_doc(nodes, a), a);
         break;
     }
     case TEnum: {
@@ -557,12 +557,15 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
 }
 
 typedef struct {
-    bool is_toplevel;
+    bool should_wrap;
+    bool show_named;
 } PrettyContext;
 
 Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
-    bool is_toplevel = ctx.is_toplevel;
-    ctx.is_toplevel = false;
+    bool should_wrap = ctx.should_wrap;
+    bool show_named = ctx.show_named;
+    ctx.should_wrap = true;
+    ctx.show_named = false;
 
     Document* out = NULL;
     switch (type->sort) {
@@ -634,7 +637,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(pretty_type_internal(type->proc.ret, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TUVar:
@@ -661,8 +664,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(fd_doc, &nodes);
         }
 
-        out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TEnum: {
@@ -678,17 +681,19 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 Document* arg = pretty_type_internal((PiType*)types->data[j], ctx, a);
                 push_ptr(arg, &ty_nodes);
             }
-            Document* ptypes = mv_sep_doc(ty_nodes, a);
 
             push_ptr(fname, &var_nodes);
-            push_ptr(ptypes,   &var_nodes);
-            Document* var_doc = mk_paren_doc("[:", "]",mv_sep_doc(var_nodes, a), a);
+            if (ty_nodes.len != 0) {
+                Document* ptypes = mv_sep_doc(ty_nodes, a);
+                push_ptr(ptypes, &var_nodes);
+            }
+            Document* var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_grouped_sep_doc(var_nodes, a), a), a);
 
             push_ptr(var_doc, &nodes);
         }
 
-        out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TReset: {
@@ -697,7 +702,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(pretty_type_internal(type->reset.in, ctx, a), &nodes);
         push_ptr(pretty_type_internal(type->reset.out, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TResumeMark: {
@@ -707,13 +712,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
+        ctx.should_wrap = false;
         push_ptr(pretty_type_internal(type->dynamic, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TNamed:  {
-        if (is_toplevel) {
+        if (show_named) {
             PtrArray nodes = mk_ptr_array(6, a);
             push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
 
@@ -728,8 +734,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
             }
 
-            push_ptr(pretty_type_internal(type->named.type, ctx, a), &nodes);
+            ctx.should_wrap = false;
+            push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.type, ctx, a), a), &nodes);
             out = mv_sep_doc(nodes, a);
+            if (should_wrap) {
+                out = mk_paren_doc("(", ")", out, a);
+            }
         } else {
             Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
 
@@ -739,13 +749,11 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 for (size_t i = 0; i < type->named.args->len; i++) {
                     push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
-                out = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
+                out = mv_sep_doc(args, a);
+                if (should_wrap) out = mk_paren_doc("(", ")", out, a);
             } else {
                 out = base;
             }
-        }
-        if (!is_toplevel) {
-            out = mk_paren_doc("(", ")", out, a);
         }
         break;
     }
@@ -767,7 +775,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
         push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
         out = mv_cat_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTrait:  {
@@ -797,7 +805,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(fd_doc, &nodes);
         }
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTraitInstance: {
@@ -818,7 +826,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         }
 
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCType: {
@@ -839,7 +847,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TExists: {
@@ -852,7 +860,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCApp: {
@@ -862,20 +870,19 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(pretty_type_internal(type->app.args.data[i], ctx, a), &nodes);
         }
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TFam: {
         PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("Family [" ), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("Family" ), a), &nodes);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &nodes);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
-        if (!is_toplevel) out = mk_paren_doc("(", ")", out, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TKind: {
@@ -917,7 +924,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
 Document* pretty_type(PiType* type, Allocator* a) {
     PrettyContext ctx = (PrettyContext) {
-        .is_toplevel = true,
+        .should_wrap = false,
+        .show_named = true,
     };
     return pretty_type_internal(type, ctx, a);
 }
@@ -1369,7 +1377,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), a), &nodes);
         push_ptr(pretty_type(body, a), &nodes);
         Document* message = mk_sep_doc(nodes, a);
-        panic(doc_to_str(message, a));
+        panic(doc_to_str(message, 80, a));
         break;
     }
     }

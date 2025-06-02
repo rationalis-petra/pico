@@ -1243,7 +1243,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             push_ptr(mv_str_doc(mv_string("Unrecognized type to generate_size_of:"), a), &nodes);
             push_ptr(pretty_type(type, a), &nodes);
             Document* message = mk_sep_doc(nodes, a);
-            panic(doc_to_str(message, a));
+            panic(doc_to_str(message, 80, a));
         }
         }
     }
@@ -1325,7 +1325,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
             push_ptr(mv_str_doc(mv_string("Unrecognized type provided to generate_align_of:"), a), &nodes);
             push_ptr(pretty_type(type, a), &nodes);
             Document* message = mk_sep_doc(nodes, a);
-            panic(doc_to_str(message, a));
+            panic(doc_to_str(message, 80, a));
         }
         }
     }

@@ -337,7 +337,8 @@ void reset_bytecount(IStream *stream) {
 //--------------------------- ostream definitions ---------------------------//
 
 typedef enum OStreamType {
-    OStreamFile
+    OStreamFile,
+    OStreamString,
 } OStreamType;
 
 typedef struct FileOStream {
@@ -346,10 +347,15 @@ typedef struct FileOStream {
     Encoding etype;
 } FileOStream;
 
+typedef struct StringOStream {
+    U8Array buffer;
+} StringOStream;
+
 struct OStream {
     OStreamType type;
     union {
         FileOStream file_ostream;
+        StringOStream string_ostream;
     } impl;
 };
 
@@ -382,6 +388,27 @@ OStream* open_file_ostream(String filename, Allocator* a) {
     return ofile;
 }
 
+OStream *mk_string_ostream(Allocator *a) {
+    OStream* ostring = mem_alloc(sizeof(OStream), a);
+    *ostring = (OStream) {
+        .type = OStreamString,
+        .impl.string_ostream.buffer = mk_u8_array(1024, a),
+    };
+    return ostring;
+}
+
+String *current_string(OStream *os, Allocator *a) {
+    if (os->type != OStreamString) {
+        return NULL;
+    }
+    String* out = mem_alloc(sizeof(String), a);
+    out->memsize = os->impl.string_ostream.buffer.len + 1;
+    out->bytes = mem_alloc(out->memsize, a);
+    memcpy(out->bytes, os->impl.string_ostream.buffer.data, out->memsize - 1);
+    out->bytes[out->memsize - 1] = '\0';
+    return out;
+}
+
 void delete_ostream(OStream* stream, Allocator* a) {
     switch (stream->type) {
     case OStreamFile: {
@@ -389,13 +416,24 @@ void delete_ostream(OStream* stream, Allocator* a) {
             fclose(stream->impl.file_ostream.file_ptr);
         }
         mem_free(stream, a);
-    } break;
+        break;
+    } 
+    case OStreamString: {
+        sdelete_u8_array(stream->impl.string_ostream.buffer);
+        mem_free(stream, a);
+        break;
+    }
     }
 }
 
 void write_impl(int char_literal, OStream* stream) {
     switch (stream->type) {
     case OStreamFile: {
+        fputc(char_literal, stream->impl.file_ostream.file_ptr);
+        break;
+    }
+    case OStreamString: {
+        // TODO (BUG): check char_literal < MAX_UINT8
         fputc(char_literal, stream->impl.file_ostream.file_ptr);
         break;
     }
@@ -416,14 +454,27 @@ void write_codepoint(uint32_t codepoint, OStream* stream) {
         fputs((char*)data, stream->impl.file_ostream.file_ptr);
         break;
     }
+    case OStreamString: {
+        // for now, we just use UTF-8 encoding
+        uint8_t nchar;
+        uint8_t data[4];
+        encode_point_utf8(data, &nchar, codepoint);
+        data[nchar] = 0;
+
+        add_u8_chunk(data, nchar, &stream->impl.string_ostream.buffer);
+        break;
+    }
     }
 }
 
 void write_string(String str, OStream* stream) {
     switch (stream->type) {
     case OStreamFile:
-        // TODO: this is only right for now (while strings are utf-8 internally...)
+        // TODO (FEATURE): Support outputting to non utf-8 ostreams
         fputs((char*)str.bytes, stream->impl.file_ostream.file_ptr);
+        break;
+    case OStreamString:
+        add_u8_chunk(str.bytes, str.memsize - 1, &stream->impl.string_ostream.buffer);
         break;
     }
 }
