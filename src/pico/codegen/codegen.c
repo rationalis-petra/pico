@@ -69,6 +69,20 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     }
     }
 
+    // The data chunk may be moved around during code-generation via 'realloc'
+    // if it needs to grow. Thus, we backlink data here, to be safe.
+    // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
+    for (size_t i = 0; i < links.links.ed_links.len; i++) {
+        LinkMetaData link = links.links.ed_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+    for (size_t i = 0; i < links.links.cd_links.len; i++) {
+        LinkMetaData link = links.links.cd_links.data[i];
+        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+
     return links.links;
 }
 
@@ -1706,8 +1720,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (immediate.memsize > UINT32_MAX) 
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
-        // Push the u8
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+        // Push the string onto the stack
+        // '0' is used as a placeholder, as the correct address will be
+        // substituted when backlinking!
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
