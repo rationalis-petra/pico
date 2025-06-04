@@ -4,6 +4,8 @@
 #include "data/result.h"
 #include "pico/values/types.h"
 
+typedef struct UVarType UVarType;
+
 // Instantiate uvars in the LHS and RHS so that they become equal
 // perform occurence checking.
 // Note: this destructively mutates the type
@@ -16,5 +18,10 @@ bool has_unification_vars_p(PiType type);
 // by their subsitutions, and all unification variables with default values
 // instantiated with those defaults.
 void squash_type(PiType* type);
+
+PiType* mk_uvar(Allocator* a);
+PiType* mk_uvar_integral(Allocator* a);
+PiType* mk_uvar_floating(Allocator* a);
+
 
 #endif

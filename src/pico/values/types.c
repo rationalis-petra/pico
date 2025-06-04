@@ -132,12 +132,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
-        if (t.uvar->subst != NULL) {
-            delete_pi_type(*t.uvar->subst, a);
-        }
-        mem_free(t.uvar, a);
+        panic(mv_string("UVars should not be deleted, but rather freed via region or similar allocators"));
         break;
     case TPrim: break;
 
@@ -241,15 +236,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
-        out.uvar = mem_alloc(sizeof(UVarType), a);
-        out.uvar->id = t.uvar->id; 
-        if (t.uvar->subst) {
-            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
-        } else {
-            out.uvar->subst = NULL;
-        }
+        panic(mv_string("UVars should not be copied, but rather freed via region or similar allocators"));
         break;
     case TPrim:
         out.prim = t.prim;
@@ -367,12 +354,6 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     }
     case TUVar:
         out = mk_str_doc(mv_string("No Print UVar!"), a);
-        break;
-    case TUVarIntegral:
-        out = mk_str_doc(mv_string("No Print UVar (integral)!"), a);
-        break;
-    case TUVarFloating:
-        out = mk_str_doc(mv_string("No Print UVar (floating)!"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;
@@ -648,12 +629,6 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TUVar:
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
-        break;
-    case TUVarIntegral:
-        out = mv_str_doc(mk_string("No Print UVar Integral", a), a);
-        break;
-    case TUVarFloating:
-        out = mv_str_doc(mk_string("No Print UVar Floating", a), a);
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
@@ -1091,10 +1066,6 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     case TUVar:
         return Err;
-    case TUVarIntegral:
-        return Err;
-    case TUVarFloating:
-        return Err;
     }
 
     // If we haven't returned at this point, then the tag is invalid
@@ -1209,51 +1180,9 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         *out = sizeof(void*);
         return Ok;
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
         return Err;
     }
     panic(mv_string("pi_maye_align_of received invalid type."));
-}
-
-PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVar; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarIntegral; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarFloating; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-UVarGenerator* mk_gen(Allocator* a) {
-    UVarGenerator* gen = mem_alloc(sizeof(UVarGenerator), a);
-    gen->counter = 0;
-    return gen;
-}
-
-void delete_gen(UVarGenerator* gen, Allocator* a) {
-    mem_free(gen, a);
 }
 
 // TODO (UB): make this thread safe

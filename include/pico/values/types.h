@@ -13,7 +13,10 @@
 /* Basic types in pico typesystem */
 // Forward declarations
 typedef struct PiType PiType;
-typedef struct UVarGenerator UVarGenerator;
+
+// Forward declaration: these types are defined and used
+// in unify.c
+typedef struct UVarType UVarType;
 
 typedef enum {
     Int_8  = 0b000,
@@ -68,8 +71,6 @@ typedef enum {
 
   // Used only during unification
   TUVar,
-  TUVarIntegral,
-  TUVarFloating,
 } PiType_t;
 
 typedef struct {
@@ -107,11 +108,6 @@ typedef struct {
     PtrArray args;
     PiType* fam;
 } TAppType;
-
-typedef struct {
-    uint64_t id;
-    PiType* subst;
-} UVarType;
 
 typedef struct {
     SymbolArray vars;
@@ -196,12 +192,6 @@ void delete_pi_type_p(PiType* t, Allocator* a);
 
 PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
-
-PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a);
-UVarGenerator* mk_gen(Allocator* a);
-void delete_gen(UVarGenerator* gen, Allocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types

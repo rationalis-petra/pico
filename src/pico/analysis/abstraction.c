@@ -1105,34 +1105,42 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         SynArray elements = mk_ptr_array(raw.branch.nodes.len - 1, a);
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
             RawTree tree = raw.branch.nodes.data[i];
-            SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
             if (tree.type == RawBranch && tree.branch.hint == HSpecial) {
                 if (tree.type != RawBranch
-                    || tree.branch.nodes.len != 3
                     || !eq_symbol(&tree.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
-                    err.range = tree.range;
-                    err.message = mv_cstr_doc("Invalid let! binding in seq", a);
+                    err.range = tree.branch.nodes.data[0].range;
+                    err.message = mv_cstr_doc("Special nodes in a 'seq' are expected to have a head 'let!'", a);
                     throw_pi_error(point, err);
                 }
-                RawTree rsym = tree.branch.nodes.data[1];
-                if (rsym.type != RawAtom || rsym.atom.type != ASymbol) {
-                    err.range = tree.range;
-                    err.message = mv_cstr_doc("Invalid let! binding in seq", a);
-                    throw_pi_error(point, err);
-                }
+                for (size_t i = 0; i < (tree.branch.nodes.len - 1) / 2; i++) {
+                    RawTree rsym = tree.branch.nodes.data[(2 * i) + 1];
+                    if (rsym.type != RawAtom || rsym.atom.type != ASymbol) {
+                        err.range = tree.branch.nodes.data[(2 * i) + 1].range;
+                        err.message = mv_cstr_doc("'let!' expected to bind a symbol", a);
+                        throw_pi_error(point, err);
+                    }
                 
-                *elt = (SeqElt) {
-                    .is_binding = true,
-                    .symbol = rsym.atom.symbol,
-                    .expr = abstract_expr_i(tree.branch.nodes.data[2], env, a, point),
-                };
+                    SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
+                    *elt = (SeqElt) {
+                        .is_binding = true,
+                        .symbol = rsym.atom.symbol,
+                        .expr = abstract_expr_i(tree.branch.nodes.data[(2 * i) + 2], env, a, point),
+                    };
+                    push_ptr(elt, &elements);
+                }
+                if (tree.branch.nodes.len % 2 != 1) {
+                    err.range = tree.branch.nodes.data[tree.branch.nodes.len - 1].range;
+                    err.message = mv_cstr_doc("Incomplete binding in let!", a);
+                    throw_pi_error(point, err);
+                }
             } else {
+                SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
                 *elt = (SeqElt) {
                     .is_binding = false,
                     .expr = abstract_expr_i(tree, env, a, point),
                 };
+                push_ptr(elt, &elements);
             }
-            push_ptr(elt, &elements);
         }
         
         Syntax* res = mem_alloc(sizeof(Syntax), a);

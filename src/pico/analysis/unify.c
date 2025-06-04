@@ -3,6 +3,7 @@
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
 
+#include "pico/data/range.h"
 #include "pico/analysis/unify.h"
 
 // Handling of named types
@@ -17,6 +18,37 @@
 // 
 // lhs_symbol
 // rhs_symbol
+
+typedef enum {
+    NoDefault, Integral, Floating, Struct
+} UVarDefault;
+
+typedef enum {
+    ConInt, ConFloat, ConField,
+} ConstraintType;
+
+typedef struct {
+    Symbol name;
+    PiType* type;
+} FieldConstraint;
+
+typedef struct {
+    ConstraintType type;
+    Range range;
+    union {
+        int64_t fits;
+        FieldConstraint has_field;
+    };
+} Constraint;
+
+ARRAY_HEADER(Constraint, constraint, Constraint)
+ARRAY_COMMON_IMPL(Constraint, constraint, Constraint)
+
+struct UVarType {
+    PiType* subst;
+    ConstraintArray constraints;
+    UVarDefault default_behaviour;
+};
 
 typedef struct {
     Symbol lhs;
@@ -39,9 +71,7 @@ PiType* trace_uvar(PiType* uvar);
 // Unify two types such they are equal. Assumes they have the same sort
 Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
 Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
-
-Result assert_maybe_integral(PiType* type);
-Result assert_maybe_floating(PiType* type);
+Result uvar_subst(UVarType* uvar, PiType* type, Allocator* a);
 
 
 Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
@@ -69,28 +99,12 @@ Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator*
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
     if (lhs->sort == TUVar) {
-        lhs->uvar->subst = rhs;
-        out.type = Ok;
+        out = uvar_subst(lhs->uvar, rhs, a);
+        if (out.type != Ok) return out;
     }
     else if (rhs->sort == TUVar) {
-        rhs->uvar->subst = lhs;
-        out.type = Ok;
-    }
-    else if (lhs->sort == TUVarIntegral) {
-        out = assert_maybe_integral(rhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
-    }
-    else if (rhs->sort == TUVarIntegral) {
-        out = assert_maybe_integral(rhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
-    }
-    else if (lhs->sort == TUVarFloating) {
-        out = assert_maybe_floating(lhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
-    }
-    else if (rhs->sort == TUVarFloating) {
-        out = assert_maybe_floating(lhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
+        out = uvar_subst(rhs->uvar, lhs, a);
+        if (out.type != Ok) return out;
     }
     else if (rhs->sort == lhs->sort)
         out = unify_eq(lhs, rhs, rename, a);
@@ -359,44 +373,51 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     }
 }
 
-Result assert_maybe_integral(PiType* type) {
-    // Use a while loop to trace through uvars
-    while (type) {
-        // If it is a primtive, check it is integral type
-        if (type->sort == TPrim && (type->prim < 0b1000)) {
-            return (Result) {.type = Ok};
-        } else if (type->sort == TUVar || type->sort == TUVarIntegral) {
-            // continue on to next iteration
-            type = type->uvar->subst;
-        } else {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
-            };
+Result uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
+    if (type->sort == TUVar) {
+        // type has been traced, so if it's a uvar, no need to chase!
+        // check that the defaults are compatible
+        if (uvar->default_behaviour ) {
+        }
+    } else {
+        // TODO: better error messages
+        PiType* unwrapped = unwrap_type(type, a);
+        for (size_t i = 0; i < uvar->constraints.len; i++) {
+            switch (uvar->constraints.data[i].type) {
+            case ConInt:
+                if (unwrapped->sort != TPrim || unwrapped->prim > 0b111) {
+                    return (Result) {.type = Err, .error_message = mv_string("Does not satisfy integral constraint.")};
+                }
+                break;
+            case ConFloat:
+                if (unwrapped->sort != TPrim || unwrapped->prim != Float_32 || unwrapped->prim != Float_64) {
+                    return (Result) {.type = Err, .error_message = mv_string("Does not satisfy floating constraint.")};
+                }
+                break;
+            case ConField:
+                if (unwrapped->sort != TStruct) {
+                    return (Result) {.type = Err, .error_message = mv_string("Does not satisfy field constraint: not a struct")};
+                }
+                bool found_field = false;
+                for (size_t i = 0; i < type->structure.fields.len; i++) {
+                    if (symbol_eq(type->structure.fields.data[i].key,
+                                  uvar->constraints.data[i].has_field.name)) {
+                        Result out = unify(type->structure.fields.data[i].val, uvar->constraints.data[i].has_field.type, a); 
+                        if (out.type != Ok) return out;
+                        found_field = false;
+                    }
+                }
+                if (!found_field) {
+                    return (Result) {.type = Err, .error_message = mv_string("Does not satisfy field constraint: field not found")};
+                }
+                break;
+            }
         }
     }
-    return (Result) {.type = Ok};
+    
+    uvar->subst = type;
+    return (Result){.type = Ok};
 }
-
-Result assert_maybe_floating(PiType* type) {
-    // Use a while loop to trace through uvars
-    while (type) {
-        // If it is a primtive, check it is integral type
-        if (type->sort == TPrim && (type->prim == Float_32 || type->prim == Float_64)) {
-            return (Result) {.type = Ok};
-        } else if (type->sort == TUVar || type->sort == TUVarFloating) {
-            // continue on to next iteration
-            type = type->uvar->subst;
-        } else {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
-            };
-        }
-    }
-    return (Result) {.type = Ok};
-}
-
 
 bool has_unification_vars_p(PiType type) {
     // Only return t if uvars don't go anywhere
@@ -496,15 +517,13 @@ bool has_unification_vars_p(PiType type) {
 
     // Special sort: unification variable
     case TUVar:
-        if (type.uvar->subst == NULL) {
+        if (type.uvar->subst == NULL && type.uvar->default_behaviour == NoDefault) {
             return true;
-        } else {
+        } else if (type.uvar->subst != NULL) {
             return has_unification_vars_p(*type.uvar->subst);
+        } else {
+            return false;
         }
-
-    case TUVarIntegral:
-    case TUVarFloating:
-        return false;
     }
 
     // If we are here, then none of the branches were taken!
@@ -512,7 +531,7 @@ bool has_unification_vars_p(PiType type) {
 }
 
 PiType* trace_uvar(PiType* uvar) {
-  while ((uvar->sort == TUVar || uvar->sort == TUVarIntegral || uvar->sort == TUVarFloating)
+  while ((uvar->sort == TUVar)
          && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
@@ -599,30 +618,70 @@ void squash_type(PiType* type) {
         if (subst) {
             squash_type(subst);
             *type = *subst;
-        } 
-        break;
-    }
-    case TUVarIntegral: {
-        PiType* subst = type->uvar->subst;
-        if (subst) {
-            squash_type(subst);
-            *type = *subst;
-        } else {
-            *type = (PiType) {.sort = TPrim, .prim = Int_64,};
         }
-        break;
-    }
-    case TUVarFloating: {
-        PiType* subst = type->uvar->subst;
-        if (subst) {
-            squash_type(subst);
-            *type = *subst;
-        } else {
-            *type = (PiType) {.sort = TPrim, .prim = Float_64,};
+
+        // If still a unification variable, 
+        // instantiate with default behavioru
+        if (type->sort == TUVar) {
+          switch (type->uvar->default_behaviour) {
+          case NoDefault:
+              break;
+          case Integral:
+              *type = (PiType){.sort = TPrim, .prim = Int_64};
+              break;
+          case Floating:
+              *type = (PiType){.sort = TPrim, .prim = Float_64};
+              break;
+          case Struct:
+              panic(mv_string("Not implemented: squash uvar with struct default!"));
+              break;
+          }
         }
         break;
     }
     default: 
         panic(mv_string("squash_type received invalid type!"));
     }
+}
+
+PiType* mk_uvar(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = NoDefault,
+    };
+    
+    return uvar;
+}
+
+PiType* mk_uvar_integral(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = Integral,
+    };
+    
+    return uvar;
+}
+
+PiType* mk_uvar_floating(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = Integral,
+    };
+    
+    return uvar;
 }

@@ -80,7 +80,7 @@ void display_error(PicoError error, IStream *is, OStream* os, Allocator* a) {
             }
         }
 
-        Document* doc = pretty_u64(line_number + 1, a);
+        Document* doc = pretty_u64(++line_number, a);
         write_doc_formatted(doc, 80, fos);
         delete_doc(doc, a);
         write_fstring(mv_string(" | "), fos);
@@ -93,7 +93,38 @@ void display_error(PicoError error, IStream *is, OStream* os, Allocator* a) {
         write_fstring(s1, fos);
 
         start_coloured_text(colour(208, 105, 30), fos);
-        write_fstring(bad_code, fos);
+        {
+            // We need to add line-numbers if bad code spans multiple lines!  
+            size_t start_idx = 0;
+            size_t i = 0;
+            for (; i < bad_code.memsize; i++) {
+                if (bad_code.bytes[i] == '\n') {
+                    String bad_line = substring(start_idx, i + 1, bad_code, a);
+                    if (start_idx != 0) {
+                        Document* doc = pretty_u64(++line_number, a);
+                        end_coloured_text(fos);
+                        write_doc_formatted(doc, 80, fos);
+                        delete_doc(doc, a);
+                        write_fstring(mv_string(" | "), fos);
+                        start_coloured_text(colour(208, 105, 30), fos);
+                    }
+                    write_fstring(bad_line, fos);
+                    start_idx = i + 1;
+                }
+            }
+            String bad_line = substring(start_idx, i + 1, bad_code, a);
+            if (start_idx != 0) {
+                line_number++;
+                Document* doc = pretty_u64(line_number, a);
+                        end_coloured_text(fos);
+                write_doc_formatted(doc, 80, fos);
+                delete_doc(doc, a);
+                write_fstring(mv_string(" | "), fos);
+                start_coloured_text(colour(208, 105, 30), fos);
+            } 
+            write_fstring(bad_line, fos);
+            start_idx = i + 1;
+        }
         end_coloured_text(fos);
 
         write_fstring(s2, fos);
