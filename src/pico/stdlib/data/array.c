@@ -33,6 +33,12 @@ void add_array_module(Module *data, Allocator *a) {
         panic(point.error_message);
     }
 
+    // TODO (FEAT): add/implement the following:
+    //  - array-free or delete-array
+    //  - map
+    //  - each
+
+    // TODO (BUG): the array should set the allocator
     const char *mk_array_fn = 
         "(def mk-array all [A] proc [capacity len]\n"
         "  (struct (Array A)\n"
@@ -55,6 +61,7 @@ void add_array_module(Module *data, Allocator *a) {
         "                           (address-to-num arr.data)))\n"
         "    val))";
     compile_toplevel(aset_fn, module, &point, &pi_point, a);
+
 
     Result r = add_module_def(data, string_to_symbol(mv_string("array")), module);
     if (r.type == Err) panic(r.error_message);

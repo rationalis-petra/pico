@@ -1242,6 +1242,44 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FWiden: {
+        if (raw.branch.nodes.len != 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'widen' expects precisely 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+
+        Syntax* type = abstract_expr_i(raw.branch.nodes.data[2], env, a, point);
+        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SWiden,
+            .ptype = NULL,
+            .range = raw.range,
+            .name = {.val = term, .type = type},
+        };
+        return res;
+    }
+    case FNarrow: {
+        if (raw.branch.nodes.len != 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'narrow' expects precisely 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+
+        Syntax* type = abstract_expr_i(raw.branch.nodes.data[2], env, a, point);
+        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SNarrow,
+            .ptype = NULL,
+            .range = raw.range,
+            .name = {.val = term, .type = type},
+        };
+        return res;
+    }
     case FDynAlloc: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;

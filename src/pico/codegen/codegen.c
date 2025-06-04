@@ -1381,6 +1381,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SUnName:
         generate(*syn.unname, env, target, links, a, point);
         break;
+    case SWiden:
+        // TODO (BUG): appropriately widen (sign-extend/double broaden)
+        generate(*syn.widen.val, env, target, links, a, point);
+        break;
+    case SNarrow:
+        // TODO: if signed -ve => 0??
+        // TODO (BUG): appropriately narrow (sign-extend/double broaden)
+        generate(*syn.narrow.val, env, target, links, a, point);
+        break;
     case SDynAlloc:
         generate(*syn.size, env, target, links, a, point);
 

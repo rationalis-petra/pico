@@ -79,12 +79,15 @@ typedef enum TermFormer {
     FSequence,
     FModule,
 
-    // Special Term formers
+    // Special Term formers, usually manipulating types 
+    // or being pseudo-functions
     FIs,
     FInTo,
     FOutOf,
     FName,
     FUnName,
+    FWiden,
+    FNarrow,
     FDynAlloc,
     FSizeOf,
     FAlignOf,

@@ -324,6 +324,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FUnName:
         out = mk_str_doc(mv_string("::unname"), a);
         break;
+    case FWiden:
+        out = mk_str_doc(mv_string("::widen"), a);
+        break;
+    case FNarrow:
+        out = mk_str_doc(mv_string("::narrow"), a);
+        break;
     case FDynAlloc:
         out = mk_str_doc(mv_string("::dynamic-allocate"), a);
         break;

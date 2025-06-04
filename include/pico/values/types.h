@@ -208,6 +208,9 @@ void delete_gen(UVarGenerator* gen, Allocator* a);
 // Generate distinct id
 uint64_t distinct_id();
 
+bool is_wider(PiType* narrow, PiType* wide);
+bool is_narrower(PiType* wide, PiType* narrow);
+
 // Recursively extracts the inner type from distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 
 // (wrapped) named type within the type, then contine descending.

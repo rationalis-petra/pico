@@ -4,7 +4,6 @@
 
 #include "data/string.h"
 #include "pretty/standard_types.h"
-#include "pretty/string_printer.h"
 
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
@@ -22,7 +21,7 @@
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
 void type_infer_expr(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* a, PiErrorPoint* point);
-void instantiate_implicits(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+void post_unify(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* point) {
@@ -42,7 +41,7 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         }
         type_var(top->def.bind, check_against, t_env);
         type_check_expr(term, *check_against, t_env, gen, a, point);
-        instantiate_implicits(term, t_env, a, point);
+        post_unify(term, t_env, a, point);
         pop_type(t_env);
         break;
     }
@@ -81,7 +80,7 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
     case TLExpr: {
         Syntax* term = top->expr;
         type_infer_expr(term, t_env, gen, a, point);
-        instantiate_implicits(term, t_env, a, point);
+        post_unify(term, t_env, a, point);
         break;
     }
     }
@@ -992,6 +991,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
         untyped->ptype = untyped->unname->ptype->named.type;
         break;
     }
+    case SWiden: {
+        PiType* wide_type = eval_type(untyped->name.type, env, a, gen, point);
+        untyped->ptype = wide_type; 
+        break;
+    }
+    case SNarrow: {
+        PiType* narrow_type = eval_type(untyped->name.type, env, a, gen, point);
+        untyped->ptype = narrow_type; 
+        break;
+    }
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -1315,7 +1324,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, UVarGenerator* gen, Allocator* 
     }
 }
 
-void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+// Post Unify: perform actions which require types to be resolved,
+// i.e. no uvars!
+// This includes
+// - Instantiating implicits
+// - Checking that widen and narrow widen and narrow their arguments, respectively
+void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     err.range = syn->range;
     switch (syn->type) {
@@ -1340,7 +1354,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
             SymPtrACell arg = syn->procedure.args.data[i];
             type_var(arg.key, arg.val, env);
         }
-        instantiate_implicits(syn->procedure.body, env, a, point);
+        post_unify(syn->procedure.body, env, a, point);
         pop_types(env, syn->procedure.args.len + syn->procedure.implicits.len);
         break;
     }
@@ -1353,18 +1367,18 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
 
             type_qvar(arg, arg_ty, env);
         }
-        instantiate_implicits(syn->all.body, env, a, point);
+        post_unify(syn->all.body, env, a, point);
         pop_types(env, syn->all.args.len);
         break;
     }
     case SMacro: {
-        instantiate_implicits(syn->transformer, env, a, point);
+        post_unify(syn->transformer, env, a, point);
         break;
     }
     case SApplication: {
-        instantiate_implicits(syn->application.function, env, a, point);
+        post_unify(syn->application.function, env, a, point);
         for (size_t i = 0; i < syn->application.args.len; i++) {
-            instantiate_implicits(syn->application.args.data[i], env, a, point);
+            post_unify(syn->application.args.data[i], env, a, point);
         }
 
         if (syn->application.implicits.len != 0) {
@@ -1403,14 +1417,14 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
                 }
             }
         } else if (fn_type.sort != TKind) {
-            panic(mv_string("Invalid lhs in application in instantiate_implicits: not Proc or Kind"));
+            panic(mv_string("Invalid lhs in application in post_unify: not Proc or Kind"));
         } 
         break;
     }
     case SAllApplication: {
-        instantiate_implicits(syn->all_application.function, env, a, point);
+        post_unify(syn->all_application.function, env, a, point);
         for (size_t i = 0; i < syn->all_application.args.len; i++) {
-            instantiate_implicits(syn->all_application.args.data[i], env, a, point);
+            post_unify(syn->all_application.args.data[i], env, a, point);
         }
 
         if (syn->all_application.implicits.len != 0) {
@@ -1467,29 +1481,29 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
     case SConstructor: break;
     case SVariant: {
         for (size_t i = 0; i < syn->variant.args.len; i++) {
-            instantiate_implicits(syn->variant.args.data[i], env, a, point);
+            post_unify(syn->variant.args.data[i], env, a, point);
         }
         break;
     }
     case SMatch: {
-        instantiate_implicits(syn->match.val, env, a, point);
+        post_unify(syn->match.val, env, a, point);
 
         for (size_t i = 0; i < syn->match.clauses.len; i++) {
             SynClause* clause = syn->match.clauses.data[i];
 
             // TODO BUG: bind types/vars from clause
-            instantiate_implicits(clause->body, env, a, point);
+            post_unify(clause->body, env, a, point);
         }
         break;
     }
     case SStructure: {
         for (size_t i = 0; i < syn->structure.fields.len; i++) {
-            instantiate_implicits(syn->structure.fields.data[i].val, env, a, point);
+            post_unify(syn->structure.fields.data[i].val, env, a, point);
         }
         break;
     }
     case SProjector: {
-        instantiate_implicits(syn->projector.val, env, a, point);
+        post_unify(syn->projector.val, env, a, point);
         break;
     }
     case SInstance: {
@@ -1509,7 +1523,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         for (size_t i = 0; i < syn->ptype->instance.fields.len; i++) {
             Syntax** field_syn = (Syntax**)sym_ptr_lookup(syn->ptype->instance.fields.data[i].key, syn->instance.fields);
             if (field_syn) {
-                instantiate_implicits(*field_syn, env, a, point);
+                post_unify(*field_syn, env, a, point);
             } else {
                 err.message = mv_cstr_doc("Trait instance is missing a field", a);
                 throw_pi_error(point, err);
@@ -1520,85 +1534,101 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
         break;
     }
     case SDynamic:
-        instantiate_implicits(syn->dynamic, env, a, point);
+        post_unify(syn->dynamic, env, a, point);
         break;
     case SDynamicUse:
-        instantiate_implicits(syn->use, env, a, point);
+        post_unify(syn->use, env, a, point);
         break;
 
     // Control Flow & Binding
     case SDynamicLet:
         for (size_t i = 0; i < syn->dyn_let_expr.bindings.len; i++) {
             DynBinding* b = syn->dyn_let_expr.bindings.data[i];
-            instantiate_implicits(b->var, env, a, point);
-            instantiate_implicits(b->expr, env, a, point);
+            post_unify(b->var, env, a, point);
+            post_unify(b->expr, env, a, point);
         }
-        instantiate_implicits(syn->dyn_let_expr.body, env, a, point);
+        post_unify(syn->dyn_let_expr.body, env, a, point);
         break;
     case SLet:
         // TODO BUG: update environment 
         for (size_t i = 0; i < syn->let_expr.bindings.len; i++) {
-            instantiate_implicits(syn->let_expr.bindings.data[i].val, env, a, point);
+            post_unify(syn->let_expr.bindings.data[i].val, env, a, point);
         }
-        instantiate_implicits(syn->let_expr.body, env, a, point);
+        post_unify(syn->let_expr.body, env, a, point);
         break;
     case SIf:
-        instantiate_implicits(syn->if_expr.condition, env, a, point);
-        instantiate_implicits(syn->if_expr.true_branch, env, a, point);
-        instantiate_implicits(syn->if_expr.false_branch, env, a, point);
+        post_unify(syn->if_expr.condition, env, a, point);
+        post_unify(syn->if_expr.true_branch, env, a, point);
+        post_unify(syn->if_expr.false_branch, env, a, point);
         break;
     case SLabels:
-        instantiate_implicits(syn->labels.entry, env, a, point);
+        post_unify(syn->labels.entry, env, a, point);
         for (size_t i = 0; i < syn->labels.terms.len; i++) {
             SynLabelBranch* branch = syn->labels.terms.data[i].val;
-            instantiate_implicits(branch->body, env, a, point);
+            post_unify(branch->body, env, a, point);
         }
         break;
     case SGoTo:
         for (size_t i = 0; i < syn->go_to.args.len; i++) {
-            instantiate_implicits(syn->go_to.args.data[i], env, a, point);
+            post_unify(syn->go_to.args.data[i], env, a, point);
         }
         break;
     case SSequence:
         for (size_t i = 0; i < syn->sequence.elements.len; i++) {
             SeqElt* elt = syn->sequence.elements.data[i];
-            instantiate_implicits(elt->expr, env, a, point);
+            post_unify(elt->expr, env, a, point);
         }
         break;
     case SWithReset:
         // TODO BUG: update environment 
-        instantiate_implicits(syn->with_reset.expr, env, a, point);
-        instantiate_implicits(syn->with_reset.handler, env, a, point);
+        post_unify(syn->with_reset.expr, env, a, point);
+        post_unify(syn->with_reset.handler, env, a, point);
         break;
     case SResetTo:
-        instantiate_implicits(syn->reset_to.point, env, a, point);
-        instantiate_implicits(syn->reset_to.arg, env, a, point);
+        post_unify(syn->reset_to.point, env, a, point);
+        post_unify(syn->reset_to.arg, env, a, point);
         break;
 
     // Special
     case SIs:
-        instantiate_implicits(syn->is.val, env, a, point);
-        instantiate_implicits(syn->is.type, env, a, point);
+        post_unify(syn->is.val, env, a, point);
+        post_unify(syn->is.type, env, a, point);
         break;
     case SInTo:
-        instantiate_implicits(syn->into.val, env, a, point);
-        instantiate_implicits(syn->into.type, env, a, point);
+        post_unify(syn->into.val, env, a, point);
+        post_unify(syn->into.type, env, a, point);
         break;
     case SOutOf:
-        instantiate_implicits(syn->out_of.val, env, a, point);
-        instantiate_implicits(syn->out_of.type, env, a, point);
+        post_unify(syn->out_of.val, env, a, point);
+        post_unify(syn->out_of.type, env, a, point);
         break;
     case SName:
-        instantiate_implicits(syn->name.val, env, a, point);
-        instantiate_implicits(syn->name.type, env, a, point);
+        post_unify(syn->name.val, env, a, point);
+        post_unify(syn->name.type, env, a, point);
+        break;
+    case SWiden:
+        post_unify(syn->widen.val, env, a, point);
+        post_unify(syn->widen.type, env, a, point);
+        if (!is_wider(syn->widen.val->ptype, syn->widen.type->type_val)) {
+            err.message = mv_cstr_doc("This widening is invalid", a);
+            throw_pi_error(point, err);
+        }
+        break;
+    case SNarrow:
+        post_unify(syn->narrow.val, env, a, point);
+        post_unify(syn->narrow.type, env, a, point);
+        if (!is_narrower(syn->narrow.val->ptype, syn->narrow.type->type_val)) {
+            err.message = mv_cstr_doc("This narrowing is invalid", a);
+            throw_pi_error(point, err);
+        }
         break;
     case SUnName:
-        instantiate_implicits(syn->unname, env, a, point);
+        post_unify(syn->unname, env, a, point);
         break;
     case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
-        instantiate_implicits(syn->size, env, a, point);
+        post_unify(syn->size, env, a, point);
         break;
     case SModule:
         panic(mv_string("instantiate implicits not implemented for module"));
@@ -1618,7 +1648,7 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
     case STypeFamily:
         break;
     case SLiftCType:
-        instantiate_implicits(syn->c_type, env, a, point);
+        post_unify(syn->c_type, env, a, point);
         break;
     case SCheckedType:
         // TODO (INVESTIGATE FEATURE): check that it is OK to do nothing? (no implicits in types, right?)
@@ -1628,15 +1658,15 @@ void instantiate_implicits(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint
     case SAnnotation:
         panic(mv_string("instantiate implicits not implemented for a annotation"));
     case SReinterpret:
-        instantiate_implicits(syn->reinterpret.type, env, a, point);
-        instantiate_implicits(syn->reinterpret.body, env, a, point);
+        post_unify(syn->reinterpret.type, env, a, point);
+        post_unify(syn->reinterpret.body, env, a, point);
         break;
     case SConvert:
-        instantiate_implicits(syn->convert.type, env, a, point);
-        instantiate_implicits(syn->convert.body, env, a, point);
+        post_unify(syn->convert.type, env, a, point);
+        post_unify(syn->convert.body, env, a, point);
         break;
     case STypeOf: {
-        instantiate_implicits(syn->type_of, env, a, point);
+        post_unify(syn->type_of, env, a, point);
         break;
     }
     case SDescribe: 
@@ -1832,6 +1862,14 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SUnName:
         squash_types(typed->unname, a, point);
         break;
+    case SWiden:
+        squash_type(typed->widen.type->type_val);
+        squash_types(typed->widen.val, a, point);
+        break;
+    case SNarrow:
+        squash_type(typed->narrow.type->type_val);
+        squash_types(typed->narrow.val, a, point);
+        break;
     case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
@@ -1934,7 +1972,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
 
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     squash_types(typed, a, point);
-    instantiate_implicits(typed, env, a, point);
+    post_unify(typed, env, a, point);
     Allocator exalloc = mk_executable_allocator(a);
     
     // Catch error here; so can cleanup after self before further unwinding.

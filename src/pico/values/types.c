@@ -1262,6 +1262,66 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 static int id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
 
+bool is_wider(PiType *narrow, PiType *wide) {
+    // is_wider only works for primitives, return false otherwise
+    if (narrow->sort != TPrim || wide->sort != TPrim)
+        return false;
+    PrimType n = narrow->prim;
+    PrimType w = wide->prim;
+
+    // Float hierarchy is simple
+    if (n == Float_32 && w == Float_32) return true;
+    if (n == Float_32 && w == Float_64) return true;
+    if (n == Float_64 && w == Float_64) return true;
+
+    // A bool can widen to any int.
+    if (n == Bool && w <= UInt_64) return true;
+
+    // If n and w are either both signed, or both unsigned, 
+    // then widening is a matter of if n <= w
+    if (Int_8 <= n && n <= Int_64 && Int_8 <= w && w <= Int_64)
+        return n <= w;
+    if (UInt_8 <= n && n <= UInt_64 && UInt_8 <= w && w <= UInt_64)
+        return n <= w;
+
+    // if n is unsigned and w is signed, then we need the bottom two 
+    // bits of w to be strictly greater than the bottom bits of n
+    if (UInt_8 <= n && n <= UInt_64 && Int_8 <= w && w <= Int_64)
+        return (n & 0b11) < (w & 0b11);
+
+    // Default to false
+    return false;
+}
+
+bool is_narrower(PiType *wide, PiType *narrow) {
+    // is_narrower only works for primitives, return false otherwise
+    if (narrow->sort != TPrim || wide->sort != TPrim)
+        return false;
+    PrimType n = narrow->prim;
+    PrimType w = wide->prim;
+
+    // Float hierarchy is simple - 
+    if (n == Float_32 && w == Float_64) return true;
+
+    // Any int can narrow to a bool
+    if (n == Bool && w <= UInt_64) return true;
+
+    // If n and w are either both signed, or both unsigned, 
+    // then narrowing is a matter of if n < w
+    if (Int_8 <= n && n <= Int_64 && Int_8 <= w && w <= Int_64)
+        return n < w;
+    if (UInt_8 <= n && n <= UInt_64 && UInt_8 <= w && w <= UInt_64)
+        return n < w;
+
+    // if n is unsigned and w is signed, then any cast is a narrow,
+    // as we always loose sign information
+    if (UInt_8 <= n && n <= UInt_64 && Int_8 <= w && w <= Int_64)
+        return true;
+
+    // Default to false
+    return false;
+}
+
 PiType* unwrap_type(PiType *ty, Allocator* a) {
     bool unwrapping = true;
     while (unwrapping) {
@@ -1389,7 +1449,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), a), &nodes);
         push_ptr(pretty_type(body, a), &nodes);
         Document* message = mk_sep_doc(nodes, a);
-        panic(doc_to_str(message, 80, a));
+        panic(doc_to_str(message, 120, a));
         break;
     }
     }

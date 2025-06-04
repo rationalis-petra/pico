@@ -68,6 +68,8 @@ typedef enum {
     SOutOf,
     SName,
     SUnName,
+    SWiden,
+    SNarrow,
     SDynAlloc,
     SSizeOf,
     SAlignOf,
@@ -357,6 +359,8 @@ struct Syntax {
         SynIs out_of;
         SynIs name;
         Syntax* unname;
+        SynIs widen;
+        SynIs narrow;
         Syntax* size;
 
         SynProcType proc_type;
