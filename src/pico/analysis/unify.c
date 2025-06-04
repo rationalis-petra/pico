@@ -668,6 +668,11 @@ PiType* mk_uvar_integral(Allocator* a) {
       .constraints = mk_constraint_array(4, a),
       .default_behaviour = Integral,
     };
+
+    Constraint con = (Constraint) {
+        .type = ConInt,
+    };
+    push_constraint(con, &uvar->uvar->constraints);
     
     return uvar;
 }
@@ -682,6 +687,54 @@ PiType* mk_uvar_floating(Allocator* a) {
       .constraints = mk_constraint_array(4, a),
       .default_behaviour = Integral,
     };
+
+    Constraint con = (Constraint) {
+        .type = ConFloat,
+    };
+    push_constraint(con, &uvar->uvar->constraints);
     
     return uvar;
+}
+
+Result add_field_constraint(UVarType *uvar, Symbol field, PiType *field_ty, Allocator *a) {
+    while (true) {
+        if ((uvar->default_behaviour == NoDefault) | (uvar->default_behaviour == Struct)) {
+            uvar->default_behaviour = Struct;
+            bool append = true;
+            for (size_t i = 0; i < uvar->constraints.len; i++) {
+                if (uvar->constraints.data[i].type != ConField) {
+                    return (Result) {
+                        .type = Err,
+                        .error_message = mv_string("incompatible uvar constraints!"),
+                    };
+                } else {
+                    if (symbol_eq(uvar->constraints.data[i].has_field.name, field)) {
+                        Result out = unify(uvar->constraints.data[i].has_field.type, field_ty, a);
+                        if (out.type != Ok) return out; 
+                        append = false;
+                    }
+                }
+            }
+            if (append) {
+                Constraint con = (Constraint) {
+                    .type = ConField,
+                    .has_field.name = field,
+                    .has_field.type = field_ty,
+                };
+                push_constraint(con, &uvar->constraints);
+            }
+        } else {
+            return (Result) {
+                .type = Err,
+                .error_message = mv_string("incompatible uvar types!"),
+            };
+        }
+
+        if (uvar->subst && uvar->subst->sort == TUVar) {
+            uvar = uvar->subst->uvar;
+        } else {
+            break; // stop the loop
+        }
+    }
+    return (Result){.type = Ok};
 }

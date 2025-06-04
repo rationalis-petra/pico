@@ -12,7 +12,7 @@
 #include "pico/eval/call.h"
 
 
-void load_module_from_istream(IStream* in, OStream* serr, Package* package, Module* parent, Allocator* a) {
+void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -79,7 +79,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
             return;
         }
         if (res.type != ParseSuccess) {
-            write_string(mv_string("Parse Returned Invalid Result!\n"), serr);
+            write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
             release_arena_allocator(arena);
             return;
         }
@@ -124,8 +124,8 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     goto on_error_generic;
 
  on_error:
-    write_string(point.error_message, serr);
-    write_string(mv_string("\n"), serr);
+    write_fstring(point.error_message, serr);
+    write_fstring(mv_string("\n"), serr);
     goto on_error_generic;
     
  on_error_generic:
@@ -136,7 +136,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     return;
 }
 
-void run_script_from_istream(IStream* in, OStream* serr, Module* current, Allocator* a) {
+void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* current, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -175,7 +175,7 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
             return;
         }
         if (res.type != ParseSuccess) {
-            write_string(mv_string("Parse Returned Invalid Result!\n"), serr);
+            write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
             release_arena_allocator(arena);
             return;
         }
@@ -222,8 +222,8 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     goto on_error_generic;
 
  on_error:
-    write_string(point.error_message, serr);
-    write_string(mv_string("\n"), serr);
+    write_fstring(point.error_message, serr);
+    write_fstring(mv_string("\n"), serr);
  goto on_error_generic;
 
  on_error_generic:

@@ -612,6 +612,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             throw_pi_error(point, err);
         }
 
+
         if (untyped->structure.fields.len != struct_type->structure.fields.len) {
             err.message = mv_cstr_doc("Structure must have exactly n fields.", a);
             throw_pi_error(point, err);
@@ -661,6 +662,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
             untyped->ptype = ret_ty;
 
+        } else if (source_type.sort == TUVar) {
+            untyped->ptype = mk_uvar(a);
+            Result out = add_field_constraint(source_type.uvar, untyped->projector.field, untyped->ptype, a);
+            if (out.type != Ok) {
+                err.message = mv_str_doc(out.error_message, a);
+                throw_pi_error(point, err);
+            }
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("Projection only works on structs and traits. Instead got:", a), &nodes);

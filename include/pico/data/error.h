@@ -19,6 +19,7 @@ typedef struct {
 
 _Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err); 
 
-void display_error(PicoError error, IStream *is, OStream* cout, Allocator* a);
+void display_error(PicoError error, IStream *is, FormattedOStream* cout, Allocator* a);
+void display_code_region(String buffer, Range range, const size_t lines_prior, FormattedOStream* os, Allocator* a);
 
 #endif

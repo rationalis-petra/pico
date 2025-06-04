@@ -228,7 +228,7 @@ void load_module_c_fun(String filename) {
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
-    load_module_from_istream(sfile, current_ostream, current_package, NULL, a);
+    load_module_from_istream(sfile, mk_formatted_ostream(current_ostream, a), current_package, NULL, a);
     delete_istream(sfile, a);
 }
 
@@ -288,7 +288,7 @@ Result run_script_c_fun(String filename) {
       };
     }
     Module* current_module = get_std_current_module();
-    run_script_from_istream(sfile, current_ostream, current_module, a);
+    run_script_from_istream(sfile, mk_formatted_ostream(current_ostream, a), current_module, a);
     delete_istream(sfile, a);
     return (Result) {.type = Ok};
 }

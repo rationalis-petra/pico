@@ -23,5 +23,7 @@ PiType* mk_uvar(Allocator* a);
 PiType* mk_uvar_integral(Allocator* a);
 PiType* mk_uvar_floating(Allocator* a);
 
+Result add_field_constraint(UVarType* uvar, Symbol field, PiType* field_ty, Allocator* a);
+
 
 #endif

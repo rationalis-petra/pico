@@ -58,6 +58,10 @@ FormattedOStream *mk_formatted_ostream(OStream *os, Allocator* a) {
     return out;
 }
 
+OStream *fos(FormattedOStream *os) {
+    return os->os;
+}
+
 void write_fstring(String string, FormattedOStream *os) {
     write_string(string, os->os);
 }
