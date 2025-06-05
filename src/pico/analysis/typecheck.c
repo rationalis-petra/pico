@@ -139,13 +139,31 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, P
 
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     type_infer_i(untyped, env, a, point);
-    Result out = unify(type, untyped->ptype, a);
-    if (out.type == Err) {
+    UnifyResult out = unify(type, untyped->ptype, a);
+    if (out.type == USimpleError) {
         PicoError err = (PicoError) {
             .range = untyped->range,
             .message = mv_str_doc(out.error_message, a),
         };
         throw_pi_error(point, err);
+    }
+    if (out.type == UConstraintError) {
+        PtrArray errs = mk_ptr_array(2, a);
+        PicoError* err_main = mem_alloc(sizeof(PicoError), a);
+        *err_main = (PicoError) {
+            .range = untyped->range,
+            .message = mv_str_doc(out.error_message, a),
+        };
+
+        PicoError* err_src = mem_alloc(sizeof(PicoError), a);
+        *err_src = (PicoError) {
+            .range = out.initial,
+            .message = mv_cstr_doc("Constraint was introduced here", a)
+        };
+        push_ptr(err_main, &errs);
+        push_ptr(err_src, &errs);
+
+        throw_pi_errors(point, errs);
     }
 }
 
@@ -664,10 +682,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         } else if (source_type.sort == TUVar) {
             untyped->ptype = mk_uvar(a);
-            Result out = add_field_constraint(source_type.uvar, untyped->projector.field, untyped->ptype, a);
-            if (out.type != Ok) {
+            UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, a);
+            if (out.type == USimpleError) {
                 err.message = mv_str_doc(out.error_message, a);
                 throw_pi_error(point, err);
+            } else if (out.type == UConstraintError) {
+                PtrArray errs = mk_ptr_array(2, a);
+                err.message = mv_str_doc(out.error_message, a);
+                PicoError* err_main = mem_alloc(sizeof(PicoError), a);
+                *err_main = err;
+
+                PicoError* err_src = mem_alloc(sizeof(PicoError), a);
+                *err_src = (PicoError) {
+                    .range = out.initial,
+                    .message = mv_cstr_doc("Constraint was introduced here", a)
+                };
+
+                push_ptr(err_main, &errs);
+                push_ptr(err_src, &errs);
+                throw_pi_errors(point, errs);
             }
         } else {
             PtrArray nodes = mk_ptr_array(2, a);

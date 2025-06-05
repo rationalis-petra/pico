@@ -288,8 +288,10 @@ Result run_script_c_fun(String filename) {
       };
     }
     Module* current_module = get_std_current_module();
-    run_script_from_istream(sfile, mk_formatted_ostream(current_ostream, a), current_module, a);
+    FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
+    run_script_from_istream(sfile, os, current_module, a);
     delete_istream(sfile, a);
+    delete_formatted_ostream(os, a);
     return (Result) {.type = Ok};
 }
 

@@ -38,7 +38,11 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     if (ph_res.type == ParseNone) goto on_exit;
 
     if (ph_res.type == ParseFail) {
-        display_error(ph_res.error, in, serr, a);
+        MultiError multi = (MultiError) {
+            .has_many = false,
+            .error = ph_res.error,
+        };
+        display_error(multi, in, serr, a);
         release_arena_allocator(arena);
         return;
     }
@@ -74,7 +78,11 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            display_error(ph_res.error, in, serr, a);
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = ph_res.error,
+            };
+            display_error(multi, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
@@ -120,7 +128,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     return;
 
  on_pi_error:
-    display_error(ph_res.error, in, serr, a);
+    display_error(pi_point.multi, in, serr, a);
     goto on_error_generic;
 
  on_error:
@@ -170,7 +178,11 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            display_error(res.error, in, serr, a);
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = res.error,
+            };
+            display_error(multi, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
@@ -218,7 +230,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
     return;
 
  on_pi_error:
-    display_error(pi_point.error, in, serr, &arena);
+    display_error(pi_point.multi, in, serr, &arena);
     goto on_error_generic;
 
  on_error:

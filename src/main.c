@@ -74,7 +74,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
         goto on_exit;
     }
     if (res.type == ParseFail) {
-        display_error(res.error, cin, get_formatted_stdout(), a);
+        MultiError multi = (MultiError) {
+            .has_many = false,
+            .error = res.error,
+        };
+        display_error(multi, cin, get_formatted_stdout(), a);
         release_arena_allocator(arena);
         return true;
     }
@@ -163,7 +167,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     return true;
 
  on_pi_error:
-    display_error(pi_point.error, cin, cout, &arena);
+    display_error(pi_point.multi, cin, cout, &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);

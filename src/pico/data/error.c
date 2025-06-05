@@ -6,26 +6,49 @@
 #include "pretty/standard_types.h"
 #include "pico/data/error.h"
 
-void throw_pi_error(PiErrorPoint* point, PicoError err) {
-    point->error = err;
+_Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err) {
+    point->multi.has_many = false;
+    point->multi.error = err;
     long_jump(point->buf, 1);
 }
 
+_Noreturn void throw_pi_errors(PiErrorPoint *point, PtrArray errors) {
+    point->multi.has_many = true;
+    point->multi.errors = errors;
+    long_jump(point->buf, 1);
+}
 
-void display_error(PicoError error, IStream *is, FormattedOStream* fos, Allocator* a) {
+void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
     String* buffer = get_captured_buffer(is);
-    if (buffer) {
-        display_code_region(*buffer, error.range, 5, fos, a);
+
+    if (multi.has_many) {
+        for (size_t i = 0; i < multi.errors.len; i++) {
+            PicoError error = *(PicoError*)multi.errors.data[i];
+            if (buffer) {
+                size_t prev_lines = i == 0 ? 5 : 2;
+                display_code_region(*buffer, error.range, prev_lines, fos, a);
+            }
+
+            write_fstring(mv_string("\n"), fos);
+            start_coloured_text(colour(200, 20, 20), fos);
+            write_doc_formatted(error.message, 120, fos);
+            end_coloured_text(fos);
+            write_fstring(mv_string("\n"), fos);
+        }
+    } else {
+        if (buffer) {
+            display_code_region(*buffer, multi.error.range, 5, fos, a);
+        }
+        write_fstring(mv_string("\n"), fos);
+        start_coloured_text(colour(200, 20, 20), fos);
+        write_doc_formatted(multi.error.message, 120, fos);
+        end_coloured_text(fos);
+        write_fstring(mv_string("\n"), fos);
     }
 
-    write_fstring(mv_string("\n"), fos);
-    start_coloured_text(colour(200, 20, 20), fos);
-    write_doc_formatted(error.message, 120, fos);
-    end_coloured_text(fos);
-    write_fstring(mv_string("\n"), fos);
 }
 
 void display_code_region(String buffer, Range range, const size_t lines_prior, FormattedOStream* fos, Allocator* a) {
@@ -40,7 +63,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
         if (buffer.bytes[i] == '\n') {
             prev_line_starts.data[prev_line] = current_start;
             line_number++;
-            prev_line = (prev_line + 1) % 5;
+            prev_line = (prev_line + 1) % lines_prior;
             current_start = i + 1;
         }
     }
@@ -73,12 +96,12 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     }
     else {
         for (size_t i = 0; i < lines_prior; i++) {
-            size_t line_start = prev_line_starts.data[(prev_line + i) % 5];
+            size_t line_start = prev_line_starts.data[(prev_line + i) % lines_prior];
             size_t next_line_start = (i + 1 == lines_prior)
                 ? current_start
-                : prev_line_starts.data[(prev_line + 1 + i) % 5];
+                : prev_line_starts.data[(prev_line + 1 + i) % lines_prior];
 
-            Document* doc = pretty_u64(line_number + 1 - (5 - i), a);
+            Document* doc = pretty_u64(line_number + 1 - (lines_prior - i), a);
             write_doc_formatted(doc, 80, fos);
             delete_doc(doc, a);
             write_fstring(mv_string(" | "), fos);

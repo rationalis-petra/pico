@@ -25,7 +25,8 @@ void add_ptr_module(Module *data, Allocator *a) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        panic(doc_to_str(pi_point.error.message, 120, a));
+        //panic(doc_to_str(pi_point.error.message, 120, a));
+        panic(mv_string("pi error in ptr.c"));
     }
 
     ErrorPoint point;

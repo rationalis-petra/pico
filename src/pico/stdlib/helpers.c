@@ -74,7 +74,7 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     return;
 
  on_pi_error:
-    display_error(pi_point.error, cin, get_formatted_stdout(), &arena);
+    display_error(pi_point.multi, cin, get_formatted_stdout(), &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);

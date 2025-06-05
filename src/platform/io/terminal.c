@@ -58,6 +58,12 @@ FormattedOStream *mk_formatted_ostream(OStream *os, Allocator* a) {
     return out;
 }
 
+void delete_formatted_ostream(FormattedOStream *os, Allocator *a) {
+    mem_free(os->colours, a);
+    mem_free(os->boldness, a);
+    mem_free(os, a);
+}
+
 OStream *fos(FormattedOStream *os) {
     return os->os;
 }
