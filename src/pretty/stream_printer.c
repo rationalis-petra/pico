@@ -67,6 +67,18 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
             }
         }
         break;
+    case HSepDocument:
+        for (size_t i = 0; i < doc->docs.len; i++) {
+            render_doc(doc->docs.data[i], state, os);
+
+            if (i + 1 < doc->docs.len) {
+                Document* next_doc = doc->docs.data[i];
+                state.flatten = next_doc->requirement.fin == Finite
+                    && next_doc->requirement.cols + *state.current_column + 1 < state.width;
+                if (i + 1 < doc->docs.len) write_string(mv_string(state.flatten ? " " : "\n"), os);
+            }
+        }
+        break;
     case VSepDocument:
         for (size_t i = 0; i < doc->docs.len; i++) {
             render_doc(doc->docs.data[i], state, os);
@@ -145,6 +157,26 @@ void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
             } else {
                 if (i + 1 < doc->docs.len) {
                     write_fstring(mv_string("\n"), os);
+                    for (size_t i = 0; i < state.indent; i++) {
+                        write_fstring(mv_string(" "), os);
+                    }
+                    *state.current_column = state.indent;
+                }
+            }
+        }
+        break;
+    case HSepDocument:
+        for (size_t i = 0; i < doc->docs.len; i++) {
+            frender_doc(doc->docs.data[i], state, os);
+
+            if (i + 1 < doc->docs.len) {
+                Document* next_doc = doc->docs.data[i + 1];
+                state.flatten = next_doc->requirement.fin == Finite
+                    && next_doc->requirement.cols + *state.current_column + 1 < state.width;
+                if (state.flatten) {
+                    write_fstring(mv_string(" "), os);
+                } else {
+                    write_fstring(mv_string(" \n"), os);
                     for (size_t i = 0; i < state.indent; i++) {
                         write_fstring(mv_string(" "), os);
                     }

@@ -548,10 +548,10 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     ctx.should_wrap = true;
     ctx.show_named = false;
 
-    DocStyle cstyle = scolour(colour(200, 100, 200), dstyle);
-    DocStyle vstyle = scolour(colour(208, 105, 30), dstyle);
-    DocStyle pstyle = scolour(colour(200, 20, 10), dstyle);
-    DocStyle fstyle = scolour(colour(255, 200, 0), dstyle);
+    DocStyle cstyle = scolour(colour(209, 118, 219), dstyle);
+    DocStyle vstyle = scolour(colour(38, 181, 43), dstyle);
+    DocStyle pstyle = scolour(colour(52, 216, 235), dstyle);
+    DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
 
     Document* out = NULL;
     switch (type->sort) {

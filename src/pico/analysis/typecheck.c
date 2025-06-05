@@ -143,7 +143,7 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiE
     if (out.type == USimpleError) {
         PicoError err = (PicoError) {
             .range = untyped->range,
-            .message = mv_str_doc(out.error_message, a),
+            .message = out.message, 
         };
         throw_pi_error(point, err);
     }
@@ -152,7 +152,7 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiE
         PicoError* err_main = mem_alloc(sizeof(PicoError), a);
         *err_main = (PicoError) {
             .range = untyped->range,
-            .message = mv_str_doc(out.error_message, a),
+            .message = out.message,
         };
 
         PicoError* err_src = mem_alloc(sizeof(PicoError), a);
@@ -502,7 +502,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 // Generate variant has no args
                 PtrArray* args = enum_type->enumeration.variants.data[i].val;
                 if (args->len != 0) {
-                    err.message = mv_cstr_doc("Incorrect number of args to variant constructor", a);
+                    PtrArray arr = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
+                    push_ptr(pretty_u64(0, a), &arr);
+                    push_ptr(mv_cstr_doc("but got", a), &arr);
+                    push_ptr(pretty_u64(args->len, a), &arr);
+                    err.message = mv_hsep_doc(arr, a);
                     throw_pi_error(point, err);
                 }
                 break;
@@ -536,7 +541,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 // Generate variant has no args
                 PtrArray* args = enum_type->enumeration.variants.data[i].val;
                 if (args->len != untyped->variant.args.len) {
-                    err.message = mv_cstr_doc("Incorrect number of args to variant constructor", a);
+                    PtrArray arr = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
+                    push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
+                    push_ptr(mv_cstr_doc("but got", a), &arr);
+                    push_ptr(pretty_u64(args->len, a), &arr);
+                    err.message = mv_hsep_doc(arr, a);
+                    throw_pi_error(point, err);
                     throw_pi_error(point, err);
                 }
 
@@ -684,11 +695,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             untyped->ptype = mk_uvar(a);
             UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, a);
             if (out.type == USimpleError) {
-                err.message = mv_str_doc(out.error_message, a);
+                err.message = out.message,
                 throw_pi_error(point, err);
             } else if (out.type == UConstraintError) {
                 PtrArray errs = mk_ptr_array(2, a);
-                err.message = mv_str_doc(out.error_message, a);
+                err.message = out.message;
                 PicoError* err_main = mem_alloc(sizeof(PicoError), a);
                 *err_main = err;
 
@@ -1035,12 +1046,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SWiden: {
-        PiType* wide_type = eval_type(untyped->name.type, env, a, point);
+        PiType* wide_type = eval_type(untyped->widen.type, env, a, point);
+        type_infer_i(untyped->widen.val, env, a, point);
         untyped->ptype = wide_type; 
         break;
     }
     case SNarrow: {
-        PiType* narrow_type = eval_type(untyped->name.type, env, a, point);
+        PiType* narrow_type = eval_type(untyped->narrow.type, env, a, point);
+        type_infer_i(untyped->narrow.val, env, a, point);
         untyped->ptype = narrow_type; 
         break;
     }
@@ -1661,7 +1674,12 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         post_unify(syn->narrow.val, env, a, point);
         post_unify(syn->narrow.type, env, a, point);
         if (!is_narrower(syn->narrow.val->ptype, syn->narrow.type->type_val)) {
-            err.message = mv_cstr_doc("This narrowing is invalid", a);
+            PtrArray docs = mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc("This narrowing is invalid - cannot narrow from type:", a), &docs);
+            push_ptr(pretty_type(syn->narrow.val->ptype, a), &docs);
+            push_ptr(mv_cstr_doc("to type:", a), &docs);
+            push_ptr(pretty_type(syn->narrow.type->type_val, a), &docs);
+            err.message = mv_hsep_doc(docs, a);
             throw_pi_error(point, err);
         }
         break;

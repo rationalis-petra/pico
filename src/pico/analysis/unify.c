@@ -116,7 +116,7 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Alloc
 
         out = (UnifyResult) {
             .type = USimpleError,
-            .error_message = doc_to_str(mv_sep_doc(nodes, a), 80, a),
+            .message = mv_sep_doc(nodes, a),
         };
     }
     return out;
@@ -151,7 +151,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
 
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = doc_to_str(mv_sep_doc(nodes, a), 80, a),
+                .message = mv_sep_doc(nodes, a),
             };
         }
         break;
@@ -161,7 +161,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
             || lhs->proc.implicits.len != rhs->proc.implicits.len) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Unification failed: provided two different procedures with differing number of arguments or implicits.", a)
+                .message = mv_cstr_doc("Unification failed: provided two different procedures with differing number of arguments or implicits.", a)
             };
         }
 
@@ -185,7 +185,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         if (lhs->structure.fields.len != rhs->structure.fields.len) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Unification failed: two different structures with differing number of fields.", a)
+                .message = mv_cstr_doc("Unification failed: two different structures with differing number of fields.", a)
             };
         }
 
@@ -199,7 +199,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
             if (!symbol_eq(rhs_sym, lhs_sym)) {
                 return (UnifyResult) {
                     .type = USimpleError,
-                    .error_message = mk_string("Unification failed: RHS and LHS structures must have matching field-names.", a)
+                    .message = mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a)
                 };
             }
 
@@ -214,7 +214,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Unification failed: two different enums with differing number of variants.", a)
+                .message = mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a)
             };
         }
 
@@ -228,14 +228,14 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
             if (!symbol_eq(rhs_sym, lhs_sym)) {
                 return (UnifyResult) {
                     .type = USimpleError,
-                    .error_message = mk_string("Unification failed: RHS and LHS enums must have matching variant-names.", a)
+                    .message = mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.", a)
                 };
             }
 
             if (lhs_args.len != rhs_args.len) {
                 return (UnifyResult) {
                     .type = USimpleError,
-                    .error_message = mk_string("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
+                    .message = mv_cstr_doc("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
                 };
             }
 
@@ -273,7 +273,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         if (lhs->named.args->len != rhs->named.args->len) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mv_string("named type mismatch: different arg count!"),
+                .message = mv_cstr_doc("named type mismatch: different arg count!", a),
             };
         }
 
@@ -284,7 +284,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
       } else if (lhs->named.args || rhs->named.args) {
         return (UnifyResult) {
             .type = USimpleError,
-            .error_message = mv_string("named type mismatch: one has args and one doesn't!"),
+            .message = mv_cstr_doc("named type mismatch: one has args and one doesn't!", a),
         };
       }
       return res;
@@ -294,7 +294,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs or source modules", a),
+                .message = mv_cstr_doc("Cannot Unify two distinct types of unequal IDs or source modules", a),
             };
         }
 
@@ -318,7 +318,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
           else 
               return (UnifyResult) {
                   .type = USimpleError,
-                  .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
+                  .message = mv_cstr_doc("Cannot Unify two kinds of unequal nags", a),
               };
           break;
       }
@@ -328,7 +328,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         else 
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Cannot Unify two constraints of unequal nags", a),
+                .message = mv_cstr_doc("Cannot Unify two constraints of unequal nags", a),
             };
         break;
     }
@@ -339,7 +339,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
         if (!var_eq(lhs->var, rhs->var, rename)) {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mk_string("Cannot Unify different type variables", a),
+                .message = mv_cstr_doc("Cannot Unify different type variables", a),
             };
         }
         return (UnifyResult) {.type = UOk};
@@ -388,37 +388,40 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                   return (UnifyResult) {
                     .type = UConstraintError,
                     .initial = uvar->constraints.data[i].range,
-                    .error_message = mv_string("Does not satisfy integral constraint.")
+                    .message = mv_cstr_doc("Does not satisfy integral constraint.", a)
                   };
                 }
                 break;
             case ConFloat:
                 if (unwrapped->sort != TPrim || unwrapped->prim != Float_32 || unwrapped->prim != Float_64) {
-                    return (UnifyResult) {.type = USimpleError, .error_message = mv_string("Does not satisfy floating constraint.")};
+                    return (UnifyResult) {.type = USimpleError, .message = mv_cstr_doc("Does not satisfy floating constraint.", a)};
                 }
                 break;
             case ConField:
                 if (unwrapped->sort != TStruct) {
-                    return (UnifyResult) {.type = USimpleError, .error_message = mv_string("Does not satisfy field constraint: not a struct")};
+                    return (UnifyResult) {.type = USimpleError, .message = mv_cstr_doc("Does not satisfy field constraint: not a struct", a)};
                 }
                 bool found_field = false;
-                for (size_t j = 0; j < type->structure.fields.len; j++) {
-                    if (symbol_eq(type->structure.fields.data[j].key,
+                for (size_t j = 0; j < unwrapped->structure.fields.len; j++) {
+                    if (symbol_eq(unwrapped->structure.fields.data[j].key,
                                   uvar->constraints.data[i].has_field.name)) {
-                        UnifyResult out = unify(type->structure.fields.data[j].val, uvar->constraints.data[i].has_field.type, a); 
+                        UnifyResult out = unify(unwrapped->structure.fields.data[j].val, uvar->constraints.data[i].has_field.type, a); 
                         if (out.type != UOk) return out;
-                        found_field = false;
+                        found_field = true;
                     }
                 }
+
                 if (!found_field) {
-                  String message =
-                      string_cat(mv_string("Does not satisfy field constraint "
-                                           "- field not found: "),
-                                 *symbol_to_string(uvar->constraints.data[i].has_field.name), a);
+                    PtrArray nodes = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("Does not satisfy field constraint - field not found:", a), &nodes);
+                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_cstr_doc("in type:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+                                  
                     return (UnifyResult) {
                         .type = UConstraintError,
                         .initial = uvar->constraints.data[i].range,
-                        .error_message = message,
+                        .message = mv_hsep_doc(nodes, a),
                     };
                 }
                 break;
@@ -716,7 +719,7 @@ UnifyResult add_field_constraint(UVarType *uvar, Range range, Symbol field, PiTy
                 if (uvar->constraints.data[i].type != ConField) {
                     return (UnifyResult) {
                         .type = USimpleError,
-                        .error_message = mv_string("incompatible uvar constraints!"),
+                        .message = mv_cstr_doc("incompatible uvar constraints!", a),
                     };
                 } else {
                     if (symbol_eq(uvar->constraints.data[i].has_field.name, field)) {
@@ -738,7 +741,7 @@ UnifyResult add_field_constraint(UVarType *uvar, Range range, Symbol field, PiTy
         } else {
             return (UnifyResult) {
                 .type = USimpleError,
-                .error_message = mv_string("incompatible uvar types!"),
+                .message = mv_cstr_doc("incompatible uvar types!", a),
             };
         }
 

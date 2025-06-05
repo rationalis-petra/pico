@@ -18,6 +18,7 @@ typedef enum {
 
     // Utility/extra
     SepDocument,
+    HSepDocument,
     VSepDocument,
 
     // Styling
@@ -86,6 +87,9 @@ Document* mk_cat_doc(const PtrArray docs, Allocator* a);
 Document* mv_nest_doc(size_t idx, Document* nested, Allocator* a);
 
 Document* mv_group_doc(Document* group, Allocator* a);
+
+Document* mv_hsep_doc(const PtrArray docs, Allocator* a);
+Document* mk_hsep_doc(const PtrArray docs, Allocator* a);
 
 Document* mv_sep_doc(const PtrArray docs, Allocator* a);
 Document* mk_sep_doc(const PtrArray docs, Allocator* a);

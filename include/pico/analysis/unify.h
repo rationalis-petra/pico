@@ -15,7 +15,7 @@ typedef enum {
 typedef struct {
     UnifyResultType type;
     Range initial;
-    String error_message;
+    Document* message;
 } UnifyResult;
 
 // Instantiate uvars in the LHS and RHS so that they become equal

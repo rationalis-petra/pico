@@ -104,6 +104,27 @@ Document* mv_sep_doc(const PtrArray source, Allocator* a) {
     return doc;
 }
 
+Document* mk_hsep_doc(const PtrArray source, Allocator* a) {
+    PtrArray copy = scopy_ptr_array(source, a);
+    return mv_hsep_doc(copy, a);
+}
+
+Document* mv_hsep_doc(const PtrArray source, Allocator* a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
+
+    const DocRequirement one = (DocRequirement) {.fin = Finite, .cols = 1};
+    DocRequirement req = (DocRequirement) {.fin = Finite, .cols = 0};
+    for (size_t i = 0; i < source.len; i++) {
+        Document* d = source.data[i];
+        req = requirement_add(req, d->requirement);
+        req = requirement_add(req, one);
+    }
+    doc->type = HSepDocument;
+    doc->docs = source;
+    doc->requirement = req;
+    return doc;
+}
+
 Document* mk_sep_doc(const PtrArray source, Allocator* a) {
     PtrArray copy = scopy_ptr_array(source, a);
     return mv_sep_doc(copy, a);

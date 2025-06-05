@@ -35,9 +35,11 @@ void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocat
 
             write_fstring(mv_string("\n"), fos);
             start_coloured_text(colour(200, 20, 20), fos);
-            write_doc_formatted(error.message, 120, fos);
+            Document* iderr = mv_nest_doc(2, error.message, a);
+            write_doc_formatted(iderr, 120, fos);
+            mem_free(iderr, a); // TODO: fix me! (fix mk doc & replace the mv with mk)
             end_coloured_text(fos);
-            write_fstring(mv_string("\n"), fos);
+            write_fstring(mv_string("\n\n"), fos);
         }
     } else {
         if (buffer) {
@@ -45,9 +47,13 @@ void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocat
         }
         write_fstring(mv_string("\n"), fos);
         start_coloured_text(colour(200, 20, 20), fos);
-        write_doc_formatted(multi.error.message, 120, fos);
+
+        Document* iderr = mv_nest_doc(2, multi.error.message, a);
+        write_doc_formatted(iderr, 120, fos);
+        mem_free(iderr, a); // TODO: fix me! (fix mk doc & replace the mv with mk)
+
         end_coloured_text(fos);
-        write_fstring(mv_string("\n"), fos);
+        write_fstring(mv_string("\n\n"), fos);
     }
 
 }
