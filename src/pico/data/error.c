@@ -1,4 +1,5 @@
 #include "data/stream.h"
+#include "data/stringify.h"
 #include "platform/io/terminal.h"
 
 #include "pretty/document.h"
@@ -78,6 +79,11 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     // Colour for "irrelevant" code
     start_coloured_text(colour(150, 150, 150), fos);
     // Now, gather the past n lines
+
+    // 
+    String strnum = string_u64(line_number + 1, a);
+    size_t line_width = strnum.memsize;
+    delete_string(strnum, a);
     if (line_number < lines_prior) {
         for (size_t i = 0; i < line_number; i++) {
             size_t line_start = prev_line_starts.data[i];
@@ -85,9 +91,12 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                 ? current_start
                 : prev_line_starts.data[1 + i];
 
-            Document* doc = pretty_u64(i + 1, a);
-            write_doc_formatted(doc, 80, fos);
-            delete_doc(doc, a);
+            String strnum = string_u64(i + 1, a);
+            for (size_t i = 0; i < line_width - strnum.memsize; i++) {
+                write_fstring(mv_string(" "), fos);
+            }
+            write_fstring(strnum, fos);
+            delete_string(strnum, a);
             write_fstring(mv_string(" | "), fos);
             String str = substring(line_start, next_line_start, buffer, a);
             write_fstring(str, fos);
@@ -101,10 +110,14 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                 ? current_start
                 : prev_line_starts.data[(prev_line + 1 + i) % lines_prior];
 
-            Document* doc = pretty_u64(line_number + 1 - (lines_prior - i), a);
-            write_doc_formatted(doc, 80, fos);
-            delete_doc(doc, a);
+            String strnum = string_u64(line_number + 1 - (lines_prior - i), a);
+            for (size_t i = 0; i < line_width - strnum.memsize; i++) {
+                write_fstring(mv_string(" "), fos);
+            }
+            write_fstring(strnum, fos);
             write_fstring(mv_string(" | "), fos);
+            delete_string(strnum, a);
+
             String str = substring(line_start, next_line_start, buffer, a);
             write_fstring(str, fos);
             delete_string(str, a);
