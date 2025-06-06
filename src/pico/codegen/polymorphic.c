@@ -124,9 +124,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
     switch (syn.type) {
-    case SLitUntypedIntegral: {
+    case SLitUntypedIntegral:
         panic(mv_string("Cannot generate polymorphic code for untyped integral."));
-    }
     case SLitTypedIntegral: {
         // Does it fit into 32 bits?
         if (syn.integral.value < 0x80000000 && syn.integral.value > -80000001) {
@@ -134,6 +133,27 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(ass, Push, imm32(immediate), a, point);
         } else {
             throw_error(point, mk_string("Limitation: Literals must fit into less than 64 bits.", a));
+        }
+        break;
+    }
+    case SLitUntypedFloating: 
+        panic(mv_string("Cannot generate polymorphic code for untyped floating!"));
+    case SLitTypedFloating: {
+        if (syn.ptype->prim == Float_32) {
+            float f = syn.floating.value;
+            void* raw = &f;
+            int32_t immediate = *(int32_t*)raw;
+            build_unary_op(ass, Push, imm32(immediate), a, point);
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        }
+        else if (syn.ptype->prim == Float_64) {
+            void* raw = &syn.floating.value;
+            int64_t immediate = *(int64_t*)raw;
+            build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
+            build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        } else {
+            panic(mv_string("Floating literal has non-float type!"));
         }
         break;
     }

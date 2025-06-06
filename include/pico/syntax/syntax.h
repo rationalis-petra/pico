@@ -175,7 +175,7 @@ typedef struct {
 } SynMatch;
 
 typedef struct {
-    Syntax* ptype;
+    Syntax* type;
     SymSynAMap fields;
 } SynStructure;
 

@@ -625,12 +625,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             throw_pi_error(point, err);
         }
 
+        Syntax* stype;
+        size_t start_idx = 1;
         // Get the type of the structure
-        Syntax* stype = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        if (raw.branch.nodes.data[1].type != RawBranch || raw.branch.nodes.data[1].branch.hint != HSpecial) {
+            start_idx = 2;
+            stype = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        } else {
+            stype = NULL;
+        }
 
         // Construct a structure
         SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len, a);
-        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
@@ -662,7 +669,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .type = SStructure,
             .ptype = NULL,
             .range = raw.range,
-            .structure.ptype = stype,
+            .structure.type = stype,
             .structure.fields = fields,
         };
         return res;

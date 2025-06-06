@@ -393,8 +393,11 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                 }
                 break;
             case ConFloat:
-                if (unwrapped->sort != TPrim || unwrapped->prim != Float_32 || unwrapped->prim != Float_64) {
-                    return (UnifyResult) {.type = USimpleError, .message = mv_cstr_doc("Does not satisfy floating constraint.", a)};
+                if (unwrapped->sort != TPrim || (unwrapped->prim != Float_32 && unwrapped->prim != Float_64)) {
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_cstr_doc("Type does not satisfy floating constraint:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+                    return (UnifyResult) {.type = USimpleError, .message = mv_hsep_doc(nodes, a)};
                 }
                 break;
             case ConField:
@@ -699,7 +702,7 @@ PiType* mk_uvar_floating(Allocator* a) {
     *uvar->uvar = (UVarType) {
       .subst = NULL,
       .constraints = mk_constraint_array(4, a),
-      .default_behaviour = Integral,
+      .default_behaviour = Floating,
     };
 
     Constraint con = (Constraint) {

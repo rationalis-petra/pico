@@ -152,11 +152,22 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SLitUntypedFloating: 
         panic(mv_string("Cannot generate monomorphic code for untyped floating!"));
     case SLitTypedFloating: {
-        void* raw = &syn.integral.value;
-        int64_t immediate = *(int64_t*)raw;
-        build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
-        build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        if (syn.ptype->prim == Float_32) {
+            float f = syn.floating.value;
+            void* raw = &f;
+            int32_t immediate = *(int32_t*)raw;
+            build_unary_op(ass, Push, imm32(immediate), a, point);
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        }
+        else if (syn.ptype->prim == Float_64) {
+            void* raw = &syn.floating.value;
+            int64_t immediate = *(int64_t*)raw;
+            build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
+            build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
+            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        } else {
+            panic(mv_string("Floating literal has non-float type!"));
+        }
         break;
     }
     case SLitBool: {
@@ -198,11 +209,17 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t size = pi_stack_size_of(*syn.ptype);
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
-            // TODO: check that some imm8 sizes aren't too large
-            // TODO: the size we use is the 'stack' size - this can this be safely done?
-            for (size_t i = 0; i < size / 8; i++) {
-                build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
-                build_binary_op(ass, Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
+            if (e.stack_offset > INT8_MAX || e.stack_offset < INT8_MIN) {
+                panic(mv_string("address_env: offset too large (direct access)"));
+                /* for (size_t i = 0; i < size / 8; i++) { */
+                /*     build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point); */
+                /*     build_binary_op(ass, Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point); */
+                /* } */
+            } else {
+                for (size_t i = 0; i < size / 8; i++) {
+                    build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
+                    build_binary_op(ass, Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
+                }
             }
             break;
         }

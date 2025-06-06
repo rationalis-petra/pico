@@ -1095,10 +1095,12 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         case Address:
         case Int_64:
         case UInt_64:
+        case Float_64:
             *out = sizeof(int64_t);
             return Ok;
         case Int_32:
         case UInt_32:
+        case Float_32:
             *out = sizeof(int32_t);
             return Ok;
         case Int_16:
@@ -1236,7 +1238,7 @@ bool is_narrower(PiType *wide, PiType *narrow) {
     if (n == Bool && w <= UInt_64) return true;
 
     // If n and w are either both signed, or both unsigned, 
-    // then narrowing is a matter of if n < w
+    // then narrowing is a matter of if n <= w
     if (Int_8 <= n && n <= Int_64 && Int_8 <= w && w <= Int_64)
         return n < w;
     if (UInt_8 <= n && n <= UInt_64 && UInt_8 <= w && w <= UInt_64)
@@ -1246,6 +1248,11 @@ bool is_narrower(PiType *wide, PiType *narrow) {
     // as we always loose sign information
     if (UInt_8 <= n && n <= UInt_64 && Int_8 <= w && w <= Int_64)
         return true;
+
+    // if n is signed and w is unsigned, then a cast is a narrow
+    // if size(n) <= size(w)
+    if (Int_8 <= n && n <= Int_64 && UInt_8 <= w && w <= UInt_64)
+        return (n & 0b11) <= (w & 0b11);
 
     // Default to false
     return false;

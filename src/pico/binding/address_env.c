@@ -157,7 +157,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
         if ((maddr.type == SADirect || maddr.type == SAIndirect || maddr.type == SAIndexed) && symbol_eq(maddr.symbol, s)) {
             if (maddr.type == SAIndexed) {
                 int64_t offset = ADDRESS_SIZE * (maddr.stack_offset - locals.stack_head);
-                if (offset > 127 || offset < -128) {
+                if (offset > INT8_MAX || offset < INT8_MIN) {
                     panic(mv_string("address_env: offset too large (indexed variable)"));
                 }
                 return (AddressEntry) {
@@ -167,7 +167,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
                     .stack_offset = offset,
                 };
             } else {
-                if (maddr.stack_offset > 127 || maddr.stack_offset < -128) {
+                if (maddr.stack_offset > INT16_MAX || maddr.stack_offset < INT16_MIN) {
                     panic(mv_string("address_env: offset too large (indirect/direct variable)"));
                 }
                 return (AddressEntry) {

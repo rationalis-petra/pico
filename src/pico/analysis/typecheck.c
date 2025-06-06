@@ -504,9 +504,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 if (args->len != 0) {
                     PtrArray arr = mk_ptr_array(4, a);
                     push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                    push_ptr(pretty_u64(0, a), &arr);
-                    push_ptr(mv_cstr_doc("but got", a), &arr);
                     push_ptr(pretty_u64(args->len, a), &arr);
+                    push_ptr(mv_cstr_doc("but got", a), &arr);
+                    push_ptr(pretty_u64(0, a), &arr);
                     err.message = mv_hsep_doc(arr, a);
                     throw_pi_error(point, err);
                 }
@@ -543,11 +543,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 if (args->len != untyped->variant.args.len) {
                     PtrArray arr = mk_ptr_array(4, a);
                     push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                    push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
-                    push_ptr(mv_cstr_doc("but got", a), &arr);
                     push_ptr(pretty_u64(args->len, a), &arr);
+                    push_ptr(mv_cstr_doc("but got", a), &arr);
+                    push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
                     err.message = mv_hsep_doc(arr, a);
-                    throw_pi_error(point, err);
                     throw_pi_error(point, err);
                 }
 
@@ -633,29 +632,44 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SStructure: {
-        untyped->ptype = eval_type(untyped->structure.ptype, env, a, point);
-        PiType* struct_type = unwrap_type(untyped->ptype, a);
+        if (untyped->structure.type) {
+            untyped->ptype = eval_type(untyped->structure.type, env, a, point);
+            PiType* struct_type = unwrap_type(untyped->ptype, a);
 
-        if (struct_type->sort != TStruct) {
-            err.message = mv_cstr_doc("Structure type invalid", a);
-            throw_pi_error(point, err);
-        }
-
-
-        if (untyped->structure.fields.len != struct_type->structure.fields.len) {
-            err.message = mv_cstr_doc("Structure must have exactly n fields.", a);
-            throw_pi_error(point, err);
-        }
-
-        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
-            if (field_syn) {
-                PiType* field_ty = struct_type->structure.fields.data[i].val;
-                type_check_i(*field_syn, field_ty, env, a, point);
-            } else {
-                err.message = mv_cstr_doc("Structure is missing a field", a);
+            if (struct_type->sort != TStruct) {
+                err.message = mv_cstr_doc("Structure type invalid", a);
                 throw_pi_error(point, err);
             }
+
+            if (untyped->structure.fields.len != struct_type->structure.fields.len) {
+                err.message = mv_cstr_doc("Structure must have exactly n fields.", a);
+                throw_pi_error(point, err);
+            }
+
+            for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+                // TODO (BUG): check for no duplicates!
+                Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
+                if (field_syn) {
+                    PiType* field_ty = struct_type->structure.fields.data[i].val;
+                    type_check_i(*field_syn, field_ty, env, a, point);
+                } else {
+                    err.message = mv_cstr_doc("Structure is missing a field", a);
+                    throw_pi_error(point, err);
+                }
+            }
+        } else {
+            PiType struct_type = (PiType) {
+                .sort = TStruct,
+                .structure.fields = mk_sym_ptr_amap(untyped->structure.fields.len, a),
+            };
+            for (size_t i = 0; i < untyped->structure.fields.len; i++) {
+                // TODO (BUG): check for no duplicates!
+                SymPtrCell cell = untyped->structure.fields.data[i];
+                type_infer_i(cell.val, env, a, point);
+                sym_ptr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
+            }
+            untyped->ptype = mem_alloc(sizeof(PiType), a);
+            *untyped->ptype = struct_type;
         }
         break;
     }
