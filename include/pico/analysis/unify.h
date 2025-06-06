@@ -29,13 +29,14 @@ bool has_unification_vars_p(PiType type);
 // Return a deep copy of the original type, with all unification vars replaced
 // by their subsitutions, and all unification variables with default values
 // instantiated with those defaults.
-void squash_type(PiType* type);
+void squash_type(PiType* type, Allocator* a);
 
 PiType* mk_uvar(Allocator* a);
 PiType* mk_uvar_integral(Allocator* a);
 PiType* mk_uvar_floating(Allocator* a);
 
 UnifyResult add_field_constraint(UVarType* uvar, Range range, Symbol field, PiType* field_ty, Allocator* a);
+UnifyResult add_variant_constraint(UVarType* uvar, Range range, Symbol field, PtrArray types, Allocator* a);
 
 
 #endif

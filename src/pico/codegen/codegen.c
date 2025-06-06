@@ -523,7 +523,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             
     }
     case SConstructor: {
-        PiType* enum_type = strip_type(syn.constructor.enum_type->type_val);
+        PiType* enum_type = strip_type(syn.ptype);
         size_t enum_size = pi_stack_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
@@ -537,7 +537,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // TODO (FEAT BUG): ensure this will correctly handle non-stack aligned
         // enum tags, members and overall enums gracefully.
         const size_t tag_size = sizeof(uint64_t);
-        PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
+        PiType* enum_type = strip_type(syn.ptype);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
         size_t variant_stack_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);

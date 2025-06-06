@@ -94,6 +94,7 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* p
 void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
+void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* point);
 
 // -----------------------------------------------------------------------------
 // Interface
@@ -140,31 +141,7 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, P
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     type_infer_i(untyped, env, a, point);
     UnifyResult out = unify(type, untyped->ptype, a);
-    if (out.type == USimpleError) {
-        PicoError err = (PicoError) {
-            .range = untyped->range,
-            .message = out.message, 
-        };
-        throw_pi_error(point, err);
-    }
-    if (out.type == UConstraintError) {
-        PtrArray errs = mk_ptr_array(2, a);
-        PicoError* err_main = mem_alloc(sizeof(PicoError), a);
-        *err_main = (PicoError) {
-            .range = untyped->range,
-            .message = out.message,
-        };
-
-        PicoError* err_src = mem_alloc(sizeof(PicoError), a);
-        *err_src = (PicoError) {
-            .range = out.initial,
-            .message = mv_cstr_doc("Constraint was introduced here", a)
-        };
-        push_ptr(err_main, &errs);
-        push_ptr(err_src, &errs);
-
-        throw_pi_errors(point, errs);
-    }
+    check_result_out(out, untyped->range, a, point);
 }
 
 // "internal" type inference. Destructively mutates types.
@@ -485,83 +462,103 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     }
     case SConstructor: {
         // Typecheck variant
-        untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
-        PiType* enum_type = unwrap_type(untyped->ptype, a);
+        if (untyped->variant.enum_type) {
+            untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
+            PiType* enum_type = unwrap_type(untyped->ptype, a);
 
-        if (enum_type->sort != TEnum) {
-            err.message = mv_cstr_doc("Variant must be of enum type.", a);
-            throw_pi_error(point, err);
-        }
-
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
-                untyped->variant.tag = i;
-                found_variant = true;
-
-                // Generate variant has no args
-                PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                if (args->len != 0) {
-                    PtrArray arr = mk_ptr_array(4, a);
-                    push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                    push_ptr(pretty_u64(args->len, a), &arr);
-                    push_ptr(mv_cstr_doc("but got", a), &arr);
-                    push_ptr(pretty_u64(0, a), &arr);
-                    err.message = mv_hsep_doc(arr, a);
-                    throw_pi_error(point, err);
-                }
-                break;
+            if (enum_type->sort != TEnum) {
+                err.message = mv_cstr_doc("Variant must be of enum type.", a);
+                throw_pi_error(point, err);
             }
-        }
 
-        if (!found_variant) {
-            String msg_origin = mv_string("Could not find variant tag: ");
-            String data = *symbol_to_string(untyped->variant.tagname);
-            err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
-            throw_pi_error(point, err);
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
+                    untyped->variant.tag = i;
+                    found_variant = true;
+
+                    // Generate variant has no args
+                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                    if (args->len != 0) {
+                        PtrArray arr = mk_ptr_array(4, a);
+                        push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
+                        push_ptr(pretty_u64(args->len, a), &arr);
+                        push_ptr(mv_cstr_doc("but got", a), &arr);
+                        push_ptr(pretty_u64(0, a), &arr);
+                        err.message = mv_hsep_doc(arr, a);
+                        throw_pi_error(point, err);
+                    }
+                    break;
+                }
+            }
+
+            if (!found_variant) {
+                String msg_origin = mv_string("Could not find variant tag: ");
+                String data = *symbol_to_string(untyped->variant.tagname);
+                err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
+                throw_pi_error(point, err);
+            }
+        } else {
+            untyped->ptype = mk_uvar(a);
+            PtrArray types = mk_ptr_array(0, a);
+
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, a);
+            check_result_out(out, untyped->range, a, point);
         }
         break;
     }
     case SVariant: {
         // Typecheck variant
-        untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
-        PiType* enum_type = unwrap_type(untyped->ptype, a);
+        if (untyped->variant.enum_type) {
+            untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
+            PiType* enum_type = unwrap_type(untyped->ptype, a);
 
-        if (enum_type->sort != TEnum) {
-            err.message = mv_cstr_doc("Variant must be of enum type.", a);
-            throw_pi_error(point, err);
-        }
-
-        bool found_variant = false;
-        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
-                untyped->variant.tag = i;
-                found_variant = true;
-
-                // Generate variant has no args
-                PtrArray* args = enum_type->enumeration.variants.data[i].val;
-                if (args->len != untyped->variant.args.len) {
-                    PtrArray arr = mk_ptr_array(4, a);
-                    push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                    push_ptr(pretty_u64(args->len, a), &arr);
-                    push_ptr(mv_cstr_doc("but got", a), &arr);
-                    push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
-                    err.message = mv_hsep_doc(arr, a);
-                    throw_pi_error(point, err);
-                }
-
-                for (size_t i = 0; i < args->len; i++) {
-                    type_check_i(untyped->variant.args.data[i], args->data[i], env, a, point);
-                }
-                break;
+            if (enum_type->sort != TEnum) {
+                err.message = mv_cstr_doc("Variant must be of enum type.", a);
+                throw_pi_error(point, err);
             }
-        }
 
-        if (!found_variant) {
-            String msg_origin = mv_string("Could not find variant tag: ");
-            String data = *symbol_to_string(untyped->variant.tagname);
-            err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
-            throw_pi_error(point, err);
+            bool found_variant = false;
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+                if (symbol_eq(enum_type->enumeration.variants.data[i].key, untyped->variant.tagname)) {
+                    untyped->variant.tag = i;
+                    found_variant = true;
+
+                    // Generate variant has no args
+                    PtrArray* args = enum_type->enumeration.variants.data[i].val;
+                    if (args->len != untyped->variant.args.len) {
+                        PtrArray arr = mk_ptr_array(4, a);
+                        push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
+                        push_ptr(pretty_u64(args->len, a), &arr);
+                        push_ptr(mv_cstr_doc("but got", a), &arr);
+                        push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
+                        err.message = mv_hsep_doc(arr, a);
+                        throw_pi_error(point, err);
+                    }
+
+                    for (size_t i = 0; i < args->len; i++) {
+                        type_check_i(untyped->variant.args.data[i], args->data[i], env, a, point);
+                    }
+                    break;
+                }
+            }
+
+            if (!found_variant) {
+                String msg_origin = mv_string("Could not find variant tag: ");
+                String data = *symbol_to_string(untyped->variant.tagname);
+                err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
+                throw_pi_error(point, err);
+            }
+        } else {
+            untyped->ptype = mk_uvar(a);
+            PtrArray types = mk_ptr_array(untyped->variant.args.len, a);
+
+            for (size_t i = 0; i < untyped->variant.args.len; i++) {
+                type_infer_i(untyped->variant.args.data[i], env, a, point);
+                push_ptr(((Syntax*)untyped->variant.args.data[i])->ptype, &types);
+            }
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, a);
+            check_result_out(out, untyped->range, a, point);
         }
         break;
     }
@@ -708,25 +705,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         } else if (source_type.sort == TUVar) {
             untyped->ptype = mk_uvar(a);
             UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, a);
-            if (out.type == USimpleError) {
-                err.message = out.message,
-                throw_pi_error(point, err);
-            } else if (out.type == UConstraintError) {
-                PtrArray errs = mk_ptr_array(2, a);
-                err.message = out.message;
-                PicoError* err_main = mem_alloc(sizeof(PicoError), a);
-                *err_main = err;
-
-                PicoError* err_src = mem_alloc(sizeof(PicoError), a);
-                *err_src = (PicoError) {
-                    .range = out.initial,
-                    .message = mv_cstr_doc("Constraint was introduced here", a)
-                };
-
-                push_ptr(err_main, &errs);
-                push_ptr(err_src, &errs);
-                throw_pi_errors(point, errs);
-            }
+            check_result_out(out, untyped->range, a, point);
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("Projection only works on structs and traits. Instead got:", a), &nodes);
@@ -1567,6 +1546,9 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
+        if (syn->structure.type) {
+            post_unify(syn->structure.type, env, a, point);
+        }
         for (size_t i = 0; i < syn->structure.fields.len; i++) {
             post_unify(syn->structure.fields.data[i].val, env, a, point);
         }
@@ -1810,11 +1792,15 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SConstructor: {
-        squash_types(typed->variant.enum_type, a, point);
+        if (typed->variant.enum_type) {
+            squash_types(typed->variant.enum_type, a, point);
+        }
         break;
     }
     case SVariant: {
-        squash_types(typed->variant.enum_type, a, point);
+        if (typed->variant.enum_type) {
+            squash_types(typed->variant.enum_type, a, point);
+        }
         
         for (size_t i = 0; i < typed->variant.args.len; i++) {
             squash_types(typed->variant.args.data[i], a, point);
@@ -1831,6 +1817,9 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
+        if (typed->structure.type) {
+            squash_types(typed->structure.type, a, point);
+        }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
             squash_types(syn, a, point);
@@ -1896,13 +1885,13 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         squash_types(typed->with_reset.handler, a, point);
 
         if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
-            squash_type(typed->with_reset.in_arg_ty);
+            squash_type(typed->with_reset.in_arg_ty, a);
         } else {
             err.message = mv_cstr_doc("reset argument type not instantiated", a);
             throw_pi_error(point, err);
         }
         if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
-            squash_type(typed->with_reset.cont_arg_ty);
+            squash_type(typed->with_reset.cont_arg_ty, a);
         } else {
             err.message = mv_cstr_doc("resume argument type not instantiated", a);
             throw_pi_error(point, err);
@@ -1919,30 +1908,30 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         }
         break;
     case SIs:
-        squash_type(typed->is.type->type_val);
+        squash_type(typed->is.type->type_val, a);
         squash_types(typed->is.val, a, point);
         break;
     case SInTo:
-        squash_type(typed->into.type->type_val);
+        squash_type(typed->into.type->type_val, a);
         squash_types(typed->into.val, a, point);
         break;
     case SOutOf:
-        squash_type(typed->out_of.type->type_val);
+        squash_type(typed->out_of.type->type_val, a);
         squash_types(typed->out_of.val, a, point);
         break;
     case SName:
-        squash_type(typed->name.type->type_val);
+        squash_type(typed->name.type->type_val, a);
         squash_types(typed->name.val, a, point);
         break;
     case SUnName:
         squash_types(typed->unname, a, point);
         break;
     case SWiden:
-        squash_type(typed->widen.type->type_val);
+        squash_type(typed->widen.type->type_val, a);
         squash_types(typed->widen.val, a, point);
         break;
     case SNarrow:
-        squash_type(typed->narrow.type->type_val);
+        squash_type(typed->narrow.type->type_val, a);
         squash_types(typed->narrow.val, a, point);
         break;
     case SDynAlloc:
@@ -2007,7 +1996,7 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         }
         break;
     case SCheckedType:
-        squash_type(typed->type_val);
+        squash_type(typed->type_val, a);
         break;
     case SReinterpret:
         squash_types(typed->reinterpret.type, a, point);
@@ -2030,10 +2019,10 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
 
     // has_unification_vars only returns true if those vars don't go anywhere!
     if (!has_unification_vars_p(*typed->ptype)) {
-        squash_type(typed->ptype);
+        squash_type(typed->ptype, a);
     }
     else {
-        squash_type(typed->ptype);
+        squash_type(typed->ptype, a);
 
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), a), &nodes);
@@ -2106,4 +2095,32 @@ PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     untyped->type_val = *result;
 
     return *result;
+}
+
+void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* point) {
+    if (out.type == USimpleError) {
+        PicoError err = (PicoError) {
+            .range = range,
+            .message = out.message, 
+        };
+        throw_pi_error(point, err);
+    }
+    if (out.type == UConstraintError) {
+        PtrArray errs = mk_ptr_array(2, a);
+        PicoError* err_main = mem_alloc(sizeof(PicoError), a);
+        *err_main = (PicoError) {
+            .range = range,
+            .message = out.message,
+        };
+
+        PicoError* err_src = mem_alloc(sizeof(PicoError), a);
+        *err_src = (PicoError) {
+            .range = out.initial,
+            .message = mv_cstr_doc("Constraint was introduced here", a)
+        };
+        push_ptr(err_main, &errs);
+        push_ptr(err_src, &errs);
+
+        throw_pi_errors(point, errs);
+    }
 }

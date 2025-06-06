@@ -291,8 +291,7 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, ShadowEnv* env
 Syntax* mk_application(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point) {
     Syntax* fn_syn = abstract_expr_i((raw.branch.nodes.data[0]), env, a, point);
 
-    // TODO (IMPROVEMENT): make sure that ptype not null
-    if (fn_syn->type == SAbsVariable && fn_syn->ptype->sort == TPrim&& fn_syn->ptype->prim == TFormer) {
+    if (fn_syn->type == SAbsVariable && fn_syn->ptype->sort == TPrim && fn_syn->ptype->prim == TFormer) {
         return mk_term(*((TermFormer*)fn_syn->abvar.value), raw, env, a, point);
     }
 
@@ -494,6 +493,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             }
             Symbol lit = msym.atom.symbol;
 
+            // TODO (FEAT): caese special handling of unit, true, false syntaxes
+            //              - make 'normal' types
             if (symbol_eq(lit, string_to_symbol(mv_string("unit")))) {
                 Syntax* res = mem_alloc(sizeof(Syntax), a);
                 *res = (Syntax) {.type = SLitUnit, .ptype = NULL, .range = raw.range, .boolean = true,};
@@ -509,14 +510,29 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 *res = (Syntax) {.type = SLitBool, .ptype = NULL,  .range = raw.range, .boolean = false,};
                 return res;
             } else {
-                err.range = msym.range;
-                err.message = mv_cstr_doc("Variant term former needs two arguments!", a);
-                throw_pi_error(point, err);
+                // Check that we are indeed getting a result
+                // Get the tag gname of the variant
+                RawTree msym = raw.branch.nodes.data[1];
+                if (msym.type != RawAtom && msym.atom.type != ASymbol) {
+                    err.range = msym.range;
+                    err.message = mv_cstr_doc("First argument to variant term former should be symbol", a);
+                    throw_pi_error(point, err);
+                };
+
+                Syntax* res = mem_alloc(sizeof(Syntax), a);
+                *res = (Syntax) {
+                    .type = SConstructor,
+                    .ptype = NULL,
+                    .range = raw.range,
+                    .constructor.enum_type = NULL,
+                    .constructor.tagname = msym.atom.symbol,
+                };
+                return res;
             }
         }
         else if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Variant term former needs two arguments!", a);
+            err.message = mv_cstr_doc("Variant term former expects at most two arguments!", a);
             throw_pi_error(point, err);
         } else {
             // Get the Type portion of the projector 
@@ -527,7 +543,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree msym = raw.branch.nodes.data[1];
             if (msym.type != RawAtom && msym.atom.type != ASymbol) {
                 err.range = msym.range;
-                err.message = mv_cstr_doc("First argument to projection term former should be symbol", a);
+                err.message = mv_cstr_doc("First argument to variant term former should be symbol", a);
                 throw_pi_error(point, err);
             };
 
