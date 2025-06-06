@@ -167,7 +167,7 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
                     .stack_offset = offset,
                 };
             } else {
-                if (maddr.stack_offset > INT16_MAX || maddr.stack_offset < INT16_MIN) {
+                if (maddr.stack_offset > INT32_MAX || maddr.stack_offset < INT32_MIN) {
                     panic(mv_string("address_env: offset too large (indirect/direct variable)"));
                 }
                 return (AddressEntry) {

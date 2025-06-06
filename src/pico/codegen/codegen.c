@@ -210,11 +210,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
             if (e.stack_offset > INT8_MAX || e.stack_offset < INT8_MIN) {
-                panic(mv_string("address_env: offset too large (direct access)"));
-                /* for (size_t i = 0; i < size / 8; i++) { */
-                /*     build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point); */
-                /*     build_binary_op(ass, Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point); */
-                /* } */
+                for (size_t i = 0; i < size / 8; i++) {
+                    build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
+                    build_binary_op(ass, Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
+                }
             } else {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point);

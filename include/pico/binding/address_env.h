@@ -36,7 +36,7 @@ typedef struct {
     AddressEntry_t type;
     union {
         void* value;
-        int16_t stack_offset;
+        int32_t stack_offset;
     };
 } AddressEntry;
 
