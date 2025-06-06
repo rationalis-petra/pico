@@ -47,6 +47,13 @@
     void sdelete_ ## fprefix ## _array(tprefix ## Array arr) {          \
         mem_free(arr.data, arr.gpa);                                    \
     }                                                                   \
+    void reverse_ ## fprefix ##_array(tprefix##Array arr) {             \
+        for (size_t i = 0; i < arr.len / 2; i++) {                      \
+            type tmp = arr.data[i];                                     \
+            arr.data[i] = arr.data[arr.len - (i + 1)];                  \
+            arr.data[arr.len - (i + 1)] = tmp;                          \
+        }                                                               \
+    }                                                                   \
                                                                         \
     void push_ ## fprefix (type val, tprefix ## Array* arr) {           \
         if (arr->len < arr->size) {                                     \

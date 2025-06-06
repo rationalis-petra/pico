@@ -68,6 +68,8 @@ typedef enum {
     SOutOf,
     SName,
     SUnName,
+    SWiden,
+    SNarrow,
     SDynAlloc,
     SSizeOf,
     SAlignOf,
@@ -98,6 +100,7 @@ typedef enum {
 
     // Meta/reflection
     STypeOf,
+    SDescribe,
 } Syntax_t;
 
 
@@ -172,7 +175,7 @@ typedef struct {
 } SynMatch;
 
 typedef struct {
-    Syntax* ptype;
+    Syntax* type;
     SymSynAMap fields;
 } SynStructure;
 
@@ -317,7 +320,6 @@ typedef struct {
     Syntax* body;
 } SynConvert;
 
-
 struct Syntax {
     Syntax_t type;
     union {
@@ -357,6 +359,8 @@ struct Syntax {
         SynIs out_of;
         SynIs name;
         Syntax* unname;
+        SynIs widen;
+        SynIs narrow;
         Syntax* size;
 
         SynProcType proc_type;
@@ -376,6 +380,7 @@ struct Syntax {
         SynConvert convert;
 
         Syntax* type_of;
+        Symbol to_describe;
     };
     PiType* ptype;
     Range range;
@@ -401,7 +406,7 @@ typedef struct {
 
 typedef struct {
     Range range;
-    SymbolArray syms;
+    PtrArray paths;
 } OpenClause;
 
 typedef struct {

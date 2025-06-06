@@ -132,12 +132,7 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
-        if (t.uvar->subst != NULL) {
-            delete_pi_type(*t.uvar->subst, a);
-        }
-        mem_free(t.uvar, a);
+        panic(mv_string("UVars should not be deleted, but rather freed via region or similar allocators"));
         break;
     case TPrim: break;
 
@@ -241,15 +236,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
-        out.uvar = mem_alloc(sizeof(UVarType), a);
-        out.uvar->id = t.uvar->id; 
-        if (t.uvar->subst) {
-            out.uvar->subst = copy_pi_type_p(t.uvar->subst, a);
-        } else {
-            out.uvar->subst = NULL;
-        }
+        panic(mv_string("UVars should not be copied, but rather freed via region or similar allocators"));
         break;
     case TPrim:
         out.prim = t.prim;
@@ -368,12 +355,6 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TUVar:
         out = mk_str_doc(mv_string("No Print UVar!"), a);
         break;
-    case TUVarIntegral:
-        out = mk_str_doc(mv_string("No Print UVar (integral)!"), a);
-        break;
-    case TUVarFloating:
-        out = mk_str_doc(mv_string("No Print UVar (floating)!"), a);
-        break;
     case TStruct: {
         size_t current_offset = 0;
 
@@ -394,7 +375,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             current_offset += pi_size_of(*ftype);
         }
 
-        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
+        out = mk_paren_doc("(",")", mv_grouped_sep_doc(nodes, a), a);
         break;
     }
     case TEnum: {
@@ -556,94 +537,106 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     return out;
 }
 
-Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
+typedef struct {
+    bool should_wrap;
+    bool show_named;
+} PrettyContext;
+
+Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
+    bool should_wrap = ctx.should_wrap;
+    bool show_named = ctx.show_named;
+    ctx.should_wrap = true;
+    ctx.show_named = false;
+
+    DocStyle cstyle = scolour(colour(209, 118, 219), dstyle);
+    DocStyle vstyle = scolour(colour(38, 181, 43), dstyle);
+    DocStyle pstyle = scolour(colour(52, 216, 235), dstyle);
+    DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
+
     Document* out = NULL;
     switch (type->sort) {
     case TPrim:
         switch (type->prim) {
         case Int_64: 
-            out = mv_str_doc(mk_string("I64", a), a);
+            out = mk_cstr_doc("I64", a);
             break;
         case Int_32: 
-            out = mv_str_doc(mk_string("I32", a), a);
+            out = mk_cstr_doc("I32", a);
             break;
         case Int_16: 
-            out = mv_str_doc(mk_string("I16", a), a);
+            out = mk_cstr_doc("I16", a);
             break;
         case Int_8: 
-            out = mv_str_doc(mk_string("I8", a), a);
+            out = mk_cstr_doc("I8", a);
             break;
         case UInt_64: 
-            out = mv_str_doc(mk_string("U64", a), a);
+            out = mk_cstr_doc("U64", a);
             break;
         case UInt_32: 
-            out = mv_str_doc(mk_string("U32", a), a);
+            out = mk_cstr_doc("U32", a);
             break;
         case UInt_16: 
-            out = mv_str_doc(mk_string("U16", a), a);
+            out = mk_cstr_doc("U16", a);
             break;
         case UInt_8: 
-            out = mv_str_doc(mk_string("U8", a), a);
+            out = mk_cstr_doc("U8", a);
             break;
         case Float_32:
-            out = mv_str_doc(mk_string("F32", a), a);
+            out = mk_cstr_doc("F32", a);
             break;
         case Float_64: 
-            out = mv_str_doc(mk_string("F64", a), a);
+            out = mk_cstr_doc("F64", a);
             break;
         case Unit: 
-            out = mv_str_doc(mk_string("Unit", a), a);
+            out = mk_cstr_doc("Unit", a);
             break;
         case Bool: 
-            out = mv_str_doc(mk_string("Bool", a), a);
+            out = mk_cstr_doc("Bool", a);
             break;
         case Address: 
-            out = mv_str_doc(mk_string("Address", a), a);
+            out = mk_cstr_doc("Address", a);
             break;
         case TFormer: 
-            out = mv_str_doc(mk_string("Former", a), a);
+            out = mk_cstr_doc("Former", a);
             break;
         case TMacro: 
-            out = mv_str_doc(mk_string("Macro", a), a);
+            out = mk_cstr_doc("Macro", a);
             break;
         }
+        out = mv_style_doc(pstyle, out, a);
         break;
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc((mk_string("Proc", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &nodes);
         if (type->proc.implicits.len != 0) {
             PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
-                push_ptr(pretty_type_internal(type->proc.implicits.data[i], show_named, a), &arg_nodes);
+                push_ptr(pretty_type_internal(type->proc.implicits.data[i], ctx, a), &arg_nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(pretty_type_internal(type->proc.args.data[i], show_named, a), &arg_nodes);
+            push_ptr(pretty_type_internal(type->proc.args.data[i], ctx, a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-        push_ptr(pretty_type_internal(type->proc.ret, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->proc.ret, ctx, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TUVar:
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
         break;
-    case TUVarIntegral:
-        out = mv_str_doc(mk_string("No Print UVar Integral", a), a);
-        break;
-    case TUVarFloating:
-        out = mv_str_doc(mk_string("No Print UVar Floating", a), a);
-        break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
-        push_ptr(mv_str_doc((mk_string("Struct", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, show_named, a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a), a);
+            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -651,39 +644,46 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
             push_ptr(fd_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+
+        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TEnum: {
         PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
-        push_ptr(mv_str_doc((mk_string("Enum ", a)), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum ", a)), a), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
             for (size_t j = 0; j < types->len; j++) {
-                Document* arg = pretty_type_internal((PiType*)types->data[j], show_named, a);
+                Document* arg = pretty_type_internal((PiType*)types->data[j], ctx, a);
                 push_ptr(arg, &ty_nodes);
             }
-            Document* ptypes = mv_sep_doc(ty_nodes, a);
 
             push_ptr(fname, &var_nodes);
-            push_ptr(ptypes,   &var_nodes);
-            Document* var_doc = mk_paren_doc("[:", "]",mv_sep_doc(var_nodes, a), a);
+            if (ty_nodes.len != 0) {
+                Document* ptypes = mv_sep_doc(ty_nodes, a);
+                push_ptr(ptypes, &var_nodes);
+            }
+            Document* var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_grouped_sep_doc(var_nodes, a), a), a);
 
             push_ptr(var_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+
+        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TReset: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("Reset"), a), &nodes);
-        push_ptr(pretty_type_internal(type->reset.in, show_named, a), &nodes);
-        push_ptr(pretty_type_internal(type->reset.out, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->reset.in, ctx, a), &nodes);
+        push_ptr(pretty_type_internal(type->reset.out, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TResumeMark: {
@@ -693,38 +693,47 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
-        push_ptr(pretty_type_internal(type->dynamic, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        ctx.should_wrap = false;
+        push_ptr(pretty_type_internal(type->dynamic, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TNamed:  {
         if (show_named) {
-            PtrArray nodes = mk_ptr_array(6, a);
-            push_ptr(mk_str_doc(mv_string("Named" ), a), &nodes);
+            PtrArray nodes = mk_ptr_array(2, a);
+            PtrArray name_group = mk_ptr_array(5, a);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Named" ), a), a), &name_group);
 
-            push_ptr(mk_str_doc(*symbol_to_string(type->named.name), a),
-                     &nodes);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a),
+                     &name_group);
 
             if (type->named.args) {
                 PtrArray args = mk_ptr_array(type->named.args->len, a);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
-                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &name_group);
             }
 
-            push_ptr(pretty_type_internal(type->named.type, false, a), &nodes);
+            ctx.should_wrap = false;
+            push_ptr(mv_group_doc(mv_sep_doc(name_group, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.type, ctx, a), a), &nodes);
             out = mv_sep_doc(nodes, a);
+            if (should_wrap) {
+                out = mk_paren_doc("(", ")", out, a);
+            }
         } else {
-            Document* base = mk_str_doc(*symbol_to_string(type->named.name), a);
+            Document* base = mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a);
 
             if (type->named.args) {
                 PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
                 push_ptr(base, &args);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], false, a), &args);
+                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
-                out = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
+                out = mv_sep_doc(args, a);
+                if (should_wrap) out = mk_paren_doc("(", ")", out, a);
             } else {
                 out = base;
             }
@@ -742,13 +751,14 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
             for (size_t i = 0; i < type->distinct.args->len; i++) {
-                push_ptr(pretty_type_internal(type->distinct.args->data[i], show_named, a), &args);
+                push_ptr(pretty_type_internal(type->distinct.args->data[i], ctx, a), &args);
             }
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
-        push_ptr(pretty_type_internal(type->distinct.type, show_named, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_cat_doc(nodes, a), a);
+        push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
+        out = mv_cat_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTrait:  {
@@ -768,8 +778,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->trait.fields.data[i].val, show_named, a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->trait.fields.data[i].key), a), a);
+            Document* arg = pretty_type_internal(type->trait.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -777,7 +787,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
             push_ptr(fd_doc, &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTraitInstance: {
@@ -787,8 +798,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a);
-            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, show_named, a);
+            Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->instance.fields.data[i].key), a), a);
+            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -797,7 +808,8 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(fd_doc, &nodes);
         }
 
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCType: {
@@ -805,7 +817,7 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
         break;
     }
     case TVar: {
-        out = mk_str_doc(*symbol_to_string(type->var), a);
+        out = mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->var), a), a);
         break;
     }
     case TAll: {
@@ -815,9 +827,10 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TExists: {
@@ -827,30 +840,36 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCApp: {
         PtrArray nodes = mk_ptr_array(type->app.args.len + 1, a);
-        push_ptr(pretty_type_internal(type->app.fam, show_named, a), &nodes);
+        push_ptr(pretty_type_internal(type->app.fam, ctx, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type_internal(type->app.args.data[i], show_named, a), &nodes);
+            push_ptr(pretty_type_internal(type->app.args.data[i], ctx, a), &nodes);
         }
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TFam: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("Family [" ), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+        PtrArray head_group = mk_ptr_array(2, a);
+        PtrArray vars = mk_ptr_array(type->binder.vars.len, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Family" ), a), a), &head_group);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &vars);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, show_named, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_group);
+        push_ptr(mv_sep_doc(head_group, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 
-        out = mv_sep_doc(nodes, a);
+        out = mv_grouped_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TKind: {
@@ -891,7 +910,11 @@ Document* pretty_type_internal(PiType* type, bool show_named, Allocator* a) {
 }
 
 Document* pretty_type(PiType* type, Allocator* a) {
-    return pretty_type_internal(type, true, a);
+    PrettyContext ctx = (PrettyContext) {
+        .should_wrap = false,
+        .show_named = true,
+    };
+    return pretty_type_internal(type, ctx, a);
 }
 
 size_t pi_size_align(size_t size, size_t align) {
@@ -1043,10 +1066,6 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     case TUVar:
         return Err;
-    case TUVarIntegral:
-        return Err;
-    case TUVarFloating:
-        return Err;
     }
 
     // If we haven't returned at this point, then the tag is invalid
@@ -1076,10 +1095,12 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         case Address:
         case Int_64:
         case UInt_64:
+        case Float_64:
             *out = sizeof(int64_t);
             return Ok;
         case Int_32:
         case UInt_32:
+        case Float_32:
             *out = sizeof(int32_t);
             return Ok;
         case Int_16:
@@ -1161,51 +1182,9 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         *out = sizeof(void*);
         return Ok;
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
         return Err;
     }
     panic(mv_string("pi_maye_align_of received invalid type."));
-}
-
-PiType* mk_uvar(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVar; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarIntegral; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a) {
-    PiType* uvar = mem_alloc(sizeof(PiType), a);
-    uvar->sort = TUVarFloating; 
-
-    uvar->uvar = mem_alloc(sizeof(UVarType), a);
-    *uvar->uvar = (UVarType) {.subst = NULL, .id = gen->counter++,};
-    
-    return uvar;
-}
-
-UVarGenerator* mk_gen(Allocator* a) {
-    UVarGenerator* gen = mem_alloc(sizeof(UVarGenerator), a);
-    gen->counter = 0;
-    return gen;
-}
-
-void delete_gen(UVarGenerator* gen, Allocator* a) {
-    mem_free(gen, a);
 }
 
 // TODO (UB): make this thread safe
@@ -1213,6 +1192,71 @@ void delete_gen(UVarGenerator* gen, Allocator* a) {
 // which means 'not unique/no ID'
 static int id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
+
+bool is_wider(PiType *narrow, PiType *wide) {
+    // is_wider only works for primitives, return false otherwise
+    if (narrow->sort != TPrim || wide->sort != TPrim)
+        return false;
+    PrimType n = narrow->prim;
+    PrimType w = wide->prim;
+
+    // Float hierarchy is simple
+    if (n == Float_32 && w == Float_32) return true;
+    if (n == Float_32 && w == Float_64) return true;
+    if (n == Float_64 && w == Float_64) return true;
+
+    // A bool can widen to any int.
+    if (n == Bool && w <= UInt_64) return true;
+
+    // If n and w are either both signed, or both unsigned, 
+    // then widening is a matter of if n <= w
+    if (Int_8 <= n && n <= Int_64 && Int_8 <= w && w <= Int_64)
+        return n <= w;
+    if (UInt_8 <= n && n <= UInt_64 && UInt_8 <= w && w <= UInt_64)
+        return n <= w;
+
+    // if n is unsigned and w is signed, then we need the bottom two 
+    // bits of w to be strictly greater than the bottom bits of n
+    if (UInt_8 <= n && n <= UInt_64 && Int_8 <= w && w <= Int_64)
+        return (n & 0b11) < (w & 0b11);
+
+    // Default to false
+    return false;
+}
+
+bool is_narrower(PiType *wide, PiType *narrow) {
+    // is_narrower only works for primitives, return false otherwise
+    if (narrow->sort != TPrim || wide->sort != TPrim)
+        return false;
+    PrimType n = narrow->prim;
+    PrimType w = wide->prim;
+
+    // Float hierarchy is simple - 
+    if (n == Float_32 && w == Float_64) return true;
+
+    // Any int can narrow to a bool
+    if (n == Bool && w <= UInt_64) return true;
+
+    // If n and w are either both signed, or both unsigned, 
+    // then narrowing is a matter of if n <= w
+    if (Int_8 <= n && n <= Int_64 && Int_8 <= w && w <= Int_64)
+        return n < w;
+    if (UInt_8 <= n && n <= UInt_64 && UInt_8 <= w && w <= UInt_64)
+        return n < w;
+
+    // if n is unsigned and w is signed, then any cast is a narrow,
+    // as we always loose sign information
+    if (UInt_8 <= n && n <= UInt_64 && Int_8 <= w && w <= Int_64)
+        return true;
+
+    // if n is signed and w is unsigned, then a cast is a narrow
+    // if size(n) <= size(w)
+    if (Int_8 <= n && n <= Int_64 && UInt_8 <= w && w <= UInt_64)
+        return (n & 0b11) <= (w & 0b11);
+
+    // Default to false
+    return false;
+}
 
 PiType* unwrap_type(PiType *ty, Allocator* a) {
     bool unwrapping = true;
@@ -1341,7 +1385,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), a), &nodes);
         push_ptr(pretty_type(body, a), &nodes);
         Document* message = mk_sep_doc(nodes, a);
-        panic(doc_to_str(message, a));
+        panic(doc_to_str(message, 120, a));
         break;
     }
     }
@@ -1658,19 +1702,10 @@ PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
 }
 
 PiType* mk_string_type(Allocator* a) {
-    // Struct [.memsize U64] [.bytes Address]
-    PiType* memsize_type = mk_prim_type(a, UInt_64);
-    PiType* bytes_type = mk_prim_type(a, Address);
-
-    SymPtrAMap fields = mk_sym_ptr_amap(2, a);
-    sym_ptr_insert(string_to_symbol(mv_string("memsize")), memsize_type, &fields);
-    sym_ptr_insert(string_to_symbol(mv_string("bytes")), bytes_type, &fields);
-    
-    PiType* out = mem_alloc(sizeof(PiType), a);
-    *out = (PiType) {
-        .sort = TStruct,
-        .structure.fields = fields
-    };
-    return out;
+    // Named String Struct [.memsize U64] [.bytes Address]
+    return mk_named_type(a, "String",
+                         mk_struct_type(a, 2,
+                                        "memsize", mk_prim_type(a, UInt_64),
+                                        "bytes", mk_prim_type(a, Address)));
 }
 

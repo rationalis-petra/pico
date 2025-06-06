@@ -14,12 +14,51 @@ struct Environment {
     NamePtrAMap instances;
 };
 
+// Helper function:
+Module* path_parent(SymbolArray path, Module* root) {
+    Module* current = root;
+
+    // Don't go to the last part of the path!
+    for (size_t i = 0; i + 1 < path.len; i++) {
+        ModuleEntry* e = get_def(path.data[i], current);
+        if (e) {
+          if (e->is_module) {
+              current = e->value;
+          } else {
+              panic(mv_string("error in environment.c: module not found"));
+          }
+        } else {
+            panic(mv_string("error in environment.c: module not found"));
+        }
+    }
+    return current;
+}
+
+Module* path_all(SymbolArray path, Module* root) {
+    Module* current = root;
+
+    // Don't go to the last part of the path!
+    for (size_t i = 0; i < path.len; i++) {
+        ModuleEntry* e = get_def(path.data[i], current);
+        if (e) {
+          if (e->is_module) {
+              current = e->value;
+          } else {
+              panic(mv_string("error in environment.c: module not found"));
+          }
+        } else {
+            panic(mv_string("error in environment.c: module not found"));
+        }
+    }
+    return current;
+}
+
 Environment* env_from_module(Module* module, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     env->symbol_origins = mk_name_ptr_amap(128, a);
     env->instances = mk_name_ptr_amap(128, a);
 
-    // TODO (PERF): this is quite expensive every REPL iteration... possibly 
+    // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 
     // cache results?
     Imports imports = get_imports(module);
     Package* package = get_package(module);
@@ -32,10 +71,9 @@ Environment* env_from_module(Module* module, Allocator* a) {
         ImportClause clause = imports.clauses.data[i];
         switch (clause.type) {
         case Import: {
-            // Currently, import is not a path, so we can guarantee it's a module
-            // In the future, when paths are supported, this will need to be
-            // updated to check
-            name_ptr_insert(clause.name.name, root_module, &env->symbol_origins);
+            Symbol last_symbol = clause.path.data[clause.path.len - 1];
+            Module* parent = path_parent(clause.path, root_module);
+            name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
             break;
         }
         case ImportAs:
@@ -46,7 +84,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
             break;
         case ImportAll: {
             // Find the package
-            Module* importee = get_module(clause.name, package);
+            Module* importee = path_all(clause.path, root_module);
             SymbolArray syms = get_exported_symbols(importee, a);
             for (size_t i = 0; i < syms.len; i++ ) {
                 name_ptr_insert(syms.data[i].name, importee, &env->symbol_origins);
@@ -130,6 +168,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
             result.is_module = mentry->is_module;
             result.value = mentry->value;
             result.type = mentry->is_module ? NULL : &mentry->type;
+            result.source = *module;
         } else {
             result.success = Err;
         }

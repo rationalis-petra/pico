@@ -28,7 +28,7 @@ ParseResult parse_atom(IStream* is, Allocator* a);
 ParseResult parse_number(IStream* is, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, Allocator* a);
 ParseResult parse_string(IStream* is, Allocator* a);
-ParseResult parse_char(IStream* is);
+ParseResult parse_char(IStream* is, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -105,7 +105,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 out = parse_string(is, a);
             }
             else if (point == '#') {
-                out = parse_char(is);
+                out = parse_char(is, a);
             }
             else if (is_numchar(point) || point == '-') {
                 out = parse_number(is, a);
@@ -143,7 +143,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                     .type = ParseFail,
                     .error.range.start = range_start,
                     .error.range.end = bytecount(is),
-                    .error.message = message,
+                    .error.message = mv_str_doc(message, a),
                 };
                 running = false;
                 break;
@@ -159,7 +159,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         default: {
             out = (ParseResult) {
                 .type = ParseFail,
-                .error.message = mv_string("Stream result was in unexpected state."),
+                .error.message = mv_cstr_doc("Stream result was in unexpected state.", a),
                 .error.range.start = bytecount(is),
                 .error.range.end = bytecount(is),
             };
@@ -186,9 +186,9 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Inappropriate number of terms for infix-operator: "),
-            .error.range.start = bytecount(is),
-            .error.range.end = bytecount(is),
+            .error.message = mv_cstr_doc("Inappropriate number of terms for infix-operator", a),
+            .error.range.start = terms.data[0].range.start,
+            .error.range.end = terms.data[terms.len - 1].range.end,
           };
           return out;
         }
@@ -247,14 +247,14 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     if (sres == StreamEnd) {
         out = (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Unexpected end of stream. List started here was still parsing"),
+            .error.message = mv_cstr_doc("Unexpected end of stream. List started here was still parsing", a),
             .error.range.start = start,
             .error.range.end = start,
         };
     } else if (sres != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Input stream failure"),
+            .error.message = mv_cstr_doc("Input stream failure", a),
             .error.range.start = bytecount(is),
             .error.range.end = bytecount(is),
         };
@@ -350,7 +350,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
     if (result != StreamSuccess) {
         out = (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Stream failure."),
+            .error.message = mv_cstr_doc("Stream failure.", a),
             .error.range.start = bytecount(is),
             .error.range.end = bytecount(is),
         };
@@ -432,7 +432,7 @@ ParseResult parse_number(IStream* is, Allocator* a) {
     if (result != StreamSuccess && result != StreamEnd) {
         return (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Stream failure"),
+            .error.message = mv_cstr_doc("Stream failure", a),
             .error.range.start = bytecount(is),
             .error.range.end = bytecount(is),
         };
@@ -500,7 +500,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
 
     if (result != StreamSuccess) {
         out.type = ParseFail;
-        out.error.message = mv_string("Stream failed");
+        out.error.message = mv_cstr_doc("Stream failed", a);
         out.error.range.start = bytecount(is);
         out.error.range.end = bytecount(is);
     } else if (arr.len == 0) {
@@ -567,7 +567,7 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Stream failed"),
+            .error.message = mv_cstr_doc("Stream failed", a),
             .error.range.start = bytecount(is),
             .error.range.end = bytecount(is),
         };
@@ -584,7 +584,7 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is) {
+ParseResult parse_char(IStream* is, Allocator* a) {
     StreamResult result;
     uint32_t codepoint;
     size_t start = bytecount(is);
@@ -594,7 +594,7 @@ ParseResult parse_char(IStream* is) {
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
-            .error.message = mv_string("Stream failed"),
+            .error.message = mv_cstr_doc("Stream failed", a),
             .error.range.start = bytecount(is),
             .error.range.end = bytecount(is),
         };

@@ -911,8 +911,6 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TKind:
     case TConstraint:
     case TUVar:
-    case TUVarIntegral:
-    case TUVarFloating:
         return false;
     default:
         panic(mv_string("invalid types provided to can_reinterpret"));

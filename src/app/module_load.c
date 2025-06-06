@@ -12,7 +12,7 @@
 #include "pico/eval/call.h"
 
 
-void load_module_from_istream(IStream* in, OStream* serr, Package* package, Module* parent, Allocator* a) {
+void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -38,7 +38,11 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     if (ph_res.type == ParseNone) goto on_exit;
 
     if (ph_res.type == ParseFail) {
-        display_error(ph_res.error, in, serr, a);
+        MultiError multi = (MultiError) {
+            .has_many = false,
+            .error = ph_res.error,
+        };
+        display_error(multi, in, serr, a);
         release_arena_allocator(arena);
         return;
     }
@@ -74,12 +78,16 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            display_error(ph_res.error, in, serr, a);
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = ph_res.error,
+            };
+            display_error(multi, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
         if (res.type != ParseSuccess) {
-            write_string(mv_string("Parse Returned Invalid Result!\n"), serr);
+            write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
             release_arena_allocator(arena);
             return;
         }
@@ -120,12 +128,12 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     return;
 
  on_pi_error:
-    display_error(ph_res.error, in, serr, a);
+    display_error(pi_point.multi, in, serr, a);
     goto on_error_generic;
 
  on_error:
-    write_string(point.error_message, serr);
-    write_string(mv_string("\n"), serr);
+    write_fstring(point.error_message, serr);
+    write_fstring(mv_string("\n"), serr);
     goto on_error_generic;
     
  on_error_generic:
@@ -136,7 +144,7 @@ void load_module_from_istream(IStream* in, OStream* serr, Package* package, Modu
     return;
 }
 
-void run_script_from_istream(IStream* in, OStream* serr, Module* current, Allocator* a) {
+void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* current, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -170,12 +178,16 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
-            display_error(res.error, in, serr, a);
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = res.error,
+            };
+            display_error(multi, in, serr, a);
             release_arena_allocator(arena);
             return;
         }
         if (res.type != ParseSuccess) {
-            write_string(mv_string("Parse Returned Invalid Result!\n"), serr);
+            write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
             release_arena_allocator(arena);
             return;
         }
@@ -218,12 +230,12 @@ void run_script_from_istream(IStream* in, OStream* serr, Module* current, Alloca
     return;
 
  on_pi_error:
-    display_error(pi_point.error, in, serr, &arena);
+    display_error(pi_point.multi, in, serr, &arena);
     goto on_error_generic;
 
  on_error:
-    write_string(point.error_message, serr);
-    write_string(mv_string("\n"), serr);
+    write_fstring(point.error_message, serr);
+    write_fstring(mv_string("\n"), serr);
  goto on_error_generic;
 
  on_error_generic:

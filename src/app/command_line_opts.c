@@ -59,6 +59,17 @@ Command parse_command(StringArray args) {
             .type = CHelp,
             .help.help_all = true,
         };
+    } else if (string_cmp(subcommand, mv_string("version")) == 0) {
+        if (args.len != 1) {
+            return (Command) {
+                .type = CInvalid,
+                .error_message = mv_string("Version subcommand expects no arguments. Correct usage: 'pico version'"),
+            };
+        }
+
+        return (Command) {
+            .type = CVersion,
+        };
     } else {
         return (Command) {
             .type = CInvalid,

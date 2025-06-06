@@ -24,6 +24,6 @@ void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
         panic(point.error_message);
     }
 
-    Result r = add_module_def(data, string_to_symbol(mv_string("Pair")), module);
+    Result r = add_module_def(data, string_to_symbol(mv_string("pair")), module);
     if (r.type == Err) panic(r.error_message);
 }

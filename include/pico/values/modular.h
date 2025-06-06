@@ -114,6 +114,8 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
 Result add_module_def(Module* module, Symbol symbol, Module* child);
 
 // Add an import clause into a module's namespace
+// Note: The import clause will be copied, so the caller is still responsible
+//       for cleaning up its copy of the clause.
 void add_import_clause(ImportClause clause, Module* module);
 
 ModuleEntry* get_def(Symbol symbol, Module* module);

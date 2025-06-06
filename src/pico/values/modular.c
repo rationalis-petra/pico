@@ -90,6 +90,8 @@ Result add_module(Symbol symbol, Module* module, Package* package) {
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
+    // TODO (PERF): check for if this clause already exists!
+    clause.path = scopy_symbol_array(clause.path, module->allocator);
     push_import_clause(clause, &module->header.imports.clauses);
 }
 
@@ -162,8 +164,7 @@ void delete_module(Module* module) {
         delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
-    sdelete_import_clause_array(module->header.imports.clauses);
-    sdelete_export_clause_array(module->header.exports.clauses);
+    delete_module_header(module->header);
 
     release_executable_allocator(module->executable_allocator);
     mem_free(module, module->allocator);

@@ -11,4 +11,7 @@
 // All memory allocated is free'd, 
 void compile_toplevel(const char *string, Module *module, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a);
 
+void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
+void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);
+
 #endif

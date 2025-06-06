@@ -15,7 +15,11 @@
 static jump_buf* m_buf;
 void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
-static uint64_t std_allocator; 
+static uint64_t std_current_allocator; 
+static uint64_t std_perm_allocator; 
+static uint64_t std_region_allocator; 
+static uint64_t std_comptime_allocator; 
+static uint64_t std_temp_allocator; 
 
 static Package* current_package;
 void set_current_package(Package* current) { current_package = current; }
@@ -26,16 +30,15 @@ void set_std_istream(IStream* current) { current_istream = current; }
 static OStream* current_ostream;
 void set_std_ostream(OStream* current) { current_ostream = current; }
 
-static uint64_t std_tmp_allocator; 
-Allocator* get_std_tmp_allocator() {
+Allocator* get_std_temp_allocator() {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_tmp_allocator]; 
+    Allocator** dyn = data[std_temp_allocator]; 
     return *dyn;
 }
 
-Allocator* set_std_tmp_allocator(Allocator* al) {
+Allocator* set_std_temp_allocator(Allocator* al) {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_tmp_allocator]; 
+    Allocator** dyn = data[std_temp_allocator]; 
     Allocator* old = *dyn;
     *dyn = al;
     return old;
@@ -57,7 +60,7 @@ Module* set_std_current_module(Module* md) {
 }
 
 void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // realloc : Proc (Address U64) Unit
+    // realloc : Proc (Address U64) Address
     build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
 
 #if ABI == SYSTEM_V_64
@@ -90,8 +93,12 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(ass, Ret, a, point);
 }
 
+void *relic_malloc(uint64_t size) {
+    
+}
+
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // malloc : Proc (U64) Unit
+    // malloc : Proc (U64) Address
     build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
 
 #if ABI == SYSTEM_V_64
@@ -221,7 +228,7 @@ void load_module_c_fun(String filename) {
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
-    load_module_from_istream(sfile, current_ostream, current_package, NULL, a);
+    load_module_from_istream(sfile, mk_formatted_ostream(current_ostream, a), current_package, NULL, a);
     delete_istream(sfile, a);
 }
 
@@ -281,8 +288,10 @@ Result run_script_c_fun(String filename) {
       };
     }
     Module* current_module = get_std_current_module();
-    run_script_from_istream(sfile, current_ostream, current_module, a);
+    FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
+    run_script_from_istream(sfile, os, current_module, a);
     delete_istream(sfile, a);
+    delete_formatted_ostream(os, a);
     return (Result) {.type = Ok};
 }
 
@@ -331,23 +340,31 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     a = &arena;
     
     // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
-    std_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
     typep = mk_dynamic_type(a, mk_struct_type(a, 4,
                                              "malloc", mk_prim_type(a, Address),
                                              "realloc", mk_prim_type(a, Address),
                                              "free", mk_prim_type(a, Address),
                                              "ctx", mk_prim_type(a, Address)));
-    sym = string_to_symbol(mv_string("allocator"));
-    add_def(module, sym, *typep, &std_allocator, null_segments, NULL);
-    clear_assembler(ass);
+    sym = string_to_symbol(mv_string("perm-allocator"));
+    add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
+
+    std_current_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+    typep = mk_dynamic_type(a, mk_struct_type(a, 4,
+                                             "malloc", mk_prim_type(a, Address),
+                                             "realloc", mk_prim_type(a, Address),
+                                             "free", mk_prim_type(a, Address),
+                                             "ctx", mk_prim_type(a, Address)));
+    sym = string_to_symbol(mv_string("current-allocator"));
+    add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
     void* nul = NULL;
-    std_tmp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
+    std_temp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
     std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     typep = mk_dynamic_type(a, mk_prim_type(a, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
-    add_def(module, sym, *typep, &std_tmp_allocator, null_segments, NULL);
+    add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
     clear_assembler(ass);
 
     // C Wrappers!

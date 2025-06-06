@@ -23,11 +23,11 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
     }
     case TLOpen: {
         res.type = EROpen;
-        res.opened = top.open.syms;
-        for (size_t i = 0; i < top.open.syms.len; i++) {
+        res.opened = top.open.paths;
+        for (size_t i = 0; i < top.open.paths.len; i++) {
             ImportClause clause = (ImportClause) {
                 .type = ImportAll,
-                .name = top.open.syms.data[i],
+                .path = *(SymbolArray*)top.open.paths.data[i],
             };
             add_import_clause(clause, module);
         }
@@ -106,7 +106,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* dynamic_memory_space = mem_alloc(4096, a);
     void* offset_memory_space = mem_alloc(1024, a);
 
-    Allocator* old_tmp_alloc = set_std_tmp_allocator(a);
+    Allocator* old_temp_alloc = set_std_temp_allocator(a);
 
     int64_t out;
     __asm__ __volatile__(
@@ -140,7 +140,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         , "r" (dynamic_memory_space)
         , "r" (offset_memory_space)) ;
 
-    set_std_tmp_allocator(old_tmp_alloc);
+    set_std_temp_allocator(old_temp_alloc);
     mem_free(dynamic_memory_space, a);
     return value;
 }
@@ -161,7 +161,16 @@ Document* pretty_res(EvalResult res, Allocator* a) {
         PtrArray docs = mk_ptr_array(res.opened.len + 1, a);
         push_ptr(mk_str_doc(mv_string("Opened:"), a), &docs);
         for (size_t i = 0; i < res.opened.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(res.opened.data[i]), a), &docs);
+            SymbolArray* syms = res.opened.data[i];
+            PtrArray elts = mk_ptr_array(2 * syms->len, a);
+            for (size_t j = 0; j < syms->len; j++) {
+                push_ptr(mk_str_doc(*symbol_to_string(syms->data[j]), a), &elts);
+                if (j + 1 != syms->len) {
+                    push_ptr(mk_str_doc(mv_string("."), a), &elts);
+                }
+            }
+              
+            push_ptr(mv_cat_doc(elts, a), &docs);
         }
         out = mv_sep_doc(docs, a);
         break;

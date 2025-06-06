@@ -17,8 +17,14 @@ void set_current_package(Package* current);
 void set_std_istream(IStream* current);
 void set_std_ostream(OStream* current);
 
-Allocator* get_std_tmp_allocator();
-Allocator* set_std_tmp_allocator(Allocator* al);
+Allocator* get_std_temp_allocator();
+Allocator* set_std_temp_allocator(Allocator* al);
+
+Allocator* get_std_comptime_allocator();
+Allocator* set_std_comptime_allocator(Allocator* al);
+
+Allocator* get_std_region_allocator();
+Allocator* set_std_region_allocator(Allocator* al);
 
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a);
 

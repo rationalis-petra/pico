@@ -23,6 +23,7 @@ typedef struct EnvEntry {
     bool is_module;
     PiType* type;
     void* value;
+    Module* source;
 } EnvEntry;
 
 Environment* env_from_module(Module* module, Allocator* a);

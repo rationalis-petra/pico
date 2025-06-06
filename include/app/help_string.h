@@ -1,8 +1,8 @@
 #ifndef __APP_HELP_STRING
 #define __APP_HELP_STRING
 
-#include "data/stream.h"
+#include "platform/io/terminal.h"
 
-void write_help_string(OStream* os);
+void write_help_string(FormattedOStream *os);
 
 #endif
