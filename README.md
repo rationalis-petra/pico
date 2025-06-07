@@ -64,7 +64,7 @@ user > (i64.* 10 20)
 Some code in a programming language will be neither function or operator calls, but instead will 
 be one of a various set of terms, which define things like control flow, such as `if` or `seq`, 
 create values as with `struct` or `proc` or introduce new definitions, as with `def`. In Relic,
-these generally have the a similary as function calls, although there is more variation. To
+these generally have a similar structure to function calls, although there is more variation. To
 introduce a new definition, for example, we write a 'function call' with `def` as the 'function',
 so, to define a new value 'three', write:
 
@@ -75,6 +75,14 @@ Defined three : I64
 user > three
 3
 ```
+
+You can see that when three was defined, relic printed the type of the value
+(I64). All values in Relic have a type, which is determined ahead of time -
+Relic is a statically typed language. The type 'I64' is a (signed) 64-bit
+integer, while an (unsigned) 64-bit integer is U64. Relic also has other numeric
+types, including U8, U16, U32, I8, I16, I32 and F32, F64 as the two
+floating-point types. You will encounter more types as we explore the language
+further.
 
 Proceudres (a.k.a functions) follow a similar pattern - start a new procedure
 with `proc` and follow it with an argument list, written using square brackets,
@@ -173,6 +181,61 @@ user > (print-to 10)
 1 2 3 4 5 6 7 8 9 10
 :unit
 ```
+
+### Types
+All values in relic have a type. 
+
+
+
+There are also types which allow combining smaller values into a larger
+aggregate. The simplest way to do so is the `struct`, which associates names
+(fields) with values. Below, we create a struct called 'point', which has two
+integers: 'x' and 'y'.
+
+```clojure
+user > (def point struct [.x 10] [.y 4])
+Define point : Struct [.x I64] [.y I64])
+```
+
+The projection '.' operator is used to get the value from a struct, e.g.
+
+```clojure
+user > (i64.+ point.x point.y)
+14
+```
+
+It is also possible to provide an expected structure type, which can be useful
+if we forget a field - for example, a three-dimensional point might look like:
+
+```clojure
+user > (def Point Struct [.x I64] [.y I64] [.z I64]) 
+Defined Point : Type
+```
+
+Note the difference here - when defining a struct *value*, use lowercase
+`struct`, while when defining a struct *type*, use the capitalized `Struct`. By
+convention, this is extended to types so the value `point` may have type
+`Point`. While not required, this can help you distinguish between types and
+values.
+
+You can see how this helps identify issues by placing the type just after the
+`struct` term former, and leaving out one field - this gives the error message. 
+
+```clojure
+user > (def point struct Point [.x 3] [.y 5])
+1 |
+2 | (def point struct Point [.x 3] [.y 5])
+
+  Structure value definition is missing the fields: z
+```
+
+Providing the correct fields fixes the error.
+
+```clojure
+user > (def point struct 3DPoint [.x 3] [.y 5] [.z 10])
+(struct [.x 3] [.y 5] [.z 10])
+```
+
 
 ### Polymorphism and Pointers
 TODO: document me!
