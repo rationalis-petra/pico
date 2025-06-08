@@ -19,6 +19,10 @@ _Noreturn void throw_pi_errors(PiErrorPoint *point, PtrArray errors) {
     long_jump(point->buf, 1);
 }
 
+const Colour message_colour = (Colour){.r = 200, .g = 20, .b = 20};
+const Colour regular_code_colour = (Colour){.r = 150, .g = 150, .b = 150};
+const Colour bad_code_colour = (Colour){.r = 208, .g = 105, .b = 30};
+
 void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
@@ -34,7 +38,7 @@ void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocat
             }
 
             write_fstring(mv_string("\n"), fos);
-            start_coloured_text(colour(200, 20, 20), fos);
+            start_coloured_text(message_colour, fos);
             Document* iderr = mv_nest_doc(2, error.message, a);
             write_doc_formatted(iderr, 120, fos);
             mem_free(iderr, a); // TODO: fix me! (fix mk doc & replace the mv with mk)
@@ -46,7 +50,7 @@ void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocat
             display_code_region(*buffer, multi.error.range, 5, fos, a);
         }
         write_fstring(mv_string("\n"), fos);
-        start_coloured_text(colour(200, 20, 20), fos);
+        start_coloured_text(message_colour, fos);
 
         Document* iderr = mv_nest_doc(2, multi.error.message, a);
         write_doc_formatted(iderr, 120, fos);
@@ -83,7 +87,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     }
         
     // Colour for "irrelevant" code
-    start_coloured_text(colour(150, 150, 150), fos);
+    start_coloured_text(regular_code_colour, fos);
     // Now, gather the past n lines
 
     // 
@@ -142,7 +146,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
 
     write_fstring(s1, fos);
 
-    start_coloured_text(colour(208, 105, 30), fos);
+    start_coloured_text(bad_code_colour, fos);
     {
         // We need to add line-numbers if bad code spans multiple lines!  
         size_t start_idx = 0;
@@ -170,7 +174,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
             write_doc_formatted(doc, 80, fos);
             delete_doc(doc, a);
             write_fstring(mv_string(" | "), fos);
-            start_coloured_text(colour(208, 105, 30), fos);
+            start_coloured_text(bad_code_colour, fos);
         } 
         write_fstring(bad_line, fos);
         start_idx = i + 1;

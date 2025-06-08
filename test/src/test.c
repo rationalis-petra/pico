@@ -68,7 +68,8 @@ int main(int argc, char** argv) {
     sdelete_string_array(args);
 
     // TODO: setup_tests
-    TestLog* log = mk_test_log(cout, stdalloc);
+    FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
+    TestLog* log = mk_test_log(cos, stdalloc);
 
     switch (command.type) {
     case CAll: {
@@ -98,6 +99,7 @@ int main(int argc, char** argv) {
     }
 
     delete_test_log(log, stdalloc);
+    delete_formatted_ostream(cos, stdalloc);
 
     // Cleanup
     delete_package(base);
