@@ -1781,7 +1781,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FTypeOf: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("type-of term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("type-of term former requires 1 argument!", a);
             throw_pi_error(point, err);
         }
         RawTree* raw_term = (raw.branch.nodes.len == 2)
@@ -1802,7 +1802,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FDescribe:
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("describe term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("describe term former requires 2 arguments!", a);
             throw_pi_error(point, err);
         }
         RawTree term = raw.branch.nodes.data[1];
@@ -1820,6 +1820,27 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             err.message = mk_cstr_doc("describe expects argument to be a symbol!", a);
             throw_pi_error(point, err);
         }
+    case FMacroExpand: {
+        if (raw.branch.nodes.len < 2) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("macro-expand term former requires 1 argument!", a);
+            throw_pi_error(point, err);
+        }
+        RawTree* raw_term = (raw.branch.nodes.len == 2)
+            ? &raw.branch.nodes.data[1]
+            : raw_slice(&raw, 1, a);
+
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SMacroExpand,
+            .ptype = NULL,
+            .range = raw.range,
+            .type_of = body,
+        };
+        return res;
+    }
     }
     panic(mv_string("Invalid termformer provided to mk_term."));
 }
@@ -1924,20 +1945,22 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                     int64_t out;
                     __asm__ __volatile__(
                                          // save nonvolatile registers
-                                         "push %%rbp       \n"
+                                         "push %%rbp       \n" // Nonvolatile on System V + Win64
                                          "push %%rbx       \n" // Nonvolatile on System V + Win64
                                          "push %%rdi       \n" // Nonvolatile on Win 64
-                                         "push %%r15       \n"
-                                         "push %%r14       \n"
-                                         "push %%r13       \n"
-                                         // Push output ptr & sizeof (RawTree), resp
-                                         "push %6          \n"
-                                         "push %7          \n"
+                                         "push %%r15       \n" // for dynamic vars
+                                         "push %%r14       \n" // for dynamic memory space
+                                         "push %%r13       \n" // for control/indexing memory space
+                                         "push %%r12       \n" // Nonvolatile on System V + Win64
 
                                          "mov %4, %%r13    \n"
                                          "mov %3, %%r14    \n"
                                          "mov %2, %%r15    \n"
                                          //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+
+                                         // Push output ptr & sizeof (RawTree), resp
+                                         "push %6          \n" // output ptr
+                                         "push %7          \n" // sizeof (RawTree)
 
                                          // Push arg (array) onto stack
                                          "push 0x18(%5)       \n"
@@ -1952,7 +1975,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "call *%1         \n"
 
                                          // After calling the function, we
-                                         // expect a Syntax to be atop the stack:
+                                         // expect a RawTree to be atop the stack:
 #if ABI == SYSTEM_V_64
                                          // memcpy (dest = rdi, src = rsi, size = rdx)
                                          // retval = rax 
@@ -1980,6 +2003,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          // pop stashed size & dest from stack
                                          "add $0x10, %%rsp          \n"
 
+                                         "pop %%r12        \n"
                                          "pop %%r13        \n"
                                          "pop %%r14        \n"
                                          "pop %%r15        \n"

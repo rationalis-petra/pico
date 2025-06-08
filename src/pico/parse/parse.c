@@ -1,27 +1,15 @@
 #include <math.h>
 #include "pico/parse/parse.h"
 
-/* High Level overview of the grammar:
- *
- * 
- *
- *
- *
- */
+// The main parsing functions, which parse different types of expressions. 
+// The entry point, parse_expr, which an arbitrary expression, inspects the head
+// of the input sream and delegates to a number of secondary parsing functions:  
+// + list - for whitespace separated lists 
+// + atom - for symbols OR prefixed operators such as .field or :variant
+//   + parse_sybol - for symbols, is called by parse_atom
+//   + parse_prefix - for prefixed operators, is called by parse_atom
+// + numbers - for decimal or floating-point numbers
 
-
-// The 'actual' parser funciton
-ParseResult parse_main(IStream* is, Allocator* a);
-
-ParseResult parse_rawtree(IStream* is, Allocator* a) {
-    return parse_main(is, a);
-}
-
-// The three main parsing functions, which parse:
-// + lists
-// + numbers
-// + symbols
-// The 'main' parser does lookahead to dispatch on the appropriate parsing function.
 ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected);
 ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a);
 ParseResult parse_atom(IStream* is, Allocator* a);
@@ -37,7 +25,7 @@ bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
-ParseResult parse_main(IStream* is, Allocator* a) {
+ParseResult parse_rawtree(IStream* is, Allocator* a) {
     return parse_expr(is, a, '\0');
 }
 

@@ -101,6 +101,7 @@ typedef enum {
     // Meta/reflection
     STypeOf,
     SDescribe,
+    SMacroExpand,
 } Syntax_t;
 
 
@@ -381,6 +382,7 @@ struct Syntax {
 
         Syntax* type_of;
         Symbol to_describe;
+        Syntax* to_expand;
     };
     PiType* ptype;
     Range range;

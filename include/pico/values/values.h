@@ -120,6 +120,7 @@ typedef enum TermFormer {
     // Formers for the meta module
     FTypeOf,
     FDescribe,
+    FMacroExpand,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

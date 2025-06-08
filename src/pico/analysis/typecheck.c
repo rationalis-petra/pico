@@ -639,7 +639,23 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             if (untyped->structure.fields.len != struct_type->structure.fields.len) {
-                err.message = mv_cstr_doc("Structure must have exactly n fields.", a);
+                // Figure out which field(s) are missing, and print those in the
+                // error message:
+                PtrArray docs = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Structure value definition is missing the field(s):", a), &docs);
+                for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+                    Symbol field = struct_type->structure.fields.data[i].key;
+                    bool has_field = false;
+                    for (size_t j = 0; j < untyped->structure.fields.len; j++) {
+                        if (symbol_eq(field, untyped->structure.fields.data[j].key))
+                            has_field = true;
+                    }
+                    if (!has_field) {
+                        push_ptr(mk_str_doc(*symbol_to_string(field), a), &docs);
+                    }
+                }
+                
+                err.message = mv_hsep_doc(docs, a);
                 throw_pi_error(point, err);
             }
 

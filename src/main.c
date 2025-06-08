@@ -92,7 +92,9 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     Document* doc;
     if (opts.debug_print) {
         doc = pretty_rawtree(res.result, &arena);
-        write_fstring(mv_string("Pretty printing raw syntax\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Raw Syntax\n"), cout);
+        end_underline(cout);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\n"), cout);
     }
@@ -104,7 +106,9 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
     if (opts.debug_print) {
-        write_fstring(mv_string("Pretty printing typechecked syntax:\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Abstract Syntax:\n"), cout);
+        end_underline(cout);
         doc = pretty_toplevel(&abs, &arena);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\n"), cout);
@@ -121,8 +125,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
         if (ty) {
-            write_fstring(mv_string("Pretty Printing Inferred Type\n"), cout);
-            doc = pretty_type(ty, &arena);
+            start_underline(cout);
+            write_fstring(mv_string("Inferred Type\n"), cout);
+            end_underline(cout);
+            doc = mv_nest_doc(2, pretty_type(ty, &arena), a);
             write_doc_formatted(doc, 120, cout);
             write_fstring(mv_string("\n"), cout);
         }
@@ -135,7 +141,9 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
 
     if (opts.debug_print) {
-        write_fstring(mv_string("Pretty Printing Binary:\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Compiled Binary:\n"), cout);
+        end_underline(cout);
         write_fstring(mv_string("Execute Assembly:\n"), cout);
         doc = pretty_assembler(gen_target.target, &arena);
         write_doc_formatted(doc, 120, cout);

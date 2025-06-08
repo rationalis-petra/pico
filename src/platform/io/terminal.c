@@ -139,10 +139,26 @@ void end_boldness(FormattedOStream* os) {
     }
 }
 
-void start_italics(FormattedOStream* os) { printf("\x1b[3m"); }
+void start_italics(FormattedOStream *os) {
+    char str[8];
+    snprintf(str, 8, "\x1b[3m");
+    write_fstring(mv_string(str), os);
+}
 
-void end_italics(FormattedOStream* os) { printf("\x1b[23m"); }
+void end_italics(FormattedOStream *os) {
+    char str[8];
+    snprintf(str, 8, "\x1b[23m");
+    write_fstring(mv_string(str), os);
+}
 
-void start_underline(FormattedOStream* os) { printf("\x1b[4m"); }
+void start_underline(FormattedOStream *os) {
+    char str[8];
+    snprintf(str, 8, "\x1b[4m");
+    write_fstring(mv_string(str), os);
+}
 
-void end_underline(FormattedOStream* os) { printf("\x1b[24m"); }
+void end_underline(FormattedOStream *os) {
+    char str[8];
+    snprintf(str, 8, "\x1b[24m");
+    write_fstring(mv_string(str), os);
+}

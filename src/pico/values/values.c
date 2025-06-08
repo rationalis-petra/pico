@@ -396,6 +396,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDescribe:
         out = mk_str_doc(mv_string("::describe"), a);
         break;
+    case FMacroExpand:
+        out = mk_str_doc(mv_string("::macro-expand"), a);
+        break;
     }
 
     if (out == NULL) {

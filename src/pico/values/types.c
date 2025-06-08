@@ -631,7 +631,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         out = mv_str_doc(mk_string("No Print UVar!", a), a);
         break;
     case TStruct: {
-        PtrArray nodes = mk_ptr_array(1 + type->structure.fields.len, a);
+        PtrArray nodes = mk_ptr_array(2, a);
+        PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &nodes);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
@@ -642,10 +643,11 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(fd_doc, &nodes);
+            push_ptr(fd_doc, &fields);
         }
 
-        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        push_ptr(mv_nest_doc(2, mv_grouped_sep_doc(fields, a), a), &nodes);
+        out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
@@ -673,7 +675,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(var_doc, &nodes);
         }
 
-        out = mv_nest_doc(2, mv_grouped_sep_doc(nodes, a), a);
+        out = mv_grouped_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
@@ -705,15 +707,17 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             PtrArray name_group = mk_ptr_array(5, a);
             push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Named" ), a), a), &name_group);
 
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a),
-                     &name_group);
-
             if (type->named.args) {
-                PtrArray args = mk_ptr_array(type->named.args->len, a);
+                PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
+                push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a),
+                         &args);
                 for (size_t i = 0; i < type->named.args->len; i++) {
                     push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
                 }
                 push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &name_group);
+            } else {
+                push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->named.name), a), a),
+                         &name_group);
             }
 
             ctx.should_wrap = false;

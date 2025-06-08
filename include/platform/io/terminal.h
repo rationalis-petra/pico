@@ -42,4 +42,7 @@ void end_boldness(FormattedOStream* os);
 void start_italics(FormattedOStream* os);
 void end_italics(FormattedOStream* os);
 
+void start_underline(FormattedOStream* os);
+void end_underline(FormattedOStream* os);
+
 #endif

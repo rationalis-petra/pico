@@ -80,12 +80,12 @@ Document* pretty_assembler(Assembler* assembler, Allocator* a) {
         int len = snprintf(NULL, 0, "%02x", assembler->instructions.data[i]) + 1;
         char* str = (char*)mem_alloc(sizeof(char) * len, a);
         snprintf(str, len, "%02" PRIx8, assembler->instructions.data[i]);
-        Document* arg = mv_str_doc(mv_string(str), a);
+        Document* arg = mv_cstr_doc(str, a);
 
         push_ptr(arg, &nodes);
     }
 
-    return mv_sep_doc(nodes, a);
+    return mv_hsep_doc(nodes, a);
 }
 
 Location reg(Regname reg, LocationSize sz) {
