@@ -84,6 +84,8 @@ typedef struct {
 
     LinkMetaArray cc_links;
     LinkMetaArray cd_links;
+
+    LinkMetaArray dd_links;
 } LinkData;
 
 typedef struct {

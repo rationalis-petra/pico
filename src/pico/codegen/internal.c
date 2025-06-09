@@ -55,6 +55,15 @@ void backlink_data(Target target, size_t offset, InternalLinkData* links) {
     }
 }
 
+void backlink_data_data(Target target, size_t location, size_t offset, InternalLinkData* links) {
+    LinkMetaData link = (LinkMetaData) {
+        .source_offset = offset,
+        .dest_offset = location,
+    };
+
+    push_link_meta(link, &links->links.dd_links);
+}
+
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
     SizeArray* sarr = sym_sarr_lookup(sym, links->gotolinks);

@@ -7,6 +7,7 @@
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/symbol_array.h"
+#include "pico/syntax/concrete.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -101,7 +102,7 @@ typedef enum {
     // Meta/reflection
     STypeOf,
     SDescribe,
-    SMacroExpand,
+    SQuote,
 } Syntax_t;
 
 
@@ -382,7 +383,7 @@ struct Syntax {
 
         Syntax* type_of;
         Symbol to_describe;
-        Syntax* to_expand;
+        RawTree quoted;
     };
     PiType* ptype;
     Range range;

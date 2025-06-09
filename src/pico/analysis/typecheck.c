@@ -1382,6 +1382,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = mk_string_type(a);
         break;
     }
+    case SQuote: {
+        untyped->ptype = get_syntax_type();
+        break;
+    }
 
     }
     if (untyped->ptype == NULL) {
@@ -1545,6 +1549,21 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     }
     case SConstructor: break;
     case SVariant: {
+        // Resolve the variant tag
+        PiType* enum_type = unwrap_type(syn->ptype, a);
+
+        bool found_variant = false;
+        for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
+            SymPtrCell cell = enum_type->enumeration.variants.data[i];
+            if (symbol_eq(cell.key, syn->variant.tagname)) {
+                found_variant = true;
+                syn->variant.tag = i;
+                break;
+            }
+        }
+        if (!found_variant) {
+            panic(mv_string("Unable to find variant tag in post-unify."));
+        }
         for (size_t i = 0; i < syn->variant.args.len; i++) {
             post_unify(syn->variant.args.data[i], env, a, point);
         }
@@ -1743,6 +1762,8 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe: 
+        break;
+    case SQuote: 
         break;
     }
 }
@@ -2027,6 +2048,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe:
+        break;
+    case SQuote:
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));

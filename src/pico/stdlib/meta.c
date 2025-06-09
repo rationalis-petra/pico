@@ -120,8 +120,8 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("describe"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FMacroExpand;
-    sym = string_to_symbol(mv_string("macro-expand"));
+    former = FQuote;
+    sym = string_to_symbol(mv_string("quote"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
@@ -147,6 +147,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         PiType* atom_type = mk_enum_type(a, 4,
                                         "bool", 1, mk_prim_type(a, Bool),
                                         "integral", 1, mk_prim_type(a, Int_64),
+                                        "floating", 1, mk_prim_type(a, Float_64),
                                         "symbol", 1,  copy_pi_type_p(symbol_type, a),
                                         "string", 1, mk_string_type(a));
         typep = atom_type;

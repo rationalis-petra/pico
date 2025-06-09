@@ -1799,10 +1799,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
-    case FDescribe:
+    case FDescribe: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("describe term former requires 2 arguments!", a);
+            err.message = mk_cstr_doc("describe term former requires 1 argument!", a);
             throw_pi_error(point, err);
         }
         RawTree term = raw.branch.nodes.data[1];
@@ -1820,24 +1820,23 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             err.message = mk_cstr_doc("describe expects argument to be a symbol!", a);
             throw_pi_error(point, err);
         }
-    case FMacroExpand: {
-        if (raw.branch.nodes.len < 2) {
+        break;
+    }
+    case FQuote: {
+        if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("macro-expand term former requires 1 argument!", a);
+            err.message = mk_cstr_doc("quote term former expects 1 argument!", a);
             throw_pi_error(point, err);
         }
-        RawTree* raw_term = (raw.branch.nodes.len == 2)
-            ? &raw.branch.nodes.data[1]
-            : raw_slice(&raw, 1, a);
 
-        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+        RawTree body = raw.branch.nodes.data[1];
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SMacroExpand,
+            .type = SQuote,
             .ptype = NULL,
             .range = raw.range,
-            .type_of = body,
+            .quoted = body,
         };
         return res;
     }

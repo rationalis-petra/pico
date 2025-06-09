@@ -375,7 +375,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             current_offset += pi_size_of(*ftype);
         }
 
-        out = mk_paren_doc("(",")", mv_grouped_sep_doc(nodes, a), a);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TEnum: {
@@ -646,13 +646,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(fd_doc, &fields);
         }
 
-        push_ptr(mv_nest_doc(2, mv_grouped_sep_doc(fields, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(fields, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TEnum: {
         PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
+        PtrArray variants = mk_ptr_array(1 + type->enumeration.variants.len, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum ", a)), a), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
@@ -670,12 +671,13 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
             }
-            Document* var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_grouped_sep_doc(var_nodes, a), a), a);
+            Document* var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
 
-            push_ptr(var_doc, &nodes);
+            push_ptr(var_doc, &variants);
         }
 
-        out = mv_grouped_sep_doc(nodes, a);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(variants, a), a), &nodes);
+        out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
@@ -872,7 +874,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         push_ptr(mv_sep_doc(head_group, a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 
-        out = mv_grouped_sep_doc(nodes, a);
+        out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
@@ -910,7 +912,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     if (out == NULL) {
         out = mk_str_doc(mv_string("Error printing type: unrecognised sort."), a);
     }
-    return out;
+    return mv_group_doc(out, a);
 }
 
 Document* pretty_type(PiType* type, Allocator* a) {

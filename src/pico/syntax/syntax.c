@@ -1,3 +1,4 @@
+#include "data/string.h"
 #include "platform/signals.h"
 #include "pretty/standard_types.h"
 
@@ -84,7 +85,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             PtrArray impl_nodes = mk_ptr_array(syntax->procedure.implicits.len, a);
             for (size_t i = 0; i < syntax->procedure.implicits.len; i++) {
                 Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.implicits.data[i].key), a);
-                push_ptr(arg, &impl_nodes);
+                push_ptr(mv_nest_doc(2, arg, a), &impl_nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
         }
@@ -92,12 +93,12 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
         for (size_t i = 0; i < syntax->procedure.args.len; i++) {
             Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
-            push_ptr(arg, &arg_nodes);
+            push_ptr(mv_nest_doc(2, arg, a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
 
-        push_ptr(pretty_syntax(syntax->procedure.body, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->procedure.body, a), a), &nodes);
+        out = mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
         break;
     }
     case SAll: {
@@ -116,19 +117,21 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SMacro: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mv_str_doc((mk_string("macro", a)), a), &nodes);
-        push_ptr(pretty_syntax(syntax->transformer, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->transformer, a), a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SApplication: {
         Document* head = pretty_syntax(syntax->application.function, a);
-        PtrArray nodes = mk_ptr_array(1 + syntax->application.args.len, a);
+        PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(head, &nodes);
+        PtrArray args = mk_ptr_array(syntax->application.args.len, a);
         for (size_t i = 0; i < syntax->application.args.len; i++) {
             Document* node = pretty_syntax(syntax->application.args.data[i], a);
-            push_ptr(node, &nodes);
+            push_ptr(node, &args);
         }
-        out = mv_sep_doc(nodes, a);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(args, a), a), &nodes);
+        out = mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
         break;
     }
     case SAllApplication: {
@@ -153,29 +156,34 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SConstructor: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(pretty_syntax(syntax->constructor.enum_type, a), &nodes);
+        if (syntax->constructor.enum_type) {
+            push_ptr(pretty_syntax(syntax->constructor.enum_type, a), &nodes);
+        }
         push_ptr(mk_str_doc(mv_string(":"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &nodes);
         out = mv_cat_doc(nodes, a);
         break;
     }
     case SVariant: {
-        PtrArray nodes = mk_ptr_array(6, a);
+        PtrArray nodes = mk_ptr_array(syntax->variant.args.len + 1, a);
+        PtrArray ctor_parts = mk_ptr_array(3, a);
 
-        push_ptr(mk_str_doc(mv_string("("), a), &nodes);
-        push_ptr(pretty_syntax(syntax->variant.enum_type, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(":"), a), &nodes);
-        push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &nodes);
-
-        PtrArray pretty_args = mk_ptr_array(syntax->variant.args.len, a);
-        for (size_t i = 0; i < syntax->variant.args.len; i++) {
-            push_ptr(pretty_syntax(syntax->variant.args.data[i], a), &pretty_args);
+        if (syntax->variant.enum_type) {
+            push_ptr(pretty_syntax(syntax->variant.enum_type, a), &ctor_parts);
         }
-        push_ptr(mv_sep_doc(pretty_args, a), &nodes);
+        push_ptr(mk_str_doc(mv_string(":") , a), &ctor_parts);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &ctor_parts);
+        push_ptr(mv_cat_doc(ctor_parts, a), &nodes);
 
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-
-        out = mv_cat_doc(nodes, a);
+        for (size_t i = 0; i < syntax->variant.args.len; i++) {
+            push_ptr(pretty_syntax(syntax->variant.args.data[i], a), &nodes);
+        }
+        
+        if (syntax->variant.args.len > 0) {
+            out = mk_paren_doc("(", ")",  mv_sep_doc(nodes, a), a);
+        } else {
+            out = mv_sep_doc(nodes, a);
+        }
         break;
     }
     case SMatch: {
@@ -324,7 +332,6 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 
         out = mv_sep_doc(nodes, a);
         break;
-        break;
     }
     case SDynamicLet: {
         PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
@@ -384,6 +391,20 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SUnName: {
         out = mk_paren_doc("(unname ", ")", pretty_syntax(syntax->unname, a), a);
+        break;
+    }
+    case SWiden: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(pretty_syntax(syntax->widen.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->widen.type, a), &nodes);
+        out = mk_paren_doc("(widen ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
+        break;
+    }
+    case SNarrow: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(pretty_syntax(syntax->narrow.val, a), &nodes);
+        push_ptr(pretty_syntax(syntax->narrow.type, a), &nodes);
+        out = mk_paren_doc("(narrow ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
     case SDynAlloc: {
@@ -479,9 +500,9 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
                 push_ptr(pretty_syntax(elt->expr, a), &nodes);
                 push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
-                push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+                push_ptr(mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), &nodes);
             } else {
-                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+                push_ptr(mv_nest_doc(2, pretty_syntax(elt->expr, a), a), &nodes);
             }
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
@@ -701,16 +722,16 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     if (out == NULL)  {
         panic(mv_string("Internal Error in pretty_syntax: Unknown syntax Type"));
     }
+    out = mv_group_doc(out, a);
     return out;
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {
     PtrArray nodes = mk_ptr_array(4, a);
-    push_ptr(mv_str_doc(mk_string("(def", a), a), &nodes);
+    push_ptr(mv_str_doc(mk_string("def", a), a), &nodes);
     push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes);
-    push_ptr(pretty_syntax(def->value, a), &nodes);
-    push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-    return mv_sep_doc(nodes, a);
+    push_ptr(mv_nest_doc(2, pretty_syntax(def->value, a), a), &nodes);
+    return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
 }
 
 Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {

@@ -198,6 +198,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
             *address_ptr= out.data.data + link.dest_offset;
         }
+
+        for (size_t i = 0; i < links->dd_links.len; i++) {
+            LinkMetaData link = links->dd_links.data[i];
+            void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
+            *address_ptr= out.data.data + link.dest_offset;
+        }
     }
 
     // Overrite all links to code with new addresses

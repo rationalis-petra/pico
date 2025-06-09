@@ -33,10 +33,12 @@ ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 
 // Implementation details
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+
 void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
 void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
+void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
 
 LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     InternalLinkData links = (InternalLinkData) {
@@ -46,6 +48,7 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(32, a),
             .cd_links = mk_link_meta_array(8, a),
+            .dd_links = mk_link_meta_array(8, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
@@ -95,6 +98,7 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .dd_links = mk_link_meta_array(8, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
@@ -127,6 +131,7 @@ void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, 
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .dd_links = mk_link_meta_array(8, a),
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
@@ -1812,6 +1817,22 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
+    case SQuote: {
+        // Setup: push the memory address (in data) of the Syntax value into stack.
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        backlink_data(target, out.backlink, links);
+
+        // Now copy the entire concrete syntax tree into the data-segment,
+        // setting allocators to null
+        add_rawtree(syn.quoted, target, links);
+
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), a, point);
+        for (size_t i = 0; i < sizeof(RawTree); i += sizeof(uint64_t)) {
+            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
+        }
+        break;
+    }
     default: {
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
@@ -1883,3 +1904,60 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
     release_executable_allocator(exalloc);
     throw_error(point, cleanup_point.error_message);
 }
+
+void add_tree_children(RawTreeArray trees, U8Array *arr) {
+    for (size_t i = 0; i < trees.len; i++) {
+        RawTree tree = trees.data[i];
+        // TODO (BUG FEAT): set self .data = NULL, .gpa = NULL
+        if (tree.type == RawBranch) {
+            add_tree_children(tree.branch.nodes, arr);
+        }
+    }
+}
+
+void backlink_children(const size_t field_offset, size_t base_id, size_t* head, RawTreeArray trees, Target target, InternalLinkData* links) {
+    for (size_t i = 0; i < trees.len; i++) {
+        RawTree tree = trees.data[i];
+        size_t current_idx = base_id + sizeof(RawTree) * i;
+        if (tree.type == RawBranch) {
+            size_t new_base_id = *head;
+            backlink_data_data(target, current_idx , new_base_id + field_offset, links);
+            *head += sizeof(RawTree) * tree.branch.nodes.len;
+            backlink_children(field_offset, new_base_id, head, tree.branch.nodes, target, links);
+        }
+    }
+}
+
+void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
+    if (tree.type == RawAtom) {
+        add_u8_chunk((uint8_t*)&tree, sizeof(RawTree), target.data_aux);
+    } else {
+        // Start index of 
+        size_t start_idx = target.data_aux->len;
+        RawTree copy = (RawTree) {
+            .type = tree.type,
+            .range = tree.range,
+            .branch.hint = tree.branch.hint,
+            .branch.nodes.data = NULL, // this will be backlinked later
+            .branch.nodes.len = tree.branch.nodes.len,
+            .branch.nodes.size = tree.branch.nodes.len,
+            .branch.nodes.gpa = NULL,
+        };
+        // Step 1: Copy in the tree
+        add_u8_chunk((uint8_t*)&copy, sizeof(RawTree), target.data_aux);
+        add_u8_chunk((uint8_t*)&tree.branch.nodes.data, sizeof(RawTree) * tree.branch.nodes.len, target.data_aux);
+        add_tree_children(tree.branch.nodes, target.data_aux);
+
+        // Step 2: Backlink nodes
+        // ----------------------
+        // The field offset for .branch.nodes.data from the rawtree (note: C
+        // does not allow us to calculate this value directly, so we use a
+        // little pointer arithmetic cheat to properly calculate it.
+        const size_t field_offset = ((size_t)&tree.branch.nodes.data) - ((size_t)&tree);
+
+        size_t head = start_idx + sizeof(RawTree) * tree.branch.nodes.len;
+        backlink_data_data(target, start_idx, start_idx + field_offset, links);
+        backlink_children(field_offset, start_idx, &head, tree.branch.nodes, target, links);
+    }
+}
+

@@ -26,6 +26,7 @@ typedef struct {
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
 void backlink_code(Target target, size_t offset, InternalLinkData* links);
 void backlink_data(Target target, size_t offset, InternalLinkData* links);
+void backlink_data_data(Target target, size_t location, size_t offset, InternalLinkData* links);
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
 
 

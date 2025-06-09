@@ -151,7 +151,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
         doc = pretty_assembler(gen_target.code_aux, &arena);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\nData Segment:\n"), cout);
-        write_fstring(string_from_ASCII(*gen_target.data_aux, &arena), cout);
+        // TODO (FEAT): as per string (below)
+        write_fstring(mv_string("TODO: data segment needs to type-annotate data to display properly!"), cout);
+        //write_fstring(string_from_ASCII(*gen_target.data_aux, &arena), cout);
+        write_fstring(mv_string("\n"), cout);
     }
 
     // -------------------------------------------------------------------------
@@ -160,7 +163,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
 
     EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
     if (opts.debug_print) {
-        write_fstring(mv_string("Pretty Printing Evaluation Result\n"), cout);
+        write_fstring(mv_string("Evaluation Result\n"), cout);
     }
 
     if (opts.debug_print || opts.interactive) {

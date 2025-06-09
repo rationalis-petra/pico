@@ -8,7 +8,7 @@ RELEASE_DIR := $(BUILD_DIR)/release
 DEBUG_DIR := $(BUILD_DIR)/debug
 SRC_DIRS := ./src
 
-C_VERSION := c11
+C_VERSION := c99
 CC := gcc
 
 ## Platform specifics and configuration
