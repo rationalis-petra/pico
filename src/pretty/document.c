@@ -198,6 +198,7 @@ void delete_doc(Document* doc, Allocator* a) {
     case CatDocument:
     case SepDocument:
     case VSepDocument:
+    case HSepDocument:
         for (size_t i = 0; i < doc->docs.len; i++)
             delete_doc(doc->docs.data[i], a);
         break;

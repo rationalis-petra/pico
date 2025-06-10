@@ -490,23 +490,21 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SSequence: {
         PtrArray nodes = mk_ptr_array(2 + syntax->sequence.elements.len, a);
-        push_ptr(mk_str_doc(mv_string("(seq"), a), &nodes);
         for (size_t i = 0; i < syntax->sequence.elements.len; i++) {
             SeqElt* elt = syntax->sequence.elements.data[i];
             if (elt->is_binding) {
                 PtrArray let_nodes = mk_ptr_array(4, a);
                 push_ptr(mk_str_doc(mv_string("[let!"), a), &let_nodes);
                 push_ptr(mk_str_doc(*symbol_to_string(elt->symbol), a), &let_nodes);
-                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+                push_ptr(pretty_syntax(elt->expr, a), &let_nodes);
                 push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
-                push_ptr(mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), &nodes);
+                push_ptr(mv_sep_doc(let_nodes, a), &nodes);
             } else {
-                push_ptr(mv_nest_doc(2, pretty_syntax(elt->expr, a), a), &nodes);
+                push_ptr(pretty_syntax(elt->expr, a), &nodes);
             }
         }
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(seq ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
     case SProcType: {
@@ -715,6 +713,11 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("describe"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->to_describe), a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SQuote: {
+        Document* raw = pretty_rawtree(syntax->quoted, a);
+        out = mk_paren_doc("(quote ", ")", mv_nest_doc(2, raw, a), a);
         break;
     }
     }

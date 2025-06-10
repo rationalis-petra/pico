@@ -85,6 +85,11 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
         void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
         *address_ptr= target.data_aux->data + link.dest_offset;
     }
+    for (size_t i = 0; i < links.links.dd_links.len; i++) {
+        LinkMetaData link = links.links.dd_links.data[i];
+        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
 
     return links.links;
 }
@@ -116,6 +121,11 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+    for (size_t i = 0; i < links.links.dd_links.len; i++) {
+        LinkMetaData link = links.links.dd_links.data[i];
+        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
         *address_ptr= target.data_aux->data + link.dest_offset;
     }
 
@@ -1890,6 +1900,11 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
     for (size_t i = 0; i < links->links.cd_links.len; i++) {
         LinkMetaData link = links->links.cd_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
+        *address_ptr= target.data_aux->data + link.dest_offset;
+    }
+    for (size_t i = 0; i < links->links.dd_links.len; i++) {
+        LinkMetaData link = links->links.dd_links.data[i];
+        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
         *address_ptr= target.data_aux->data + link.dest_offset;
     }
 
