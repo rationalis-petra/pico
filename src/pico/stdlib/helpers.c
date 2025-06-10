@@ -99,7 +99,6 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     throw_error(final_point, mv_string("Startup compiled definition not exepcted to exit!"));
 }
 
-
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
     SymbolArray path = mk_symbol_array(len, a);
     va_list args;
@@ -123,6 +122,7 @@ void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
         const char* name = va_arg(args, const char*);
         push_symbol(string_to_symbol(mv_string(name)), &path);
     }
+    va_end(args);
     push_import_clause((ImportClause) {
             .type = ImportAll,
             .path = path,

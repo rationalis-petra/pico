@@ -46,3 +46,7 @@ void test_log_pass(TestLog* log, String message) {
     write_fstring(mv_string("\n"), log->stream);
     end_coloured_text(log->stream);
 }
+
+FormattedOStream *get_fstream(TestLog *log) {
+    return log->stream;
+}

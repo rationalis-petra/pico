@@ -1,5 +1,4 @@
 #include "platform/signals.h"
-#include "pretty/string_printer.h"
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/array.h"
 

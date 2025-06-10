@@ -16,4 +16,6 @@ void test_log_error(TestLog* log, String message);
 void test_log_info(TestLog* log, String message);
 void test_log_pass(TestLog* log, String message);
 
+FormattedOStream* get_fstream(TestLog* log);
+
 #endif

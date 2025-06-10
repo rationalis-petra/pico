@@ -42,9 +42,12 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
+
+    init_ctypes();
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+    init_terminal(stdalloc);
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);

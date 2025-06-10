@@ -79,7 +79,7 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
 UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
 UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, PtrArray rhs_args, SymPairArray *rename, Allocator *a);
 UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a);
-
+UnifyResult add_constraint(Constraint con, UVarType* uvar, Allocator* a);
 
 UnifyResult unify(PiType* lhs, PiType* rhs, Allocator* a) {
     SymPairArray renames = mk_sym_pair_array(8, a);
@@ -388,10 +388,33 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
 }
 
 UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
+    // ------------------------------------------------------------
+    // Uvar Subst
+    // The goal of uvar subst is to ensure that the uvar substitutes in type. If
+    // typeis itself a uvar, then the constraints from the uvar argument must be
+    // propagated into the type argument.
+    // ------------------------------------------------------------
+
     if (type->sort == TUVar) {
+        UVarType* rhs = type->uvar; 
         // type has been traced, so if it's a uvar, no need to chase!
         // check that the defaults are compatible
-        if (uvar->default_behaviour ) {
+        if (uvar->default_behaviour != NoDefault) {
+            // Check that the two unification variables are compatible
+            if (rhs->default_behaviour == NoDefault ||
+                rhs->default_behaviour == uvar->default_behaviour) {
+                rhs->default_behaviour = uvar->default_behaviour;
+                for (size_t i = 0; i < uvar->constraints.len; i++) {
+                    UnifyResult res = add_constraint(uvar->constraints.data[i], type->uvar, a);
+                    if (res.type != UOk) return res;
+                }
+                return (UnifyResult){.type = UOk};
+            } else {
+                return (UnifyResult) {
+                    .type = USimpleError,
+                    .message = mv_cstr_doc("Cannot push forward deafult.", a)
+                };
+            }
         }
     } else {
         // TODO: better error messages
@@ -895,4 +918,37 @@ UnifyResult add_variant_constraint(UVarType *uvar, Range range, Symbol variant, 
         }
     }
     return (UnifyResult){.type = UOk};
+}
+
+UnifyResult add_constraint(Constraint con, UVarType *uvar, Allocator *a) {
+  switch (con.type) {
+  case ConInt:
+      for (size_t i = 0; i < uvar->constraints.len; i++) {
+        if (uvar->constraints.data[i].type != ConInt) {
+            // TODO (BUG) ensure constraints are compatibel
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Incompatible constraints!", a),
+            };
+        }
+      }
+      return (UnifyResult){.type = UOk};
+  case ConFloat:
+      for (size_t i = 0; i < uvar->constraints.len; i++) {
+        if (uvar->constraints.data[i].type != ConFloat) {
+            // TODO (BUG) ensure constraints are compatibel
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Incompatible constraints!", a),
+            };
+        }
+      }
+      return (UnifyResult){.type = UOk};
+  case ConField:
+      return add_field_constraint(uvar, con.range, con.has_field.name, con.has_field.type, a);
+  case ConVariant:
+      return add_variant_constraint(uvar, con.range, con.has_variant.name, *con.has_variant.types, a);
+  }
+
+  panic(mv_string("Invalid constraint provided to add_constraint"));
 }

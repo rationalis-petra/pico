@@ -11,6 +11,7 @@
 //                  ass, i64, point, a)
 // All memory allocated is free'd,
 void test_toplevel(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a);
+void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);
