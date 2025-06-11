@@ -13,8 +13,8 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     add_core_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
     add_num_module(ass, base, a);
-    add_data_module(ass, base, a);
     add_meta_module(ass, base, a);
+    add_data_module(ass, base, a);
     add_foreign_module(ass, base, a);
     add_libc_module(ass, base, a);
 

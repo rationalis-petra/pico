@@ -560,6 +560,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         break;
     }
     case FMatch: {
+        if (raw.branch.nodes.len < 2) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Match expects at least 1 argument", a);
+            throw_pi_error(point, err);
+        }
         Syntax* sval = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
 
         ClauseArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
@@ -1126,6 +1131,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     }
     case FSequence: {
         SynArray elements = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        size_t num_binds = 0;
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
             RawTree tree = raw.branch.nodes.data[i];
             if (tree.type == RawBranch && tree.branch.hint == HSpecial) {
@@ -1149,6 +1155,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                         .symbol = rsym.atom.symbol,
                         .expr = abstract_expr_i(tree.branch.nodes.data[(2 * i) + 2], env, a, point),
                     };
+
+                    num_binds++;
+                    shadow_var(rsym.atom.symbol, env);
+
                     push_ptr(elt, &elements);
                 }
                 if (tree.branch.nodes.len % 2 != 1) {
@@ -1165,7 +1175,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 push_ptr(elt, &elements);
             }
         }
-        
+        shadow_pop(num_binds, env);
+
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SSequence,

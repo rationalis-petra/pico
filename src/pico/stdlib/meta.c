@@ -4,6 +4,7 @@
 #include "platform/memory/arena.h"
 
 #include "pico/data/range.h"
+#include "pico/syntax/concrete.h"
 #include "pico/values/modular.h"
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
@@ -24,6 +25,45 @@ CType mk_symbol_ctype(Allocator* a) {
     return mk_struct_ctype(a, 2,
                            "name", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                            "did", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+}
+
+CType mk_range_ctype(Allocator* a) {
+    return mk_struct_ctype(a, 2,
+                           "start", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
+}
+
+CType mk_atom_ctype(Allocator* a) {
+    CType atom_union = mk_union_ctype(a, 5,
+                                      "bool", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                                      "int_64", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
+                                      "double", (CType){.sort = CSDouble},
+                                      "Symbol", mk_symbol_ctype(a),
+                                      "String", mk_string_ctype(a));
+    return mk_struct_ctype(a, 2,
+                           "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "term", atom_union);
+}
+
+CType mk_branch_ctype(Allocator* a) {
+    return mk_struct_ctype(a, 3,
+                           "range", mk_range_ctype(a),
+                           "hint", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "branch", mk_array_ctype(a));
+}
+
+CType mk_syntax_ctype(Allocator* a) {
+    CType atom_range = mk_struct_ctype(a, 2,
+                                       "range", mk_range_ctype(a),
+                                       "atom", mk_atom_ctype(a));
+
+    CType union_ctype = mk_union_ctype(a, 2, "atom", atom_range, "node", mk_branch_ctype(a));
+
+    // Enum [:atom Range (Enum Atom)] [:branch Range Hint (Array Syntax)]
+
+    return mk_struct_ctype(a, 2,
+                           "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "term", union_ctype);
 }
 
 void build_mk_name_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -57,16 +97,23 @@ Range relic_range(uint64_t start, uint64_t end) {
 
 void build_range_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
-    CType range_type = mk_struct_ctype(a, 2, 
-                                 "start", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                       "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
-
     CType fn_ctype = mk_fn_ctype(a, 2,
                                  "start", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                 range_type);
+                                 mk_range_ctype(a));
 
     convert_c_fn(relic_range, &fn_ctype, type, ass, a, point); 
+}
+
+Range get_range(RawTree syntax) {
+    return syntax.range;
+}
+
+void build_get_range_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // Proc type
+    CType fn_ctype = mk_fn_ctype(a, 1, "Synatx", mk_syntax_ctype(a), mk_range_ctype(a));
+
+    convert_c_fn(get_range, &fn_ctype, type, ass, a, point); 
 }
 
 void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
@@ -144,7 +191,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         e = get_def(sym, module);
         symbol_type = e->value;
 
-        PiType* atom_type = mk_enum_type(a, 4,
+        PiType* atom_type = mk_enum_type(a, 5,
                                         "bool", 1, mk_prim_type(a, Bool),
                                         "integral", 1, mk_prim_type(a, Int_64),
                                         "floating", 1, mk_prim_type(a, Float_64),
@@ -231,6 +278,14 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     typep = mk_proc_type(a, 2, mk_prim_type(a, UInt_64), mk_prim_type(a, UInt_64), copy_pi_type_p(range_type, a));
     build_range_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("range"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(a, 1, get_syntax_type(), copy_pi_type_p(range_type, a));
+    build_get_range_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("get-range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

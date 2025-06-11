@@ -33,7 +33,10 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
 
     {
         uint64_t expected = 10;
-        test_toplevel("(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))", &expected, module, log, a);
+        test_toplevel("Instnatiate Implicit with Default UVar",
+            "(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))",
+            &expected, module, log, a)
+            ;
     }
 
     delete_module(module);

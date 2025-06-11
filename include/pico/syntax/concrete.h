@@ -23,6 +23,7 @@ typedef enum : uint64_t {
 typedef struct {
     Atom_t type;
     union {
+        bool boolean;
         int64_t int_64;
         double float_64;
         Symbol symbol;

@@ -692,7 +692,6 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
         return false;
     }
     case Bool:  {
-        // TODO (check for signedness?)
         return ctype.prim == CChar;
     }
     case Address: {
@@ -802,10 +801,9 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
 }
 
 bool can_reinterpret(CType* ctype, PiType* ptype) {
-    // TODO (BUG/FEATURE): algorithm should depend on
-
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
+    //                   we are in the source module
     // TODO (FEATURE): check for well-formedness of types in debug mode?
     ptype = strip_type(ptype);
 
@@ -813,6 +811,12 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TPrim: {
         if (ctype->sort == CSPrimInt) {
             return can_reinterpret_prim(ctype->prim, ptype->prim);
+        } else if (ctype->sort == CSDouble) {
+            // if the ctype could be converted to/from void*
+            return ptype->sort == TPrim || ptype->prim == Float_64;
+        } else if (ctype->sort == CSFloat) {
+            // if the ctype could be converted to/from void*
+            return ptype->sort == TPrim || ptype->prim == Float_32;
         } else if (ptype->prim == Address) {
             // if the ctype could be converted to/from void*
             return ctype->sort == CSPtr || ctype->sort == CSProc;
@@ -847,9 +851,20 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         return true;
     }
     case TEnum: {
+        // If it's a "simple enum" (all variants have 0 args), check against the tag
+        if (ctype->sort == CSPrimInt) {
+            // Check against UInt 64
+            if (!can_reinterpret_prim(ctype->prim, UInt_64)) return false;
+            for (size_t i = 0; i < ptype->enumeration.variants.len; i++) {
+                PtrArray* variant = ptype->enumeration.variants.data[i].val;
+                if (variant->len != 0) return false;
+            }
+            return true;
+        }
+
         // TODO: compare 0-member enums with actual c enums/ints.
         if (ctype->sort != CSStruct) return false;
-        if (ctype->structure.fields.len != 2) return false;
+        else if (ctype->structure.fields.len != 2) return false;
 
         // check that the 0th struct field is reinterpretable as a 64-bit int
         // TODO (FEATURE): change tag size based on number of enum vals 
@@ -885,11 +900,20 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
 
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {
             PtrArray* variant = ptype->enumeration.variants.data[i].val;
-            // TODO: allow if union type is struct!
-            if (variant->len != 1) return false;
+            if (variant->len == 1) {
+                if (!can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
+                    return false;
+            } else {
+                CType* var_struct = cunion->cunion.fields.data[i].val;
+                if (var_struct->sort != CSStruct || var_struct->structure.fields.len != variant->len)
+                    return false;
 
-            if (!can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
-                return false;
+                for (size_t j = 0; j < variant->len; j++) {
+                    if (!can_reinterpret(&var_struct->structure.fields.data[j].val, variant->data[j]))
+                        return false;
+                }
+            }
+
         }
         return true;
     }

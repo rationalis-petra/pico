@@ -16,7 +16,7 @@
 
 #include "test/test_log.h"
 
-void test_toplevel(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
+void test_toplevel(const char* name, const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -73,7 +73,7 @@ void test_toplevel(const char *string, void *expected_val, Module *module, TestL
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_pass(log, mv_string("Test Passed"));
+    test_log_pass(log, mv_string(name));
     return;
 
  on_pi_error:
