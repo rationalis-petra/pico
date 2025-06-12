@@ -183,11 +183,8 @@ user > (print-to 10)
 ```
 
 ### Types
-All values in relic have a type. 
-
-
-
-There are also types which allow combining smaller values into a larger
+Thus far, you have seen some simple types, such as the numeric and procedure
+types. There are also types which allow combining smaller values into a larger
 aggregate. The simplest way to do so is the `struct`, which associates names
 (fields) with values. Below, we create a struct called 'point', which has two
 integers: 'x' and 'y'.
@@ -204,7 +201,7 @@ user > (i64.+ point.x point.y)
 14
 ```
 
-It is also possible to provide an expected structure type, which can be useful
+It is also possible define a commonly used structure type, which can be useful
 if we forget a field - for example, a three-dimensional point might look like:
 
 ```clojure
@@ -213,13 +210,14 @@ Defined Point : Type
 ```
 
 Note the difference here - when defining a struct *value*, use lowercase
-`struct`, while when defining a struct *type*, use the capitalized `Struct`. By
-convention, this is extended to types so the value `point` may have type
-`Point`. While not required, this can help you distinguish between types and
-values.
+`struct`, while when defining a struct *type*, use the capitalized `Struct`.
+This naming convention is extends to types so a value named `origin-point` may
+have type `Point`. While not required, this can help you distinguish between
+types and values.
 
-You can see how this helps identify issues by placing the type just after the
-`struct` term former, and leaving out one field - this gives the error message. 
+Once defined, a struct type may be used to help identify errors by placing it
+after the `struct` term former. In the below example, I "forget" to add an extra
+field, and am provided with an appropriate error message.
 
 ```clojure
 user > (def point struct Point [.x 3] [.y 5])
@@ -229,13 +227,75 @@ user > (def point struct Point [.x 3] [.y 5])
   Structure value definition is missing the fields: z
 ```
 
-Providing the correct fields fixes the error.
+Adding the missing field fixes the error.
 
 ```clojure
 user > (def point struct 3DPoint [.x 3] [.y 5] [.z 10])
 (struct [.x 3] [.y 5] [.z 10])
 ```
 
+There is another sort of aggregate type - the `Enum`. Enum in Relic is similar
+to enum in other languages, allowing us to define a type with several possible
+values. A simple example is a vehicle, which may be a car, bike or truck.
+
+```clojure
+user > (def Vehicle Enum :bike :car :truck)
+Defined Vehicle : Type
+```
+
+To inspect the value of an enum, use `match` - below, I use it to write a
+function that calculates the number of wheels on a vehicle.
+
+```clojure
+user > (def wheels proc [vehicle] match vehicle
+  [:bike 2]
+  [:car 4]
+  [:truck 6])
+Defined wheels : Proc [(Enum :car :bike :truck)] I64
+user > (wheels :car)
+4
+```
+
+A feature of Relic enums which is less common is the ability to attach data to
+them - for example, we may want to account for the fact that the 
+[reliant robin](https://en.wikipedia.org/wiki/Reliant_Robin) has three wheels,
+and so adjust the definition of the Vehicle enum:
+
+```clojure
+user > (def Vehicle Enum :bike [:car Bool] :truck)
+Defined Vehicle : Type
+user > (def wheels proc [vehicle] match vehicle
+  [:bike 2]
+  [[:car is_robin] (if is_robin 3 4)]
+  [:truck 6])
+```
+
+Different branches (variants) of the enum can store different types, so we may
+also decide to account for the fact that trucks can have a varying number of
+tyres by storing the tyre count:
+
+```clojure
+user > (def Vehicle Enum :bike [:car Bool] [:truck U8])
+Defined Vehicle : Type
+user > (def wheels proc [vehicle] match vehicle
+  [:bike 2]
+  [[:car is_robin] (if is_robin 3 4)]
+  [[:truck num_wheels] num_wheels])
+```
+
+Finally,it is worth noting that multiple pieces of data can be attached to a
+variant, so we may also decide that we want to count the spare tyre that some
+cars have:
+
+```clojure
+user > (def Vehicle Enum :bike [:car Bool Bool] [:truck U8])
+Defined Vehicle : Type
+user > (def wheels proc [vehicle] match vehicle
+  [:bike 2]
+  [[:car is_robin has_spare] (u8.+ (if is_robin 3 4)
+                                   (if has_spare 1 0))]
+  [[:truck num_wheels] num_wheels])
+```
 
 ### Polymorphism and Pointers
 TODO: document me!
