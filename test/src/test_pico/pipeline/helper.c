@@ -172,7 +172,7 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     type_check(&abs, env, &arena, &pi_point);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
-    EvalResult evres = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
 
     // TODO: check evres == expected_val 
 
@@ -181,7 +181,6 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_pass(log, mv_string("Test Passed"));
     return;
 
  on_pi_error:
@@ -191,7 +190,7 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - message logged"));
+    test_log_error(log, mv_string("Test failure - message logged"));
     return;
 
  on_error:
@@ -200,7 +199,7 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - message logged?"));
+    test_log_error(log, mv_string("Test failure - message logged?"));
     return;
 
  on_exit:
@@ -209,6 +208,6 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - (exit) called unexpectedly during test"));
+    test_log_error(log, mv_string("Test failure - (exit) called unexpectedly during test"));
     return;
 }

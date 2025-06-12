@@ -1,6 +1,8 @@
 #include "platform/memory/executable.h"
+#include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/extra.h"
 
 #include "test_pico/pipeline/pipeline.h"
 #include "test_pico/pipeline/helper.h"
@@ -8,6 +10,7 @@
 void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
+    Allocator arena = mk_arena_allocator(4096, a);
     Assembler* ass = mk_assembler(&exalloc);
     Package* base = base_package(ass, a, a);
 
@@ -124,26 +127,30 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     {
         test_start(log);
         MisalignedStruct expected = (MisalignedStruct) {.x = 3, .y = -5, .z = 4};
-        test_toplevel("struct-space-aligned", "(struct MAS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
+        test_toplevel("struct-space-misaligned", "(struct MAS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
     }
 
     {
         test_start(log);
-        AlignedStruct expected = (AlignedStruct) {.x = 3, .y = -5, .z = 4};
-        test_toplevel("struct-packed-aligned", "(struct AS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
+        AlignedStruct expected = (AlignedStruct) {.x = 1527, .y = -5, .z = 2};
+        test_toplevel("struct-packed-aligned", "(struct AS [.x 1527] [.y -5] [.z 2])", &expected, module, log, a) ;
     }
 
     {
         // TODO (BUG): this leaks - set current allocator?
+        Allocator* current_old = get_std_current_allocator();
+        set_std_current_allocator(&arena);
         test_start(log);
         uint64_t expected = 10;
         test_toplevel("Instnatiate Implicit with Default UVar",
             "(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))",
             &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
     }
 
     delete_module(module);
     delete_package(base);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
+    release_arena_allocator(arena);
 }

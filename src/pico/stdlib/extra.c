@@ -30,6 +30,21 @@ void set_std_istream(IStream* current) { current_istream = current; }
 static OStream* current_ostream;
 void set_std_ostream(OStream* current) { current_ostream = current; }
 
+Allocator* get_std_current_allocator() {
+    void** data = get_dynamic_memory();
+    Allocator** dyn = data[std_current_allocator]; 
+    return *dyn;
+}
+
+Allocator* set_std_current_allocator(Allocator* al) {
+    void** data = get_dynamic_memory();
+    Allocator** dyn = data[std_current_allocator]; 
+    Allocator* old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+
 Allocator* get_std_temp_allocator() {
     void** data = get_dynamic_memory();
     Allocator** dyn = data[std_temp_allocator]; 
@@ -94,7 +109,8 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void *relic_malloc(uint64_t size) {
-    
+    Allocator* a = get_std_current_allocator();
+    return mem_alloc(size, a);
 }
 
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -113,11 +129,7 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-    // Get the malloc dynamic variable
-    /* build_binary_op(ass, Mov, reg(RAX), imm64((uint64_t)&malloc_dyn_var),  a, point); */
-    /* build_unary_op(ass, Call, reg(RAX), a, point); */
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&malloc),  a, point);
+    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&relic_malloc),  a, point);
     build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
 
 #if ABI == WIN_64

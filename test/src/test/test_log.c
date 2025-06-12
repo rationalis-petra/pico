@@ -68,10 +68,13 @@ FormattedOStream *get_fstream(TestLog *log) {
     return log->stream;
 }
 
-size_t summarize_tests(TestLog *log, Allocator* a) {
+int summarize_tests(TestLog *log, Allocator* a) {
+    int err_code = 0;
+
     write_fstring(mv_string("\nTest Suite Completed"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
     if (log->passed_tests + log->failed_tests != log->test_count) {
+        err_code = 1;
         start_coloured_text(fail_colour, log->stream);
         write_fstring(mv_string("Failure of test suite: total tests != passed + failed"), log->stream);
         end_coloured_text(log->stream);
@@ -93,5 +96,6 @@ size_t summarize_tests(TestLog *log, Allocator* a) {
     write_fstring(mv_string("\n"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
 
-    return log->failed_tests;
+    if (log->failed_tests != 0) err_code = 2;
+    return err_code; 
 }

@@ -34,7 +34,6 @@ ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 // Implementation details
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 
-void generate_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
 size_t calc_variant_size(PtrArray* types);
 void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
@@ -716,16 +715,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
         size_t dest_offset = 0;
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            dest_offset = pi_size_align(dest_offset, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
 
             // Find the field in the source & compute offset
             size_t src_offset = 0;
             for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType** t = (PiType**)sym_ptr_lookup(syn.structure.fields.data[j].key, struct_type->structure.fields);
-                if (t) {
-                    src_offset += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[j].val)->ptype); 
-                } else {
-                    throw_error(point, mv_string("Error code-generating for structure: field not found."));
-                }
+                PiType* t = ((Syntax*)syn.structure.fields.data[i].val)->ptype;
+                src_offset += pi_stack_size_of(*t); 
 
                 if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
                     break; // offset is correct, end the loop
