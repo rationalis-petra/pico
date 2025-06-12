@@ -72,7 +72,11 @@ int main(int argc, char** argv) {
 
     // TODO: setup_tests
     FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
-    TestLog* log = mk_test_log(cos, stdalloc);
+    Verbosity v = (Verbosity) {
+      .show_passes = false, .show_fails = true,
+      .show_info = false, .show_errors = true,
+    };
+    TestLog* log = mk_test_log(cos, v, stdalloc);
 
     switch (command.type) {
     case CAll: {

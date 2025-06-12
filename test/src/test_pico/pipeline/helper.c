@@ -18,7 +18,7 @@
 
 #include "test/test_log.h"
 
-void test_toplevel(const char* name, const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
+void test_toplevel(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -70,7 +70,7 @@ void test_toplevel(const char* name, const char *string, void *expected_val, Mod
 
     if (evres.type == ERValue) {
       if (!pi_value_eql(evres.val.type, evres.val.val, expected_val)) {
-          test_log_fail(log, mv_string(name));
+          test_fail(log);
           FormattedOStream* os = get_fstream(log);
           write_fstring(mv_string("Expected: "), os);
           Document* doc = pretty_pi_value(expected_val, evres.val.type, a);
@@ -82,10 +82,12 @@ void test_toplevel(const char* name, const char *string, void *expected_val, Mod
           delete_doc(doc, a);
           write_fstring(mv_string("\n"), os);
       } else {
-          test_log_pass(log, mv_string(name));
+          test_pass(log);
       }
     } else {
-        test_log_fail(log, mv_string("Could not compare values: eval "));
+        FormattedOStream* os = get_fstream(log);
+        write_fstring(mv_string("Did not evaluate to a value."), os);
+        test_fail(log);
     }
 
     delete_assembler(gen_target.target);
@@ -102,7 +104,7 @@ void test_toplevel(const char* name, const char *string, void *expected_val, Mod
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - message logged"));
+    test_fail(log);
     return;
 
  on_error:
@@ -111,7 +113,7 @@ void test_toplevel(const char* name, const char *string, void *expected_val, Mod
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - message logged?"));
+    test_fail(log);
     return;
 
  on_exit:
@@ -120,7 +122,7 @@ void test_toplevel(const char* name, const char *string, void *expected_val, Mod
     release_arena_allocator(arena);
     release_executable_allocator(exalloc);
     delete_istream(sin, a);
-    test_log_fail(log, mv_string("Test failure - (exit) called unexpectedly during test"));
+    test_fail(log);
     return;
 }
 

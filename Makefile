@@ -129,6 +129,12 @@ all: debug release test
 debug_mode:
 	set -x LD_LIBRARY_PATH /usr/lib/debug
 
+# use make <target> QUIET=1 to prevent make from printing! 
+# can be used in scripts, e.g. git pre-commit hooks
+ifdef QUIET
+.SILENT:
+endif
+
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.
