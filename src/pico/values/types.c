@@ -1623,7 +1623,16 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
     case TUVar:
         panic(mv_string("Can't compare values of type UVar!"));
     case TStruct: {
-        panic(mv_string("Not implemented: comparing values of type struct"));
+        size_t offset = 0;
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            PiType* ty = type->structure.fields.data[i].val;
+            offset = pi_size_align(offset, pi_align_of(*ty));
+            if (!pi_value_eql(ty, lhs + offset, rhs + offset)) {
+                return false;
+            }
+            offset += pi_size_of(*ty);
+        }
+        return true;
     }
     case TEnum: {
         panic(mv_string("Not implemented: comparing values of type enum"));

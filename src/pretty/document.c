@@ -201,6 +201,7 @@ void delete_doc(Document* doc, Allocator* a) {
     case HSepDocument:
         for (size_t i = 0; i < doc->docs.len; i++)
             delete_doc(doc->docs.data[i], a);
+        sdelete_ptr_array(doc->docs);
         break;
     case StyledDocument:
         delete_doc(doc->styled.inner, a);

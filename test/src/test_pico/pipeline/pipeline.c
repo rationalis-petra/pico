@@ -33,6 +33,14 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
 
     {
         test_start(log);
+        int64_t expected = -10;
+        test_toplevel("int-literal",
+            "-10",
+            &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
         uint64_t expected = 3;
         test_toplevel("Addition",
             "(u64.+ 1 2)",
@@ -54,13 +62,35 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     {
         test_start(log);
         int64_t expected = 3;
-        test_toplevel("let", "(let [x 3] x)", &expected, module, log, a) ;
+        test_toplevel("simple-let", "(let [x 3] x)", &expected, module, log, a) ;
     }
 
     {
         test_start(log);
         int64_t expected = 3;
-        test_toplevel("seq", "(seq 1 2 3)", &expected, module, log, a) ;
+        test_toplevel("simple-sequence", "(seq 1 2 3)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = 2;
+        test_toplevel("let-in-sequence", "(seq [let! x 2] x)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = 5;
+        test_toplevel("let-many-in-sequence", "(seq [let! x 2 y 3] (u32.+ x y))", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        typedef struct {
+            int64_t x;
+            int64_t y;
+        } Point;
+        Point expected = (Point) {.x = 3, .y = 5};
+        test_toplevel("struct", "(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
     {
