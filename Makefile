@@ -99,6 +99,9 @@ debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 .PHONY: test
 test: $(TEST_DIR)/$(TARGET_TEST)
 
+.PHONY: build_test
+test: $(TEST_DIR)/$(TARGET_TEST)
+
 .PHONY: install
 install: $(RELEASE_DIR)/$(TARGET_EXEC)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) ~/.local/bin
@@ -115,7 +118,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: run-test
-test: $(TEST_DIR)/$(TARGET_TEST)
+run-test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: all

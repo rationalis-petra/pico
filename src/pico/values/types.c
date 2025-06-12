@@ -365,6 +365,8 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             Document* fname = mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a);
             PiType* ftype = type->structure.fields.data[i].val;
 
+            current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
+
             Document* arg = pretty_pi_value(val + current_offset, ftype, a);
 
             push_ptr(fname, &fd_nodes);

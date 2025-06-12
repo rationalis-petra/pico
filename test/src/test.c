@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
         break;
     }
 
-    summarize_tests(log, stdalloc);
+    int out = summarize_tests(log, stdalloc);
 
     delete_test_log(log, stdalloc);
     delete_formatted_ostream(cos, stdalloc);
@@ -115,5 +115,5 @@ int main(int argc, char** argv) {
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
 
-    return 0;
+    return out;
 }

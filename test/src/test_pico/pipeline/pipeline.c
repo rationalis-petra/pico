@@ -31,6 +31,32 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
+
+    // -------------------------------------------------------------------------
+    //
+    // Types: types used in testing
+    //
+    // -------------------------------------------------------------------------
+
+    typedef struct {
+        int64_t x;
+        int64_t y;
+    } Point;
+
+    typedef struct {
+        int8_t x;
+        int16_t y;
+        int32_t z;
+    } MisalignedStruct;
+    run_toplevel("(def MAS Struct [.x I8] [.y I16] [.z I32])", module, log, a) ;
+
+    typedef struct {
+        int32_t x;
+        int16_t y;
+        int8_t z;
+    } AlignedStruct;
+    run_toplevel("(def AS Struct [.x I32] [.y I16] [.z I8])", module, log, a) ;
+
     {
         test_start(log);
         int64_t expected = -10;
@@ -85,12 +111,26 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
 
     {
         test_start(log);
-        typedef struct {
-            int64_t x;
-            int64_t y;
-        } Point;
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel("struct", "(struct [.x 3] [.y -5])", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        Point expected = (Point) {.x = 3, .y = -5};
+        test_toplevel("struct-alignment", "(struct [.x 3] [.y -5])", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        MisalignedStruct expected = (MisalignedStruct) {.x = 3, .y = -5, .z = 4};
+        test_toplevel("struct-space-aligned", "(struct MAS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        AlignedStruct expected = (AlignedStruct) {.x = 3, .y = -5, .z = 4};
+        test_toplevel("struct-packed-aligned", "(struct AS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
     }
 
     {

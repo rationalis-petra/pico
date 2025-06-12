@@ -68,7 +68,7 @@ FormattedOStream *get_fstream(TestLog *log) {
     return log->stream;
 }
 
-void summarize_tests(TestLog *log, Allocator* a) {
+size_t summarize_tests(TestLog *log, Allocator* a) {
     write_fstring(mv_string("\nTest Suite Completed"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
     if (log->passed_tests + log->failed_tests != log->test_count) {
@@ -92,4 +92,6 @@ void summarize_tests(TestLog *log, Allocator* a) {
     delete_string(str, a);
     write_fstring(mv_string("\n"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
+
+    return log->failed_tests;
 }

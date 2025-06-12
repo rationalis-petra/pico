@@ -23,6 +23,6 @@ void test_log_pass(TestLog* log, String message);
 
 FormattedOStream* get_fstream(TestLog* log);
 
-void summarize_tests(TestLog* log, Allocator* a);
+size_t summarize_tests(TestLog* log, Allocator* a);
 
 #endif
