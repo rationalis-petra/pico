@@ -592,26 +592,41 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             // The pattern has two parts: the variables & the tag
             // The tag should be in a constructor (i.e. list)
-            Symbol clause_tagname; 
-            if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
-                PtrArray nodes = mk_ptr_array(2, a);
-                push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
-                push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
-                Document* doc = mv_sep_doc(nodes, a);
-                err.range = raw_clause.range;
-                err.message = doc;
-                throw_pi_error(point, err);
-            }
 
-            SymbolArray clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
-            for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
-                RawTree raw_name = raw_pattern.branch.nodes.data[s];
-                if (!is_symbol(&raw_name)) {
-                    err.range = raw_clause.range;
-                    err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+            Symbol clause_tagname; 
+            SymbolArray clause_binds;
+            RawTree mcol = raw_pattern.branch.nodes.data[0];
+            if (raw_pattern.branch.nodes.len == 2 && is_symbol(&mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+                RawTree mname = raw_pattern.branch.nodes.data[1];
+                if (!is_symbol(&mname)) {
+                    err.range = mname.range;
+                    err.message = mv_cstr_doc("Bad pattern in match clause", a);
                     throw_pi_error(point, err);
                 }
-                push_symbol(raw_name.atom.symbol, &clause_binds); 
+
+                clause_tagname = mname.atom.symbol;
+                clause_binds = mk_symbol_array(0, a);
+            } else {
+                if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
+                    push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
+                    Document* doc = mv_sep_doc(nodes, a);
+                    err.range = raw_clause.range;
+                    err.message = doc;
+                    throw_pi_error(point, err);
+                }
+
+                clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
+                for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
+                    RawTree raw_name = raw_pattern.branch.nodes.data[s];
+                    if (!is_symbol(&raw_name)) {
+                        err.range = raw_clause.range;
+                        err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+                        throw_pi_error(point, err);
+                    }
+                    push_symbol(raw_name.atom.symbol, &clause_binds); 
+                }
             }
 
             // Get the term
@@ -1469,17 +1484,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             // First, see if 'edesc' has ':' followed by 1 symbol
             RawTree mcol = edesc.branch.nodes.data[0];
+            // TODO replace ":" with 'a symbol that resolves to the constructor/variant
+            // term former!
             if (edesc.branch.nodes.len == 2 && is_symbol(&mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
                 RawTree mname = edesc.branch.nodes.data[1];
                 if (!is_symbol(&mname)) {
                     err.range = mname.range;
                     err.message = mv_cstr_doc("Enumeration type expects variant descriptors to have a symbol name.", a);
                     throw_pi_error(point, err);
-                } else {
-                    PtrArray* types = mem_alloc(sizeof(PtrArray), a);
-                    *types = mk_ptr_array(0, a);
-                    sym_ptr_insert(mname.atom.symbol, types, &enum_variants);
-                }
+                } 
+
+                PtrArray* types = mem_alloc(sizeof(PtrArray), a);
+                *types = mk_ptr_array(0, a);
+                sym_ptr_insert(mname.atom.symbol, types, &enum_variants);
             } else {
                 Symbol tagname;
                 PtrArray* types = mem_alloc(sizeof(PtrArray), a);
