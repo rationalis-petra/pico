@@ -1537,6 +1537,143 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     }
 }
 
+bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
+    switch (type->sort) {
+    case TPrim:
+        switch (type->prim) {
+        case Unit:
+            return true;
+        case Bool:  {
+            uint8_t* uilhs = (uint8_t*) lhs;
+            uint8_t* uirhs = (uint8_t*) rhs;
+            return *uilhs == *uirhs;
+        }
+        case Address: {
+            void** addrlhs = (void**) lhs;
+            void** addrrhs = (void**) rhs;
+            return *addrlhs == *addrrhs;
+        }
+        case Int_64: {
+            int64_t* intlhs = (int64_t*) lhs;
+            int64_t* intrhs = (int64_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case Int_32: {
+            int32_t* intlhs = (int32_t*) lhs;
+            int32_t* intrhs = (int32_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case Int_16: {
+            int16_t* intlhs = (int16_t*) lhs;
+            int16_t* intrhs = (int16_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case Int_8: {
+            int8_t* intlhs = (int8_t*) lhs;
+            int8_t* intrhs = (int8_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case UInt_64: {
+            uint64_t* intlhs = (uint64_t*) lhs;
+            uint64_t* intrhs = (uint64_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case UInt_32: {
+            uint32_t* intlhs = (uint32_t*) lhs;
+            uint32_t* intrhs = (uint32_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case UInt_16: {
+            uint16_t* intlhs = (uint16_t*) lhs;
+            uint16_t* intrhs = (uint16_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case UInt_8: {
+            uint8_t* intlhs = (uint8_t*) lhs;
+            uint8_t* intrhs = (uint8_t*) rhs;
+            return *intlhs == *intrhs;
+        }
+        case Float_32: {
+            float32_t* flhs = (float32_t*) lhs;
+            float32_t* frhs = (float32_t*) rhs;
+            return *flhs == *frhs;
+        }
+        case Float_64: {
+            float64_t* flhs = (float64_t*) lhs;
+            float64_t* frhs = (float64_t*) rhs;
+            return *flhs == *frhs;
+        }
+        case TFormer:  {
+            TermFormer* lformer = (TermFormer*) lhs;
+            TermFormer* rformer = (TermFormer*) rhs;
+            return *lformer == *rformer;
+        }
+        case TMacro:  {
+            void** addrlhs = (void**) lhs;
+            void** addrrhs = (void**) rhs;
+            return *addrlhs == *addrrhs;
+        }
+        }
+        break;
+    case TProc: {
+        void** addrlhs = (void**) lhs;
+        void** addrrhs = (void**) rhs;
+        return *addrlhs == *addrrhs;
+    }
+    case TUVar:
+        panic(mv_string("Can't compare values of type UVar!"));
+    case TStruct: {
+        panic(mv_string("Not implemented: comparing values of type struct"));
+    }
+    case TEnum: {
+        panic(mv_string("Not implemented: comparing values of type enum"));
+    }
+    case TReset: {
+        panic(mv_string("Not implemented: comparing values of type reset"));
+    }
+    case TResumeMark: {
+        panic(mv_string("Not implemented: comparing values of type resume-mark"));
+    }
+    case TDynamic: {
+        panic(mv_string("Not implemented: comparing values of type dynamic"));
+    }
+    case TTraitInstance: {
+        panic(mv_string("Not implemented: comparing values of type trait-instance"));
+    }
+    case TCType: {
+        panic(mv_string("Not implemented: comparing values of type c-type"));
+    }
+    case TVar: {
+        panic(mv_string("Not implemented: comparing values of type t-var"));
+    }
+    case TAll:
+        panic(mv_string("Not implemented: comparing values of type all"));
+    case TExists:
+        panic(mv_string("Not implemented: comparing values of type exists"));
+    case TFam: {
+        panic(mv_string("Not implemented: comparing values of type family"));
+    }
+    case TCApp: {
+        panic(mv_string("Not implemented: comparing values of type app"));
+    }
+    case TNamed: {
+        return pi_value_eql(type->named.type, lhs, rhs);
+    }
+    case TDistinct:  {
+        return pi_value_eql(type->distinct.type, lhs, rhs);
+    }
+    case TTrait:  {
+        panic(mv_string("Not implemented: comparing values of type trait"));
+    }
+    case TKind:
+    case TConstraint: {
+        return pi_type_eql(lhs, rhs);
+    }
+
+    }
+    panic(mv_string("Invalid type provided to pi_value_eql"));
+}
+
 PiType* mk_prim_type(Allocator* a, PrimType t) {
     PiType* prim = mem_alloc(sizeof(PiType), a);
     *prim = (PiType) {

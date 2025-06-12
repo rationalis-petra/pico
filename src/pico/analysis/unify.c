@@ -685,10 +685,20 @@ void squash_type(PiType* type, Allocator* a) {
     }
     case TNamed: {
         squash_type(type->named.type, a);
+        if (type->named.args) {
+            for (size_t i = 0; i < type->named.args->len; i++) {
+                squash_type(type->named.args->data[i], a);
+            }
+        }
         break;
     }
     case TDistinct: {
         squash_type(type->distinct.type, a);
+        if (type->distinct.args) {
+            for (size_t i = 0; i < type->distinct.args->len; i++) {
+                squash_type(type->distinct.args->data[i], a);
+            }
+        }
         break;
     }
     case TTrait: {

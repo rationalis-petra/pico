@@ -32,11 +32,44 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     delete_module_header(header);
 
     {
+        test_start(log);
+        uint64_t expected = 3;
+        test_toplevel("Addition",
+            "(u64.+ 1 2)",
+            &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = -1;
+        test_toplevel("Subtraction", "(i64.- 1 2)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = -1;
+        test_toplevel("Subtraction", "(i64.- 1 2)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = 3;
+        test_toplevel("let", "(let [x 3] x)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log);
+        int64_t expected = 3;
+        test_toplevel("seq", "(seq 1 2 3)", &expected, module, log, a) ;
+    }
+
+    {
+        // TODO (BUG): this leaks - set current allocator?
+        test_start(log);
         uint64_t expected = 10;
         test_toplevel("Instnatiate Implicit with Default UVar",
             "(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))",
-            &expected, module, log, a)
-            ;
+            &expected, module, log, a) ;
     }
 
     delete_module(module);

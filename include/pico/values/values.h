@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#include "data/meta/array_header.h"
 #include "data/array.h"
 #include "data/string.h"
 #include "pretty/document.h"

@@ -101,6 +101,8 @@ int main(int argc, char** argv) {
         break;
     }
 
+    summarize_tests(log, stdalloc);
+
     delete_test_log(log, stdalloc);
     delete_formatted_ostream(cos, stdalloc);
 
