@@ -89,7 +89,7 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
             int64_t x;
             int64_t y;
         } Point;
-        Point expected = (Point) {.x = 3, .y = 5};
+        Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel("struct", "(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
