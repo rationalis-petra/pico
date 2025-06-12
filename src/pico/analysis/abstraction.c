@@ -1457,32 +1457,47 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
             if (edesc.type != RawBranch) {
                 err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Enumeration type expects all enum descriptors to be lists.", a);
+                err.message = mv_cstr_doc("Enumeration type expects all variant descriptors to be lists.", a);
                 throw_pi_error(point, err);
             };
             
             if (edesc.branch.nodes.len < 1) {
                 err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Enumeration type expects all enum descriptors to have at least 1 elements.", a);
+                err.message = mv_cstr_doc("Enumeration type expects all variant descriptors to have at least 1 elements.", a);
                 throw_pi_error(point, err);
             };
 
-            Symbol tagname;
-            PtrArray* types = mem_alloc(sizeof(PtrArray), a);
-            *types = mk_ptr_array(edesc.branch.nodes.len - 1, a);
+            // First, see if 'edesc' has ':' followed by 1 symbol
+            RawTree mcol = edesc.branch.nodes.data[0];
+            if (edesc.branch.nodes.len == 2 && is_symbol(&mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+                RawTree mname = edesc.branch.nodes.data[1];
+                if (!is_symbol(&mname)) {
+                    err.range = mname.range;
+                    err.message = mv_cstr_doc("Enumeration type expects variant descriptors to have a symbol name.", a);
+                    throw_pi_error(point, err);
+                } else {
+                    PtrArray* types = mem_alloc(sizeof(PtrArray), a);
+                    *types = mk_ptr_array(0, a);
+                    sym_ptr_insert(mname.atom.symbol, types, &enum_variants);
+                }
+            } else {
+                Symbol tagname;
+                PtrArray* types = mem_alloc(sizeof(PtrArray), a);
+                *types = mk_ptr_array(edesc.branch.nodes.len - 1, a);
 
-            if (!get_fieldname(&edesc.branch.nodes.data[0], &tagname)) {
-                err.range = edesc.branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Enum type has malformed field name.", a);
-                throw_pi_error(point, err);
-            };
+                if (!get_fieldname(&edesc.branch.nodes.data[0], &tagname)) {
+                    err.range = edesc.branch.nodes.data[0].range;
+                    err.message = mv_cstr_doc("Enum type has malformed field name.", a);
+                    throw_pi_error(point, err);
+                };
 
-            for (size_t i = 1; i < edesc.branch.nodes.len; i++) {
-                Syntax* field_ty = abstract_expr_i(edesc.branch.nodes.data[i], env, a, point);
-                push_ptr(field_ty, types);
+                for (size_t i = 1; i < edesc.branch.nodes.len; i++) {
+                    Syntax* field_ty = abstract_expr_i(edesc.branch.nodes.data[i], env, a, point);
+                    push_ptr(field_ty, types);
+                }
+
+                sym_ptr_insert(tagname, types, &enum_variants);
             }
-
-            sym_ptr_insert(tagname, types, &enum_variants);
         }
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
