@@ -134,8 +134,8 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
 
     {
         // TODO (BUG): this leaks - set current allocator?
-        Allocator* current_old = get_std_current_allocator();
-        set_std_current_allocator(&arena);
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
         test_start(log, mv_string("Instnatiate Implicit with Default UVar"));
         uint64_t expected = 10;
         test_toplevel("(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))",

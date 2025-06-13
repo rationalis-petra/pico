@@ -27,11 +27,12 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
+const static char* version = "0.0.4";
+
 typedef struct {
     bool debug_print;
     bool interactive;
 } IterOpts;
-
 
 bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
@@ -240,6 +241,9 @@ int main(int argc, char** argv) {
             .debug_print = command.repl.debug_print,
             .interactive = true,
         };
+        write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
+        write_string(mv_string(version), cout);
+        write_string(mv_string("\n"), cout);
         while (repl_iter(cin, get_formatted_stdout(), stdalloc, &exalloc, module, opts));
         break;
     }
