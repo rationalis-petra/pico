@@ -1975,19 +1975,6 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     return mk_term(*((TermFormer*)entry.value), raw, env, a, point);
                 } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
-                    typedef struct {
-                        String message;
-                        Range range;
-                    } MacroError;
-                    typedef struct {
-                        uint64_t result_type;
-                        union {
-                            RawTree term;
-                            MacroError err;
-                        };
-                    } MacroResult;
-
-
                     // Call the function (uses Pico ABI)
                     MacroResult output;
                     RawTreeArray input = raw.branch.nodes;
@@ -2081,6 +2068,11 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                     if (output.result_type == 1) {
                         return abstract_expr_i(output.term, env, a, point);
                     } else {
+                        PicoError err = (PicoError) {
+                            .message = mk_str_doc(output.err.message, a),
+                            .range = output.err.range,
+                        };
+                        throw_pi_error(point, err);
                     }
                 } else {
                     return mk_application(raw, env, a, point);

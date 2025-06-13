@@ -9,7 +9,7 @@
 // System V Specific stuff
 // -----------------------------------------------------------------------------
 
-typedef enum {
+typedef enum : uint8_t {
     SysVInteger,
     SysVSSE,
     SysVSSEUp,
@@ -118,6 +118,7 @@ void populate_sysv_words(U8Array* out, size_t offset, CType* type, Allocator* a)
 
 U8Array system_v_arg_classes(CType* type, Allocator* a) {
     U8Array out = mk_u8_array(8, a);
+    bool use_memory = false;
     size_t type_size = c_size_of(*type);
     if (type_size <= 64) {
         // We start by calculating the number of words (eightbytes) we need.
@@ -129,18 +130,31 @@ U8Array system_v_arg_classes(CType* type, Allocator* a) {
             push_u8(SysVNoClass, &out);
         }
         populate_sysv_words(&out, 0, type, a);
-    } else {
-        // Larger than 8 words (eightbytes), therefore class is memory
-        push_u8(SysVMemory, &out);
-    }
+    } 
 
-    // TODO (FEATURE BUG): Add the other merge steps.
+    // Post merger cleanup:
+    // a) if one of the classes is Memory, the whole argument is passed in memory
     for (size_t i = 0; i < out.len; i++) {
       if (out.data[i] == SysVMemory) {
-          out.len = 0;
+          use_memory = true;
       };
     }
+    // TODO b) if x87up is not preceeded by x87, the whole argument is passed in memory 
+    // c) If the size of the aggregate exceeds two eightbytes and the first eightbyte isn’t
+    //    SSE or any other eightbyte isn’t SSEUP, the whole argument is passed in memory
+    if (type_size >= 16) {
+        if (out.data[0] != SysVSSE) use_memory = true;
+        for (size_t i = 1; i < out.len; i++) {
+            if (out.data[i] != SysVSSEUp) use_memory = true;
+        }
+    }
+    // TODO d) if SSEup is not preceeded by SSE, the whole argument is passed in memory 
 
+    // If anything set the entire class to memory; then push memory
+    if (use_memory) {
+        out.len = 0;
+        push_u8(SysVMemory, &out);
+    }
     return out;
 }
 
@@ -246,7 +260,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // a 'hidden' extra argument - specifically, the first, with the ptr being
     // passed in RDI.
     bool pass_return_in_memory =
-        (return_classes.len == 0 && ctype->proc.ret->sort != CSVoid)
+        (return_classes.len == 1 && return_classes.data[0] == SysVMemory)
         || (return_classes.len > 2);
     if (pass_return_in_memory) {
         input_area_size += return_arg_size;
@@ -362,7 +376,14 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Restore value of RDX
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
 
+    if (pass_return_in_memory) {
+        // pass in memory - reserve space on stack:
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
+        build_binary_op(ass, Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), a, point);
+    }
+
     for (size_t i = 0; i < in_memory_args.len; i++) {
+        // TODO (BUG) - this needs reversing maybe??
         // pass in memory - reserve space on stack:
         size_t arg_idx = in_memory_args.data[i];
         size_t arg_size = arg_offsets.data[arg_idx] - arg_offsets.data[arg_idx + 1];
@@ -370,12 +391,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
         build_binary_op(ass, Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx + 1]), a, point);
         generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
-    }
-
-    if (pass_return_in_memory) {
-        // pass in memory - reserve space on stack:
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
-        build_binary_op(ass, Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), a, point);
     }
 
     // Call function
@@ -411,10 +426,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
 
         // Now, generate a stack copy targeting RDX
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), a, point);
         generate_stack_copy(RDX, return_arg_size, ass, a, point);
 
-        // Then, pop all memory (sans the return arg) from the stack.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
+        // Then, the remainder of memory (sans the return arg) from the stack.
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(return_arg_size), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), a, point);
 

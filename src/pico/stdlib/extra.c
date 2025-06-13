@@ -6,9 +6,11 @@
 #include "platform/signals.h"
 #include "platform/memory/arena.h"
 
+#include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/meta.h"
 #include "pico/syntax/concrete.h"
+#include "pico/analysis/abstraction.h"
 #include "pico/codegen/foreign_adapters.h"
 
 #include "app/module_load.h"
@@ -321,7 +323,7 @@ void build_run_script_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     convert_c_fn(run_script_c_fun, &fn_ctype, type, ass, a, point); 
 }
 
-RawTree loop_macro(RawTreeArray nodes) {
+MacroResult loop_macro(RawTreeArray nodes) {
     // (loop 
     //   [for var from i upto j]
     //   [for var from i below j]
@@ -344,16 +346,20 @@ RawTree loop_macro(RawTreeArray nodes) {
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
-          if (branch.branch.nodes.len != 6) {
-              //return error;
-          }
+            if (branch.branch.nodes.len != 6) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("Malformed for clause: incorrect number of terms - expecting 6"),
+                    .err.range = branch.range,
+                };
+            }
         }
     }
     
 }
 
 void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_syntax_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_macro_result_ctype(a));
 
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
@@ -497,14 +503,17 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+    PiType* macro_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
+
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax
-    /* typep = mk_prim_type(a, TMacro); */
-    /* build_loop_macro(typep, ass, a, &point); */
-    /* sym = string_to_symbol(mv_string("loop")); */
-    /* fn_segments.code = get_instructions(ass); */
-    /* prepped = prep_target(module, fn_segments, ass, NULL); */
-    /* add_def(module, sym, *typep, &prepped.code.data, prepped, NULL); */
-    /* clear_assembler(ass); */
+    typep = mk_prim_type(a, TMacro);
+    build_loop_macro(macro_proc, ass, a, &point);
+    sym = string_to_symbol(mv_string("loop"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     add_module(string_to_symbol(mv_string("extra")), module, base);
 

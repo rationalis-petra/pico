@@ -70,6 +70,18 @@ CType mk_syntax_ctype(Allocator* a) {
                            "term", union_ctype);
 }
 
+CType mk_macro_result_ctype(Allocator* a) {
+    CType macro_error = mk_struct_ctype(a, 2, "message", mk_string_ctype(a), "range", mk_range_ctype(a));
+
+    CType union_ctype = mk_union_ctype(a, 2, "left", macro_error, "right", mk_syntax_ctype(a));
+
+    // Enum [:left (Pair message range)] [:right Syntax]
+
+    return mk_struct_ctype(a, 2,
+                           "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "term", union_ctype);
+}
+
 void build_mk_name_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Proc type
     CType name_ctype = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
