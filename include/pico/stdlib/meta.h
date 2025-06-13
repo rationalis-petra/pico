@@ -5,6 +5,7 @@
 
 PiType* get_symbol_type();
 PiType* get_syntax_type();
+PiType* get_macro_result_type();
 
 CType mk_syntax_ctype(Allocator* a);
 

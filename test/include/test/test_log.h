@@ -1,6 +1,8 @@
 #ifndef __TEST_TEST_LOG_H
 #define __TEST_TEST_LOG_H
 
+#include <time.h>
+
 #include "platform/memory/allocator.h"
 #include "platform/io/terminal.h"
 
@@ -14,6 +16,8 @@ typedef struct {
 typedef struct {
     FormattedOStream* stream;
     Verbosity verbosity;
+
+    clock_t start_time;
 
     bool in_test;
     String current_test;

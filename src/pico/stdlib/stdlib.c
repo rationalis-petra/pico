@@ -8,8 +8,9 @@
 #include "pico/stdlib/libc.h"
 #include "pico/stdlib/user.h"
 
+static Package* base;
 Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator) {
-    Package* base = mk_package(string_to_name(mv_string("base")), a);
+    base = mk_package(string_to_name(mv_string("base")), a);
     add_core_module(ass, base, a);
     add_extra_module(ass, base, default_allocator, a);
     add_num_module(ass, base, a);
@@ -21,3 +22,5 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     add_user_module(base, a);
     return base;
 }
+
+Package* get_base_package() { return base; }

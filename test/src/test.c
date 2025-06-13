@@ -42,7 +42,6 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
-
     init_ctypes();
     init_asm();
     init_symbols(stdalloc);
@@ -76,6 +75,7 @@ int main(int argc, char** argv) {
       .show_passes = false, .show_fails = true,
       .show_info = false, .show_errors = true,
     };
+
     TestLog* log = mk_test_log(cos, v, stdalloc);
 
     switch (command.type) {

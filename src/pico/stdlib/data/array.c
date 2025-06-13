@@ -106,7 +106,7 @@ void add_array_module(Module *data, Allocator *a) {
         "\n"
         "  (aset (u64.+ 1 terms.len) local-sym new-terms)\n"
         "  \n"
-        "  (Syntax:node ar :special new-terms))\n";
+        "  (:right (Syntax:node ar :special new-terms)))\n";
     compile_toplevel(array_macro, module, &point, &pi_point, a);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("array")), module);

@@ -18,6 +18,12 @@ PiType* get_syntax_type() {
 }
 
 static PiType* range_type;
+static PiType* macro_error_type;
+
+static PiType* macro_result_type;
+PiType* get_macro_result_type() {
+    return macro_result_type;
+}
 
 CType mk_symbol_ctype(Allocator* a) {
     return mk_struct_ctype(a, 2,
@@ -225,6 +231,22 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         add_def(module, sym, type, &typep, null_segments, NULL);
         e = get_def(sym, module);
         syntax_type = e->value;
+
+        delete_pi_type_p(typep, a);
+
+        typep = mk_struct_type(a, 2, "message", mk_string_type(a), "range", copy_pi_type_p(range_type, a));
+        sym = string_to_symbol(mv_string("MacroError"));
+        add_def(module, sym, type, &typep, null_segments, NULL);
+        e = get_def(sym, module);
+        macro_error_type = e->value;
+
+        delete_pi_type_p(typep, a);
+
+        typep = mk_app_type(a, get_either_type(), copy_pi_type_p(macro_error_type, a), copy_pi_type_p(syntax_type, a));
+        sym = string_to_symbol(mv_string("MacroResult"));
+        add_def(module, sym, type, &typep, null_segments, NULL);
+        e = get_def(sym, module);
+        macro_result_type = e->value;
 
         delete_pi_type_p(typep, a);
     }

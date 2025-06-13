@@ -12,7 +12,7 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
     Assembler* ass = mk_assembler(&exalloc);
-    Package* base = base_package(ass, a, a);
+    Package* base = get_base_package();
 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(3, a),
@@ -144,7 +144,6 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     delete_module(module);
-    delete_package(base);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
     release_arena_allocator(arena);

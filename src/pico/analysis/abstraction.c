@@ -1975,8 +1975,21 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                 if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                     return mk_term(*((TermFormer*)entry.value), raw, env, a, point);
                 } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
+                    typedef struct {
+                        String message;
+                        Range range;
+                    } MacroError;
+                    typedef struct {
+                        uint64_t result_type;
+                        union {
+                            RawTree term;
+                            MacroError err;
+                        };
+                    } MacroResult;
+
+
                     // Call the function (uses Pico ABI)
-                    RawTree output;
+                    MacroResult output;
                     RawTreeArray input = raw.branch.nodes;
                     void* dvars = get_dynamic_memory();
                     void* dynamic_memory_space = mem_alloc(4096, a);
@@ -2000,9 +2013,9 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "mov %2, %%r15    \n"
                                          //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
-                                         // Push output ptr & sizeof (RawTree), resp
+                                         // Push output ptr & sizeof (MacroResult), resp
                                          "push %6          \n" // output ptr
-                                         "push %7          \n" // sizeof (RawTree)
+                                         "push %7          \n" // sizeof (MacroResult)
 
                                          // Push arg (array) onto stack
                                          "push 0x18(%5)       \n"
@@ -2021,9 +2034,9 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #if ABI == SYSTEM_V_64
                                          // memcpy (dest = rdi, src = rsi, size = rdx)
                                          // retval = rax 
-                                         // Note: 0x40 = sizeof(RawTree)
-                                         "mov 0x40(%%rsp), %%rdx   \n"
-                                         "mov 0x48(%%rsp), %%rdi   \n"
+                                         // Note: 0x48 = sizeof(MacroResult)
+                                         "mov 0x48(%%rsp), %%rdx   \n"
+                                         "mov 0x50(%%rsp), %%rdi   \n"
                                          "mov %%rsp, %%rsi         \n"
                                          "call memcpy              \n"
 
@@ -2040,7 +2053,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #error "Unknown calling convention"
 #endif
                                          // pop value from stack 
-                                         "mov 0x40(%%rsp), %%rax   \n"
+                                         // Note: 0x48 = sizeof(MacroResult)
+                                         "mov 0x48(%%rsp), %%rax   \n"
                                          "add %%rax, %%rsp         \n"
                                          // pop stashed size & dest from stack
                                          "add $0x10, %%rsp          \n"
@@ -2060,11 +2074,14 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                            , "r" (offset_memory_space)
                                            , "r" (&input)
                                            , "r" (&output)
-                                           , "c" (sizeof(RawTree))) ;
+                                           , "c" (sizeof(MacroResult))) ;
 
                     set_std_temp_allocator(old_temp_alloc);
                     mem_free(dynamic_memory_space, a);
-                    return abstract_expr_i(output, env, a, point);
+                    if (output.result_type == 1) {
+                        return abstract_expr_i(output.term, env, a, point);
+                    } else {
+                    }
                 } else {
                     return mk_application(raw, env, a, point);
                 }

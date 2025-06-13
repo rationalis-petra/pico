@@ -31,16 +31,16 @@ void set_std_istream(IStream* current) { current_istream = current; }
 static OStream* current_ostream;
 void set_std_ostream(OStream* current) { current_ostream = current; }
 
-Allocator* get_std_current_allocator() {
-    void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_current_allocator]; 
+Allocator get_std_current_allocator() {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_current_allocator]; 
     return *dyn;
 }
 
-Allocator* set_std_current_allocator(Allocator* al) {
-    void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_current_allocator]; 
-    Allocator* old = *dyn;
+Allocator set_std_current_allocator(Allocator al) {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_current_allocator]; 
+    Allocator old = *dyn;
     *dyn = al;
     return old;
 }
@@ -110,8 +110,8 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void *relic_malloc(uint64_t size) {
-    Allocator* a = get_std_current_allocator();
-    return mem_alloc(size, a);
+    Allocator a = get_std_current_allocator();
+    return mem_alloc(size, &a);
 }
 
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -331,7 +331,7 @@ RawTree loop_macro(RawTreeArray nodes) {
     //   (c2)
     //   (c3)
     // )
-    Allocator* a = get_std_current_allocator();
+    Allocator a = get_std_current_allocator();
     typedef enum {UpTo, Below, Above, DownTo} RangeType; 
 
     typedef struct {
@@ -340,7 +340,7 @@ RawTree loop_macro(RawTreeArray nodes) {
         Atom to;
     } ForRange;
 
-    PtrArray loop_fors = mk_ptr_array(2, a);
+    PtrArray loop_fors = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
@@ -400,11 +400,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
 
     std_current_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
-    typep = mk_dynamic_type(a, mk_struct_type(a, 4,
-                                             "malloc", mk_prim_type(a, Address),
-                                             "realloc", mk_prim_type(a, Address),
-                                             "free", mk_prim_type(a, Address),
-                                             "ctx", mk_prim_type(a, Address)));
     sym = string_to_symbol(mv_string("current-allocator"));
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 

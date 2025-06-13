@@ -13,6 +13,7 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
   *out = (TestLog) {
       .stream = stream,
       .verbosity = v,
+      .start_time = clock(),
       .test_count = 0,
       .passed_tests = 0,
       .failed_tests = 0,
@@ -89,6 +90,8 @@ FormattedOStream *get_fstream(TestLog *log) {
 
 int summarize_tests(TestLog *log, Allocator* a) {
     int err_code = 0;
+    clock_t end_time = clock();
+    double cpu_time_used = ((double) (end_time - log->start_time)) / CLOCKS_PER_SEC;
 
     write_fstring(mv_string("\nTest Suite Completed"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
@@ -113,6 +116,11 @@ int summarize_tests(TestLog *log, Allocator* a) {
     write_fstring(str, log->stream);
     delete_string(str, a);
     write_fstring(mv_string("\n"), log->stream);
+    write_fstring(mv_string("\nTime Taken: "), log->stream);
+    String time = string_double(cpu_time_used, a) ;
+    write_fstring(time, log->stream);
+    delete_string(time, a);
+    write_fstring(mv_string("s\n"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
 
     if (log->failed_tests != 0) err_code = 2;
