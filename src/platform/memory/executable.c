@@ -36,6 +36,7 @@ ex_mem alloc_ex_mem(size_t min_size) {
     ex_mem out;
 
     // calculate out.size as smallest multiple of pagesize satisfying > min_size
+    // platform_pagesize is provided as long int, so we
     size_t pagesize = platform_pagesize();
     out.size = pagesize * ((min_size + pagesize - 1) / pagesize);
     

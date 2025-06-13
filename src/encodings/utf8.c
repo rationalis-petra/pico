@@ -74,7 +74,7 @@ bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out) {
     return success;
 }
 
-char num_bytes_utf8(uint8_t head) {
+uint8_t num_bytes_utf8(uint8_t head) {
     // head = 0bbbbbbb => head & 10000000 = 0
     if ((head & 0x80) == 0) {
         return 1;
@@ -100,7 +100,7 @@ char num_bytes_utf8(uint8_t head) {
     }
 }
 
-char point_size_utf8(uint32_t codepoint) {
+uint8_t point_size_utf8(uint32_t codepoint) {
     if (codepoint < 0x80) {
         return 1;
     }

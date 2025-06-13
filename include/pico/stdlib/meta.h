@@ -6,6 +6,8 @@
 PiType* get_symbol_type();
 PiType* get_syntax_type();
 
+CType mk_syntax_ctype(Allocator* a);
+
 void add_meta_module(Assembler* ass, Package* base, Allocator* a);
 
 #endif

@@ -1198,7 +1198,7 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
 // TODO (UB): make this thread safe
 // Note: this counter starts at 1 as 0 is a reserved value,
 // which means 'not unique/no ID'
-static int id_counter = 1;
+static uint64_t id_counter = 1;
 uint64_t distinct_id() { return id_counter++; }
 
 bool is_wider(PiType *narrow, PiType *wide) {

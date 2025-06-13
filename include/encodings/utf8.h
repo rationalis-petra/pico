@@ -17,12 +17,12 @@ bool decode_point_utf8(uint8_t* size, uint8_t* str, uint32_t* out);
 // Given a byte, assumed to be the first byte of a (potentially) multibyte character, return the number of 
 // bytes the rest of the encoding will use.
 // returns 0 if head is an invalid start of a utf-8 string.
-char num_bytes_utf8(uint8_t head);
+uint8_t num_bytes_utf8(uint8_t head);
 
 // Given a byte, assumed to be the first byte of a (potentially) multibyte character, return the number of 
 // bytes the rest of the encoding will use.
 // returns 0 if head is an invalid start of a utf-8 string.
-char point_size_utf8(uint32_t codepoint);
+uint8_t point_size_utf8(uint32_t codepoint);
 
 // encode_string
 // decode_string

@@ -1,5 +1,3 @@
-#include <string.h>
-
 #include "platform/signals.h"
 #include "platform/memory/arena.h"
 
