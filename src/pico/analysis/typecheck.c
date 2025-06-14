@@ -868,7 +868,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             PiType* t = mk_uvar(a);
             untyped->ptype = t;
         } else {
-            err.message = mv_cstr_doc("Error in go-to: Label Not found!", a);
+            PtrArray nodes = mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc("Error in go-to: label not found:", a), &nodes);
+            push_ptr(mk_str_doc(*symbol_to_string(untyped->go_to.label), a), &nodes);
+            err.message = mv_sep_doc(nodes, a);
             throw_pi_error(point, err);
         }
         break;

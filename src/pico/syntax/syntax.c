@@ -424,40 +424,47 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SLabels: {
-        PtrArray nodes = mk_ptr_array(2 + syntax->labels.terms.len, a);
-        push_ptr(mk_str_doc(mv_string("(labels "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->labels.entry, a), &nodes);
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("labels"), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->labels.entry, a), a), &nodes);
 
+        PtrArray label_terms = mk_ptr_array(syntax->labels.terms.len, a);
         for (size_t i = 0; i < syntax->labels.terms.len; i++) {
-            PtrArray label_nodes = mk_ptr_array(5, a);
+            PtrArray label_nodes = mk_ptr_array(3, a);
             SymPtrACell cell = syntax->labels.terms.data[i];
             SynLabelBranch* branch = cell.val;
 
-            PtrArray arg_nodes = mk_ptr_array(syntax->procedure.args.len, a);
+            PtrArray arg_nodes = mk_ptr_array(branch->args.len, a);
             for (size_t i = 0; i < branch->args.len; i++) {
                 Document* arg = mk_str_doc(*symbol_to_string(branch->args.data[i].key), a);
                 push_ptr(arg, &arg_nodes);
             }
 
-            push_ptr(mk_str_doc(mv_string("["), a), &label_nodes);
             push_ptr(mk_str_doc(*symbol_to_string(cell.key), a), &label_nodes);
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &label_nodes);
-            push_ptr(pretty_syntax(branch->body, a), &label_nodes);
-            push_ptr(mk_str_doc(mv_string("]"), a), &label_nodes);
+            if (arg_nodes.len > 0) {
+                push_ptr(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), a), &label_nodes);
+            }
+            push_ptr(mv_nest_doc(2, pretty_syntax(branch->body, a), a), &label_nodes);
 
-            push_ptr(mv_sep_doc(label_nodes, a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(label_nodes, a), a), &label_terms);
         }
-
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        push_ptr(mv_nest_doc(2, mv_vsep_doc(label_terms, a), a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SGoTo: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("(go-to "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("go-to"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->go_to.label), a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+
+        PtrArray args = mk_ptr_array(syntax->go_to.args.len, a);
+        for (size_t i = 0; i < syntax->go_to.args.len; i++) {
+            push_ptr(mv_nest_doc(2, pretty_syntax(syntax->go_to.args.data[i], a), a), &args);
+        }
+        if (args.len > 0) {
+            push_ptr(mv_sep_doc(args, a), &nodes);
+        }
+        out = mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
         break;
     }
     case SWithReset: {

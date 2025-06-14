@@ -1980,6 +1980,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                     void* offset_memory_space = mem_alloc(1024, a);
 
                     Allocator* old_temp_alloc = set_std_temp_allocator(a);
+                    Allocator old_current_alloc = set_std_current_allocator(*a);
 
                     int64_t out;
                     __asm__ __volatile__(
@@ -2061,6 +2062,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                            , "c" (sizeof(MacroResult))) ;
 
                     set_std_temp_allocator(old_temp_alloc);
+                    set_std_current_allocator(old_current_alloc);
                     mem_free(dynamic_memory_space, a);
                     if (output.result_type == 1) {
                         return abstract_expr_i(output.term, env, a, point);

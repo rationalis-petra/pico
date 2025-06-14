@@ -323,27 +323,72 @@ void build_run_script_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint
     convert_c_fn(run_script_c_fun, &fn_ctype, type, ass, a, point); 
 }
 
+RawTree atom_symbol(const char *str) {
+    return (RawTree) {
+        .type = RawAtom,
+        .atom.type = ASymbol,
+        .atom.symbol = string_to_symbol(mv_string(str)),
+    };
+}
+
+typedef enum {UpTo, Below, Above, DownTo} RangeType; 
+
+typedef struct {
+    RangeType type;
+    RawTree name;
+    RawTree from;
+    RawTree to;
+} ForRange;
+
+RawTree mk_condition(ForRange range, Allocator *a) {
+    const char* comparator = NULL;
+    switch (range.type) {
+    case UpTo: comparator = "<="; break;
+    case Below: comparator = "<"; break;
+    case Above: comparator = ">"; break;
+    case DownTo: comparator = ">="; break;
+    }
+    
+    RawTreeArray proj_nodes = mk_rawtree_array(3, a);
+    push_rawtree(atom_symbol("."), &proj_nodes);
+    push_rawtree(atom_symbol(comparator), &proj_nodes);
+    push_rawtree(atom_symbol("u64"), &proj_nodes);
+
+    RawTree proj = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = proj_nodes,
+    };
+
+    RawTreeArray comp_nodes = mk_rawtree_array(3, a);
+    push_rawtree(proj, &comp_nodes);
+    push_rawtree(range.name, &comp_nodes);
+    push_rawtree(range.to, &comp_nodes);
+
+    return (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = comp_nodes,
+    };
+}
+
 MacroResult loop_macro(RawTreeArray nodes) {
+    // TODO (BUGS):
+    //   non-hygenic: labels loop-exit and loop-continue
+    //   
     // (loop 
     //   [for var from i upto j]
-    //   [for var from i below j]
     //   [for var from i above j]
     //   [for var from i downto j]
+    //   [for var from i below j]
     //   (c1)
     //   (c2)
     //   (c3)
     // )
     Allocator a = get_std_current_allocator();
-    typedef enum {UpTo, Below, Above, DownTo} RangeType; 
 
-    typedef struct {
-        RangeType RangeType;
-        Symbol name;
-        RawTree from;
-        RawTree to;
-    } ForRange;
-
-    RawTreeArray loop_exprs = mk_rawtree_array(2, &a);
+    RawTreeArray loop_body_nodes = mk_rawtree_array(nodes.len + 1, &a);
+    push_rawtree(atom_symbol("seq"), &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
@@ -372,7 +417,8 @@ MacroResult loop_macro(RawTreeArray nodes) {
                     .err.range = branch.branch.nodes.data[1].range,
                 };
             }
-            range.name = branch.branch.nodes.data[1].atom.symbol;
+
+            range.name = branch.branch.nodes.data[1];
 
             if (!eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
                 return (MacroResult) {
@@ -384,12 +430,29 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
             range.from = branch.branch.nodes.data[3];
 
-            if (!eq_symbol(&branch.branch.nodes.data[4], string_to_symbol(mv_string("for")))) {
+            if (!is_symbol(branch.branch.nodes.data[4])) {
                 return (MacroResult) {
                     .result_type = Left,
                     .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
                     .err.range = branch.branch.nodes.data[4].range,
                 };
+            } else {
+                Symbol s = branch.branch.nodes.data[4].atom.symbol;
+                if (symbol_eq(s, string_to_symbol(mv_string("upto")))) {
+                    range.type = UpTo;
+                } else if (symbol_eq(s, string_to_symbol(mv_string("below")))) {
+                    range.type = Below;
+                } else if (symbol_eq(s, string_to_symbol(mv_string("downto")))) {
+                    range.type = DownTo;
+                } else if (symbol_eq(s, string_to_symbol(mv_string("above")))) {
+                    range.type = Above;
+                } else {
+                    return (MacroResult) {
+                        .result_type = Left,
+                        .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
+                        .err.range = branch.branch.nodes.data[4].range,
+                    };
+                }
             }
 
             range.to = branch.branch.nodes.data[5];
@@ -398,10 +461,184 @@ MacroResult loop_macro(RawTreeArray nodes) {
             *rp = range;
             push_ptr(rp, &loop_fors);
         } else {
-            push_rawtree(nodes.data[i], &loop_exprs);
+            push_rawtree(nodes.data[i], &loop_body_nodes);
         }
     }
 
+    RawTreeArray start_go_to_nodes = mk_rawtree_array(2 + loop_fors.len, &a);
+    push_rawtree(atom_symbol("go-to"), &start_go_to_nodes);
+    push_rawtree(atom_symbol("loop-continue"), &start_go_to_nodes);
+
+    RawTreeArray continue_go_to_nodes = mk_rawtree_array(2 + loop_fors.len, &a);
+    push_rawtree(atom_symbol("go-to"), &continue_go_to_nodes);
+    push_rawtree(atom_symbol("loop-continue"), &continue_go_to_nodes);
+
+    RawTree loop_condition;
+    if (loop_fors.len == 0) {
+        loop_condition = (RawTree) { 
+            .type = RawAtom,
+            .atom.type = ABool,
+            .atom.boolean = true, // TODO should this be false? no condition =
+                                  // no loop?
+        };
+    } else {
+        loop_condition = mk_condition(*(ForRange*)loop_fors.data[0], &a);
+        for (size_t i = 1; i < loop_fors.len; i++) {
+            RawTree new_condition = mk_condition(*(ForRange*)loop_fors.data[i], &a);
+            RawTreeArray and_fn_nodes = mk_rawtree_array(3, &a);
+            push_rawtree(atom_symbol("."), &and_fn_nodes);
+            push_rawtree(atom_symbol("and"), &and_fn_nodes);
+            push_rawtree(atom_symbol("bool"), &and_fn_nodes);
+            RawTree and = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_fn_nodes,
+            };
+
+            RawTreeArray and_nodes = mk_rawtree_array(3, &a);
+
+            push_rawtree(and, &and_nodes);
+            push_rawtree(loop_condition, &and_nodes);
+            push_rawtree(new_condition, &and_nodes);
+            loop_condition = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_nodes,
+            };
+        }
+    }// _nodes = mk_rawtree_array(4, &a); // (if condition (go-to loop-body ...) (go-to exit))
+
+    RawTreeArray loop_body_arg_nodes = mk_rawtree_array(loop_fors.len, &a);
+    
+    for (size_t i = 0; i < loop_fors.len; i++) {
+        ForRange* fr = loop_fors.data[i];
+        push_rawtree(fr->from, &start_go_to_nodes);
+
+        push_rawtree(fr->name, &loop_body_arg_nodes);
+
+        // Increment or decrement appropriately
+        // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
+        RawTreeArray func_nodes = mk_rawtree_array(3, &a);
+        push_rawtree(atom_symbol("."), &func_nodes);
+        push_rawtree(atom_symbol((fr->type == UpTo | fr->type == Below) ? "+" : "-"), &func_nodes);
+        push_rawtree(atom_symbol("u64"), &func_nodes);
+        RawTree func_term = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = func_nodes,
+        };
+
+        RawTreeArray call_nodes = mk_rawtree_array(4, &a);
+        push_rawtree(func_term, &call_nodes);
+        push_rawtree(fr->name, &call_nodes);
+
+        RawTree one_atom = (RawTree) {
+            .type = RawAtom,
+            .atom.type = AIntegral,
+            .atom.int_64 = 1,
+        };
+        push_rawtree(one_atom, &call_nodes);
+
+        RawTree next_val = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = call_nodes,
+        };
+        push_rawtree(next_val, &continue_go_to_nodes);
+    }
+
+    RawTree loop_body_args = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HSpecial,
+        .branch.nodes = loop_body_arg_nodes,
+    };
+
+    RawTreeArray loop_body_label_nodes = mk_rawtree_array(3, &a);
+    push_rawtree(atom_symbol("loop-continue"), &loop_body_label_nodes);
+    push_rawtree(loop_body_args, &loop_body_label_nodes);
+
+    RawTreeArray unit_nodes = mk_rawtree_array(2, &a);
+    push_rawtree(atom_symbol(":"), &unit_nodes);
+    push_rawtree(atom_symbol("unit"), &unit_nodes);
+    RawTree unit_term = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = unit_nodes,
+    };
+
+    RawTreeArray labels_nodes = mk_rawtree_array(4, &a);
+    RawTree labels_atom = (RawTree) {
+        .type = RawAtom,
+        .atom.type = ASymbol,
+        .atom.symbol = string_to_symbol(mv_string("labels")),
+    };
+    push_rawtree(labels_atom, &labels_nodes);
+
+    RawTree start_go_to = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = start_go_to_nodes,
+    };
+    push_rawtree(start_go_to, &labels_nodes);
+
+    // TODO: Add if (condition) (go-to continue ...) (go-to exit ...) 
+    RawTreeArray if_nodes = mk_rawtree_array(4, &a);
+    push_rawtree(atom_symbol("if"), &if_nodes);
+    push_rawtree(loop_condition, &if_nodes);
+    RawTree goto_continue = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = continue_go_to_nodes,
+    };
+    push_rawtree(goto_continue, &if_nodes);
+
+    RawTreeArray goto_exit_nodes = mk_rawtree_array(2, &a);
+    push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
+    push_rawtree(atom_symbol("exit"), &goto_exit_nodes);
+    RawTree goto_exit = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = goto_exit_nodes,
+    };
+    push_rawtree(goto_exit, &if_nodes);
+
+    RawTree if_expr = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = if_nodes,
+    };
+    push_rawtree(if_expr, &loop_body_nodes);
+
+    RawTree loop_body = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = loop_body_nodes,
+    };
+    push_rawtree(loop_body, &loop_body_label_nodes);
+    RawTree loop_body_label = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HSpecial,
+        .branch.nodes = loop_body_label_nodes,
+    };
+    push_rawtree(loop_body_label, &labels_nodes);
+
+    RawTreeArray loop_exit_nodes = mk_rawtree_array(2, &a);
+
+    push_rawtree(atom_symbol("exit"), &loop_exit_nodes);
+    push_rawtree(unit_term, &loop_exit_nodes);
+    RawTree loop_exit = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HSpecial,
+        .branch.nodes = loop_exit_nodes,
+    };
+    push_rawtree(loop_exit, &labels_nodes);
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term.type = RawBranch,
+        .term.branch.hint = HExpression,
+        .term.branch.nodes = labels_nodes,
+    };
     // Now, construct the loop expression
     // each for-variable must
     // (labels (go-to loop-body initial-val-1 initial-val-2 ...)
