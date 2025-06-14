@@ -4,6 +4,7 @@
 #include "platform/signals.h"
 #include "data/stringify.h"
 
+#include "pico/stdlib/extra.h"
 #include "pico/stdlib/num.h"
 #include "pico/codegen/foreign_adapters.h"
 
@@ -60,41 +61,81 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_nullary_op (ass, Ret, a, point);
 }
 
+String relic_u64_to_string(uint64_t u64) {
+    Allocator a = get_std_current_allocator();
+    return string_u64(u64, &a);
+}
+
+String relic_u32_to_string(uint32_t u32) {
+    Allocator a = get_std_current_allocator();
+    return string_u32(u32, &a);
+}
+
+String relic_u16_to_string(uint16_t u16) {
+    Allocator a = get_std_current_allocator();
+    return string_u16(u16, &a);
+}
+
+String relic_u8_to_string(uint8_t u8) {
+    Allocator a = get_std_current_allocator();
+    return string_u8(u8, &a);
+}
+
+String relic_i64_to_string(int64_t i64) {
+    Allocator a = get_std_current_allocator();
+    return string_i64(i64, &a);
+}
+
+String relic_i32_to_string(int32_t i32) {
+    Allocator a = get_std_current_allocator();
+    return string_i32(i32, &a);
+}
+
+String relic_i16_to_string(int16_t i16) {
+    Allocator a = get_std_current_allocator();
+    return string_i16(i16, &a);
+}
+
+String relic_i8_to_string(int8_t i8) {
+    Allocator a = get_std_current_allocator();
+    return string_u8(i8, &a);
+}
+
 void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CPrimInt cint;
     void* cfn;
     switch (prim) {
     case UInt_64:
         cint = (CPrimInt){.prim = CLongLong, .is_signed = Unsigned};
-        cfn = string_u64;
+        cfn = relic_u64_to_string;
         break;
     case Int_64:
         cint = (CPrimInt){.prim = CLongLong, .is_signed = Signed};
-        cfn = string_i64;
+        cfn = relic_i64_to_string;
         break;
     case UInt_32:
         cint = (CPrimInt){.prim = CInt, .is_signed = Unsigned};
-        cfn = string_u32;
+        cfn = relic_u32_to_string;
         break;
     case Int_32:
         cint = (CPrimInt){.prim = CInt, .is_signed = Signed};
-        cfn = string_i32;
+        cfn = relic_i32_to_string;
         break;
     case UInt_16:
         cint = (CPrimInt){.prim = CShort, .is_signed = Unsigned};
-        cfn = string_u16;
+        cfn = relic_u16_to_string;
         break;
     case Int_16:
         cint = (CPrimInt){.prim = CShort, .is_signed = Signed};
-        cfn = string_i16;
+        cfn = relic_i16_to_string;
         break;
     case UInt_8:
         cint = (CPrimInt){.prim = CChar, .is_signed = Unsigned};
-        cfn = string_u8;
+        cfn = relic_u8_to_string;
         break;
     case Int_8:
         cint = (CPrimInt){.prim = CChar, .is_signed = Signed};
-        cfn = string_i8;
+        cfn = relic_i8_to_string;
         break;
     default:
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));

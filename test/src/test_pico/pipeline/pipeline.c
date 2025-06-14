@@ -68,21 +68,27 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
 
     // TODO (FEAT): move libraries out into their own section
     {
-        test_start(log, mv_string("Addition"));
+        test_start(log, mv_string("unsigned-add"));
         uint64_t expected = 3;
         test_toplevel("(u64.+ 1 2)", &expected, module, log, a) ;
     }
 
     {
-        test_start(log, mv_string("Subtraction"));
+        test_start(log, mv_string("signed-add"));
+        int64_t expected = 6;
+        test_toplevel("(i64.+ 4 2)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("signed-sub"));
         int64_t expected = -1;
         test_toplevel("(i64.- 1 2)", &expected, module, log, a) ;
     }
 
     {
-        test_start(log, mv_string("Subtraction"));
-        int64_t expected = -1;
-        test_toplevel("(i64.- 1 2)", &expected, module, log, a) ;
+        test_start(log, mv_string("unsigned-mul"));
+        int64_t expected = 24;
+        test_toplevel("(i64.* 4 6)", &expected, module, log, a) ;
     }
 
     {
