@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include "platform/memory/std_allocator.h"
 #include "platform/signals.h"
+#include "data/stringify.h"
 
 #include "pico/stdlib/num.h"
 #include "pico/codegen/foreign_adapters.h"
@@ -59,106 +60,41 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_nullary_op (ass, Ret, a, point);
 }
 
-String uint64_to_string(uint64_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRIu64, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRId64, num);
-    return mv_string(str);
-}
-
-String int64_to_string(int64_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRId64, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRId64, num);
-    return mv_string(str);
-}
-
-String uint32_to_string(uint32_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRIu32, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRIu32, num);
-    return mv_string(str);
-}
-
-String int32_to_string(int32_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRId32, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRId32, num);
-    return mv_string(str);
-}
-
-String uint16_to_string(uint16_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRIu16, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRIu16, num);
-    return mv_string(str);
-}
-
-String int16_to_string(int16_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRId16, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRId16, num);
-    return mv_string(str);
-}
-
-String uint8_to_string(uint8_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRIu8, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRIu8, num);
-    return mv_string(str);
-}
-
-String int8_to_string(int8_t num) {
-    Allocator* a = get_std_allocator();
-    int len = snprintf(NULL, 0, "%" PRId8, num) + 1;
-    char* str = (char*)mem_alloc(sizeof(char) * len, a);
-    snprintf(str, len, "%" PRId8, num);
-    return mv_string(str);
-}
-
 void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* a, ErrorPoint* point) {
-
     CPrimInt cint;
     void* cfn;
     switch (prim) {
     case UInt_64:
         cint = (CPrimInt){.prim = CLongLong, .is_signed = Unsigned};
-        cfn = uint64_to_string;
+        cfn = string_u64;
         break;
     case Int_64:
         cint = (CPrimInt){.prim = CLongLong, .is_signed = Signed};
-        cfn = int64_to_string;
+        cfn = string_i64;
         break;
     case UInt_32:
         cint = (CPrimInt){.prim = CInt, .is_signed = Unsigned};
-        cfn = uint32_to_string;
+        cfn = string_u32;
         break;
     case Int_32:
         cint = (CPrimInt){.prim = CInt, .is_signed = Signed};
-        cfn = int32_to_string;
+        cfn = string_i32;
         break;
     case UInt_16:
         cint = (CPrimInt){.prim = CShort, .is_signed = Unsigned};
-        cfn = uint16_to_string;
+        cfn = string_u16;
         break;
     case Int_16:
         cint = (CPrimInt){.prim = CShort, .is_signed = Signed};
-        cfn = int16_to_string;
+        cfn = string_i16;
         break;
     case UInt_8:
         cint = (CPrimInt){.prim = CChar, .is_signed = Unsigned};
-        cfn = uint8_to_string;
+        cfn = string_u8;
         break;
     case Int_8:
         cint = (CPrimInt){.prim = CChar, .is_signed = Signed};
-        cfn = int8_to_string;
+        cfn = string_i8;
         break;
     default:
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
@@ -294,6 +230,54 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     if (r.type == Err) panic(r.error_message);
 }
 
+void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, get_package(num), NULL, a);
+    delete_module_header(header);
+    Symbol sym;
+
+    PiType* typep;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
+    Segments prepped;
+
+    build_binary_fn(ass, And, sz_8, a, &point);
+    typep = mk_binop_type(a, Bool, Bool, Bool);
+    sym = string_to_symbol(mv_string("and"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_fn(ass, Or, sz_8, a, &point);
+    sym = string_to_symbol(mv_string("or"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    delete_pi_type_p(typep, a);
+    sdelete_u8_array(fn_segments.data);
+
+    Result r = add_module_def(num, string_to_symbol(mv_string("bool")), module);
+    if (r.type == Err) panic(r.error_message);
+}
+
 void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -309,6 +293,8 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     };
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
+
+    add_bool_module(ass, module, a);
 
     add_integral_module(mv_string("u8"), sz_8, false, ass, module, a);
     add_integral_module(mv_string("u16"), sz_16, false, ass, module, a);

@@ -93,7 +93,6 @@ int summarize_tests(TestLog *log, Allocator* a) {
     clock_t end_time = clock();
     double cpu_time_used = ((double) (end_time - log->start_time)) / CLOCKS_PER_SEC;
 
-    write_fstring(mv_string("\nTest Suite Completed"), log->stream);
     write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
     if (log->passed_tests + log->failed_tests != log->test_count) {
         err_code = 1;
@@ -101,22 +100,33 @@ int summarize_tests(TestLog *log, Allocator* a) {
         write_fstring(mv_string("Failure of test suite: total tests != passed + failed"), log->stream);
         end_coloured_text(log->stream);
     }
+
+    if (log->failed_tests == 0 && err_code == 0) {
+        start_coloured_text(pass_colour, log->stream);
+        write_fstring(mv_string("                   All tests Passed\n"), log->stream);
+        end_coloured_text(log->stream);
+    } else if (log->failed_tests != 0) {
+        err_code = 1;
+        start_coloured_text(fail_colour, log->stream);
+        write_fstring(mv_string("Some Tests Failed\n"), log->stream);
+        end_coloured_text(log->stream);
+    }
     String str;
 
-    write_fstring(mv_string("\n  Passed : "), log->stream);
+    write_fstring(mv_string("\n                     Passed : "), log->stream);
     str = string_u64(log->passed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
-    write_fstring(mv_string("\n  Failed : "), log->stream);
+    write_fstring(mv_string("\n                     Failed : "), log->stream);
     str = string_u64(log->failed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
-    write_fstring(mv_string("\n  Total  : "), log->stream);
+    write_fstring(mv_string("\n                     Total  : "), log->stream);
     str = string_u64(log->test_count, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
     write_fstring(mv_string("\n"), log->stream);
-    write_fstring(mv_string("\nTime Taken: "), log->stream);
+    write_fstring(mv_string("\n                 Time Taken: "), log->stream);
     String time = string_double(cpu_time_used, a) ;
     write_fstring(time, log->stream);
     delete_string(time, a);

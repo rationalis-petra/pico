@@ -565,6 +565,10 @@ void build_binary_opcode_table() {
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x23;
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x23;
 
+    // r8, r/m8
+    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x22;
+    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x22;
+
     // Or
     // r/m64, imm8 & imm64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
@@ -583,6 +587,10 @@ void build_binary_opcode_table() {
     // r64, r/m64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0B;
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0B;
+
+    // r8, r/m8
+    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x0A;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x0A;
 
     // ------------------
     //  Bit Manipulation

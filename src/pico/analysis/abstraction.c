@@ -17,8 +17,6 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 
 Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
-bool eq_symbol(RawTree* raw, Symbol s);
-bool is_symbol(RawTree* raw);
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
@@ -83,7 +81,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
 
-    if (!is_symbol(&raw.branch.nodes.data[1])) {
+    if (!is_symbol(raw.branch.nodes.data[1])) {
         err.range = raw.branch.nodes.data[1].range;
         err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header.", a);
         throw_pi_error(point, err);
@@ -201,8 +199,8 @@ bool eq_symbol(RawTree* raw, Symbol s) {
           raw->atom.symbol.did == s.did);
 }
 
-bool is_symbol(RawTree* raw) {
-    return (raw->type == RawAtom && raw->atom.type == ASymbol);
+bool is_symbol(RawTree raw) {
+    return (raw.type == RawAtom && raw.atom.type == ASymbol);
 }
 
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
@@ -226,7 +224,7 @@ RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
 bool get_fieldname(RawTree* raw, Symbol* fieldname) {
     if (raw->type == RawBranch && raw->branch.nodes.len == 2) {
         raw = &raw->branch.nodes.data[1];
-        if (is_symbol(raw)) {
+        if (is_symbol(*raw)) {
             *fieldname = raw->atom.symbol;
             return true;
         } else {
@@ -243,7 +241,7 @@ bool get_fieldname(RawTree* raw, Symbol* fieldname) {
 bool get_label(RawTree* raw, Symbol* fieldname) {
     if (raw->type == RawBranch && raw->branch.nodes.len >= 1) {
         raw = &raw->branch.nodes.data[0];
-        if (is_symbol(raw)) {
+        if (is_symbol(*raw)) {
             *fieldname = raw->atom.symbol;
             return true;
         } else {
@@ -596,9 +594,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             Symbol clause_tagname; 
             SymbolArray clause_binds;
             RawTree mcol = raw_pattern.branch.nodes.data[0];
-            if (raw_pattern.branch.nodes.len == 2 && is_symbol(&mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+            if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
                 RawTree mname = raw_pattern.branch.nodes.data[1];
-                if (!is_symbol(&mname)) {
+                if (!is_symbol(mname)) {
                     err.range = mname.range;
                     err.message = mv_cstr_doc("Bad pattern in match clause", a);
                     throw_pi_error(point, err);
@@ -620,7 +618,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
                 for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
                     RawTree raw_name = raw_pattern.branch.nodes.data[s];
-                    if (!is_symbol(&raw_name)) {
+                    if (!is_symbol(raw_name)) {
                         err.range = raw_clause.range;
                         err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
                         throw_pi_error(point, err);
@@ -1409,7 +1407,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         for (size_t i = 0; i < raw_args.branch.nodes.len; i++) {
             Syntax* arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], env, a, point);
-
             push_ptr(arg_ty, &arg_types);
         }
 
@@ -1486,9 +1483,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree mcol = edesc.branch.nodes.data[0];
             // TODO replace ":" with 'a symbol that resolves to the constructor/variant
             // term former!
-            if (edesc.branch.nodes.len == 2 && is_symbol(&mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+            if (edesc.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
                 RawTree mname = edesc.branch.nodes.data[1];
-                if (!is_symbol(&mname)) {
+                if (!is_symbol(mname)) {
                     err.range = mname.range;
                     err.message = mv_cstr_doc("Enumeration type expects variant descriptors to have a symbol name.", a);
                     throw_pi_error(point, err);
@@ -1571,7 +1568,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
 
         RawTree* rname = &raw.branch.nodes.data[1];
-        if (!is_symbol(rname)) {
+        if (!is_symbol(*rname)) {
             err.range = raw.range;
             err.message = mv_cstr_doc("Malformed Named Type expression: 1st arg to be name.", a);
             throw_pi_error(point, err);
@@ -1849,7 +1846,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             throw_pi_error(point, err);
         }
         RawTree term = raw.branch.nodes.data[1];
-        if (is_symbol(&term)) {
+        if (is_symbol(term)) {
             Syntax* res = mem_alloc(sizeof(Syntax), a);
             *res = (Syntax) {
                 .type = SDescribe,
@@ -1954,7 +1951,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             throw_pi_error(point, err);
         }
 
-        if (is_symbol(&raw.branch.nodes.data[0])) {
+        if (is_symbol(raw.branch.nodes.data[0])) {
             Symbol sym = raw.branch.nodes.data[0].atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
@@ -2102,7 +2099,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
             throw_pi_error(point, err);
         }
 
-        if (!is_symbol(&raw.branch.nodes.data[1])) {
+        if (!is_symbol(raw.branch.nodes.data[1])) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mv_cstr_doc("First argument to definitions should be a symbol", a);
             throw_pi_error(point, err);
@@ -2167,7 +2164,7 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
     bool unique_toplevel = false;
 
     if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
-        if (is_symbol(&raw.branch.nodes.data[0])) {
+        if (is_symbol(raw.branch.nodes.data[0])) {
             Symbol sym = raw.branch.nodes.data[0].atom.symbol;
             ShadowEntry entry = shadow_env_lookup(sym, env);
             switch (entry.type) {
@@ -2196,7 +2193,7 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
 
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
-    if (is_symbol(raw)) {
+    if (is_symbol(*raw)) {
         SymbolArray path = mk_symbol_array(1,a);
         push_symbol(raw->atom.symbol, &path);
         return (ImportClause) {
@@ -2210,7 +2207,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         // (. name2 name1)
         // (. (list-of-names) name1)
         if (raw->branch.nodes.len == 2) {
-            if (!is_symbol(&raw->branch.nodes.data[0])) {
+            if (!is_symbol(raw->branch.nodes.data[0])) {
                 err.range = raw->branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Invalid import clause: first element should be symbol", a);
                 throw_pi_error(point, err);
@@ -2238,7 +2235,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             };
         } else if (raw->branch.nodes.len == 3) {
 
-            if (!is_symbol(&raw->branch.nodes.data[0]) || !is_symbol(&raw->branch.nodes.data[2])) {
+            if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2])) {
                 err.range = raw->range;
                 err.message = mv_cstr_doc("Invalid import clause", a);
                 throw_pi_error(point, err);
@@ -2254,7 +2251,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 }
 
                 RawTree raw_members = raw->branch.nodes.data[1];
-                if (is_symbol(&raw_members)) {
+                if (is_symbol(raw_members)) {
                     SymbolArray path = mk_symbol_array(1,a);
                     push_symbol(src, &path);
                     return (ImportClause) {
@@ -2329,7 +2326,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
 
 ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator* a) {
     PicoError err;
-    if (is_symbol(raw)) {
+    if (is_symbol(*raw)) {
         return (ExportClause) {
             .type = ExportName,
             .name = raw->atom.symbol,

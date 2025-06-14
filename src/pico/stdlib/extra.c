@@ -338,14 +338,17 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
     typedef struct {
         RangeType RangeType;
-        Atom from;
-        Atom to;
+        Symbol name;
+        RawTree from;
+        RawTree to;
     } ForRange;
 
+    RawTreeArray loop_exprs = mk_rawtree_array(2, &a);
     PtrArray loop_fors = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
+            ForRange range;
             if (branch.branch.nodes.len != 6) {
                 return (MacroResult) {
                     .result_type = Left,
@@ -353,8 +356,60 @@ MacroResult loop_macro(RawTreeArray nodes) {
                     .err.range = branch.range,
                 };
             }
+
+            if (!eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("for")))) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("Malformed loop clause: expected 'for'"),
+                    .err.range = branch.branch.nodes.data[0].range,
+                };
+            }
+
+            if (!is_symbol(branch.branch.nodes.data[1])) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("For loop expects variable"),
+                    .err.range = branch.branch.nodes.data[1].range,
+                };
+            }
+            range.name = branch.branch.nodes.data[1].atom.symbol;
+
+            if (!eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("For loop expects 'from'"),
+                    .err.range = branch.branch.nodes.data[2].range,
+                };
+            }
+
+            range.from = branch.branch.nodes.data[3];
+
+            if (!eq_symbol(&branch.branch.nodes.data[4], string_to_symbol(mv_string("for")))) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
+                    .err.range = branch.branch.nodes.data[4].range,
+                };
+            }
+
+            range.to = branch.branch.nodes.data[5];
+
+            ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+            *rp = range;
+            push_ptr(rp, &loop_fors);
+        } else {
+            push_rawtree(nodes.data[i], &loop_exprs);
         }
     }
+
+    // Now, construct the loop expression
+    // each for-variable must
+    // (labels (go-to loop-body initial-val-1 initial-val-2 ...)
+    //   [loop-body [var-1 var-2 ...]
+    //     (seq loop-expr-1 loop-expr-2 ...
+    //       (if (num.bool.and loop-cont (num.bool.and loop-expr-2 ...)))
+    //       )
+    //    [exit :unit]])
     
 }
 

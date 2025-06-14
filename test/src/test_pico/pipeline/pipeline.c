@@ -66,6 +66,7 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
         test_toplevel("-10", &expected, module, log, a) ;
     }
 
+    // TODO (FEAT): move libraries out into their own section
     {
         test_start(log, mv_string("Addition"));
         uint64_t expected = 3;
@@ -82,6 +83,42 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
         test_start(log, mv_string("Subtraction"));
         int64_t expected = -1;
         test_toplevel("(i64.- 1 2)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("and-ff"));
+        uint8_t expected = 0;
+        test_toplevel("(bool.and :false :true)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("and-ft"));
+        uint8_t expected = 0;
+        test_toplevel("(bool.and :false :true)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("and-tt"));
+        uint8_t expected = 1;
+        test_toplevel("(bool.and :true :true)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("or-ff"));
+        uint8_t expected = 0;
+        test_toplevel("(bool.or :false :false)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("or-ft"));
+        uint8_t expected = 1;
+        test_toplevel("(bool.or :false :true)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("or-tt"));
+        uint8_t expected = 1;
+        test_toplevel("(bool.or :true :true)", &expected, module, log, a) ;
     }
 
     {

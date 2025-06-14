@@ -28,4 +28,8 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* poi
 Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point);
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point);
 
+// Helper functions for implementing macros (used in the standard library)
+bool eq_symbol(RawTree* raw, Symbol s);
+bool is_symbol(RawTree raw);
+
 #endif
