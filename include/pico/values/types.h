@@ -13,7 +13,10 @@
 /* Basic types in pico typesystem */
 // Forward declarations
 typedef struct PiType PiType;
-typedef struct UVarGenerator UVarGenerator;
+
+// Forward declaration: these types are defined and used
+// in unify.c
+typedef struct UVarType UVarType;
 
 typedef enum {
     Int_8  = 0b000,
@@ -68,8 +71,6 @@ typedef enum {
 
   // Used only during unification
   TUVar,
-  TUVarIntegral,
-  TUVarFloating,
 } PiType_t;
 
 typedef struct {
@@ -107,11 +108,6 @@ typedef struct {
     PtrArray args;
     PiType* fam;
 } TAppType;
-
-typedef struct {
-    uint64_t id;
-    PiType* subst;
-} UVarType;
 
 typedef struct {
     SymbolArray vars;
@@ -177,6 +173,7 @@ Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs);
+bool pi_value_eql(PiType* type, void* lhs, void* rhs);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
@@ -197,16 +194,13 @@ void delete_pi_type_p(PiType* t, Allocator* a);
 PiType copy_pi_type(PiType t, Allocator* a);
 PiType* copy_pi_type_p(PiType* t, Allocator* a);
 
-PiType* mk_uvar(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_integral(UVarGenerator* gen, Allocator* a);
-PiType* mk_uvar_floating(UVarGenerator* gen, Allocator* a);
-UVarGenerator* mk_gen(Allocator* a);
-void delete_gen(UVarGenerator* gen, Allocator* a);
-
 // Misc. and utility
 // Utilities for generating or manipulating types
 // Generate distinct id
 uint64_t distinct_id();
+
+bool is_wider(PiType* narrow, PiType* wide);
+bool is_narrower(PiType* wide, PiType* narrow);
 
 // Recursively extracts the inner type from distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 

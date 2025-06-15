@@ -1,6 +1,9 @@
-// Relevant OS includes 
-#include "platform/machine_info.h"
+#include <string.h>
 
+#include "platform/machine_info.h"
+#include "platform/signals.h"
+
+// Relevant OS includes 
 #if OS_FAMILY == WINDOWS
   #include <windows.h>
   #include <memoryapi.h>
@@ -33,6 +36,7 @@ ex_mem alloc_ex_mem(size_t min_size) {
     ex_mem out;
 
     // calculate out.size as smallest multiple of pagesize satisfying > min_size
+    // platform_pagesize is provided as long int, so we
     size_t pagesize = platform_pagesize();
     out.size = pagesize * ((min_size + pagesize - 1) / pagesize);
     
@@ -163,9 +167,91 @@ void* exec_alloc(size_t size, void* ctx) {
     }
 }
 
+bool realloc_small(void* out, void *ptr, size_t new_size, exec_context* ctx) {
+    for (size_t i = 0; i < ctx->small_blocks.len; i++) {
+        SmallBlock block = *(SmallBlock*)(ctx->small_blocks.data[i]);
+        const void* data = block.block_memory.data;
+        size_t offset = 0;
+        // check for each element of to_free
+        while (offset < block.num_chunks) {
+            if (ptr == data + offset) {
+                // Copy the data
+                size_t copy_size = new_size < small_chunk_size ? new_size : small_chunk_size;
+                memcpy(out, ptr, copy_size);
+
+                  // Free the old memory
+                block.free_slots.data[offset / small_chunk_size] = 1; // set it as free
+                return true;
+            }
+            offset += small_chunk_size;
+        }
+    }
+    return false;
+}
+
+bool realloc_medium(void* out, void* ptr, size_t new_size, exec_context* ctx) {
+    MediumBlock* blk_prev = NULL;
+    MediumBlock** blk_ptr = &ctx->medium_blocks;
+    MediumBlock* blk = ctx->medium_blocks;
+    while (blk != NULL) {
+        if (ptr == blk->block_memory.data) {
+            // Copy the data
+            // TODO (OPTIMIZATION): if don't need to allocate, don't!
+            size_t copy_size = new_size < blk->block_memory.size ? new_size : blk->block_memory.size;
+            memcpy(out, ptr, copy_size);
+
+            *blk_ptr = blk->next;
+            free_ex_mem(blk->block_memory);
+            mem_free(blk, ctx->metadata_allocator);
+            if (blk == ctx->medium_blocks_end) {
+                ctx->medium_blocks_end = blk_prev;
+            }
+            return true;
+        } else {
+            blk_prev = blk;
+            blk_ptr = &blk->next; 
+            blk = blk->next;
+        }
+    }
+    return false;
+}
+
+bool realloc_large(void* out, void* ptr, size_t new_size, exec_context* ctx) {
+    LargeBlock* blk_prev = NULL;
+    LargeBlock** blk_ptr = &ctx->large_blocks;
+    LargeBlock* blk = ctx->large_blocks;
+    while (blk != NULL) {
+        if (ptr == blk->block_memory.data) {
+            // Copy the data
+            // TODO (OPTIMIZATION): if don't need to allocate, don't!
+            size_t copy_size = new_size < blk->block_memory.size ? new_size : blk->block_memory.size;
+            memcpy(out, ptr, copy_size);
+
+            *blk_ptr = blk->next;
+            free_ex_mem(blk->block_memory);
+            mem_free(blk, ctx->metadata_allocator);
+            if (blk == ctx->large_blocks_end) {
+                ctx->large_blocks_end = blk_prev;
+            }
+            return true;
+        } else {
+            blk_prev = blk;
+            blk_ptr = &blk->next; 
+            blk = blk->next;
+        }
+    }
+    return false;
+}
+
 void* exec_realloc(void* ptr, size_t new_size, void* ctx) {
     // TODO (FEAT BUG): Implement ME!
-    return NULL;
+    exec_context* ectx = (exec_context*) ctx;
+    void* out = exec_alloc(new_size, ctx);
+    if (realloc_small(out, ptr, new_size, ectx) ||
+        realloc_medium(out, ptr, new_size, ectx) ||
+        realloc_large(out, ptr, new_size, ectx))
+        return out;
+    panic(mv_string("exec_realloc failed"));
 }
 
 bool free_small(void* ptr, exec_context* ctx) {

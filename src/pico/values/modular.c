@@ -90,6 +90,8 @@ Result add_module(Symbol symbol, Module* module, Package* package) {
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
+    // TODO (PERF): check for if this clause already exists!
+    clause.path = scopy_symbol_array(clause.path, module->allocator);
     push_import_clause(clause, &module->header.imports.clauses);
 }
 
@@ -162,8 +164,7 @@ void delete_module(Module* module) {
         delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
-    sdelete_import_clause_array(module->header.imports.clauses);
-    sdelete_export_clause_array(module->header.exports.clauses);
+    delete_module_header(module->header);
 
     release_executable_allocator(module->executable_allocator);
     mem_free(module, module->allocator);
@@ -195,6 +196,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->cd_links.len; i++) {
             LinkMetaData link = links->cd_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            *address_ptr= out.data.data + link.dest_offset;
+        }
+
+        for (size_t i = 0; i < links->dd_links.len; i++) {
+            LinkMetaData link = links->dd_links.data[i];
+            void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
             *address_ptr= out.data.data + link.dest_offset;
         }
     }

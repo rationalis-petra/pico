@@ -4,6 +4,7 @@
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
 #include "platform/io/terminal.h"
+#include "platform/window/window.h"
 
 #include "data/string.h"
 #include "data/stream.h"
@@ -27,13 +28,14 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
+static const char* version = "0.0.4";
+
 typedef struct {
     bool debug_print;
     bool interactive;
 } IterOpts;
 
-
-bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
+bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
@@ -63,24 +65,28 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     if (opts.interactive) {
         String* name = get_name(module);
-        if (name) write_string(*name, cout);
-        write_string(mv_string(" > "), cout);
+        if (name) write_fstring(*name, cout);
+        write_fstring(mv_string(" > "), cout);
     }
 
     ParseResult res = parse_rawtree(cin, &arena);
 
     if (res.type == ParseNone) {
-        write_string(mv_string("\n"), cout);
+        write_fstring(mv_string("\n"), cout);
         goto on_exit;
     }
     if (res.type == ParseFail) {
-        display_error(res.error, cin, cout, a);
+        MultiError multi = (MultiError) {
+            .has_many = false,
+            .error = res.error,
+        };
+        display_error(multi, cin, get_formatted_stdout(), a);
         release_arena_allocator(arena);
         return true;
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
-        write_string(mv_string("Parse Returned Invalid Result!\n"), cout);
+        write_fstring(mv_string("Parse Returned Invalid Result!\n"), cout);
         release_arena_allocator(arena);
         return false;
     }
@@ -88,9 +94,11 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     Document* doc;
     if (opts.debug_print) {
         doc = pretty_rawtree(res.result, &arena);
-        write_string(mv_string("Pretty printing raw syntax\n"), cout);
-        write_doc(doc, cout);
-        write_string(mv_string("\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Raw Syntax\n"), cout);
+        end_underline(cout);
+        write_doc_formatted(doc, 120, cout);
+        write_fstring(mv_string("\n"), cout);
     }
 
     // -------------------------------------------------------------------------
@@ -100,10 +108,12 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty printing typechecked syntax:\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Abstract Syntax:\n"), cout);
+        end_underline(cout);
         doc = pretty_toplevel(&abs, &arena);
-        write_doc(doc, cout);
-        write_string(mv_string("\n"), cout);
+        write_doc_formatted(doc, 120, cout);
+        write_fstring(mv_string("\n"), cout);
     }
 
     // -------------------------------------------------------------------------
@@ -117,10 +127,12 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
         if (ty) {
-            write_string(mv_string("Pretty Printing Inferred Type\n"), cout);
-            doc = pretty_type(ty, &arena);
-            write_doc(doc, cout);
-            write_string(mv_string("\n"), cout);
+            start_underline(cout);
+            write_fstring(mv_string("Inferred Type\n"), cout);
+            end_underline(cout);
+            doc = mv_nest_doc(2, pretty_type(ty, &arena), a);
+            write_doc_formatted(doc, 120, cout);
+            write_fstring(mv_string("\n"), cout);
         }
     }
 
@@ -131,15 +143,20 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
 
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Binary:\n"), cout);
-        write_string(mv_string("Execute Assembly:\n"), cout);
+        start_underline(cout);
+        write_fstring(mv_string("Compiled Binary:\n"), cout);
+        end_underline(cout);
+        write_fstring(mv_string("Execute Assembly:\n"), cout);
         doc = pretty_assembler(gen_target.target, &arena);
-        write_doc(doc, cout);
-        write_string(mv_string("\nCode Segment:\n"), cout);
+        write_doc_formatted(doc, 120, cout);
+        write_fstring(mv_string("\nCode Segment:\n"), cout);
         doc = pretty_assembler(gen_target.code_aux, &arena);
-        write_doc(doc, cout);
-        write_string(mv_string("\nData Segment:\n"), cout);
-        write_string(string_from_ASCII(*gen_target.data_aux, &arena), cout);
+        write_doc_formatted(doc, 120, cout);
+        write_fstring(mv_string("\nData Segment:\n"), cout);
+        // TODO (FEAT): as per string (below)
+        write_fstring(mv_string("TODO: data segment needs to type-annotate data to display properly!"), cout);
+        //write_fstring(string_from_ASCII(*gen_target.data_aux, &arena), cout);
+        write_fstring(mv_string("\n"), cout);
     }
 
     // -------------------------------------------------------------------------
@@ -148,14 +165,13 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
 
     EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
     if (opts.debug_print) {
-        write_string(mv_string("Pretty Printing Evaluation Result\n"), cout);
+        write_fstring(mv_string("Evaluation Result\n"), cout);
     }
 
     if (opts.debug_print || opts.interactive) {
         doc = pretty_res(call_res, &arena);
-
-        write_doc(doc, cout);
-        write_string(mv_string("\n"), cout);
+        write_doc_formatted(doc, 140, get_formatted_stdout());
+        write_fstring(mv_string("\n"), cout);
     }
 
     delete_assembler(gen_target.target);
@@ -164,15 +180,15 @@ bool repl_iter(IStream* cin, OStream* cout, Allocator* a, Allocator* exec, Modul
     return true;
 
  on_pi_error:
-    display_error(pi_point.error, cin, cout, &arena);
+    display_error(pi_point.multi, cin, cout, &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
     return true;
 
  on_error:
-    write_string(point.error_message, cout);
-    write_string(mv_string("\n"), cout);
+    write_fstring(point.error_message, cout);
+    write_fstring(mv_string("\n"), cout);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
@@ -198,6 +214,9 @@ int main(int argc, char** argv) {
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
     init_terminal(stdalloc);
+    if (init_window_system(stdalloc)) {
+        write_string(mv_string("Warning: failed to init window system!\n"), cout);
+    }
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);
@@ -226,13 +245,16 @@ int main(int argc, char** argv) {
             .debug_print = command.repl.debug_print,
             .interactive = true,
         };
-        while (repl_iter(cin, cout, stdalloc, &exalloc, module, opts));
+        write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
+        write_string(mv_string(version), cout);
+        write_string(mv_string("\n"), cout);
+        while (repl_iter(cin, get_formatted_stdout(), stdalloc, &exalloc, module, opts));
         break;
     }
     case CScript: {
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
-            run_script_from_istream(fin, cout, module, stdalloc);
+            run_script_from_istream(fin, get_formatted_stdout(), module, stdalloc);
             delete_istream(fin, stdalloc);
         } else {
             write_string(mv_string("Failed to open file: "), cout);
@@ -248,19 +270,20 @@ int main(int argc, char** argv) {
         };
 
         IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
-        while (repl_iter(sin, cout, stdalloc, &exalloc, module, opts));
+        while (repl_iter(sin, get_formatted_stdout(), stdalloc, &exalloc, module, opts));
         delete_istream(sin, stdalloc);
         break;
     }
-    case CHelp: {
-        write_help_string(cout);
+    case CHelp:
+        write_help_string(get_formatted_stdout());
         break;
-    }
-    case CInvalid: {
+    case CVersion:
+        write_string(mv_string("Pico Relic compiler - Version 0.0.3\n"), cout);
+        break;
+    case CInvalid:
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
         break;
-    }
     default:
         write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
         write_string(mv_string("\n"), cout);

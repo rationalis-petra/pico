@@ -18,6 +18,43 @@
 // lhs_symbol
 // rhs_symbol
 
+typedef enum {
+    NoDefault, Integral, Floating, Struct, Enum
+} UVarDefault;
+
+typedef enum {
+    ConInt, ConFloat, ConField, ConVariant,
+} ConstraintType;
+
+typedef struct {
+    Symbol name;
+    PiType* type;
+} FieldConstraint;
+
+typedef struct {
+    Symbol name;
+    PtrArray* types;
+} VariantConstraint;
+
+typedef struct {
+    ConstraintType type;
+    Range range;
+    union {
+        int64_t fits;
+        FieldConstraint has_field;
+        VariantConstraint has_variant;
+    };
+} Constraint;
+
+ARRAY_HEADER(Constraint, constraint, Constraint)
+ARRAY_COMMON_IMPL(Constraint, constraint, Constraint)
+
+struct UVarType {
+    PiType* subst;
+    ConstraintArray constraints;
+    UVarDefault default_behaviour;
+};
+
 typedef struct {
     Symbol lhs;
     Symbol rhs;
@@ -37,21 +74,21 @@ typedef SymPair SymbolPair;
 PiType* trace_uvar(PiType* uvar);
 
 // Unify two types such they are equal. Assumes they have the same sort
-Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
-Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
+UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
 
-Result assert_maybe_integral(PiType* type);
-Result assert_maybe_floating(PiType* type);
+UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a);
+UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, PtrArray rhs_args, SymPairArray *rename, Allocator *a);
+UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a);
+UnifyResult add_constraint(Constraint con, UVarType* uvar, Allocator* a);
 
-
-Result unify(PiType* lhs, PiType* rhs, Allocator* a) {
+UnifyResult unify(PiType* lhs, PiType* rhs, Allocator* a) {
     SymPairArray renames = mk_sym_pair_array(8, a);
-    Result r = unify_internal(lhs, rhs, &renames, a);
+    UnifyResult r = unify_internal(lhs, rhs, &renames, a);
     sdelete_sym_pair_array(renames);
     return r;
 }
 
-Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
+UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     // Unification Implementation:
     // The LHS and RHS may contain unification variables
     // These are represented as a pair *(uid, type*) 
@@ -59,38 +96,22 @@ Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator*
     lhs = trace_uvar(lhs);
     rhs = trace_uvar(rhs);
 
-    Result out;
+    UnifyResult out;
     // Shortcut: if lhs == rhs, then the types are identical and no work needs
     // to be done.
     if (lhs == rhs) {
-        return (Result) {.type = Ok};
+        return (UnifyResult) {.type = UOk};
     }
 
     // Note that this is left-biased: if lhs and RHS are both uvars, lhs is
     // instantiated to be the same as RHS
     if (lhs->sort == TUVar) {
-        lhs->uvar->subst = rhs;
-        out.type = Ok;
+        out = uvar_subst(lhs->uvar, rhs, a);
+        if (out.type != UOk) return out;
     }
     else if (rhs->sort == TUVar) {
-        rhs->uvar->subst = lhs;
-        out.type = Ok;
-    }
-    else if (lhs->sort == TUVarIntegral) {
-        out = assert_maybe_integral(rhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
-    }
-    else if (rhs->sort == TUVarIntegral) {
-        out = assert_maybe_integral(rhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
-    }
-    else if (lhs->sort == TUVarFloating) {
-        out = assert_maybe_floating(lhs);
-        if (out.type == Ok) lhs->uvar->subst = rhs;
-    }
-    else if (rhs->sort == TUVarFloating) {
-        out = assert_maybe_floating(lhs);
-        if (out.type == Ok) rhs->uvar->subst = lhs;
+        out = uvar_subst(rhs->uvar, lhs, a);
+        if (out.type != UOk) return out;
     }
     else if (rhs->sort == lhs->sort)
         out = unify_eq(lhs, rhs, rename, a);
@@ -101,12 +122,35 @@ Result unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator*
         push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
         push_ptr(pretty_type(rhs, a), &nodes);
 
-        out = (Result) {
-            .type = Err,
-            .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
+        out = (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_sep_doc(nodes, a),
         };
     }
     return out;
+}
+
+UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, PtrArray rhs_args, SymPairArray *rename, Allocator *a) {
+    if (!symbol_eq(rhs_sym, lhs_sym)) {
+        return (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.", a)
+        };
+    }
+
+    if (lhs_args.len != rhs_args.len) {
+        return (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_cstr_doc("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
+        };
+    }
+
+    for (size_t i = 0; i < lhs_args.len; i++) {
+        UnifyResult out = unify_internal(lhs_args.data[i], rhs_args.data[i], rename, a);
+        if (out.type != UOk) return out;
+    }
+
+    return (UnifyResult) {.type = UOk};
 }
 
 bool var_eq(Symbol lhs, Symbol rhs, SymPairArray *rename) {
@@ -124,11 +168,11 @@ bool var_eq(Symbol lhs, Symbol rhs, SymPairArray *rename) {
     return symbol_eq(lhs, rhs);
 }
 
-Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
+UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     switch (lhs->sort) {
     case TPrim: {
         if (lhs->prim == rhs->prim) {
-            return (Result) {.type = Ok};
+            return (UnifyResult) {.type = UOk};
         } else {
             PtrArray nodes = mk_ptr_array(8, a);
             push_ptr(mk_str_doc(mv_string("Unification failed: could not unify unequal primitives"), a), &nodes);
@@ -136,9 +180,9 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
             push_ptr(pretty_type(rhs, a), &nodes);
 
-            return (Result) {
-                .type = Err,
-                .error_message = doc_to_str(mv_sep_doc(nodes, a), a),
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_sep_doc(nodes, a),
             };
         }
         break;
@@ -146,21 +190,21 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     case TProc: {
         if (lhs->proc.args.len != rhs->proc.args.len
             || lhs->proc.implicits.len != rhs->proc.implicits.len) {
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Unification failed: provided two different procedures with differing number of arguments or implicits.", a)
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: provided two different procedures with differing number of arguments or implicits.", a)
             };
         }
 
         for (size_t i = 0; i < lhs->proc.implicits.len; i++) {
-            Result out = unify_internal(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], rename, a);
-            if (out.type == Err) return out;
+            UnifyResult out = unify_internal(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], rename, a);
+            if (out.type != UOk) return out;
         }
 
         // Unify each argumet
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
-            Result out = unify_internal(lhs->proc.args.data[i], rhs->proc.args.data[i], rename, a);
-            if (out.type == Err) return out;
+            UnifyResult out = unify_internal(lhs->proc.args.data[i], rhs->proc.args.data[i], rename, a);
+            if (out.type != UOk) return out;
         }
 
         // Unify the return values
@@ -170,9 +214,9 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     }
     case TStruct: {
         if (lhs->structure.fields.len != rhs->structure.fields.len) {
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Unification failed: two different structures with differing number of fields.", a)
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: two different structures with differing number of fields.", a)
             };
         }
 
@@ -184,60 +228,44 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
             PiType* rhs_ty = rhs->structure.fields.data[i].val;
 
             if (!symbol_eq(rhs_sym, lhs_sym)) {
-                return (Result) {
-                    .type = Err,
-                    .error_message = mk_string("Unification failed: RHS and LHS structures must have matching field-names.", a)
+                return (UnifyResult) {
+                    .type = USimpleError,
+                    .message = mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a)
                 };
             }
 
-            Result out = unify_internal(lhs_ty, rhs_ty, rename, a);
-            if (out.type == Err) return out;
+            UnifyResult out = unify_internal(lhs_ty, rhs_ty, rename, a);
+            if (out.type != UOk) return out;
         }
 
-        return (Result) {.type = Ok,};
+        return (UnifyResult) {.type = UOk,};
         break;
     }
     case TEnum: {
         if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) {
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Unification failed: two different enums with differing number of variants.", a)
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a)
             };
         }
 
         for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
-            Symbol lhs_sym = lhs->structure.fields.data[i].key;
-            PtrArray lhs_args = *(PtrArray*) lhs->structure.fields.data[i].val;
+            Symbol lhs_sym = lhs->enumeration.variants.data[i].key;
+            PtrArray lhs_args = *(PtrArray*)lhs->enumeration.variants.data[i].val;
 
-            Symbol rhs_sym = lhs->structure.fields.data[i].key;
-            PtrArray rhs_args = *(PtrArray*) lhs->structure.fields.data[i].val;
-
-            if (!symbol_eq(rhs_sym, lhs_sym)) {
-                return (Result) {
-                    .type = Err,
-                    .error_message = mk_string("Unification failed: RHS and LHS enums must have matching variant-names.", a)
-                };
-            }
-
-            if (lhs_args.len != rhs_args.len) {
-                return (Result) {
-                    .type = Err,
-                    .error_message = mk_string("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
-                };
-            }
-
-            for (size_t i = 0; i < lhs_args.len; i++) {
-                Result out = unify_internal(lhs_args.data[i], rhs_args.data[i], rename, a);
-                if (out.type == Err) return out;
-            }
+            Symbol rhs_sym = rhs->enumeration.variants.data[i].key;
+            PtrArray rhs_args = *(PtrArray*)rhs->enumeration.variants.data[i].val;
+            UnifyResult out = unify_variant(lhs_sym, lhs_args, rhs_sym, rhs_args, rename, a);
+            if (out.type != UOk) return out;
         }
 
-        return (Result) {.type = Ok,};
+
+        return (UnifyResult) {.type = UOk,};
         break;
     }
     case TReset: {
-        Result out = unify_internal(lhs->reset.in, rhs->reset.in, rename, a);
-        if (out.type == Err) return out;
+        UnifyResult out = unify_internal(lhs->reset.in, rhs->reset.in, rename, a);
+        if (out.type != UOk) return out;
         return unify_internal(lhs->reset.out, rhs->reset.out, rename, a);
         break;
     }
@@ -251,27 +279,27 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
           .rhs = rhs->named.name
       };
       push_sym_pair(syms, rename);
-      Result res = unify_internal(lhs->named.type, rhs->named.type, rename, a); 
+      UnifyResult res = unify_internal(lhs->named.type, rhs->named.type, rename, a); 
       rename->len--;
 
-      if (res.type == Err) return res;
+      if (res.type != UOk) return res;
 
       if (lhs->named.args && rhs->named.args) {
         if (lhs->named.args->len != rhs->named.args->len) {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("named type mismatch: different arg count!"),
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("named type mismatch: different arg count!", a),
             };
         }
 
         for (size_t i = 0; i < lhs->named.args->len; i++) {
             res = unify_internal(lhs->named.args->data[i], rhs->named.args->data[i], rename, a); 
-            if (res.type == Err) return res;
+            if (res.type != UOk) return res;
         }
       } else if (lhs->named.args || rhs->named.args) {
-        return (Result) {
-            .type = Err,
-            .error_message = mv_string("named type mismatch: one has args and one doesn't!"),
+        return (UnifyResult) {
+            .type = USimpleError,
+            .message = mv_cstr_doc("named type mismatch: one has args and one doesn't!", a),
         };
       }
       return res;
@@ -279,21 +307,21 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
     }
     case TDistinct: {
         if (lhs->distinct.id != rhs->distinct.id || lhs->distinct.source_module != rhs->distinct.source_module) {
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Cannot Unify two distinct types of unequal IDs or source modules", a),
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Cannot Unify two distinct types of unequal IDs or source modules", a),
             };
         }
 
         // Note: we can assume that either LHS and RHS both have args or neither
         // do, as we have already checked they have the same IDs! (I think??)
         if (lhs->distinct.args) {
-            Result res;
+            UnifyResult res;
             PtrArray lhs_args = *lhs->distinct.args;
             PtrArray rhs_args = *rhs->distinct.args;
             for (size_t i = 0; i < lhs_args.len; i++) {
                 res = unify_internal(lhs_args.data[i], rhs_args.data[i], rename, a);
-                if (res.type == Err) return res;
+                if (res.type != UOk) return res;
             }
         }
 
@@ -301,21 +329,21 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
         break;
     } case TKind: {
           if (lhs->kind.nargs == rhs->kind.nargs)
-              return (Result) {.type = Ok};
+              return (UnifyResult) {.type = UOk};
           else 
-              return (Result) {
-                  .type = Err,
-                  .error_message = mk_string("Cannot Unify two kinds of unequal nags", a),
+              return (UnifyResult) {
+                  .type = USimpleError,
+                  .message = mv_cstr_doc("Cannot Unify two kinds of unequal nags", a),
               };
           break;
       }
     case TConstraint: {
         if (lhs->constraint.nargs == rhs->constraint.nargs)
-            return (Result) {.type = Ok};
+            return (UnifyResult) {.type = UOk};
         else 
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Cannot Unify two constraints of unequal nags", a),
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Cannot Unify two constraints of unequal nags", a),
             };
         break;
     }
@@ -324,17 +352,17 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
 
         // Check they are the same var
         if (!var_eq(lhs->var, rhs->var, rename)) {
-            return (Result) {
-                .type = Err,
-                .error_message = mk_string("Cannot Unify different type variables", a),
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Cannot Unify different type variables", a),
             };
         }
-        return (Result) {.type = Ok};
+        return (UnifyResult) {.type = UOk};
         break;
     }
     case TAll: {
         if (lhs->binder.vars.len != rhs->binder.vars.len) {
-            return (Result) {.type = Err};
+            return (UnifyResult) {.type = USimpleError};
         }
         for (size_t i = 0; i < lhs->binder.vars.len; i++) {
             SymPair syms = (SymPair){
@@ -343,7 +371,7 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
             };
             push_sym_pair(syms, rename);
         };
-        Result res = unify_internal(lhs->binder.body, rhs->binder.body, rename, a);
+        UnifyResult res = unify_internal(lhs->binder.body, rhs->binder.body, rename, a);
         rename->len -= lhs->binder.vars.len;
         return res;
         break;
@@ -354,49 +382,142 @@ Result unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* a) {
         push_ptr(pretty_type(lhs, a), &nodes);
         push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
         push_ptr(pretty_type(rhs, a), &nodes);
-        panic(doc_to_str(mv_sep_doc(nodes, a), a));
+        panic(doc_to_str(mv_sep_doc(nodes, a), 80, a));
     } 
     }
 }
 
-Result assert_maybe_integral(PiType* type) {
-    // Use a while loop to trace through uvars
-    while (type) {
-        // If it is a primtive, check it is integral type
-        if (type->sort == TPrim && (type->prim < 0b1000)) {
-            return (Result) {.type = Ok};
-        } else if (type->sort == TUVar || type->sort == TUVarIntegral) {
-            // continue on to next iteration
-            type = type->uvar->subst;
-        } else {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
-            };
+UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
+    // ------------------------------------------------------------
+    // Uvar Subst
+    // The goal of uvar subst is to ensure that the uvar substitutes in type. If
+    // typeis itself a uvar, then the constraints from the uvar argument must be
+    // propagated into the type argument.
+    // ------------------------------------------------------------
+
+    if (type->sort == TUVar) {
+        UVarType* rhs = type->uvar; 
+        // type has been traced, so if it's a uvar, no need to chase!
+        // check that the defaults are compatible
+        if (uvar->default_behaviour != NoDefault) {
+            // Check that the two unification variables are compatible
+            if (rhs->default_behaviour == NoDefault ||
+                rhs->default_behaviour == uvar->default_behaviour) {
+                rhs->default_behaviour = uvar->default_behaviour;
+                for (size_t i = 0; i < uvar->constraints.len; i++) {
+                    UnifyResult res = add_constraint(uvar->constraints.data[i], type->uvar, a);
+                    if (res.type != UOk) return res;
+                }
+                return (UnifyResult){.type = UOk};
+            } else {
+                return (UnifyResult) {
+                    .type = USimpleError,
+                    .message = mv_cstr_doc("Cannot push forward deafult.", a)
+                };
+            }
+        }
+    } else {
+        // TODO: better error messages
+        PiType* unwrapped = unwrap_type(type, a);
+        for (size_t i = 0; i < uvar->constraints.len; i++) {
+            switch (uvar->constraints.data[i].type) {
+            case ConInt:
+                if (unwrapped->sort != TPrim || unwrapped->prim > 0b111) {
+                  return (UnifyResult) {
+                    .type = UConstraintError,
+                    .initial = uvar->constraints.data[i].range,
+                    .message = mv_cstr_doc("Does not satisfy integral constraint.", a)
+                  };
+                }
+                break;
+            case ConFloat:
+                if (unwrapped->sort != TPrim || (unwrapped->prim != Float_32 && unwrapped->prim != Float_64)) {
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_cstr_doc("Type does not satisfy floating constraint:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+                    return (UnifyResult) {.type = USimpleError, .message = mv_hsep_doc(nodes, a)};
+                }
+                break;
+            case ConField: {
+                if (unwrapped->sort != TStruct) {
+                    return (UnifyResult) {.type = USimpleError, .message = mv_cstr_doc("Does not satisfy field constraint: not a Struct", a)};
+                }
+                bool found_field = false;
+                for (size_t j = 0; j < unwrapped->structure.fields.len; j++) {
+                    if (symbol_eq(unwrapped->structure.fields.data[j].key,
+                                  uvar->constraints.data[i].has_field.name)) {
+                        UnifyResult out = unify(unwrapped->structure.fields.data[j].val, uvar->constraints.data[i].has_field.type, a); 
+                        if (out.type != UOk) return out;
+                        found_field = true;
+                    }
+                }
+
+                if (!found_field) {
+                    PtrArray nodes = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("Does not satisfy field constraint - field not found:", a), &nodes);
+                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_cstr_doc("in type:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+                                  
+                    return (UnifyResult) {
+                        .type = UConstraintError,
+                        .initial = uvar->constraints.data[i].range,
+                        .message = mv_hsep_doc(nodes, a),
+                    };
+                }
+                break;
+            }
+            case ConVariant: {
+                if (unwrapped->sort != TEnum) {
+                    return (UnifyResult) {.type = USimpleError, .message = mv_cstr_doc("Does not satisfy variant constraint: not an Enum", a)};
+                }
+                bool found_variant = false;
+                for (size_t j = 0; j < unwrapped->enumeration.variants.len; j++) {
+                    if (symbol_eq(unwrapped->enumeration.variants.data[j].key,
+                                  uvar->constraints.data[i].has_variant.name)) {
+                        Symbol lhs_sym = unwrapped->enumeration.variants.data[j].key;
+                        PtrArray lhs_args = *(PtrArray*)unwrapped->enumeration.variants.data[j].val;
+                        Symbol rhs_sym = uvar->constraints.data[i].has_variant.name;
+                        PtrArray rhs_args = *uvar->constraints.data[i].has_variant.types;
+
+                        SymPairArray renames = mk_sym_pair_array(8, a);
+                        UnifyResult out = unify_variant(lhs_sym, lhs_args, rhs_sym, rhs_args, &renames, a);
+                        sdelete_sym_pair_array(renames);
+                        if (out.type != UOk) return out;
+                        found_variant = true;
+                    }
+                }
+
+                if (!found_variant) {
+                    PtrArray nodes = mk_ptr_array(5, a);
+                    push_ptr(mv_cstr_doc("Does not satisfy variant constraint - variant not found:", a), &nodes);
+                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    {
+                        PtrArray types = *uvar->constraints.data[i].has_variant.types;
+                        PtrArray ptypes = mk_ptr_array(types.len, a);
+                        for (size_t i = 0; i < uvar->constraints.data[i].has_variant.types->len; i++) {
+                            push_ptr(pretty_type(type, a), &ptypes);
+                        }
+                        push_ptr(mv_grouped_sep_doc(ptypes, a), &nodes);
+                    }
+                    push_ptr(mv_cstr_doc("in type:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+                                  
+                    return (UnifyResult) {
+                        .type = UConstraintError,
+                        .initial = uvar->constraints.data[i].range,
+                        .message = mv_hsep_doc(nodes, a),
+                    };
+                }
+                break;
+            }
+            }
         }
     }
-    return (Result) {.type = Ok};
+    
+    uvar->subst = type;
+    return (UnifyResult){.type = UOk};
 }
-
-Result assert_maybe_floating(PiType* type) {
-    // Use a while loop to trace through uvars
-    while (type) {
-        // If it is a primtive, check it is integral type
-        if (type->sort == TPrim && (type->prim == Float_32 || type->prim == Float_64)) {
-            return (Result) {.type = Ok};
-        } else if (type->sort == TUVar || type->sort == TUVarFloating) {
-            // continue on to next iteration
-            type = type->uvar->subst;
-        } else {
-            return (Result) {
-                .type = Err,
-                .error_message = mv_string("Cannot unify an integral type with a non-integral type!"),
-            };
-        }
-    }
-    return (Result) {.type = Ok};
-}
-
 
 bool has_unification_vars_p(PiType type) {
     // Only return t if uvars don't go anywhere
@@ -496,15 +617,13 @@ bool has_unification_vars_p(PiType type) {
 
     // Special sort: unification variable
     case TUVar:
-        if (type.uvar->subst == NULL) {
+        if (type.uvar->subst == NULL && type.uvar->default_behaviour == NoDefault) {
             return true;
-        } else {
+        } else if (type.uvar->subst != NULL) {
             return has_unification_vars_p(*type.uvar->subst);
+        } else {
+            return false;
         }
-
-    case TUVarIntegral:
-    case TUVarFloating:
-        return false;
     }
 
     // If we are here, then none of the branches were taken!
@@ -512,7 +631,7 @@ bool has_unification_vars_p(PiType type) {
 }
 
 PiType* trace_uvar(PiType* uvar) {
-  while ((uvar->sort == TUVar || uvar->sort == TUVarIntegral || uvar->sort == TUVarFloating)
+  while ((uvar->sort == TUVar)
          && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
@@ -520,23 +639,23 @@ PiType* trace_uvar(PiType* uvar) {
 }
 
 
-void squash_type(PiType* type) {
+void squash_type(PiType* type, Allocator* a) {
     switch (type->sort) {
     case TPrim:
         break;
     case TProc: {
         for (size_t i = 0; i < type->proc.implicits.len; i++) {
-            squash_type((PiType*)(type->proc.implicits.data[i]));
+            squash_type((PiType*)(type->proc.implicits.data[i]), a);
         }
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            squash_type((PiType*)(type->proc.args.data[i]));
+            squash_type((PiType*)(type->proc.args.data[i]), a);
         }
-        squash_type(type->proc.ret);
+        squash_type(type->proc.ret, a);
         break;
     }
     case TStruct: {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
-            squash_type((PiType*)((type->structure.fields.data + i)->val));
+            squash_type((PiType*)((type->structure.fields.data + i)->val), a);
         }
         break;
     }
@@ -544,48 +663,58 @@ void squash_type(PiType* type) {
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray types = *(PtrArray*)type->enumeration.variants.data[i].val;
             for (size_t j = 0; j < types.len; j++) {
-                squash_type((PiType*)types.data[j]);
+                squash_type((PiType*)types.data[j], a);
             }
         }
         break;
     }
     case TReset: {
-        squash_type((PiType*)type->reset.in);
-        squash_type((PiType*)type->reset.out);
+        squash_type((PiType*)type->reset.in, a);
+        squash_type((PiType*)type->reset.out, a);
         break;
     }
     case TDynamic: {
-        squash_type((PiType*)type->dynamic);
+        squash_type((PiType*)type->dynamic, a);
         break;
     }
     case TVar: break;
     case TAll: 
     case TFam: {
-        squash_type(type->binder.body);
+        squash_type(type->binder.body, a);
         break;
     }
     case TNamed: {
-        squash_type(type->named.type);
+        squash_type(type->named.type, a);
+        if (type->named.args) {
+            for (size_t i = 0; i < type->named.args->len; i++) {
+                squash_type(type->named.args->data[i], a);
+            }
+        }
         break;
     }
     case TDistinct: {
-        squash_type(type->distinct.type);
+        squash_type(type->distinct.type, a);
+        if (type->distinct.args) {
+            for (size_t i = 0; i < type->distinct.args->len; i++) {
+                squash_type(type->distinct.args->data[i], a);
+            }
+        }
         break;
     }
     case TTrait: {
         // TODO (INVESTIGATE PERFORMANCE): do we need to squash implicits also?
         for (size_t i = 0; i < type->trait.fields.len; i++) {
-            squash_type((type->trait.fields.data + i)->val);
+            squash_type((type->trait.fields.data + i)->val, a);
         }
         break;
     }
     case TTraitInstance: {
         for (size_t i = 0; i < type->instance.args.len; i++) {
-            squash_type(type->instance.args.data[i]);
+            squash_type(type->instance.args.data[i], a);
         }
 
         for (size_t i = 0; i < type->instance.fields.len; i++) {
-            squash_type(type->instance.fields.data[i].val);
+            squash_type(type->instance.fields.data[i].val, a);
         }
         break;
     }
@@ -597,32 +726,239 @@ void squash_type(PiType* type) {
     case TUVar: {
         PiType* subst = type->uvar->subst;
         if (subst) {
-            squash_type(subst);
+            squash_type(subst, a);
             *type = *subst;
-        } 
-        break;
-    }
-    case TUVarIntegral: {
-        PiType* subst = type->uvar->subst;
-        if (subst) {
-            squash_type(subst);
-            *type = *subst;
-        } else {
-            *type = (PiType) {.sort = TPrim, .prim = Int_64,};
         }
-        break;
-    }
-    case TUVarFloating: {
-        PiType* subst = type->uvar->subst;
-        if (subst) {
-            squash_type(subst);
-            *type = *subst;
-        } else {
-            *type = (PiType) {.sort = TPrim, .prim = Float_64,};
+
+        // If still a unification variable, 
+        // instantiate with default behavioru
+        if (type->sort == TUVar) {
+          switch (type->uvar->default_behaviour) {
+          case NoDefault:
+              break;
+          case Integral:
+              *type = (PiType){.sort = TPrim, .prim = Int_64};
+              break;
+          case Floating:
+              *type = (PiType){.sort = TPrim, .prim = Float_64};
+              break;
+          case Struct: {
+              SymPtrAMap out_fields = mk_sym_ptr_amap(type->uvar->constraints.len, a);
+              for (size_t i = 0; i < type->uvar->constraints.len; i++) {
+                  Constraint con = type->uvar->constraints.data[i];
+                  if (con.type != ConField)
+                      panic(mv_string("Bad constraint: struct uvar should have only field constraints!"));
+
+                  squash_type(con.has_field.type, a);
+                  sym_ptr_insert(con.has_field.name, con.has_field.type, &out_fields);
+              }
+              *type = (PiType){.sort = TEnum, .structure.fields = out_fields};
+              break;
+          }
+          case Enum: {
+              SymPtrAMap out_variants = mk_sym_ptr_amap(type->uvar->constraints.len, a);
+              for (size_t i = 0; i < type->uvar->constraints.len; i++) {
+                  Constraint con = type->uvar->constraints.data[i];
+                  if (con.type != ConVariant)
+                      panic(mv_string("Bad constraint: enum uvar should have only variant constraints!"));
+
+                  for (size_t i = 0; i < con.has_variant.types->len; i++) {
+                      squash_type(con.has_variant.types->data[i], a);
+                  }
+
+                  sym_ptr_insert(con.has_variant.name, con.has_variant.types, &out_variants);
+              }
+              *type = (PiType){.sort = TEnum, .enumeration.variants = out_variants};
+              break;
+          }
+          }
         }
         break;
     }
     default: 
         panic(mv_string("squash_type received invalid type!"));
     }
+}
+
+PiType* mk_uvar(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = NoDefault,
+    };
+    
+    return uvar;
+}
+
+PiType* mk_uvar_integral(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = Integral,
+    };
+
+    Constraint con = (Constraint) {
+        .type = ConInt,
+    };
+    push_constraint(con, &uvar->uvar->constraints);
+    
+    return uvar;
+}
+
+PiType* mk_uvar_floating(Allocator* a) {
+    PiType* uvar = mem_alloc(sizeof(PiType), a);
+    uvar->sort = TUVar; 
+
+    uvar->uvar = mem_alloc(sizeof(UVarType), a);
+    *uvar->uvar = (UVarType) {
+      .subst = NULL,
+      .constraints = mk_constraint_array(4, a),
+      .default_behaviour = Floating,
+    };
+
+    Constraint con = (Constraint) {
+        .type = ConFloat,
+    };
+    push_constraint(con, &uvar->uvar->constraints);
+    
+    return uvar;
+}
+
+UnifyResult add_field_constraint(UVarType *uvar, Range range, Symbol field, PiType *field_ty, Allocator *a) {
+    while (true) {
+        if ((uvar->default_behaviour == NoDefault) | (uvar->default_behaviour == Struct)) {
+            uvar->default_behaviour = Struct;
+            bool append = true;
+            for (size_t i = 0; i < uvar->constraints.len; i++) {
+                if (uvar->constraints.data[i].type != ConField) {
+                    return (UnifyResult) {
+                        .type = USimpleError,
+                        .message = mv_cstr_doc("incompatible uvar constraints!", a),
+                    };
+                } else {
+                    if (symbol_eq(uvar->constraints.data[i].has_field.name, field)) {
+                        UnifyResult out = unify(uvar->constraints.data[i].has_field.type, field_ty, a);
+                        if (out.type != UOk) return out; 
+                        append = false;
+                    }
+                }
+            }
+            if (append) {
+                Constraint con = (Constraint) {
+                    .type = ConField,
+                    .range = range,
+                    .has_field.name = field,
+                    .has_field.type = field_ty,
+                };
+                push_constraint(con, &uvar->constraints);
+            }
+        } else {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("incompatible uvar types!", a),
+            };
+        }
+
+        if (uvar->subst && uvar->subst->sort == TUVar) {
+            uvar = uvar->subst->uvar;
+        } else {
+            break; // stop the loop
+        }
+    }
+    return (UnifyResult){.type = UOk};
+}
+
+UnifyResult add_variant_constraint(UVarType *uvar, Range range, Symbol variant, PtrArray variant_types, Allocator *a) {
+    while (true) {
+        if ((uvar->default_behaviour == NoDefault) | (uvar->default_behaviour == Enum)) {
+            uvar->default_behaviour = Enum;
+            bool append = true;
+            for (size_t i = 0; i < uvar->constraints.len; i++) {
+                if (uvar->constraints.data[i].type != ConField) {
+                    return (UnifyResult) {
+                        .type = USimpleError,
+                        .message = mv_cstr_doc("incompatible uvar constraints!", a),
+                    };
+                } else {
+                    if (symbol_eq(uvar->constraints.data[i].has_field.name, variant)) {
+
+                        SymPairArray renames = mk_sym_pair_array(8, a);
+                        UnifyResult out = unify_variant(
+                                                        variant, variant_types,
+                                                        uvar->constraints.data[i].has_variant.name,
+                                                        *uvar->constraints.data[i].has_variant.types,
+                                                        &renames,
+                                                        a);
+                        sdelete_sym_pair_array(renames);
+                        if (out.type != UOk) return out; 
+                        append = false;
+                    }
+                }
+            }
+            if (append) {
+                PtrArray* types = mem_alloc(sizeof(PtrArray), a);
+                *types = variant_types;
+                Constraint con = (Constraint) {
+                    .type = ConVariant,
+                    .range = range,
+                    .has_variant.name = variant,
+                    .has_variant.types = types,
+                };
+                push_constraint(con, &uvar->constraints);
+            }
+        } else {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("incompatible uvar types!", a),
+            };
+        }
+
+        if (uvar->subst && uvar->subst->sort == TUVar) {
+            uvar = uvar->subst->uvar;
+        } else {
+            break; // stop the loop
+        }
+    }
+    return (UnifyResult){.type = UOk};
+}
+
+UnifyResult add_constraint(Constraint con, UVarType *uvar, Allocator *a) {
+  switch (con.type) {
+  case ConInt:
+      for (size_t i = 0; i < uvar->constraints.len; i++) {
+        if (uvar->constraints.data[i].type != ConInt) {
+            // TODO (BUG) ensure constraints are compatibel
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Incompatible constraints!", a),
+            };
+        }
+      }
+      return (UnifyResult){.type = UOk};
+  case ConFloat:
+      for (size_t i = 0; i < uvar->constraints.len; i++) {
+        if (uvar->constraints.data[i].type != ConFloat) {
+            // TODO (BUG) ensure constraints are compatibel
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Incompatible constraints!", a),
+            };
+        }
+      }
+      return (UnifyResult){.type = UOk};
+  case ConField:
+      return add_field_constraint(uvar, con.range, con.has_field.name, con.has_field.type, a);
+  case ConVariant:
+      return add_variant_constraint(uvar, con.range, con.has_variant.name, *con.has_variant.types, a);
+  }
+
+  panic(mv_string("Invalid constraint provided to add_constraint"));
 }

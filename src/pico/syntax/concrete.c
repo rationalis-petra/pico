@@ -33,15 +33,13 @@ Document* pretty_rawtree(RawTree tree, Allocator* a) {
           default: close = ")"; break;
         };
 
-        PtrArray doc_arr = mk_ptr_array(tree.branch.nodes.len + 2, a);
-        push_ptr(mv_str_doc(mk_string(open, a), a), &doc_arr);
+        PtrArray doc_arr = mk_ptr_array(tree.branch.nodes.len, a);
         for (size_t i = 0; i < tree.branch.nodes.len; i++) {
             RawTree node = tree.branch.nodes.data[i];
             Document* doc = pretty_rawtree(node, a);
             push_ptr(doc, &doc_arr);
         }
-        push_ptr(mv_str_doc(mk_string(close, a), a), &doc_arr);
-        out = mv_sep_doc(doc_arr, a);
+        out = mk_paren_doc(open, close, mv_hsep_doc(doc_arr, a), a);
         break;
     }
     }

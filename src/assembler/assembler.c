@@ -80,12 +80,12 @@ Document* pretty_assembler(Assembler* assembler, Allocator* a) {
         int len = snprintf(NULL, 0, "%02x", assembler->instructions.data[i]) + 1;
         char* str = (char*)mem_alloc(sizeof(char) * len, a);
         snprintf(str, len, "%02" PRIx8, assembler->instructions.data[i]);
-        Document* arg = mv_str_doc(mv_string(str), a);
+        Document* arg = mv_cstr_doc(str, a);
 
         push_ptr(arg, &nodes);
     }
 
-    return mv_sep_doc(nodes, a);
+    return mv_hsep_doc(nodes, a);
 }
 
 Location reg(Regname reg, LocationSize sz) {
@@ -565,6 +565,10 @@ void build_binary_opcode_table() {
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x23;
     binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x23;
 
+    // r8, r/m8
+    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x22;
+    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x22;
+
     // Or
     // r/m64, imm8 & imm64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
@@ -583,6 +587,10 @@ void build_binary_opcode_table() {
     // r64, r/m64
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0B;
     binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0B;
+
+    // r8, r/m8
+    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x0A;
+    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x0A;
 
     // ------------------
     //  Bit Manipulation
@@ -711,7 +719,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary table entry for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
     }
 
     uint8_t rex_byte = be.init_rex_byte;
@@ -733,7 +741,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary opcode table entry for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
     }
     if (be.has_opcode_ext) {
         uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][3]; 
@@ -742,7 +750,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
             PtrArray nodes = mk_ptr_array(8, err_allocator);
             push_ptr(mk_str_doc(mv_string("Invalid binary opcode extension entry for: "), err_allocator), &nodes);
             push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-            throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), err_allocator));
+            throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
         }
     }
 
@@ -1257,7 +1265,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Invalid unary table entry for op: "), a), &nodes);
         push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), 80, a));
     }
     UnaryOpEntry uoe = unary_opcode_table[op][uindex(loc.type, loc.sz)];
 
@@ -1280,7 +1288,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Invalid unary opcode table entry for op: "), a), &nodes);
         push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), a));
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), 80, a));
     }
     if (uoe.opcode_modrm != 0x9) {
         modrm_byte |= modrm_reg(uoe.opcode_modrm);
@@ -1441,7 +1449,7 @@ AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_al
         push_ptr(pretty_nullary_op(op, err_allocator), &nodes);
         push_ptr(mk_str_doc(mv_string("/"), err_allocator), &nodes);
         push_ptr(pretty_i32(op, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_sep_doc(nodes, err_allocator), err_allocator));
+        throw_error(point, doc_to_str(mv_sep_doc(nodes, err_allocator), 80, err_allocator));
     }
     }
     U8Array* instructions = &assembler->instructions;

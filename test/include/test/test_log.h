@@ -1,17 +1,45 @@
 #ifndef __TEST_TEST_LOG_H
 #define __TEST_TEST_LOG_H
 
-#include "data/stream.h"
+#include <time.h>
+
+#include "platform/memory/allocator.h"
+#include "platform/io/terminal.h"
 
 typedef struct {
-  OStream* stream;
+    bool show_fails;
+    bool show_passes;
+    bool show_errors;
+    bool show_info;
+} Verbosity;
+
+typedef struct {
+    FormattedOStream* stream;
+    Verbosity verbosity;
+
+    clock_t start_time;
+
+    bool in_test;
+    String current_test;
+
+    size_t test_count;
+    size_t passed_tests;
+    size_t failed_tests;
 } TestLog;
 
-TestLog* mk_test_log(OStream* stream, Allocator* a);
+TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
 void delete_test_log(TestLog* log, Allocator* a);
 
-void test_log_fail(TestLog* log, String message);
+void test_start(TestLog* log, String name);
+
+void test_pass(TestLog* log);
+void test_fail(TestLog* log);
+
 void test_log_error(TestLog* log, String message);
 void test_log_info(TestLog* log, String message);
+
+FormattedOStream* get_fstream(TestLog* log);
+
+int summarize_tests(TestLog* log, Allocator* a);
 
 #endif

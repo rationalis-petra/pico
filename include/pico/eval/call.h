@@ -3,7 +3,6 @@
 #include <stdint.h>
 
 #include "platform/memory/allocator.h"
-#include "assembler/assembler.h"
 #include "pretty/document.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/modular.h"
@@ -33,7 +32,7 @@ typedef struct EvalResult {
     union {
         EvalVal val;
         EvalDef def;
-        SymbolArray opened;
+        PtrArray opened;
     };
 } EvalResult;
 

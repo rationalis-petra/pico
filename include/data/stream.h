@@ -41,7 +41,9 @@ String* get_captured_buffer(IStream* contents);
 
 OStream* get_stdout_stream();
 OStream* open_file_ostream(String filename, Allocator* a);
+OStream* mk_string_ostream(Allocator* a);
 
+String* current_string(OStream* os, Allocator* a);
 
 // Destructors
 void delete_istream(IStream* stream, Allocator* a);

@@ -585,6 +585,14 @@ CType mk_string_ctype(Allocator *a) {
                     "bytes", mk_voidptr_ctype(a));
 }
 
+CType mk_array_ctype(Allocator *a) {
+  return mk_struct_ctype(a, 4,
+                         "data", mk_voidptr_ctype(a),
+                         "len", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                         "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                         "allocator", mk_voidptr_ctype(a));
+}
+
 CType c_size_type;
 CType c_void;
 void init_ctypes() {

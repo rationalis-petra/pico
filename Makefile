@@ -8,7 +8,7 @@ RELEASE_DIR := $(BUILD_DIR)/release
 DEBUG_DIR := $(BUILD_DIR)/debug
 SRC_DIRS := ./src
 
-C_VERSION := c11
+C_VERSION := c99
 CC := gcc
 
 ## Platform specifics and configuration
@@ -18,8 +18,9 @@ DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lglfw
 	LINK_FLAGS := -ldl -lm
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -lglfw
 else
 	LINK_FLAGS := 
 endif
@@ -99,6 +100,9 @@ debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 .PHONY: test
 test: $(TEST_DIR)/$(TARGET_TEST)
 
+.PHONY: build_test
+test: $(TEST_DIR)/$(TARGET_TEST)
+
 .PHONY: install
 install: $(RELEASE_DIR)/$(TARGET_EXEC)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) ~/.local/bin
@@ -115,7 +119,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: run-test
-test: $(TEST_DIR)/$(TARGET_TEST)
+run-test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: all
@@ -125,6 +129,12 @@ all: debug release test
 .PHONY: debug_mode
 debug_mode:
 	set -x LD_LIBRARY_PATH /usr/lib/debug
+
+# use make <target> QUIET=1 to prevent make from printing! 
+# can be used in scripts, e.g. git pre-commit hooks
+ifdef QUIET
+.SILENT:
+endif
 
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those

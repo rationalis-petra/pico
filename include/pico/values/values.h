@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-#include "data/meta/array_header.h"
 #include "data/array.h"
 #include "data/string.h"
 #include "pretty/document.h"
@@ -79,12 +78,15 @@ typedef enum TermFormer {
     FSequence,
     FModule,
 
-    // Special Term formers
+    // Special Term formers, usually manipulating types 
+    // or being pseudo-functions
     FIs,
     FInTo,
     FOutOf,
     FName,
     FUnName,
+    FWiden,
+    FNarrow,
     FDynAlloc,
     FSizeOf,
     FAlignOf,
@@ -116,6 +118,8 @@ typedef enum TermFormer {
 
     // Formers for the meta module
     FTypeOf,
+    FDescribe,
+    FQuote,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

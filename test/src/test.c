@@ -42,9 +42,11 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
+    init_ctypes();
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+    init_terminal(stdalloc);
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);
@@ -68,7 +70,13 @@ int main(int argc, char** argv) {
     sdelete_string_array(args);
 
     // TODO: setup_tests
-    TestLog* log = mk_test_log(cout, stdalloc);
+    FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
+    Verbosity v = (Verbosity) {
+      .show_passes = false, .show_fails = true,
+      .show_info = false, .show_errors = true,
+    };
+
+    TestLog* log = mk_test_log(cos, v, stdalloc);
 
     switch (command.type) {
     case CAll: {
@@ -97,7 +105,10 @@ int main(int argc, char** argv) {
         break;
     }
 
+    int out = summarize_tests(log, stdalloc);
+
     delete_test_log(log, stdalloc);
+    delete_formatted_ostream(cos, stdalloc);
 
     // Cleanup
     delete_package(base);
@@ -108,5 +119,5 @@ int main(int argc, char** argv) {
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
 
-    return 0;
+    return out;
 }

@@ -1,32 +1,15 @@
 #include "pico/stdlib/user.h"
+#include "pico/stdlib/helpers.h"
 
 void add_user_module(Package* base, Allocator* a) {
     Imports imports = (Imports) {.clauses = mk_import_clause_array(3, a),};
-    push_import_clause((ImportClause) {
-            .type = ImportAll,
-            .name = string_to_symbol(mv_string("core")),
-        },
-        &imports.clauses);
-    push_import_clause((ImportClause) {
-            .type = ImportAll,
-            .name = string_to_symbol(mv_string("num")),
-        },
-        &imports.clauses);
-    push_import_clause((ImportClause) {
-            .type = ImportAll,
-            .name = string_to_symbol(mv_string("extra")),
-        },
-        &imports.clauses);
-    push_import_clause((ImportClause) {
-            .type = Import,
-            .name = string_to_symbol(mv_string("meta")),
-        },
-        &imports.clauses);
-    push_import_clause((ImportClause) {
-            .type = Import,
-            .name = string_to_symbol(mv_string("foreign")),
-        },
-        &imports.clauses);
+
+    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 1, "extra");
+    add_import_all(&imports.clauses, a, 1, "num");
+    add_import(&imports.clauses, a, 1, "data");
+    add_import(&imports.clauses, a, 1, "meta");
+    add_import(&imports.clauses, a, 1, "foreign");
 
     Exports exports = (Exports) {
         .export_all = true,

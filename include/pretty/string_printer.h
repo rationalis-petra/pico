@@ -3,6 +3,6 @@
 
 #include "pretty/document.h"
 
-String doc_to_str(Document* doc, Allocator* a);
+String doc_to_str(Document* doc, uint16_t width, Allocator* a);
 
 #endif 

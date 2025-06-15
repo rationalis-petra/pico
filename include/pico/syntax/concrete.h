@@ -23,6 +23,7 @@ typedef enum : uint64_t {
 typedef struct {
     Atom_t type;
     union {
+        bool boolean;
         int64_t int_64;
         double float_64;
         Symbol symbol;
@@ -52,14 +53,14 @@ typedef enum : uint64_t {
     RawBranch,
 } RawTree_t;
 
-typedef struct RawTree {
+struct RawTree {
     RawTree_t type;
     Range range;
     union {
         Atom atom;
         Branch branch;
     };
-} RawTree;
+};
 
 Document* pretty_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree(RawTree tree, Allocator* a);

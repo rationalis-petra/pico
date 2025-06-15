@@ -9,7 +9,7 @@ typedef struct CType CType;
 
 ASSOC_HEADER_NOCELL(Name, CType, name_ctype, NameCType)
 
-typedef enum {
+typedef enum : uint64_t {
     CSVoid,
     CSPrimInt,
     CSFloat,
@@ -22,7 +22,7 @@ typedef enum {
     CSCEnum,
 } CSort;
 
-typedef enum {
+typedef enum : uint64_t{
     CChar,
     CShort,
     CInt,
@@ -30,16 +30,15 @@ typedef enum {
     CLongLong,
 } CIntType;
 
-typedef enum {
+typedef enum : uint64_t{
     Signed,
     Unsigned,
     Unspecified,
 } CSigned;
 
 typedef struct {
-    // Padding is to ensure that the implementation matches the Relic types (where enums are 64 bit)
-    uint64_t prim;
-    uint64_t is_signed;
+    CIntType prim;
+    CSigned is_signed;
 } CPrimInt;
 
 typedef struct {
@@ -69,10 +68,7 @@ typedef struct {
 } CPtr;
 
 struct CType {
-    union {
-        CSort sort;
-        uint64_t pad; // To ensure that layout is same as Relic
-    };
+    CSort sort;
     union {
         CPrimInt prim;
         CProc proc;
@@ -118,7 +114,9 @@ CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
 // Sample usage: mk_union_type(a, 3, )
 CType mk_union_ctype(Allocator* a, size_t nfields, ...);
 
+// Ctypes used within our data/* libraries 
 CType mk_string_ctype(Allocator* a);
+CType mk_array_ctype(Allocator* a);
 
 void init_ctypes();
 
