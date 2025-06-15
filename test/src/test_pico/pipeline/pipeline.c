@@ -128,6 +128,18 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     {
+        test_start(log, mv_string("not-t"));
+        bool expected = false;
+        test_toplevel("(bool.not :true)", &expected, module, log, a) ;
+    }
+
+    {
+        test_start(log, mv_string("not-f"));
+        bool expected = true;
+        test_toplevel("(bool.not :false)", &expected, module, log, a) ;
+    }
+
+    {
         test_start(log, mv_string("simple-let"));
         int64_t expected = 3;
         test_toplevel("(let [x 3] x)", &expected, module, log, a) ;
