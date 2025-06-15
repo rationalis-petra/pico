@@ -592,6 +592,30 @@ void build_binary_opcode_table() {
     binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x0A;
     binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x0A;
 
+    // XOr
+    // r/m64, imm8 & imm64
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x06;
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
+    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
+    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x06;
+    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
+    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x06;
+
+    // r/m64, r64
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x31;
+    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x31;
+
+    // r64, r/m64
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x33;
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x33;
+
+    // r8, r/m8
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x30;
+    binary_opcode_table[Xor][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x32;
+
+
     // ------------------
     //  Bit Manipulation
     // ------------------
@@ -1135,9 +1159,14 @@ void build_unary_opcode_table() {
     unary_opcode_table[JMP][uindex(Dest_Deref, sz_64)] =
         (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,};
 
-    // ------------------------
-    //  Set Byte based on flag 
-    // ------------------------
+    // --------------------------------
+    //  Set Byte based on flag, logic
+    // --------------------------------
+    unary_opcode_table[Not][uindex(Dest_Register, sz_8)] =
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x2};
+    unary_opcode_table[Not][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x2};
+
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
     unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
@@ -1565,7 +1594,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "And", "Or", "SHL", "SHR",
+        "Add", "Sub", "Cmp", "And", "Or", "Xor" "SHL", "SHR",
         "Mov", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.
@@ -1575,7 +1604,7 @@ Document* pretty_binary_op(BinaryOp op, Allocator* a) {
 Document* pretty_unary_op(UnaryOp op, Allocator* a) {
     char* names[Unary_Op_Count] = {
         "Call", "Push", "Pop", "JE", "JNE", "JMP",
-        "SetE", "SetB", "SetA", "SetL", "SetG",
+        "Not", "SetE", "SetB", "SetA", "SetL", "SetG",
         "Mul", "Div", "IMul", "IDiv",
     };
     // TODO BUG bounds check here.

@@ -1,14 +1,31 @@
 #include "platform/signals.h"
+#include "platform/window/window.h"
+
+#include "pico/values/ctypes.h"
+#include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/platform/window.h"
 
-bool relic_init_windowsystem() {
+static PiType* window_ty;
+
+void build_mk_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),
+                                       "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
+                                       "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
+                                    mk_voidptr_ctype(a));
+
+    convert_c_fn(create_window, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
 }
 
-/* void build_init_windowsystem_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) { */
-/*     CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_macro_result_ctype(a)); */
+void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a),
+                                 mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
-/*     convert_c_fn(relic_init_windowsystem, &fn_ctype, type, ass, a, point);  */
-/* } */
+        convert_c_fn(create_window, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, a);
+}
 
 void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     Imports imports = (Imports) {
@@ -27,13 +44,45 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     delete_module_header(header);
     Symbol sym;
 
+    ModuleEntry* e;
+    PiType type;
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);
     }
 
-    
+    Segments prepped;
+    Segments fn_segments = {.data = mk_u8_array(0, a),};
+    Segments null_segments = (Segments) {
+        .code = mk_u8_array(0, a),
+        .data = mk_u8_array(0, a),
+    };
+
+    // The window type is simple an opaque pointer (address)
+    typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Window"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    window_ty = e->value;
+
+    typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
+    build_mk_window_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("create-window"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Bool));
+    build_window_should_close_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("should-close"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);

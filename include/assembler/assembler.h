@@ -33,6 +33,7 @@ typedef enum {
     // ------------------
     And,
     Or,
+    Xor,
 
     // ------------------
     //  Bit Manipulation
@@ -79,8 +80,9 @@ typedef enum {
     JMP, // p663, unconditional jump
 
     // ------------------------
-    //  Set Byte based on flag 
+    //  Set Byte based on flag & Logic
     // ------------------------
+    Not,
     SetE,
     SetNE,
     SetB,  // Set below   (unsigned)
