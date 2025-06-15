@@ -389,6 +389,10 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
     RawTreeArray loop_body_nodes = mk_rawtree_array(nodes.len + 1, &a);
     push_rawtree(atom_symbol("seq"), &loop_body_nodes);
+
+    // We push a 'null' rawtree because this will later be assigned to the
+    // loop-check 
+    push_rawtree((RawTree){}, &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
@@ -585,12 +589,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
     RawTreeArray if_nodes = mk_rawtree_array(4, &a);
     push_rawtree(atom_symbol("if"), &if_nodes);
     push_rawtree(loop_condition, &if_nodes);
-    RawTree goto_continue = (RawTree) {
-        .type = RawBranch,
-        .branch.hint = HExpression,
-        .branch.nodes = continue_go_to_nodes,
-    };
-    push_rawtree(goto_continue, &if_nodes);
+    push_rawtree(unit_term, &if_nodes);
 
     RawTreeArray goto_exit_nodes = mk_rawtree_array(2, &a);
     push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
@@ -607,7 +606,15 @@ MacroResult loop_macro(RawTreeArray nodes) {
         .branch.hint = HExpression,
         .branch.nodes = if_nodes,
     };
-    push_rawtree(if_expr, &loop_body_nodes);
+    // This index was reserved earlier
+    loop_body_nodes.data[1] = if_expr;
+
+    RawTree goto_continue = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = continue_go_to_nodes,
+    };
+    push_rawtree(goto_continue, &loop_body_nodes);
 
     RawTree loop_body = (RawTree) {
         .type = RawBranch,
