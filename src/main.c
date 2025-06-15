@@ -4,6 +4,7 @@
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
 #include "platform/io/terminal.h"
+#include "platform/window/window.h"
 
 #include "data/string.h"
 #include "data/stream.h"
@@ -27,7 +28,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-const static char* version = "0.0.4";
+static const char* version = "0.0.4";
 
 typedef struct {
     bool debug_print;
@@ -213,6 +214,9 @@ int main(int argc, char** argv) {
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
     init_terminal(stdalloc);
+    if (init_window_system(stdalloc)) {
+        write_string(mv_string("Warning: failed to init window system!\n"), cout);
+    }
     thread_init_dynamic_vars();
 
     Assembler* ass = mk_assembler(&exalloc);

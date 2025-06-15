@@ -16,7 +16,8 @@ to find out more about these three modes.
 To build the pico from compiler from source, you will need, the
 [w64devkit](https://github.com/skeeto/w64devkit) on Windows, or 
 [gcc](https://www.gnu.org/software/gcc/) and
-[make](https://www.gnu.org/software/make) on Linux. 
+[make](https://www.gnu.org/software/make) on Linux. You also need to be using
+wayland.
 
 First, either download (or git clone) the source, then open a terminal (the
 w64devkit terminal if on Windows), navigate to the source and run one of the

@@ -10,7 +10,7 @@ void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_symbol(mv_string("pair")),
         .imports = imports,
         .exports = exports,
     };
