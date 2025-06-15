@@ -41,12 +41,20 @@ bool window_should_close(Window *window) {
     return glfwWindowShouldClose(window->window_impl);
 }
 
-#elif OS_FAILY == WINDOWS
+#elif OS_FAMILY == WINDOWS
 
 #include <windows.h>
 
 struct Window {
-    HINSTNACE window_handle;
+    HINSTANCE window_handle;
 };
+
+int init_window_system(Allocator* a) {
+    return 0; // Dummy method, 'success'
+}
+
+void teardown_window_system() {
+    // Dummy method
+}
 
 #endif
