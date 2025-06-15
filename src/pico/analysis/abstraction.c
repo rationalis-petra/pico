@@ -1905,8 +1905,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #elif ABI == WIN_64
                                          // memcpy (dest = rcx, src = rdx, size = r8)
                                          // retval = rax
-                                         "mov 0x40(%%rsp), %%r8    \n"
-                                         "mov 0x48(%%rsp), %%rcx   \n"
+                                         "mov 0x48(%%rsp), %%r8    \n"
+                                         "mov 0x50(%%rsp), %%rcx   \n"
                                          "mov %%rsp, %%rdx         \n"
                                          "sub $0x20, %%rsp         \n"
                                          "call memcpy              \n"
