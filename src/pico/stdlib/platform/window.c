@@ -67,6 +67,7 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     e = get_def(sym, module);
     window_ty = e->value;
+    delete_pi_type_p(typep, a);
 
     typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
     build_mk_window_fn(typep, ass, a, &point);
@@ -75,6 +76,7 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    delete_pi_type_p(typep, a);
 
     typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Bool));
     build_window_should_close_fn(typep, ass, a, &point);
@@ -83,6 +85,11 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    sdelete_u8_array(fn_segments.data);
+    sdelete_u8_array(null_segments.data);
+    sdelete_u8_array(null_segments.code);
 
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);

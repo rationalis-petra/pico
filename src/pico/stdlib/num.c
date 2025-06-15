@@ -334,6 +334,7 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    delete_pi_type_p(typep, a);
 
     sdelete_u8_array(fn_segments.data);
 
