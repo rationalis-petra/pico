@@ -52,12 +52,13 @@ static const char* wind_class_name = "Relic Window Class";
 
 struct Window {
     HWND impl;
+    bool should_close;
 };
 
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    Window* window = (Window*)lParam;
     if (uMsg == WM_CLOSE) {
-        PostQuitMessage(0);
+        window->should_close = true;
         return 0;
     } else {
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -80,6 +81,7 @@ void teardown_window_system() {
 }
 
 Window *create_window(String name, int width, int height) {
+    Window *win = mem_alloc(sizeof(Window), wsa);
     HWND window = CreateWindowEx(0, // styles (optional)
                                  wind_class_name,
                                  name.bytes,
@@ -88,12 +90,14 @@ Window *create_window(String name, int width, int height) {
                                  NULL, // parent
                                  NULL, // Menu
                                  app_handle,
-                                 NULL // Additional app data
+                                 win // This will get passed into the WindowProc function as LPARAM
                                 );
     if (window) {
         ShowWindow(window, SW_SHOWDEFAULT);
-        Window* win = mem_alloc(sizeof(Window), wsa);
-        *win = (Window){.impl = window};
+        *win = (Window){
+            .should_close = false,
+            .impl = window,
+        };
         return win;
     } else {
         return NULL;
@@ -107,8 +111,7 @@ void destroy_window(Window *window) {
 }
 
 bool window_should_close(Window *window) {
-    MSG msg;
-    return (GetMessage(&msg, NULL, 0, 0) > 0);
+    return window->should_close;
 }
 
 #endif

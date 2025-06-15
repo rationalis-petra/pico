@@ -7,9 +7,6 @@
 
 static PiType* window_ty;
 
-bool relic_init_windowsystem() {
-}
-
 void build_mk_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),
                                        "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
@@ -20,11 +17,15 @@ void build_mk_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* 
 
     delete_c_type(fn_ctype, a);
 }
-/* void build_init_windowsystem_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) { */
-/*     CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_macro_result_ctype(a)); */
 
-/*     convert_c_fn(relic_init_windowsystem, &fn_ctype, type, ass, a, point);  */
-/* } */
+void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a),
+                                 mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+
+        convert_c_fn(create_window, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, a);
+}
 
 void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     Imports imports = (Imports) {
@@ -67,9 +68,17 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     e = get_def(sym, module);
     window_ty = e->value;
 
-    typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), mk_prim_type(a, Address));
+    typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
     build_mk_window_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("create-window"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Bool));
+    build_window_should_close_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("should-close"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
