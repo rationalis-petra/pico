@@ -15,4 +15,6 @@ void destroy_window(Window* window);
 
 bool window_should_close(Window* window);
 
+void poll_events();
+
 #endif

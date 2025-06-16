@@ -114,4 +114,12 @@ bool window_should_close(Window *window) {
     return window->should_close;
 }
 
+void poll_events() {
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+}
+
 #endif

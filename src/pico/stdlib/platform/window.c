@@ -22,7 +22,15 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, Er
     CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a),
                                  mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
-        convert_c_fn(create_window, &fn_ctype, type, ass, a, point);
+    convert_c_fn(window_should_close, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, a);
+}
+
+void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 0, mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+
+    convert_c_fn(poll_events, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, a);
 }
@@ -90,6 +98,14 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
+
+    typep = mk_proc_type(a, 0, mk_prim_type(a, Bool));
+    build_poll_events_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("poll-events"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);
