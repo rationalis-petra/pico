@@ -199,16 +199,20 @@ void destroy_window(Window *window) {
     if (window->buffer) {
         wl_buffer_destroy(window->buffer);
     }
+
+    xdg_toplevel_destroy(window->toplevel);
+    xdg_surface_destroy(window->xdg_surface);
     wl_surface_destroy(window->surface);
 
     mem_free(window, wsa);
 }
 
 bool window_should_close(Window *window) {
-    return false; // dummy, to implement
+    return window->should_close;
 }
 
 void poll_events() {
+    wl_display_dispatch(wl_display);
 }
 
 #elif OS_FAMILY == WINDOWS
