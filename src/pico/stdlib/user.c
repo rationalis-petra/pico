@@ -11,6 +11,7 @@ void add_user_module(Package* base, Allocator* a) {
     add_import(&imports.clauses, a, 1, "platform");
     add_import(&imports.clauses, a, 1, "meta");
     add_import(&imports.clauses, a, 1, "foreign");
+    add_import(&imports.clauses, a, 1, "debug");
 
     Exports exports = (Exports) {
         .export_all = true,
