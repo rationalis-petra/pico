@@ -199,12 +199,17 @@ void destroy_window(Window *window) {
     if (window->buffer) {
         wl_buffer_destroy(window->buffer);
     }
+    // TODO: we may be leaking the shared memory in window->pixles!
 
     xdg_toplevel_destroy(window->toplevel);
     xdg_surface_destroy(window->xdg_surface);
     wl_surface_destroy(window->surface);
 
     mem_free(window, wsa);
+
+    // TOOD: check if we want to keep this here? possibly we need to wait on a
+    //       sync message from the compositor.
+    wl_display_dispatch(wl_display);
 }
 
 bool window_should_close(Window *window) {
