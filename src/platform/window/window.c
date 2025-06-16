@@ -49,6 +49,13 @@ static struct wl_shm* wl_sharer;
 
 static struct xdg_wm_base* xdg_shell; // ??
 
+// A seat is a group of keyboards, pointer and touch devices. This
+// object is published as a global during start up, or when such a
+// device is hot plugged.
+struct wl_seat* seat;
+
+static struct wl_keyboard* kb;
+
 int32_t alc_shm(uint64_t sz) {
     // TODO: make a unique string/name - this can be done by, e.g. using printf
     // on the window pointer
@@ -106,7 +113,9 @@ void shell_ping(void* data, struct xdg_wm_base* sh, uint32_t ser) {
 
 // callback: toplevel window
 void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int32_t height, struct wl_array* states) {
-    
+    Window* window = data;
+    window->width = width;
+    window->height = height;
 }
 
 void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
@@ -114,10 +123,49 @@ void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
     win->should_close = true;
 }
 
-void reg_glob_rem(void *data, struct wl_registry *reg, uint32_t name) {
-    // TODO? remove 
+
+void kb_map(void* data, struct wl_keyboard* kb, uint32_t frmt, int32_t fd, uint32_t sz) {
+	
 }
 
+void kb_enter(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surface* srfc, struct wl_array* keys) {
+	
+}
+
+void kb_leave(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surface* srfc) {
+	
+}
+
+void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t t, uint32_t key, uint32_t stat) {
+}
+
+void kb_mod(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t grp) {
+	
+}
+
+void kb_rep(void* data, struct wl_keyboard* kb, int32_t rate, int32_t del) {
+	
+}
+
+struct wl_keyboard_listener kb_listener = {
+	.keymap = kb_map,
+	.enter = kb_enter,
+	.leave = kb_leave,
+	.key = kb_key,
+	.modifiers = kb_mod,
+	.repeat_info = kb_rep
+};
+
+void seat_capabilities(void* data, struct wl_seat* seat, uint32_t cap) {
+	if (cap & WL_SEAT_CAPABILITY_KEYBOARD && !kb) {
+		kb = wl_seat_get_keyboard(seat);
+		wl_keyboard_add_listener(kb, &kb_listener, data);
+	}
+}
+
+void seat_name(void* data, struct wl_seat* seat, const char* name) {
+		
+}
 
 static struct xdg_surface_listener xdg_listener = (struct xdg_surface_listener) {
     .configure = xdg_surface_conf,
@@ -132,6 +180,15 @@ struct xdg_wm_base_listener shell_listener = {
 	.ping = shell_ping
 };
 
+struct wl_seat_listener seat_listener = {
+	.capabilities = seat_capabilities,
+    .name = seat_name,
+};
+
+void reg_glob_rem(void *data, struct wl_registry *reg, uint32_t name) {
+    // TODO? remove 
+}
+
 // what globals we need (consistent between server and client)
 void reg_glob(void *data, struct wl_registry *reg, uint32_t name, const char *intf, uint32_t v) {
     String resource_name = mv_string(intf);
@@ -144,10 +201,13 @@ void reg_glob(void *data, struct wl_registry *reg, uint32_t name, const char *in
     } else if (string_cmp(resource_name, mv_string(xdg_wm_base_interface.name)) == 0) {
 		xdg_shell = wl_registry_bind(reg, name, &xdg_wm_base_interface, 1);
 		xdg_wm_base_add_listener(xdg_shell, &shell_listener, 0);
+	} else if (!strcmp(intf, wl_seat_interface.name)) {
+		seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
+		wl_seat_add_listener(seat, &seat_listener, 0);
 	}
 }
 
-static struct wl_registry_listener wl_listener = (struct wl_registry_listener){
+static struct wl_registry_listener wl_listener = (struct wl_registry_listener) {
     .global = reg_glob,
     .global_remove = reg_glob_rem,
 };
@@ -198,6 +258,9 @@ Window *create_window(String name, int width, int height) {
 void destroy_window(Window *window) {
     if (window->buffer) {
         wl_buffer_destroy(window->buffer);
+    }
+    if (window->pixles) {
+        munmap(window->pixles, 4 * window->width * window->height);
     }
     // TODO: we may be leaking the shared memory in window->pixles!
 
