@@ -7,13 +7,21 @@
 
 static PiType* window_ty;
 
-void build_mk_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),
                                        "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
                                        "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
                                     mk_voidptr_ctype(a));
 
     convert_c_fn(create_window, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
+}
+
+void build_destroy_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+
+    convert_c_fn(destroy_window, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, a);
 }
@@ -78,8 +86,17 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     delete_pi_type_p(typep, a);
 
     typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
-    build_mk_window_fn(typep, ass, a, &point);
+    build_create_window_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("create-window"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Unit));
+    build_destroy_window_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("destroy-window"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -95,10 +112,6 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, a);
 
-    sdelete_u8_array(fn_segments.data);
-    sdelete_u8_array(null_segments.data);
-    sdelete_u8_array(null_segments.code);
-
     typep = mk_proc_type(a, 0, mk_prim_type(a, Bool));
     build_poll_events_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("poll-events"));
@@ -106,6 +119,11 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    sdelete_u8_array(fn_segments.data);
+    sdelete_u8_array(null_segments.data);
+    sdelete_u8_array(null_segments.code);
 
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);

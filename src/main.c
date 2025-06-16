@@ -298,6 +298,7 @@ int main(int argc, char** argv) {
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
+    teardown_window_system();
 
     return 0;
 }

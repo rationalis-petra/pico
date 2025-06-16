@@ -18,9 +18,9 @@ DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lglfw
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lwayland-client
 	LINK_FLAGS := -ldl -lm
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -lglfw
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else
 	LINK_FLAGS := 
 endif
