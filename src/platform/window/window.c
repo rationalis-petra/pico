@@ -1,6 +1,6 @@
 #include "platform/window/window.h"
+#include "platform/window/internal.h"
 #include "platform/machine_info.h"
-#include "data/string.h"
 
 #if OS_FAMILY == UNIX
 #include <string.h> // for memset, TODO: remove?
@@ -15,23 +15,6 @@
 // /usr/include/wayland-client-protocol.h
 // /usr/include/wayland-client-core.h
 #include <wayland-client.h>
-
-struct Window {
-    struct wl_surface* surface; // Window surface (from compositor)
-    struct wl_buffer* buffer; // control/access to shared memory buffer
-    struct xdg_toplevel* toplevel; // This represents the window, and allows us
-                                   // to do things like interact with header
-                                   // bars (if they exist) etc.
-    struct xdg_surface* xdg_surface; // ??
-    uint8_t* pixles; // pointer to the shared memory (pixels)
-
-    String name;
-    uint16_t width;
-    uint16_t height;
-
-    // Internal state (used by us!)
-    bool should_close;
-};
 
 static Allocator* wsa = NULL;
 
@@ -212,6 +195,10 @@ static struct wl_registry_listener wl_listener = (struct wl_registry_listener) {
     .global_remove = reg_glob_rem,
 };
 
+struct wl_display *get_wl_display() {
+    return wl_display;
+}
+
 int init_window_system(Allocator* a) {
     wsa = a;
     wl_display = wl_display_connect(NULL);
@@ -292,10 +279,6 @@ static HINSTANCE app_handle = 0;
 static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
 
-struct Window {
-    HWND impl;
-    bool should_close;
-};
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     Window* window = (Window*)lParam;
@@ -364,4 +347,6 @@ void poll_events() {
     }
 }
 
+#else
+#error "Unrecognized OS"
 #endif

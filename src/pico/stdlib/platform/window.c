@@ -6,6 +6,7 @@
 #include "pico/stdlib/platform/window.h"
 
 static PiType* window_ty;
+PiType* get_window_ty() { return window_ty; };
 
 void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),

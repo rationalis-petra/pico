@@ -1,9 +1,24 @@
+#include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
 #include "platform/signals.h"
 #include "data/string.h"
 
 #ifdef USE_VULKAN
+
+#if OS_FAMILY == UNIX
+#define VK_USE_PLATFORM_WAYLAND_KHR
+#elif OS_FAMILY == WINDOWS
+#define VK_USE_PLATFORM_WIN32_KHR
+#else 
+#error "unrecognized OS"
+#endif
+
 #include <vulkan/vulkan.h>
+#include "platform/window/internal.h"
+
+struct HedronSurface {
+    VkSurfaceKHR surface;
+};
 
 bool is_hedron_supported() {
     return true;
@@ -19,6 +34,19 @@ static VkInstance rl_vk_instance;
 static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 static VkDevice logical_device = VK_NULL_HANDLE;
 static Allocator* hd_alloc;
+
+const uint32_t num_required_extensions = 2;
+const char *required_extensions[] = {
+    "VK_KHR_surface",
+#if OS_FAMILY == UNIX
+    "VK_KHR_wayland_surface",
+#elif OS_FAMILY == WINDOWS
+    "VK_KHR_win32_surface",
+#else 
+#error "unrecognized OS!"
+#endif
+};
+
 
 // Validation layers, which are used when compiling in debug mode 
 const uint32_t num_required_validation_layers = 1;
@@ -74,6 +102,10 @@ VkResult create_instance(Allocator* a) {
     VkInstanceCreateInfo create_info = (VkInstanceCreateInfo){};
     create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_info.pApplicationInfo = &app_info;
+
+    create_info.enabledExtensionCount = num_required_extensions;
+    create_info.ppEnabledExtensionNames = required_extensions;
+
     if (enable_validation) {
         create_info.enabledLayerCount = num_required_validation_layers;
         create_info.ppEnabledLayerNames = required_validation_layers;
@@ -182,8 +214,12 @@ int init_hedron(Allocator* a) {
     hd_alloc = a;
     VkResult result = create_instance(a);
     if (result != VK_SUCCESS) return 1;
+
+    // TODO: setup_debug_messenger();
+
     result = pick_physical_device(a);
     if (result != VK_SUCCESS) return 1;
+
     result = create_logical_device(a);
     if (result != VK_SUCCESS) return 1;
 
@@ -195,17 +231,54 @@ void teardown_hedron() {
     vkDestroyInstance(rl_vk_instance, NULL);
 }
 
+HedronSurface *create_window_surface(struct Window *window) {
+    VkSurfaceKHR surface;
+
+#if OS_FAMILY == UNIX 
+    VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
+    create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+    create_info.display = get_wl_display();
+    create_info.surface = window->surface;
+
+    VkResult result = vkCreateWaylandSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
+    if (result != VK_SUCCESS) return NULL;
+
+#elif OS_FAMILY == WINDOWS 
+#else
+#error "unrecognized OS"
+#endif
+
+    HedronSurface* hd_surface = mem_alloc(sizeof(HedronSurface), hd_alloc);
+    *hd_surface = (HedronSurface) {
+        .surface = surface,
+    };
+    return hd_surface;
+}
+
+void destroy_window_surface(HedronSurface *surface) {
+    vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
+    mem_free(surface, hd_alloc);
+}
+
 #else
 
 bool is_hedron_supported() {
     return false;
 }
 
-int init_hedron(Allocator* a) {
+int init_hedron(Allocator*) {
     panic(mv_string("Hedron not supported on this build"));
 }
 
 void teardown_hedron() {
+    panic(mv_string("Hedron not supported on this build"));
+}
+
+HedronSurface *create_hedron_window_surface(struct Window *) {
+    panic(mv_string("Hedron not supported on this build"));
+}
+
+void destroy_window_surface(HedronSurface*) {
     panic(mv_string("Hedron not supported on this build"));
 }
 

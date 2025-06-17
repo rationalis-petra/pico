@@ -1,11 +1,28 @@
 #include "platform/signals.h"
-#include "platform/window/window.h"
+#include "platform/hedron/hedron.h"
 
 #include "pico/values/ctypes.h"
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/platform/hedron.h"
+#include "pico/stdlib/platform/window.h"
 
-//static PiType* window_ty;
+static PiType* surface_ty;
+
+void build_create_window_surface_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), mk_voidptr_ctype(a));
+
+    convert_c_fn(create_window_surface, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
+}
+
+void build_destroy_window_surface_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "surface", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+
+    convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, a);
+}
 
 void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     Imports imports = (Imports) {
@@ -39,6 +56,32 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
         .data = mk_u8_array(0, a),
     };
 
+    typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Surface"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    surface_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(get_window_ty(), a), copy_pi_type_p(surface_ty, a));
+    build_create_window_surface_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("create-window-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(surface_ty, a), mk_prim_type(a, Unit));
+    build_destroy_window_surface_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("destroy-window-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
 
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
