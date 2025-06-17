@@ -24,10 +24,15 @@ bool is_hedron_supported() {
     return true;
 }
 
+typedef enum {
+    QUEUE_GRAPHICS = 0x1,
+    QUEUE_PRESENT = 0x2,
+} QueueFamilyFlags;
+
 typedef struct  {
     uint32_t available;
     uint32_t graphics_family;
-
+    // uint32_t present_family; TODO: check if we want graphics/present family different? 
 } QueueFamilyIndices;
 
 static VkInstance rl_vk_instance;
@@ -37,14 +42,20 @@ static Allocator* hd_alloc;
 
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
-    "VK_KHR_surface",
+    VK_KHR_SURFACE_EXTENSION_NAME,
+    //VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if OS_FAMILY == UNIX
-    "VK_KHR_wayland_surface",
+    VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 #elif OS_FAMILY == WINDOWS
-    "VK_KHR_win32_surface",
+    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #else 
 #error "unrecognized OS!"
 #endif
+};
+
+const uint32_t num_required_device_extensions = 1;
+const char *required_device_extensions[] = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
 
@@ -129,13 +140,47 @@ QueueFamilyIndices find_queue_families(VkPhysicalDevice device, Allocator* a) {
     for (uint32_t i = 0; i < queue_family_count; i++) {
         VkQueueFamilyProperties queue_family = queue_families[i];
         if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.available |= VK_QUEUE_GRAPHICS_BIT;
+            indices.available |= QUEUE_GRAPHICS;
             indices.graphics_family = i;
+        }
+
+        VkBool32 present_support = false;
+        // TODO: postpone device selection until AFTER surface creation!
+        //vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
+
+        if (present_support) {
+            //indices.present_family = i;
+            indices.available |= QUEUE_PRESENT;
         }
     }
 
     mem_free(queue_families, a);
     return indices;
+}
+
+bool check_device_extension_support(VkPhysicalDevice device, Allocator* a) {
+    uint32_t extension_count;
+    vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
+
+    VkExtensionProperties* available_extensions = mem_alloc(extension_count * sizeof(VkExtensionProperties), a);
+    vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, available_extensions);
+
+    // TODO : do we need to handle repeated extensions? perhaps replace with a set?
+    size_t supported_extension_count = 0;
+
+    for (size_t i = 0; i < num_required_device_extensions; i++) {
+        String req_name = mv_string(required_device_extensions[i]);
+        for (size_t j = 0; j < extension_count; j++) {
+            String ext_name = mv_string(available_extensions[j].extensionName);
+            if (string_cmp(ext_name, req_name) == 0) {
+                supported_extension_count++;
+                break;
+            }
+        }
+    }
+
+    mem_free(available_extensions, a);
+    return supported_extension_count == num_required_device_extensions;
 }
 
 bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
@@ -145,9 +190,13 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     vkGetPhysicalDeviceFeatures(device, &device_features);
 
     QueueFamilyIndices indices = find_queue_families(device, a);
-    const uint32_t required_indices = VK_QUEUE_GRAPHICS_BIT;
+    const uint32_t required_indices = QUEUE_GRAPHICS;
 
-    return (device_features.geometryShader && (indices.available & required_indices));
+    const bool extensions_supported = check_device_extension_support(device, a);
+
+    return (device_features.geometryShader
+            && extensions_supported
+            && (indices.available & required_indices));
 }
 
 VkResult pick_physical_device(Allocator* a) {
@@ -198,7 +247,8 @@ VkResult create_logical_device(Allocator* a) {
     // Note: technically, in modern Vulkan implementations, this will probably do nothing
     // However, it is a good idea to do this anyway as it allows us to support validation
     // layers on older vulkan implementations.
-    create_info.enabledExtensionCount = 0;
+    create_info.enabledExtensionCount = num_required_device_extensions;
+    create_info.ppEnabledExtensionNames = required_device_extensions;
 
     if (enable_validation) {
         create_info.enabledLayerCount = num_required_validation_layers;
