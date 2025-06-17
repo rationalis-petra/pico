@@ -25,6 +25,11 @@ else
 	LINK_FLAGS := 
 endif
 
+ifdef HEDRON
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lvulkan -DUSE_VULKAN
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -lvulkan -DUSE_VULKAN
+endif
+
 # Find all the C files we want to compile
 SRCS := $(shell find $(SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC))
 
