@@ -16,7 +16,7 @@ Module* set_std_current_module(Module* al);
 
 void set_current_package(Package* current);
 void set_std_istream(IStream* current);
-void set_std_ostream(OStream* current);
+OStream* set_std_ostream(OStream* current);
 
 Allocator get_std_current_allocator();
 Allocator set_std_current_allocator(Allocator al);

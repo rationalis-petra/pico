@@ -31,7 +31,11 @@ static IStream* current_istream;
 void set_std_istream(IStream* current) { current_istream = current; }
 
 static OStream* current_ostream;
-void set_std_ostream(OStream* current) { current_ostream = current; }
+OStream *set_std_ostream(OStream *current) {
+    OStream* old = current_ostream;
+    current_ostream = current;
+    return old;
+}
 
 Allocator get_std_current_allocator() {
     Allocator** data = get_dynamic_memory();
@@ -231,7 +235,7 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void relic_print_fn(String s) {
-    fputs((char*)s.bytes, stdout);
+    write_string(s, current_ostream);
 }
 
 void relic_println_fn(String s) {

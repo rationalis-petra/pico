@@ -10,7 +10,8 @@
 // compile_toplevel("(def i64-addable instance Addable [I64] [.zero 0] [.add +])", 
 //                  ass, i64, point, a)
 // All memory allocated is free'd,
-void test_toplevel(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a);
+void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a);
+void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestLog* log, Allocator *a);
 void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
