@@ -18,11 +18,28 @@
 
 struct HedronSurface {
     VkSurfaceKHR surface;
+    // presentation queue family;
+    uint32_t present_family;
+
+    // swapchain details
+    uint32_t image_count;
+    VkFormat format;
+    VkPresentModeKHR mode;
+    VkSwapchainKHR swapchain;
+
+    uint32_t num_images;
+    VkImage* swapchain_images;
+    VkImageView* image_views;
 };
 
-bool is_hedron_supported() {
-    return true;
-}
+typedef struct {
+    VkSurfaceCapabilitiesKHR capabilities;
+    uint32_t num_formats;
+    VkSurfaceFormatKHR* formats;
+
+    uint32_t num_present_modes;
+    VkPresentModeKHR* present_modes;
+} SwapChainSupportDetails;
 
 typedef enum {
     QUEUE_GRAPHICS = 0x1,
@@ -43,7 +60,6 @@ static Allocator* hd_alloc;
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
-    //VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if OS_FAMILY == UNIX
     VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 #elif OS_FAMILY == WINDOWS
@@ -142,15 +158,6 @@ QueueFamilyIndices find_queue_families(VkPhysicalDevice device, Allocator* a) {
         if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             indices.available |= QUEUE_GRAPHICS;
             indices.graphics_family = i;
-        }
-
-        VkBool32 present_support = false;
-        // TODO: postpone device selection until AFTER surface creation!
-        //vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &present_support);
-
-        if (present_support) {
-            //indices.present_family = i;
-            indices.available |= QUEUE_PRESENT;
         }
     }
 
@@ -260,6 +267,10 @@ VkResult create_logical_device(Allocator* a) {
     return vkCreateDevice(physical_device, &create_info, NULL, &logical_device);
 }
 
+bool is_hedron_supported() {
+    return true;
+}
+
 int init_hedron(Allocator* a) {
     hd_alloc = a;
     VkResult result = create_instance(a);
@@ -281,6 +292,161 @@ void teardown_hedron() {
     vkDestroyInstance(rl_vk_instance, NULL);
 }
 
+SwapChainSupportDetails query_swapchain_support_details(VkPhysicalDevice device, VkSurfaceKHR surface, Allocator* a) {
+    SwapChainSupportDetails details = (SwapChainSupportDetails){};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+    uint32_t num_formats;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &num_formats, NULL);
+    details.num_formats = num_formats;
+
+    if (num_formats != 0) {
+        details.formats = mem_alloc(num_formats * sizeof(VkSurfaceFormatKHR), a);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &num_formats, details.formats);
+    }
+
+    uint32_t num_present_modes;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &num_present_modes, NULL);
+
+    if (num_present_modes != 0) {
+        details.num_present_modes = num_present_modes;
+        details.present_modes = mem_alloc(num_present_modes * sizeof(VkPresentModeKHR), a);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &num_present_modes, details.present_modes);
+    }
+    
+    return details;
+}
+
+void free_swapchain_details(SwapChainSupportDetails swap_chain, Allocator *a) {
+    if (swap_chain.num_formats > 0)
+        mem_free(swap_chain.formats, a);
+    if (swap_chain.num_present_modes > 0)
+        mem_free(swap_chain.present_modes, a);
+}
+
+VkSurfaceFormatKHR choose_swap_surface_format(const VkSurfaceFormatKHR* available_formats, uint32_t num_formats) {
+    for (size_t i = 0; i < num_formats; i++) {
+        VkSurfaceFormatKHR available_format = available_formats[i];
+        if (available_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            return available_format;
+        }
+    }
+
+    return available_formats[0];
+}
+
+VkPresentModeKHR choose_swap_present_mode(VkPresentModeKHR* available_present_modes, uint32_t num_modes) {
+    for (size_t i = 0; i < num_modes; i++) {
+        VkPresentModeKHR present_mode = available_present_modes[i];
+        if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            return present_mode;
+        }
+    }
+
+    // FIFO is guaranteed to be available by the vulkan standard
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+uint32_t clamp(uint32_t val, uint32_t min, uint32_t max) {
+    if (val < min) return min;
+    if (val > max) return max;
+    return val;
+}
+
+VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, struct Window* window) {
+    if (capabilities.currentExtent.width != UINT32_MAX) {
+        return capabilities.currentExtent;
+    } else {
+        VkExtent2D actualExtent = {
+            .width = window->width,
+            .height = window->height,
+        };
+
+        actualExtent.width = clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height = clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+}
+
+void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, struct Window *window, HedronSurface* hd_surface) {
+
+    VkSurfaceFormatKHR surface_format = choose_swap_surface_format(swap_chain_details.formats, swap_chain_details.num_formats);
+    VkPresentModeKHR mode = choose_swap_present_mode(swap_chain_details.present_modes, swap_chain_details.num_present_modes);
+    // TODO: push extent back to window!
+    VkExtent2D extent = choose_swap_extent(swap_chain_details.capabilities, window);
+
+    uint32_t image_count = swap_chain_details.capabilities.minImageCount + 1;
+    if (swap_chain_details.capabilities.maxImageCount > 0 && image_count > swap_chain_details.capabilities.maxImageCount) {
+        image_count = swap_chain_details.capabilities.maxImageCount;
+    }
+
+    VkSwapchainCreateInfoKHR create_info = (VkSwapchainCreateInfoKHR){};
+    create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    create_info.surface = surface;
+
+    create_info.minImageCount = image_count;
+    create_info.imageFormat = surface_format.format;
+    create_info.imageColorSpace = surface_format.colorSpace;
+    create_info.imageExtent = extent;
+    create_info.imageArrayLayers = 1;
+    create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    // TODO: when we allow the presentation and graphics queue to be different,
+    //       add a check here
+    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 0; // Optional
+    create_info.pQueueFamilyIndices = NULL; // Optional
+
+    create_info.preTransform = swap_chain_details.capabilities.currentTransform;
+    create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+    create_info.presentMode = mode;
+    create_info.clipped = VK_TRUE;
+    create_info.oldSwapchain = VK_NULL_HANDLE;
+
+    VkSwapchainKHR swap_chain;
+    if (vkCreateSwapchainKHR(logical_device, &create_info, NULL, &swap_chain) != VK_SUCCESS) {
+        // TODO: proper error reporting
+        panic(mv_string("swapchain creation failed"));
+    }
+
+    vkGetSwapchainImagesKHR(logical_device, swap_chain, &image_count, NULL);
+    VkImage* images = mem_alloc(image_count * sizeof(VkImage), hd_alloc);
+    vkGetSwapchainImagesKHR(logical_device, swap_chain, &image_count, images);
+
+    VkImageView* image_views = mem_alloc(image_count * sizeof(VkImageView), hd_alloc);
+    for (size_t i = 0; i < image_count; i++) {
+        VkImageViewCreateInfo createInfo = (VkImageViewCreateInfo){};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = images[i];
+
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = surface_format.format;
+
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+        if (vkCreateImageView(logical_device, &createInfo, NULL, &image_views[i]) != VK_SUCCESS) {
+            panic(mv_string("failed to create image views!"));
+        }
+    }
+
+    hd_surface->swapchain = swap_chain;
+    hd_surface->mode = mode;
+    hd_surface->format = surface_format.format;
+    hd_surface->num_images = image_count;
+    hd_surface->swapchain_images = images;
+    hd_surface->image_views = image_views;
+}
+
 HedronSurface *create_window_surface(struct Window *window) {
     VkSurfaceKHR surface;
 
@@ -293,19 +459,53 @@ HedronSurface *create_window_surface(struct Window *window) {
     VkResult result = vkCreateWaylandSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
     if (result != VK_SUCCESS) return NULL;
 
+    // TODO: check for present support on graphics queue
+
 #elif OS_FAMILY == WINDOWS 
 #else
 #error "unrecognized OS"
 #endif
 
+
+    // TODO: postpone device selection until AFTER surface creation!
+    // TODO: possibly the graphics and present families are different?
+    VkBool32 present_support = false;
+
+    QueueFamilyIndices indices = find_queue_families(physical_device, hd_alloc);
+    vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, indices.graphics_family, surface, &present_support);
+
+    if (!present_support) {
+        return NULL;
+    }
+
+    // TODO: do we need to confirm that the swapchain extension is supported?
+    //       possibly: check in debug mode.
+    bool swap_chain_ok = false;
+    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(physical_device, surface, hd_alloc);
+    swap_chain_ok = (swap_chain_details.num_formats != 0) && (swap_chain_details.num_present_modes != 0);
+    if (!swap_chain_ok) {
+        // TODO (FEATURE): proper error type
+        vkDestroySurfaceKHR(rl_vk_instance, surface, NULL);
+        free_swapchain_details(swap_chain_details, hd_alloc);
+        return NULL;
+    }
+
     HedronSurface* hd_surface = mem_alloc(sizeof(HedronSurface), hd_alloc);
+    create_swapchain(swap_chain_details, surface, window, hd_surface);
+    free_swapchain_details(swap_chain_details, hd_alloc);
+
     *hd_surface = (HedronSurface) {
         .surface = surface,
+        .present_family = indices.graphics_family,
     };
     return hd_surface;
 }
 
 void destroy_window_surface(HedronSurface *surface) {
+    for (size_t i = 0; i < surface->num_images; i++) {
+        vkDestroyImageView(logical_device, surface->image_views[i], NULL);
+    }
+    vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
     vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
     mem_free(surface, hd_alloc);
 }
@@ -324,7 +524,7 @@ void teardown_hedron() {
     panic(mv_string("Hedron not supported on this build"));
 }
 
-HedronSurface *create_hedron_window_surface(struct Window *) {
+HedronSurface *create_window_surface(struct Window *) {
     panic(mv_string("Hedron not supported on this build"));
 }
 

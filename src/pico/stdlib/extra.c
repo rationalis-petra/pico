@@ -47,6 +47,19 @@ Allocator set_std_current_allocator(Allocator al) {
     return old;
 }
 
+Allocator get_std_perm_allocator() {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_perm_allocator]; 
+    return *dyn;
+}
+
+Allocator set_std_perm_allocator(Allocator al) {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_perm_allocator]; 
+    Allocator old = *dyn;
+    *dyn = al;
+    return old;
+}
 
 Allocator* get_std_temp_allocator() {
     void** data = get_dynamic_memory();

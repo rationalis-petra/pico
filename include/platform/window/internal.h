@@ -4,8 +4,6 @@
 #if OS_FAMILY == UNIX
 #include <wayland-client.h>
 
-// The wayland display represents the "connection" between this application
-// and the wayland display
 struct wl_display* get_wl_display();
 
 struct Window {
