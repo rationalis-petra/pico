@@ -180,6 +180,12 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     {
+        test_start(log, mv_string("struct-refersed"));
+        Point expected = (Point) {.x = 3, .y = -5};
+        test_toplevel_eq("(struct (Struct [.x I64] [.y I64]) [.y -5] [.x 3])", &expected, module, log, a) ;
+    }
+
+    {
         test_start(log, mv_string("struct-alignment"));
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
