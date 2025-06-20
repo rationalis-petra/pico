@@ -347,52 +347,24 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // 64 bytes (if __m512 is used). The alignment is to the 'end of input
     // area', i.e. the stack must be (16/32/64) - byte aligned immediately BEFORE the call.  
     // TODO (BUG LOGIC): Determine which stack alignment should be used
+
     const size_t expected_stack_align = 16;
-    size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
-    needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
+    size_t needed_stack_offset = input_area_size % expected_stack_align;
+    needed_stack_offset = expected_stack_align - needed_stack_offset;
 
-    // Check if the stack is aligned (and align if not). This is done as follows:
-    // Check the offset of the stack (RSP)
-    // If this is equal to the needed offset (input 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(R10, sz_64), imm64(expected_stack_align), a, point);
-    build_binary_op(ass, Mov, reg(R11, sz_64), imm64(needed_stack_offset), a, point);
-
-    // The div stores the remainder in RDX, which has the 1st argument and so needs saving
-    build_binary_op(ass, Mov, reg(R12, sz_64), reg(RDX, sz_64), a, point);
-    build_nullary_op(ass, CQO, a, point);
-    build_unary_op(ass, IDiv, reg(R10, sz_64), a, point);
-
-    build_binary_op(ass, Sub, reg(R11, sz_64), reg(RDX, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R11, sz_64), a, point);
-    build_unary_op(ass, Neg, reg(R11, sz_64), a, point);
-
-    // Was RDX < R10? 
-    build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
-    
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
-
-    /*
-    // Alternative!!
     // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
     build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
     // Get the bottom byte of RSP (store in RAX), which is the info we need to
     // perform (16-byte) alignment.
     build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, And, reg(RAX, sz_64), imm8(needed_stack_offset), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
 
-    // Expected alignment
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
+    // Do some fancy stuff
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(needed_stack_offset), a, point);
     build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
     build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
     build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
-    // End Alternative
-    */
-
-    // Restore value of RDX
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
 
     if (pass_return_in_memory) {
         // pass in memory - reserve space on stack:
