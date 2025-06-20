@@ -478,13 +478,13 @@ void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
         // Variables are in reverse order!
         // due to how the stack pushes/pops args.
 
-        for (size_t i = 0; i < vars.len; i++) {
+        for (size_t i = vars.len; i > 0; i--) {
             SAddr local;
             local.type = SADirect;
 
-            local.symbol = vars.data[i].key;
+            local.symbol = vars.data[i - 1].key;
             local.stack_offset = stack_offset;
-            stack_offset += vars.data[i].val;
+            stack_offset += vars.data[i - 1].val;
 
             push_saddr(local, &locals->vars);
         }
@@ -504,11 +504,11 @@ void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
         // Variables are in reverse order!
         // due to how the stack pushes/pops args.
 
-        for (size_t i = 0; i < vars.len; i++) {
+        for (size_t i = vars.len; i > 0; i--) {
             SAddr local;
             local.type = SAIndexed;
 
-            local.symbol = vars.data[i].key;
+            local.symbol = vars.data[i - 1].key;
             local.stack_offset = stack_offset;
             stack_offset += 1;
 

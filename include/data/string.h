@@ -7,7 +7,7 @@
 // A UFT-8 Encoded String
 typedef struct String {
     size_t memsize;
-    const char* bytes;
+    uint8_t* bytes;
 } String;
 
 String mk_string(const char* str, Allocator* a);

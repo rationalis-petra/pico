@@ -2453,6 +2453,7 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Sha
                     .range = msym->range,
                     .abvar.index = 0,
                     .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                    .abvar.symbol = msym->atom.symbol,
                 };
             }
             return res;
