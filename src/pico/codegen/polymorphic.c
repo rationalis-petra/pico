@@ -18,6 +18,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 // movement
@@ -1233,6 +1234,23 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             }
             break;
         }
+        case TStruct: {
+            build_unary_op(ass, Push, imm32(0), a, point);
+            for (size_t i = 0; i < type->structure.fields.len; i++) {
+                PiType* field_type = type->structure.fields.data[i].val;
+                generate_align_of(R8, field_type, env, ass, a, point);
+                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
+
+                generate_align_to(R9, R8, ass, a, point);
+                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+        
+                generate_size_of(R8, field_type, env, ass, a, point);
+                build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
+            }
+            // pop into the destination register
+            build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
+            break;
+        }
         case TEnum: {
             build_unary_op(ass, Push, imm32(0), a, point);
             for (size_t i = 0; i < type->enumeration.variants.len; i++) {
@@ -1315,13 +1333,30 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
             }
             break;
         }
+        case TStruct: {
+            build_unary_op(ass, Push, imm32(0), a, point);
+            for (size_t i = 0; i < type->structure.fields.len; i++) {
+                PiType* field_type = type->structure.fields.data[i].val;
+                generate_align_of(R8, field_type, env, ass, a, point);
+                build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), a, point);
+
+                generate_align_to(R9, R8, ass, a, point);
+                build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+        
+                generate_size_of(R8, field_type, env, ass, a, point);
+                build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
+            }
+            // pop into the destination register
+            build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
+            break;
+        }
         case TEnum: {
             build_unary_op(ass, Push, imm32(0), a, point);
             for (size_t i = 0; i < type->enumeration.variants.len; i++) {
                 PtrArray* types = type->enumeration.variants.data[i].val;
 
-                // Pick the larger of (old size) vs (current size)
-                generate_variant_size_of(R9, types, env, ass, a, point);
+                // Pick the larger of (old align) vs (current align)
+                generate_variant_align_of(R9, types, env, ass, a, point);
                 build_binary_op(ass, Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), a, point);
                 build_binary_op(ass, Cmp, reg(R9, sz_64), reg(R10, sz_64), a, point);
 
@@ -1364,6 +1399,25 @@ void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, As
         
         generate_size_of(R8, types->data[i], env, ass, a, point);
         build_binary_op(ass, Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), a, point);
+    }
+
+    build_unary_op(ass, Pop, reg(dest, sz_64), a, point);
+}
+
+void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    size_t total = sizeof(uint64_t);
+    // Push size onto stack
+    build_unary_op(ass, Push, imm32(total), a, point);
+    for (size_t i = 0; i < types->len; i++) {
+        generate_variant_align_of(R9, types->data[i], env, ass, a, point);
+        build_binary_op(ass, Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), a, point);
+        build_binary_op(ass, Cmp, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+        // Move R10 into R9 if R9 was below R10
+        build_binary_op(ass, CMovB, reg(R9, sz_64), reg(R10, sz_64), a, point);
+
+        // Store R9 on the top of the stack
+        build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
     }
 
     build_unary_op(ass, Pop, reg(dest, sz_64), a, point);

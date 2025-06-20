@@ -21,6 +21,7 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 2, "data", "array");
+    add_import_all(&imports.clauses, a, 1, "data");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -204,18 +205,23 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     {
-        typedef struct I64Pair {int64_t x, y;} I64Pair;
         test_start(log, mv_string("pair-simple"));
-        I64Pair expected = (I64Pair) {.x = 12397, .y = -35};
+        Point expected = (Point) {.x = 12397, .y = -35};
         test_toplevel_eq("(struct (Pair I64 I64) [._1 12397] [._2 -35])", &expected, module, log, a) ;
     }
 
     {
-        typedef struct I64Pair {int64_t x, y;} I64Pair;
         test_start(log, mv_string("pair-fn"));
         run_toplevel("(def pair-fn proc [x y] (struct (Pair I64 I64) [._1 x] [._2 y]))", module, log, a) ;
-        I64Pair expected = (I64Pair) {.x = -987, .y = 935};
+        Point expected = (Point) {.x = -987, .y = 935};
         test_toplevel_eq("(pair-fn -987 935)", &expected, module, log, a) ;
+    }
+
+    {
+        typedef struct I64Pair {int64_t x, y;} I64Pair;
+        test_start(log, mv_string("pair-poly"));
+        Point expected = (Point) {.x = 1432, .y = -120938};
+        test_toplevel_eq("(pair.pair 1432 -120938)", &expected, module, log, a) ;
     }
 
     {
