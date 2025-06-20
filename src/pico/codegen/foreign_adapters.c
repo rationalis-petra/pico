@@ -373,6 +373,24 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
     build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
+    /*
+    // Alternative!!
+    // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    // Get the bottom byte of RSP (store in RAX), which is the info we need to
+    // perform (16-byte) alignment.
+    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(needed_stack_offset), a, point);
+
+    // Expected alignment
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(0x10), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    // End Alternative
+    */
+
     // Restore value of RDX
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R12, sz_64), a, point);
 
