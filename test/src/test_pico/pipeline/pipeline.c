@@ -170,6 +170,16 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     {
+        test_start(log, mv_string("struct-nested"));
+        typedef struct {
+            uint64_t val;
+            Point p2;
+        } Nest;
+        Nest expected = (Nest) {.val = -8765, .p2.x = -57, .p2.y = 127};
+        test_toplevel_eq("(struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])])", &expected, module, log, a) ;
+    }
+
+    {
         test_start(log, mv_string("struct-alignment"));
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
@@ -185,6 +195,21 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
         test_start(log, mv_string("struct-packed-aligned"));
         AlignedStruct expected = (AlignedStruct) {.x = 1527, .y = -5, .z = 2};
         test_toplevel_eq("(struct AS [.x 1527] [.y -5] [.z 2])", &expected, module, log, a) ;
+    }
+
+    {
+        typedef struct I64Pair {int64_t x, y;} I64Pair;
+        test_start(log, mv_string("pair-simple"));
+        I64Pair expected = (I64Pair) {.x = 12397, .y = -35};
+        test_toplevel_eq("(struct (Pair I64 I64) [._1 12397] [._2 -35])", &expected, module, log, a) ;
+    }
+
+    {
+        typedef struct I64Pair {int64_t x, y;} I64Pair;
+        test_start(log, mv_string("pair-fn"));
+        run_toplevel("(def pair-fn proc [x y] (struct (Pair I64 I64) [._1 x] [._2 y]))", module, log, a) ;
+        I64Pair expected = (I64Pair) {.x = -987, .y = 935};
+        test_toplevel_eq("(pair-fn -987 935)", &expected, module, log, a) ;
     }
 
     {
