@@ -235,6 +235,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         size_t idx = arg_offsets.len - (i + 1);
         arg_offsets.data[idx] = offset;
         offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
+
+        if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+            // TODO (IMPROVEMENT): Move this check/assert to debug builds?
+            panic(mv_string("Attempted to do invalid conversion"));
+        }
     }
     arg_offsets.data[0] = offset;
 
@@ -269,11 +274,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
         CType c_arg = ctype->proc.args.data[i].val;
-        PiType* p_arg = ptype->proc.args.data[i];
-        if (!can_reinterpret(&c_arg, p_arg)) {
-            // TODO (IMPROVEMENT): Move this check/assert to debug builds?
-            panic(mv_string("Attempted to do invalid conversion"));
-        }
         
         // Get the classes associated with an argument.  
         // If there are multiple classes, each class in the array corresponds to an eightbyte of the argument.
@@ -890,8 +890,10 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
             size_t number_populated_branches = 0;
             for (size_t i = 0; i < ptype->enumeration.variants.len; i++) {
                 PtrArray* variant = ptype->enumeration.variants.data[i].val;
-                if (variant->len != 0) number_populated_branches++;
-                selected_index = i;
+                if (variant->len != 0) {
+                    number_populated_branches++;
+                    selected_index = i;
+                }
                 if (number_populated_branches > 1) return false;
             }
 
