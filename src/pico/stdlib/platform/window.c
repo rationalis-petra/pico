@@ -20,7 +20,7 @@ void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
 }
 
 void build_destroy_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
 
     convert_c_fn(destroy_window, &fn_ctype, type, ass, a, point); 
 
