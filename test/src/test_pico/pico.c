@@ -6,14 +6,14 @@
 #include "test_pico/pico.h"
 
 
-void run_pico_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
-  StrPtrAMap tests = mk_str_ptr_amap(16, a);
-  str_ptr_insert(mv_string("parse"), run_pico_parse_tests, &tests);
-  str_ptr_insert(mv_string("pipeline"), run_pico_pipeline_tests, &tests);
+void run_pico_tests(TestLog* log, Allocator* a) {
+    if (suite_start(log, mv_string("parse"))) {
+        run_pico_parse_tests(log, a);
+        suite_end(log);
+    }
 
-  test_log_info(log, mv_string("Beginning Pico Tests!"));
-  run_tests(tests, to_run, log, a);
-  test_log_info(log, mv_string("Ending Pico tests!"));
-
-  sdelete_str_ptr_amap(tests);
+    if (suite_start(log, mv_string("pipeline"))) {
+        run_pico_pipeline_tests(log, a);
+        suite_end(log);
+    }
 }

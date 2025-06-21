@@ -100,9 +100,10 @@ int main(int argc, char** argv) {
     int out = 1;
     switch (command.type) {
     case CAll: {
-        RunDescriptor run_all = (RunDescriptor) {.type = RunAll};
-        run_pico_tests(run_all, log, stdalloc);
-        write_string(mv_string("\n"), cout);
+        if (suite_start(log, mv_string("pico"))) {
+            run_pico_tests(log, stdalloc);
+            suite_end(log);
+        }
         out = summarize_tests(log, stdalloc);
         break;
     }

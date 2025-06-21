@@ -7,7 +7,7 @@
 #include "test_pico/pipeline/pipeline.h"
 #include "test_pico/pipeline/helper.h"
 
-void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
+void run_pico_pipeline_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
@@ -61,117 +61,98 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     } AlignedStruct;
     run_toplevel("(def AS Struct [.x I32] [.y I16] [.z I8])", module, log, a) ;
 
-    {
-        test_start(log, mv_string("int-literal"));
+    if (test_start(log, mv_string("int-literal"))) {
         int64_t expected = -10;
         test_toplevel_eq("-10", &expected, module, log, a) ;
     }
 
     // TODO (FEAT): move libraries out into their own section
-    {
-        test_start(log, mv_string("unsigned-add"));
+    if (test_start(log, mv_string("unsigned-add"))) {
         uint64_t expected = 3;
         test_toplevel_eq("(u64.+ 1 2)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("signed-add"));
+    if (test_start(log, mv_string("signed-add"))) {
         int64_t expected = 6;
         test_toplevel_eq("(i64.+ 4 2)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("signed-sub"));
+    if (test_start(log, mv_string("signed-sub"))) {
         int64_t expected = -1;
         test_toplevel_eq("(i64.- 1 2)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("unsigned-mul"));
+    if (test_start(log, mv_string("unsigned-mul"))) {
         int64_t expected = 24;
         test_toplevel_eq("(i64.* 4 6)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("and-ff"));
+    if (test_start(log, mv_string("and-ff"))) {
         uint8_t expected = 0;
         test_toplevel_eq("(bool.and :false :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("and-ft"));
+    if (test_start(log, mv_string("and-ft"))) {
         uint8_t expected = 0;
         test_toplevel_eq("(bool.and :false :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("and-tt"));
+    if (test_start(log, mv_string("and-tt"))) {
         uint8_t expected = 1;
         test_toplevel_eq("(bool.and :true :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("or-ff"));
+    if (test_start(log, mv_string("or-ff"))) {
         uint8_t expected = 0;
         test_toplevel_eq("(bool.or :false :false)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("or-ft"));
+    if (test_start(log, mv_string("or-ft"))) {
         uint8_t expected = 1;
         test_toplevel_eq("(bool.or :false :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("or-tt"));
+    if (test_start(log, mv_string("or-tt"))) {
         uint8_t expected = 1;
         test_toplevel_eq("(bool.or :true :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("not-t"));
+    if (test_start(log, mv_string("not-t"))) {
         bool expected = false;
         test_toplevel_eq("(bool.not :true)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("not-f"));
+    if (test_start(log, mv_string("not-f"))) {
         bool expected = true;
         test_toplevel_eq("(bool.not :false)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("simple-let"));
+    if (test_start(log, mv_string("simple-let"))) {
         int64_t expected = 3;
         test_toplevel_eq("(let [x 3] x)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("simple-sequence"));
+    if (test_start(log, mv_string("simple-sequence"))) {
         int64_t expected = 3;
         test_toplevel_eq("(seq 1 2 3)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("let-in-sequence"));
+    if (test_start(log, mv_string("let-in-sequence"))) {
         int64_t expected = 2;
         test_toplevel_eq("(seq [let! x 2] x)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("let-many-in-sequence"));
+    if (test_start(log, mv_string("let-many-in-sequence"))) {
         int64_t expected = 5;
         test_toplevel_eq("(seq [let! x 2 y 3] (u32.+ x y))", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct"));
+    if (test_start(log, mv_string("struct"))) {
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct-nested"));
+    if (test_start(log, mv_string("struct-nested"))) {
         typedef struct {
             uint64_t val;
             Point p2;
@@ -180,93 +161,80 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
         test_toplevel_eq("(struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct-refersed"));
+    if (test_start(log, mv_string("struct-refersed"))) {
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel_eq("(struct (Struct [.x I64] [.y I64]) [.y -5] [.x 3])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct-alignment"));
+    if (test_start(log, mv_string("struct-alignment"))) {
         Point expected = (Point) {.x = 3, .y = -5};
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct-space-misaligned"));
+    if (test_start(log, mv_string("struct-space-misaligned"))) {
         MisalignedStruct expected = (MisalignedStruct) {.x = 3, .y = -5, .z = 4};
         test_toplevel_eq("(struct MAS [.x 3] [.y -5] [.z 4])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("struct-packed-aligned"));
+    if (test_start(log, mv_string("struct-packed-aligned"))) {
         AlignedStruct expected = (AlignedStruct) {.x = 1527, .y = -5, .z = 2};
         test_toplevel_eq("(struct AS [.x 1527] [.y -5] [.z 2])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("pair-simple"));
+    if (test_start(log, mv_string("pair-simple"))) {
         Point expected = (Point) {.x = 12397, .y = -35};
         test_toplevel_eq("(struct (Pair I64 I64) [._1 12397] [._2 -35])", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("pair-fn"));
+    if (test_start(log, mv_string("pair-fn"))) {
         run_toplevel("(def pair-fn proc [x y] (struct (Pair I64 I64) [._1 x] [._2 y]))", module, log, a) ;
         Point expected = (Point) {.x = -987, .y = 935};
         test_toplevel_eq("(pair-fn -987 935)", &expected, module, log, a) ;
     }
 
-    {
-        test_start(log, mv_string("pair-poly"));
+    if (test_start(log, mv_string("pair-poly-fn"))) {
         Point expected = (Point) {.x = 1432, .y = -120938};
         test_toplevel_eq("(pair.pair 1432 -120938)", &expected, module, log, a) ;
     }
 
-    {
+    if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         // TODO (BUG): this leaks - set current allocator?
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_start(log, mv_string("Instnatiate Implicit with Default UVar"));
         uint64_t expected = 10;
         test_toplevel_eq("(seq [let! arr (mk-array 1 1)] (aset 0 10 arr) (elt 0 arr))",
             &expected, module, log, a) ;
         set_std_current_allocator(current_old);
     }
 
-    {
-        test_start(log, mv_string("print"));
+    if (test_start(log, mv_string("print"))) {
         test_toplevel_stdout("(print \"test\")", "test", module, log, a) ;
     }
 
-    {
+    if (test_start(log, mv_string("single-for-upto"))) {
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_start(log, mv_string("single-for-upto"));
         test_toplevel_stdout("(loop [for i from 1 upto 10] (print (u64.to-string i)))", "12345678910", module, log, a) ;
         set_std_current_allocator(current_old);
     }
 
-    {
+    if (test_start(log, mv_string("single-for-below"))) {
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_start(log, mv_string("single-for-below"));
         test_toplevel_stdout("(loop [for i from 1 below 10] (print (u64.to-string i)))", "123456789", module, log, a) ;
         set_std_current_allocator(current_old);
     }
 
-    {
+    if (test_start(log, mv_string("single-for-downto"))) {
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_start(log, mv_string("single-for-downto"));
         test_toplevel_stdout("(loop [for i from 10 downto 1] (print (u64.to-string i)))", "10987654321", module, log, a) ;
         set_std_current_allocator(current_old);
     }
 
-    {
+    if (test_start(log, mv_string("single-for-below"))) {
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_start(log, mv_string("single-for-below"));
         test_toplevel_stdout("(loop [for i from 10 above 1] (print (u64.to-string i)))", "1098765432", module, log, a) ;
         set_std_current_allocator(current_old);
     }
