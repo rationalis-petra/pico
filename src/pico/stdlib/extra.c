@@ -875,7 +875,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+    PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
     PiType* macro_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
 
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax

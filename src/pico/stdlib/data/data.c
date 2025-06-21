@@ -1,6 +1,4 @@
-// #include "platform/signals.h"
-
-#include "pico/stdlib/data/array.h"
+#include "pico/stdlib/data/list.h"
 #include "pico/stdlib/data/either.h"
 #include "pico/stdlib/data/maybe.h"
 #include "pico/stdlib/data/pair.h"
@@ -24,7 +22,7 @@ void add_data_module(Assembler* ass, Package* base, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    add_array_module(module, a);
+    add_list_module(module, a);
     add_either_module(ass, module, a);
     add_maybe_module(ass, module, a);
     add_pair_module(ass, module, a);

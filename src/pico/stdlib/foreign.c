@@ -206,11 +206,11 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
                                        "ptr", 1, mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
                                        "proc", 3,
                                          mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
-                                         mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
+                                         mk_app_type(a, get_list_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
                                          mk_app_type(a, get_ptr_type(), mk_var_type(a, "CType")),
                                        "struct", 2,
                                          mk_app_type(a, get_maybe_type(), mk_prim_type(a, UInt_64)),
-                                         mk_app_type(a, get_array_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
+                                         mk_app_type(a, get_list_type(), mk_app_type(a, get_pair_type(), mk_prim_type(a, UInt_64), mk_var_type(a, "CType"))),
                                        "unspecified", 0));
         type_data = c_type;
         sym = string_to_symbol(mv_string("CType"));

@@ -274,7 +274,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+        PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
         PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
 
         type_check_i(untyped->transformer, transformer_proc, env, a, point);

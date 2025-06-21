@@ -10,9 +10,9 @@ PiType* get_ptr_type() {
     return ptr_type;
 }
 
-static PiType* array_type;
-PiType* get_array_type() {
-    return array_type;
+static PiType* list_type;
+PiType* get_list_type() {
+    return list_type;
 }
 
 static PiType* maybe_type;
@@ -534,7 +534,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = 
-            mk_named_type(a, "Array",
+            mk_named_type(a, "List",
                           mk_type_family(a,
                                          vars,
                                          mk_struct_type(a, 4,
@@ -543,12 +543,12 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
                                                         "capacity", mk_prim_type(a, UInt_64),
                                                         "gpa", alloc_ptr_type)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Array"));
+        sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
         delete_pi_type_p(type_val, a);
 
         e = get_def(sym, module);
-        array_type = e->value;
+        list_type = e->value;
         
         // Maybe Type 
         vars = mk_symbol_array(1, a);
