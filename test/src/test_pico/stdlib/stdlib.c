@@ -21,7 +21,6 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
-    add_import_all(&imports.clauses, a, 2, "data", "array");
     add_import_all(&imports.clauses, a, 1, "data");
 
     Exports exports = (Exports) {
@@ -62,6 +61,17 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
             run_pico_stdlib_data_pair_tests(log, module, a);
         }
         suite_end(log);
+    }
+
+
+    if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        uint64_t expected = 10;
+        test_toplevel_eq("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))",
+            &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
     }
 
     delete_module(module);

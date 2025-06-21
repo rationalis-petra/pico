@@ -10,7 +10,7 @@ void run_pico_stdlib_num_tests(TestLog* log, Module* module, Allocator* a);
 void run_pico_stdlib_extra_tests(TestLog* log, Module* module, Allocator* a);
 
 void run_pico_stdlib_data_tests(TestLog* log, Module* module, Allocator* a);
-void run_pico_stdlib_data_array_tests(TestLog* log, Module* module, Allocator* a);
+void run_pico_stdlib_data_list_tests(TestLog* log, Module* module, Allocator* a);
 void run_pico_stdlib_data_pair_tests(TestLog* log, Module* module, Allocator* a);
 void run_pico_stdlib_data_ptr_tests(TestLog* log, Module* module, Allocator* a);
 
