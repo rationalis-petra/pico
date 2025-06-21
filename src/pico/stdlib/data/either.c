@@ -16,9 +16,9 @@ void add_either_module(Assembler *ass, Module *data, Allocator *a) {
     };
     Module* module = mk_module(header, get_package(data), NULL, a);
     delete_module_header(header);
-    Symbol sym;
+    //Symbol sym;
 
-    PiType* typep;
+    //PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);

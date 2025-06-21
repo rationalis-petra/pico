@@ -52,7 +52,12 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -Wundef -g -std=$(C_VERSION) -D_GNU_SOURCE
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -g -std=$(C_VERSION) -D_GNU_SOURCE
+
+# The warnings we want 
+CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereference -Wcast-align 
+# these warnings are a bit pedantic, so are turned off for now
+CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
 # The final build step.
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)

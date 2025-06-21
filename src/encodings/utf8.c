@@ -4,7 +4,7 @@ void encode_point_utf8(uint8_t* dest, uint8_t* size, uint32_t codepoint) {
     // Encode with 1 byte (7 bits)
     // encoded as 0xxxxxxx
     if (codepoint < 128 ) {
-        dest[0] = codepoint;
+        dest[0] = (uint8_t)codepoint; // downcast is safe, as codepoint < 128
         *size = 1;
     }
     // Encode with 2 bytes (11 bits)

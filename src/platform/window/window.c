@@ -234,11 +234,13 @@ Window *create_window(String name, int width, int height) {
     struct xdg_toplevel* top = xdg_surface_get_toplevel(xsurface);
     window->toplevel = top;
     xdg_toplevel_add_listener(top, &toplevel_listener, window);
-    xdg_toplevel_set_title(top, name.bytes);
+
+    // TODO (INVESTIGATE BUG): check the encoding used by wayland - if not
+    // UTF-8, convert!
+    xdg_toplevel_set_title(top, (char*)name.bytes);
+
     wl_surface_commit(surface); // TOOD: necessary?
 
-
-    // TODO: move into show-window method?
     return window;
 }
 

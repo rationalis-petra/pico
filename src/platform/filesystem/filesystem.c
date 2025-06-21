@@ -24,7 +24,9 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
         break;
     }
 
-    FILE* handle = fopen(name.bytes, mode);
+    // TODO (BUG): string is utf-8, but this isn't (necessarily) what
+    //    the plaform supports/uses. This should be checked.
+    FILE* handle = fopen((char*)name.bytes, mode);
     if (handle == NULL) return NULL;
 
     File* file = mem_alloc(sizeof(File), alloc);
