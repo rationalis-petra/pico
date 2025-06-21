@@ -25,12 +25,12 @@ struct Window {
 
 #elif OS_FAMILY == WINDOWS
 
+#include <windows.h>
+
 struct Window {
     HWND impl;
     bool should_close;
 };
-
-#include <windows.h>
 
 #else
 #error "Unrecognized OS"
