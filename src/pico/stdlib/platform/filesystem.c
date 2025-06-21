@@ -29,6 +29,8 @@ uint8_t relic_read_byte(File *file) {
 }
 
 U8Array relic_read_chunk(File *file, MaybeSize msize) {
+    // TODO: The allocator pointer goes on to live in the output array,
+    //       and so it will be dangling when this function exits
     Allocator a = get_std_perm_allocator();
     return read_chunk(file, !msize.tag, msize.size, &a);
 }
