@@ -17,7 +17,6 @@ Command parse_command(StringArray args) {
                 debug_print = true;
             }
         } 
-                
 
         return (Command) {
             .type = CRepl,

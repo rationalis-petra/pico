@@ -91,6 +91,12 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
 
 void end_coloured_text(FormattedOStream* os) {
     // TODO (feature): check for underflow in debug mode
+#ifdef DEBUG
+    if (os->colour_len == 0) {
+        panic(mv_string("Underflow on end_coloured_text"));
+    }
+#endif
+
     os->colour_len--;
     if (os->colour_len == 0) {
         printf("\x1b[39m");
@@ -120,7 +126,13 @@ void start_boldness(FontBoldness boldness, FormattedOStream* os) {
 }
 
 void end_boldness(FormattedOStream* os) {
-    os->colour_len--;
+#ifdef DEBUG
+    if (os->boldness_len == 0) {
+        panic(mv_string("Underflow on end_boldness"));
+    }
+#endif
+
+    os->boldness_len--;
     if (os->colour_len == 0) {
         printf("\x1b[22m");
     } else {

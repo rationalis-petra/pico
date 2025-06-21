@@ -1,12 +1,22 @@
 #include "test/command_line_opts.h"
 
-TestOpts parse_test_opts(StringArray args, size_t len) {
-    /* return (TestOpts) { */
-    /*     String report_file; */
-    /*     ReportType report_type; */
-    /*     uint8_t report_level; */
-    /*     uint8_t print_level; */
-    /* }; */
+TestOpts parse_test_opts(StringArray args, size_t start) {
+    TestOpts opts = (TestOpts) {
+        .report_file  = mv_string(""),
+        .report_type  = Text,
+        .report_level = 0,
+        .print_level  = 2, // default = print failures + errors
+    };
+
+    for (size_t i = start; i < args.len; i++) {
+        // verbose
+        if (string_cmp(mv_string("-v"), args.data[i]) == 0) {
+            opts.print_level = 3;
+        } else {
+            // do nothing
+        }
+    }
+    return opts;
 }
 
 TestCommand parse_test_command(StringArray args) {
@@ -16,8 +26,8 @@ TestCommand parse_test_command(StringArray args) {
             .type = CAll,
             .opts.report_file  = mv_string(""),
             .opts.report_type  = Text,
-            .opts.report_level = 3,
-            .opts.print_level  = 0,
+            .opts.report_level = 0,
+            .opts.print_level  = 2, // default = print failures + errors
         };
     }
 

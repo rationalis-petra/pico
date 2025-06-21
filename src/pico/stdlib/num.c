@@ -12,6 +12,19 @@ PiType* mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(a, 2, mk_prim_type(a, a1), mk_prim_type(a, a2), mk_prim_type(a, r));
 }
 
+PiType* mk_unop_type(Allocator* a, PrimType arg, PrimType r) {
+    return mk_proc_type(a, 1, mk_prim_type(a, arg), mk_prim_type(a, r));
+}
+
+void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
+    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
+    build_binary_op (ass, Xor, reg(RAX, sz_64), imm8(1), a, point);
+    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
 void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
@@ -297,8 +310,9 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
 
-    build_binary_fn(ass, And, sz_8, a, &point);
     typep = mk_binop_type(a, Bool, Bool, Bool);
+
+    build_binary_fn(ass, And, sz_8, a, &point);
     sym = string_to_symbol(mv_string("and"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -311,8 +325,17 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
     delete_pi_type_p(typep, a);
+
+    typep = mk_unop_type(a, Bool, Bool);
+    build_not_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("not"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
     sdelete_u8_array(fn_segments.data);
 
     Result r = add_module_def(num, string_to_symbol(mv_string("bool")), module);

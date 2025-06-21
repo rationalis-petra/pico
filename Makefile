@@ -18,11 +18,16 @@ DEBUG_FLAGS := -O0
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lglfw
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lwayland-client -DDEBUG
 	LINK_FLAGS := -ldl -lm
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -lglfw
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else
 	LINK_FLAGS := 
+endif
+
+ifdef HEDRON
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lvulkan -DUSE_VULKAN
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -lvulkan -DUSE_VULKAN
 endif
 
 # Find all the C files we want to compile
@@ -47,7 +52,12 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -Wall -Wextra -Wundef -g -std=$(C_VERSION) -D_GNU_SOURCE
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -g -std=$(C_VERSION) -D_GNU_SOURCE
+
+# The warnings we want 
+CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereference -Wcast-align 
+# these warnings are a bit pedantic, so are turned off for now
+CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
 # The final build step.
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)

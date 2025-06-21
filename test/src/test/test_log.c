@@ -93,7 +93,7 @@ int summarize_tests(TestLog *log, Allocator* a) {
     clock_t end_time = clock();
     double cpu_time_used = ((double) (end_time - log->start_time)) / CLOCKS_PER_SEC;
 
-    write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
+    write_fstring(mv_string("──────────────────────────────────────────────────────────\n\n"), log->stream);
     if (log->passed_tests + log->failed_tests != log->test_count) {
         err_code = 1;
         start_coloured_text(fail_colour, log->stream);

@@ -122,6 +122,7 @@ typedef struct {
 } SynFloatingLiteral;
 
 typedef struct {
+    Symbol symbol;
     size_t index;
     void* value;
 } AbsVariable;

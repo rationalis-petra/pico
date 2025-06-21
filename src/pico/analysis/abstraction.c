@@ -17,7 +17,6 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 
 Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
-RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 SymbolArray* try_get_path(Syntax* syn, Allocator* a);
@@ -630,7 +629,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             // Get the term
             RawTree *raw_term = (raw_clause.branch.nodes.len == 2)
                 ? &raw_clause.branch.nodes.data[1]
-                : raw_slice(&raw_clause, 2, a);
+                : raw_slice(&raw_clause, 1, a);
             Syntax* clause_body = abstract_expr_i(*raw_term, env, a, point);
 
             SynClause* clause = mem_alloc(sizeof(SynClause), a);
@@ -2028,8 +2027,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #elif ABI == WIN_64
                                          // memcpy (dest = rcx, src = rdx, size = r8)
                                          // retval = rax
-                                         "mov 0x40(%%rsp), %%r8    \n"
-                                         "mov 0x48(%%rsp), %%rcx   \n"
+                                         "mov 0x48(%%rsp), %%r8    \n"
+                                         "mov 0x50(%%rsp), %%rcx   \n"
                                          "mov %%rsp, %%rdx         \n"
                                          "sub $0x20, %%rsp         \n"
                                          "call memcpy              \n"
@@ -2454,6 +2453,7 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Sha
                     .range = msym->range,
                     .abvar.index = 0,
                     .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                    .abvar.symbol = msym->atom.symbol,
                 };
             }
             return res;

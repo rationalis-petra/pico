@@ -166,7 +166,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                 start_idx = i + 1;
             }
         }
-        String bad_line = substring(start_idx, i + 1, bad_code, a);
+        String bad_line = substring(start_idx, i, bad_code, a);
         if (start_idx != 0) {
             line_number++;
             Document* doc = pretty_u64(line_number, a);
@@ -177,12 +177,14 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
             start_coloured_text(bad_code_colour, fos);
         } 
         write_fstring(bad_line, fos);
+        delete_string(bad_line, a);
         start_idx = i + 1;
     }
     end_coloured_text(fos);
 
     write_fstring(s2, fos);
 
+    sdelete_u64_array(prev_line_starts);
     delete_string(s1, a);
     delete_string(bad_code, a);
     delete_string(s2, a);

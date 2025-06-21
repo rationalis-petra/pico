@@ -69,9 +69,10 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SAbsVariable: {
-        PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("#absolute-variable"), a), &nodes);
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("#abv"), a), &nodes);
         // TODO (BUG LOGIC): replace with pretty_size.
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->abvar.symbol), a), &nodes);
         push_ptr(pretty_u64(syntax->abvar.index, a), &nodes);
         push_ptr(pretty_ptr(syntax->abvar.value, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);

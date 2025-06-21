@@ -364,7 +364,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Storage of function output 
         size_t ret_size = pi_stack_size_of(*syn.procedure.body->ptype);
 
-        // Note: R9, R14, RBP 
+        // Note: R9, R14, RBP were saved previously (in the prolog)
+        //       R12 is for the return address
         build_binary_op(ass, Mov, reg(R12, sz_64),  rref8(RBP, 16, sz_64), a, point);
         build_binary_op(ass, Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), a, point);
         build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
@@ -672,7 +673,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             *body_ref = (int32_t)(curr_pos - body_pos);
         }
 
-
         generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
 
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(enum_stack_size), a, point);
@@ -720,7 +720,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Find the field in the source & compute offset
             size_t src_offset = 0;
             for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType* t = ((Syntax*)syn.structure.fields.data[i].val)->ptype;
+                PiType* t = ((Syntax*)syn.structure.fields.data[j].val)->ptype;
                 src_offset += pi_stack_size_of(*t); 
 
                 if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {

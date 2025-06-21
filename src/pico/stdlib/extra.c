@@ -20,8 +20,8 @@ void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
 static uint64_t std_current_allocator; 
 static uint64_t std_perm_allocator; 
-static uint64_t std_region_allocator; 
-static uint64_t std_comptime_allocator; 
+//static uint64_t std_region_allocator; 
+//static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
 
 static Package* current_package;
@@ -31,7 +31,11 @@ static IStream* current_istream;
 void set_std_istream(IStream* current) { current_istream = current; }
 
 static OStream* current_ostream;
-void set_std_ostream(OStream* current) { current_ostream = current; }
+OStream *set_std_ostream(OStream *current) {
+    OStream* old = current_ostream;
+    current_ostream = current;
+    return old;
+}
 
 Allocator get_std_current_allocator() {
     Allocator** data = get_dynamic_memory();
@@ -47,6 +51,19 @@ Allocator set_std_current_allocator(Allocator al) {
     return old;
 }
 
+Allocator get_std_perm_allocator() {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_perm_allocator]; 
+    return *dyn;
+}
+
+Allocator set_std_perm_allocator(Allocator al) {
+    Allocator** data = get_dynamic_memory();
+    Allocator* dyn = data[std_perm_allocator]; 
+    Allocator old = *dyn;
+    *dyn = al;
+    return old;
+}
 
 Allocator* get_std_temp_allocator() {
     void** data = get_dynamic_memory();
@@ -218,7 +235,7 @@ void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void relic_print_fn(String s) {
-    fputs((char*)s.bytes, stdout);
+    write_string(s, current_ostream);
 }
 
 void relic_println_fn(String s) {
@@ -394,76 +411,97 @@ MacroResult loop_macro(RawTreeArray nodes) {
     // loop-check 
     push_rawtree((RawTree){}, &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
+    PtrArray loop_whiles = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
-            ForRange range;
-            if (branch.branch.nodes.len != 6) {
+            if (branch.branch.nodes.len == 0) {
                 return (MacroResult) {
                     .result_type = Left,
-                    .err.message = mv_string("Malformed for clause: incorrect number of terms - expecting 6"),
+                    .err.message = mv_string("Malformed loop clause no terms provided"),
                     .err.range = branch.range,
                 };
             }
-
-            if (!eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("for")))) {
+            RawTree clause_type = branch.branch.nodes.data[0];
+            if (!is_symbol(clause_type)) {
                 return (MacroResult) {
                     .result_type = Left,
-                    .err.message = mv_string("Malformed loop clause: expected 'for'"),
+                    .err.message = mv_string("Malformed loop clause: expected first term to be a symbol"),
                     .err.range = branch.branch.nodes.data[0].range,
                 };
             }
+            if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("for")))) {
+                ForRange range;
+                if (branch.branch.nodes.len != 6) {
+                    return (MacroResult) {
+                        .result_type = Left,
+                        .err.message = mv_string("Malformed for clause: incorrect number of terms - expecting 6"),
+                        .err.range = branch.range,
+                    };
+                }
 
-            if (!is_symbol(branch.branch.nodes.data[1])) {
-                return (MacroResult) {
-                    .result_type = Left,
-                    .err.message = mv_string("For loop expects variable"),
-                    .err.range = branch.branch.nodes.data[1].range,
-                };
-            }
+                if (!is_symbol(branch.branch.nodes.data[1])) {
+                    return (MacroResult) {
+                        .result_type = Left,
+                        .err.message = mv_string("For loop expects variable"),
+                        .err.range = branch.branch.nodes.data[1].range,
+                    };
+                }
 
-            range.name = branch.branch.nodes.data[1];
+                range.name = branch.branch.nodes.data[1];
 
-            if (!eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
-                return (MacroResult) {
-                    .result_type = Left,
-                    .err.message = mv_string("For loop expects 'from'"),
-                    .err.range = branch.branch.nodes.data[2].range,
-                };
-            }
+                if (!eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
+                    return (MacroResult) {
+                        .result_type = Left,
+                        .err.message = mv_string("For loop expects 'from'"),
+                        .err.range = branch.branch.nodes.data[2].range,
+                    };
+                }
 
-            range.from = branch.branch.nodes.data[3];
+                range.from = branch.branch.nodes.data[3];
 
-            if (!is_symbol(branch.branch.nodes.data[4])) {
-                return (MacroResult) {
-                    .result_type = Left,
-                    .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
-                    .err.range = branch.branch.nodes.data[4].range,
-                };
-            } else {
-                Symbol s = branch.branch.nodes.data[4].atom.symbol;
-                if (symbol_eq(s, string_to_symbol(mv_string("upto")))) {
-                    range.type = UpTo;
-                } else if (symbol_eq(s, string_to_symbol(mv_string("below")))) {
-                    range.type = Below;
-                } else if (symbol_eq(s, string_to_symbol(mv_string("downto")))) {
-                    range.type = DownTo;
-                } else if (symbol_eq(s, string_to_symbol(mv_string("above")))) {
-                    range.type = Above;
-                } else {
+                if (!is_symbol(branch.branch.nodes.data[4])) {
                     return (MacroResult) {
                         .result_type = Left,
                         .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
                         .err.range = branch.branch.nodes.data[4].range,
                     };
+                } else {
+                    Symbol s = branch.branch.nodes.data[4].atom.symbol;
+                    if (symbol_eq(s, string_to_symbol(mv_string("upto")))) {
+                        range.type = UpTo;
+                    } else if (symbol_eq(s, string_to_symbol(mv_string("below")))) {
+                        range.type = Below;
+                    } else if (symbol_eq(s, string_to_symbol(mv_string("downto")))) {
+                        range.type = DownTo;
+                    } else if (symbol_eq(s, string_to_symbol(mv_string("above")))) {
+                        range.type = Above;
+                    } else {
+                        return (MacroResult) {
+                            .result_type = Left,
+                            .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
+                            .err.range = branch.branch.nodes.data[4].range,
+                        };
+                    }
                 }
+
+                range.to = branch.branch.nodes.data[5];
+
+                ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+                *rp = range;
+                push_ptr(rp, &loop_fors);
+            } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("while")))) {
+                RawTree *raw_term = (branch.branch.nodes.len == 2)
+                    ? &branch.branch.nodes.data[1]
+                    : raw_slice(&branch, 1, &a);
+                push_ptr(raw_term, &loop_whiles);
+            } else {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("Malformed loop clause: expected on of 'while', 'for'"),
+                    .err.range = branch.branch.nodes.data[0].range,
+                };
             }
-
-            range.to = branch.branch.nodes.data[5];
-
-            ForRange* rp = mem_alloc(sizeof(ForRange), &a);
-            *rp = range;
-            push_ptr(rp, &loop_fors);
         } else {
             push_rawtree(nodes.data[i], &loop_body_nodes);
         }
@@ -478,14 +516,16 @@ MacroResult loop_macro(RawTreeArray nodes) {
     push_rawtree(atom_symbol("loop-continue"), &continue_go_to_nodes);
 
     RawTree loop_condition;
-    if (loop_fors.len == 0) {
+    if (loop_fors.len + loop_whiles.len == 0) {
         loop_condition = (RawTree) { 
             .type = RawAtom,
             .atom.type = ABool,
             .atom.boolean = true, // TODO should this be false? no condition =
                                   // no loop?
         };
-    } else {
+    }
+
+    if (loop_fors.len > 0) {
         loop_condition = mk_condition(*(ForRange*)loop_fors.data[0], &a);
         for (size_t i = 1; i < loop_fors.len; i++) {
             RawTree new_condition = mk_condition(*(ForRange*)loop_fors.data[i], &a);
@@ -510,7 +550,40 @@ MacroResult loop_macro(RawTreeArray nodes) {
                 .branch.nodes = and_nodes,
             };
         }
-    }// _nodes = mk_rawtree_array(4, &a); // (if condition (go-to loop-body ...) (go-to exit))
+    }
+
+    if (loop_whiles.len > 0) {
+        size_t start_idx = 0;
+        if (loop_fors.len == 0) {
+            loop_condition = *(RawTree*)loop_whiles.data[0];
+            start_idx++;
+        }
+        for (size_t i = start_idx; i < loop_whiles.len; i++) {
+            RawTree new_condition = *(RawTree*)loop_whiles.data[i];
+            RawTreeArray and_fn_nodes = mk_rawtree_array(3, &a);
+            push_rawtree(atom_symbol("."), &and_fn_nodes);
+            push_rawtree(atom_symbol("and"), &and_fn_nodes);
+            push_rawtree(atom_symbol("bool"), &and_fn_nodes);
+            RawTree and = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_fn_nodes,
+            };
+
+            RawTreeArray and_nodes = mk_rawtree_array(3, &a);
+
+            push_rawtree(and, &and_nodes);
+            push_rawtree(loop_condition, &and_nodes);
+            push_rawtree(new_condition, &and_nodes);
+            loop_condition = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_nodes,
+            };
+        }
+    }
+
+    // _nodes = mk_rawtree_array(4, &a); // (if condition (go-to loop-body ...) (go-to exit))
 
     RawTreeArray loop_body_arg_nodes = mk_rawtree_array(loop_fors.len, &a);
     
@@ -524,7 +597,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
         // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
         RawTreeArray func_nodes = mk_rawtree_array(3, &a);
         push_rawtree(atom_symbol("."), &func_nodes);
-        push_rawtree(atom_symbol((fr->type == UpTo | fr->type == Below) ? "+" : "-"), &func_nodes);
+        push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
         push_rawtree(atom_symbol("u64"), &func_nodes);
         RawTree func_term = (RawTree) {
             .type = RawBranch,

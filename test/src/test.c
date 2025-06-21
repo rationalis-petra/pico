@@ -72,17 +72,38 @@ int main(int argc, char** argv) {
     // TODO: setup_tests
     FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
     Verbosity v = (Verbosity) {
-      .show_passes = false, .show_fails = true,
-      .show_info = false, .show_errors = true,
+        .show_passes = false,
+        .show_fails = false,
+        .show_info = false,
+        .show_errors = false,
     };
+    switch (command.opts.print_level) {
+    default:
+    case 4:
+        v.show_info = true;
+        // fall through
+    case 3:
+        v.show_passes = true;
+        // fall through
+    case 2:
+        v.show_errors = true;
+        // fall through
+    case 1:
+        v.show_fails = true;
+        // fall through
+    case 0:
+        break;
+    }
 
     TestLog* log = mk_test_log(cos, v, stdalloc);
 
+    int out = 1;
     switch (command.type) {
     case CAll: {
         RunDescriptor run_all = (RunDescriptor) {.type = RunAll};
         run_pico_tests(run_all, log, stdalloc);
         write_string(mv_string("\n"), cout);
+        out = summarize_tests(log, stdalloc);
         break;
     }
     case COnly: {
@@ -105,7 +126,6 @@ int main(int argc, char** argv) {
         break;
     }
 
-    int out = summarize_tests(log, stdalloc);
 
     delete_test_log(log, stdalloc);
     delete_formatted_ostream(cos, stdalloc);

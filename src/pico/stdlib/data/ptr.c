@@ -34,6 +34,9 @@ void add_ptr_module(Module *data, Allocator *a) {
         panic(point.error_message);
     }
 
+    const char* null_fn = "(def null all [A] (name (Ptr A) (num-to-address 0)))";
+    compile_toplevel(null_fn, module, &point, &pi_point, a);
+
     const char* get_fn = "(def get all [A] proc [(p (Ptr A))] (load {A} (unname p)))";
     compile_toplevel(get_fn, module, &point, &pi_point, a);
 

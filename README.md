@@ -40,7 +40,7 @@ meaning that arguments are separated with spaces (not commas) and the the functi
 are surrounded by parentheses, e.g.
 
 ```clojure
-user > (print "Hello, World!")
+user > (print-ln "Hello, World!")
 Hello, World!
 :unit
 user > 
