@@ -218,7 +218,6 @@ void run_pico_pipeline_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
     }
 
     {
-        typedef struct I64Pair {int64_t x, y;} I64Pair;
         test_start(log, mv_string("pair-poly"));
         Point expected = (Point) {.x = 1432, .y = -120938};
         test_toplevel_eq("(pair.pair 1432 -120938)", &expected, module, log, a) ;

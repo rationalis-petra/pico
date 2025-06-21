@@ -81,12 +81,16 @@ int main(int argc, char** argv) {
     default:
     case 4:
         v.show_info = true;
+        // fall through
     case 3:
         v.show_passes = true;
+        // fall through
     case 2:
         v.show_errors = true;
+        // fall through
     case 1:
         v.show_fails = true;
+        // fall through
     case 0:
         break;
     }
