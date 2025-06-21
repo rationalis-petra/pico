@@ -41,6 +41,11 @@ typedef struct {
     VkPresentModeKHR* present_modes;
 } SwapChainSupportDetails;
 
+
+struct HedronShaderModule {
+    VkShaderModule module;
+};
+
 typedef enum {
     QUEUE_GRAPHICS = 0x1,
     QUEUE_PRESENT = 0x2,
@@ -510,6 +515,28 @@ void destroy_window_surface(HedronSurface *surface) {
     mem_free(surface, hd_alloc);
 }
 
+HedronShaderModule* create_shader_module(U8Array code) {
+    VkShaderModuleCreateInfo create_info = (VkShaderModuleCreateInfo){};
+    create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    // TODO: check if code.len % 4 == 0??
+    create_info.codeSize = code.len;
+    create_info.pCode = (uint32_t*)code.data;
+
+    VkShaderModule shader_module;
+    if (vkCreateShaderModule(logical_device, &create_info, NULL, &shader_module) != VK_SUCCESS) {
+        panic(mv_string("failed to create shader module!"));
+    }
+
+    HedronShaderModule* hdm = mem_alloc(sizeof(HedronShaderModule), hd_alloc);
+    hdm->module = shader_module;
+
+    return hdm;
+}
+
+void destroy_shader_module(HedronShaderModule* module) {
+    vkDestroyShaderModule(logical_device, module->module, NULL);
+    mem_free(module, hd_alloc);
+}
 #else
 
 bool is_hedron_supported() {
@@ -524,14 +551,21 @@ void teardown_hedron() {
     panic(mv_string("Hedron not supported on this build"));
 }
 
-HedronSurface *create_window_surface(struct Window *) {
+HedronSurface *create_window_surface(struct Window * win) {
     panic(mv_string("Hedron not supported on this build"));
 }
 
-void destroy_window_surface(HedronSurface*) {
+void destroy_window_surface(HedronSurface* surface) {
     panic(mv_string("Hedron not supported on this build"));
 }
 
+HedronShaderModule* create_shader_module(U8Array code) {
+    panic(mv_string("Hedron not supported on this build"));
+}
+
+void destroy_shader_module(HedronShaderModule* module) {
+    panic(mv_string("Hedron not supported on this build"));
+}
 #endif
 
 

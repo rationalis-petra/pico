@@ -67,12 +67,6 @@ void build_read_byte_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* 
 }
 
 void build_read_chunk_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType array_ctype = mk_struct_ctype(a, 4,
-                                 "data", mk_voidptr_ctype(a),
-                                 "cap", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
-                                 "len", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
-                                 "gpa", mk_voidptr_ctype(a));
-
     CType msize_ctype = mk_struct_ctype(a, 2,
                                  "cap", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
                                  "len", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}));
@@ -80,9 +74,9 @@ void build_read_chunk_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint*
     CType fn_ctype = mk_fn_ctype(a, 2,
                                  "file", mk_voidptr_ctype(a),
                                  "maybe_size", msize_ctype,
-                                 array_ctype);
+                                 mk_array_ctype(a));
 
-    convert_c_fn(read_chunk, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(relic_read_chunk, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, a);
 }
