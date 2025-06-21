@@ -20,8 +20,8 @@ void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
 static uint64_t std_current_allocator; 
 static uint64_t std_perm_allocator; 
-static uint64_t std_region_allocator; 
-static uint64_t std_comptime_allocator; 
+//static uint64_t std_region_allocator; 
+//static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
 
 static Package* current_package;
@@ -597,7 +597,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
         // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
         RawTreeArray func_nodes = mk_rawtree_array(3, &a);
         push_rawtree(atom_symbol("."), &func_nodes);
-        push_rawtree(atom_symbol((fr->type == UpTo | fr->type == Below) ? "+" : "-"), &func_nodes);
+        push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
         push_rawtree(atom_symbol("u64"), &func_nodes);
         RawTree func_term = (RawTree) {
             .type = RawBranch,

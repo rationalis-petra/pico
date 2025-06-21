@@ -21,7 +21,7 @@ void add_debug_module(Assembler* ass, Package* base, Allocator* a) {
     Symbol sym;
 
     PiType type;
-    PiType* typep;
+    //PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(point.error_message);
