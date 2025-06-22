@@ -304,7 +304,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                err.message = mv_cstr_doc("Incorrect number of function arguments", a);
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected ", a), &nodes);
+                push_ptr(pretty_u64(fn_type.proc.args.len, a), &nodes);
+                push_ptr(mv_cstr_doc("but got ", a), &nodes);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
+                err.message = mv_hsep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 

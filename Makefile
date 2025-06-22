@@ -14,11 +14,11 @@ CC := gcc
 ## Platform specifics and configuration
 ##-------------------------------------
 RELEASE_FLAGS := -Ofast
-DEBUG_FLAGS := -O0
+DEBUG_FLAGS := -O0 -DDEBUG
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lwayland-client -DDEBUG
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client -fsanitize=address,leak 
 	LINK_FLAGS := -ldl -lm
     RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else

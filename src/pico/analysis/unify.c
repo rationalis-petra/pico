@@ -752,7 +752,7 @@ void squash_type(PiType* type, Allocator* a) {
                   squash_type(con.has_field.type, a);
                   sym_ptr_insert(con.has_field.name, con.has_field.type, &out_fields);
               }
-              *type = (PiType){.sort = TEnum, .structure.fields = out_fields};
+              *type = (PiType){.sort = TStruct, .structure.fields = out_fields};
               break;
           }
           case Enum: {

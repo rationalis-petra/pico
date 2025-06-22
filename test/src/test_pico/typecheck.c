@@ -8,7 +8,10 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/stdlib/helper.h"
 
-void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
+#include "test_pico/typecheck.h"
+
+
+void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
@@ -35,33 +38,25 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    // TODO: what do with these bois?
-    if (test_start(log, mv_string("int-literal"))) {
-        int64_t expected = -10;
-        test_toplevel_eq("-10", &expected, module, log, a) ;
+    if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        uint64_t expected = 10;
+        test_toplevel_eq("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))",
+            &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
     }
 
-    if (suite_start(log, mv_string("core"))) {
-        run_pico_stdlib_core_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("num"))) {
-        run_pico_stdlib_num_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("extra"))) {
-        run_pico_stdlib_extra_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("data"))) {
-        if (suite_start(log, mv_string("pair"))) {
-            run_pico_stdlib_data_pair_tests(log, module, a);
-        }
-        suite_end(log);
-    }
+    /* if (test_start(log, mv_string("Default struct from field constraints"))) { */
+    /*     // TODO (BUG): this leaks - set current allocator? */
+    /*     Allocator current_old = get_std_current_allocator(); */
+    /*     set_std_current_allocator(arena); */
+    /*     uint64_t expected = 10; */
+    /*     test_toplevel_eq("(proc [point] (i64.+ point.x point.y))", */
+    /*         &expected, module, log, a) ; */
+    /*     set_std_current_allocator(current_old); */
+    /* } */
 
     delete_module(module);
     delete_assembler(ass);
