@@ -24,6 +24,7 @@ struct HedronSurface {
     // swapchain details
     uint32_t image_count;
     VkFormat format;
+    VkExtent2D extent;
     VkPresentModeKHR mode;
     VkSwapchainKHR swapchain;
 
@@ -44,6 +45,11 @@ typedef struct {
 
 struct HedronShaderModule {
     VkShaderModule module;
+};
+
+struct HedronPipeline {
+    VkPipelineLayout layout;
+    VkPipeline pipeline;
 };
 
 typedef enum {
@@ -447,6 +453,7 @@ void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR s
     hd_surface->swapchain = swap_chain;
     hd_surface->mode = mode;
     hd_surface->format = surface_format.format;
+    hd_surface->extent = extent;
     hd_surface->num_images = image_count;
     hd_surface->swapchain_images = images;
     hd_surface->image_views = image_views;
@@ -495,14 +502,13 @@ HedronSurface *create_window_surface(struct Window *window) {
         return NULL;
     }
 
+    // The surface is populated with swapchain details by create_swapchain
     HedronSurface* hd_surface = mem_alloc(sizeof(HedronSurface), hd_alloc);
     create_swapchain(swap_chain_details, surface, window, hd_surface);
     free_swapchain_details(swap_chain_details, hd_alloc);
 
-    *hd_surface = (HedronSurface) {
-        .surface = surface,
-        .present_family = indices.graphics_family,
-    };
+    hd_surface->surface = surface;
+    hd_surface->present_family = indices.graphics_family;
     return hd_surface;
 }
 
@@ -537,35 +543,236 @@ void destroy_shader_module(HedronShaderModule* module) {
     vkDestroyShaderModule(logical_device, module->module, NULL);
     mem_free(module, hd_alloc);
 }
+
+HedronPipeline *create_pipeline(PtrArray shaders, HedronSurface* surface) {
+    if (shaders.len != 2) {
+        panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
+    }
+    HedronShaderModule* vert_shader = shaders.data[0];
+    HedronShaderModule* frag_shader = shaders.data[1];
+
+    VkPipelineShaderStageCreateInfo vertex_shader_info = (VkPipelineShaderStageCreateInfo){};
+    vertex_shader_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertex_shader_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertex_shader_info.module = vert_shader->module;
+    vertex_shader_info.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragment_shader_info = (VkPipelineShaderStageCreateInfo){};
+    fragment_shader_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragment_shader_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragment_shader_info.module = frag_shader->module;
+    fragment_shader_info.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shader_stages[2] = {vertex_shader_info, fragment_shader_info};
+    
+    // TODO: the vertex input data layout should be provided as an argument to
+    // this function! 
+    VkPipelineVertexInputStateCreateInfo vertex_input_info = (VkPipelineVertexInputStateCreateInfo){};
+    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertex_input_info.vertexBindingDescriptionCount = 0;
+    vertex_input_info.pVertexBindingDescriptions = NULL; // Optional
+    vertex_input_info.vertexAttributeDescriptionCount = 0;
+    vertex_input_info.pVertexAttributeDescriptions = NULL; // Optional
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly = (VkPipelineInputAssemblyStateCreateInfo){};
+    input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    input_assembly.primitiveRestartEnable = VK_FALSE;
+
+    VkViewport viewport = (VkViewport) {
+        viewport.x = 0.0f,
+        viewport.y = 0.0f,
+        viewport.width = (float) surface->extent.width, // TODO: how to get input
+        viewport.height = (float) surface->extent.height,
+        viewport.minDepth = 0.0f,
+        viewport.maxDepth = 1.0f,
+    };
+
+    VkRect2D scissor = (VkRect2D) {
+        .offset = {.x = 0, .y = 0},
+        .extent = surface->extent,
+    };
+
+    VkDynamicState dynamic_state_arr[2] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamic_states = (VkPipelineDynamicStateCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamic_state_arr,
+    };
+
+    VkPipelineViewportStateCreateInfo viewport_state = (VkPipelineViewportStateCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .pViewports = &viewport,
+        .scissorCount = 1,
+        .pScissors = &scissor,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizer = (VkPipelineRasterizationStateCreateInfo){};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    rasterizer.depthBiasConstantFactor = 0.0f; // Optional
+    rasterizer.depthBiasClamp = 0.0f; // Optional
+    rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
+
+    VkPipelineMultisampleStateCreateInfo multisampling = (VkPipelineMultisampleStateCreateInfo){};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.minSampleShading = 1.0f; // Optional
+    multisampling.pSampleMask = NULL; // Optional
+    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+    multisampling.alphaToOneEnable = VK_FALSE; // Optional
+
+    VkPipelineColorBlendAttachmentState colour_blend_attachment = (VkPipelineColorBlendAttachmentState){};
+    colour_blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colour_blend_attachment.blendEnable = VK_FALSE;
+    colour_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+    colour_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    colour_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
+    colour_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+    colour_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    colour_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+    colour_blend_attachment.blendEnable = VK_TRUE;
+    colour_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colour_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colour_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    colour_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colour_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colour_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+    VkPipelineColorBlendStateCreateInfo colour_blending = (VkPipelineColorBlendStateCreateInfo){};
+    colour_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colour_blending.logicOpEnable = VK_FALSE;
+    colour_blending.logicOp = VK_LOGIC_OP_COPY; // Optional
+    colour_blending.attachmentCount = 1;
+    colour_blending.pAttachments = &colour_blend_attachment;
+    colour_blending.blendConstants[0] = 0.0f; // Optional
+    colour_blending.blendConstants[1] = 0.0f; // Optional
+    colour_blending.blendConstants[2] = 0.0f; // Optional
+    colour_blending.blendConstants[3] = 0.0f; // Optional
+
+    VkPipelineLayoutCreateInfo pipeline_layout_info = (VkPipelineLayoutCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 0,
+        .pSetLayouts = NULL,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = NULL,
+    };
+
+    VkPipelineLayout pipeline_layout;
+
+    if (vkCreatePipelineLayout(logical_device, &pipeline_layout_info, NULL, &pipeline_layout) != VK_SUCCESS) {
+        panic(mv_string("failed to create pipeline layout!"));
+    }
+
+    VkAttachmentDescription colour_attachment = (VkAttachmentDescription){
+        .format = surface->format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    };
+
+    VkAttachmentReference colour_attachment_ref = (VkAttachmentReference) {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    VkSubpassDescription subpass = (VkSubpassDescription) {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colour_attachment_ref,
+    };
+
+    VkRenderPassCreateInfo render_pass_info = (VkRenderPassCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colour_attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkRenderPass render_pass;
+    if (vkCreateRenderPass(logical_device, &render_pass_info, NULL, &render_pass) != VK_SUCCESS) {
+        panic(mv_string("failed to create render pass!"));
+    }
+
+    VkGraphicsPipelineCreateInfo pipeline_info = (VkGraphicsPipelineCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = shader_stages,
+        .pVertexInputState = &vertex_input_info,
+        .pInputAssemblyState = &input_assembly,
+        .pViewportState = &viewport_state,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pDepthStencilState = NULL,
+        .pColorBlendState = &colour_blending,
+        .pDynamicState = &dynamic_states,
+        .layout = pipeline_layout,
+        .renderPass = render_pass,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1,
+    };
+
+    VkPipeline vk_pipeline;
+    if (vkCreateGraphicsPipelines(logical_device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &vk_pipeline) != VK_SUCCESS) {
+        panic(mv_string("failed to create graphics pipeline!"));
+    }
+
+
+    HedronPipeline *pipeline = mem_alloc(sizeof(HedronPipeline), hd_alloc);
+    *pipeline = (HedronPipeline) {
+        .pipeline = vk_pipeline,
+        .layout = pipeline_layout,
+    };
+    return pipeline;
+}
+
+void destroy_pipeline(HedronPipeline *pipeline) {
+    vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
+    vkDestroyPipeline(logical_device, pipeline->pipeline, NULL);
+    mem_free(pipeline, hd_alloc);
+}
+
 #else
 
 bool is_hedron_supported() {
     return false;
 }
 
-int init_hedron(Allocator*) {
-    panic(mv_string("Hedron not supported on this build"));
-}
+int init_hedron(Allocator*)
+  {panic(mv_string("Hedron not supported on this build"));}
+void teardown_hedron()
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronSurface *create_window_surface(struct Window * win)
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_window_surface(HedronSurface* surface)
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronShaderModule* create_shader_module(U8Array code)
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_shader_module(HedronShaderModule* module)
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronShaderModule* create_pipeline(PtrArray shaders)
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_pipeline(HedronPipeline* pipeline)
+  {panic(mv_string("Hedron not supported on this build"));}
 
-void teardown_hedron() {
-    panic(mv_string("Hedron not supported on this build"));
-}
-
-HedronSurface *create_window_surface(struct Window * win) {
-    panic(mv_string("Hedron not supported on this build"));
-}
-
-void destroy_window_surface(HedronSurface* surface) {
-    panic(mv_string("Hedron not supported on this build"));
-}
-
-HedronShaderModule* create_shader_module(U8Array code) {
-    panic(mv_string("Hedron not supported on this build"));
-}
-
-void destroy_shader_module(HedronShaderModule* module) {
-    panic(mv_string("Hedron not supported on this build"));
-}
 #endif
 
 

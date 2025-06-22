@@ -10,6 +10,7 @@ struct Window;
 
 typedef struct HedronSurface HedronSurface;
 typedef struct HedronShaderModule HedronShaderModule;
+typedef struct HedronPipeline HedronPipeline;
 
 // Global Utility - supported, setup & teardown
 bool is_hedron_supported();
@@ -22,7 +23,9 @@ HedronSurface* create_window_surface(struct Window* window);
 void destroy_window_surface(HedronSurface*);
 
 HedronShaderModule* create_shader_module(U8Array code);
-void destroy_shader_module(HedronShaderModule*);
+void destroy_shader_module(HedronShaderModule* module);
 
+HedronPipeline* create_pipeline(PtrArray shaders, HedronSurface* surface);
+void destroy_pipeline(HedronPipeline* pipeline);
 
 #endif
