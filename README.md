@@ -299,6 +299,103 @@ user > (def wheels proc [vehicle] match vehicle
 ```
 
 ### Polymorphism and Pointers
+Often, we encounter times when it is desirable to have very similar code for
+different types. A prime example is the `list` - we may want to have a list of
+integers, another of floats, and a list of strings. Below, you can see some code
+which does exactly that
+
+```clojure
+user > (def slist (list "bannana" "apple" "orange"))
+Defined slist : List String
+user > (def ilist (data.list -10 5 6))
+Defined ilist : List I64 
+user > (def flist (list -10.5 5000.5 3.14))
+Defined list : List F64 
+```
+
+We can then use the same funcion - `elt` to access an element of the list
+
+```clojure
+user > (print-ln (elt 0 slist))
+"bannana"
+:unit
+user > (elt 1 ilist)
+4
+user > (elt 2 flist)
+3.14
+```
+
+Both `list` and `elt` can work across multiple types like this because they make
+use of *polymorphism*. Polymorphism in Relic is enabled by two features:
+*polymorphic functions* and *type families*. 
+
+#### Polymorphic Functions
+The simplest polymorphic function is the identity function `id`, which would be
+used as follows:
+
+```clojure
+user > (id 3)
+3
+user > (id "test")
+"test"
+```
+
+The `id` function is written below, and can be read as "for any type A, id takes
+in a value 'x' of type A, and returns x'. 
+ 
+```clojure
+user > (def id all [A] proc [(x A)] x)
+Defined id: All [A] (Proc [A] A)
+```
+
+Two foundational polymorphic functions in Relic are `load` and `store`. These
+form the basis of Relic's ability to interact with the `Address` type. Let's
+first grab an address by allocating 8 bytes of memory:
+
+```clojure
+user > (def addr malloc 8)
+Defined addr : Address
+```
+
+Now, it is possible to store a 64 bit integer with the `store` funtion. 
+
+```clojure
+user > (store addr 345)
+Defined addr : Address
+```
+
+Load, meanwhile, has the type `(All [A] Proc [Addr] A)`. If we try and use it
+directly, we will receive an "ambiguous type" error. 
+
+```clojure
+user > (load addr)
+Ambiguous type: the type of (load addr) could not be deduced.
+```
+
+To explicitly provide the type, we use curly braces, `{}`. Like square brackets,
+which denote special information that is not executed directly, curly braces
+denote that implicit (optional) information is being explicitly provided - in
+this case, the types.
+
+```clojure
+user > (load {I64} addr)
+345
+```
+
+Note that the address type does not care about the underlying value, we can load
+it as a "different" type. For example, the 345 that we stored at addr has binary
+representation `101011001`. Taking only the lower 8 bits, we get `1011001`,
+or 89. We can verify by loading `addr` with the `U8` type:
+
+```clojure
+user > (load {U8} addr)
+89
+```
+
+#### Type Families
+TODO: document me!
+
+### Named, Distinct and Opaque Types 
 TODO: document me!
 
 ### Traits
@@ -308,4 +405,7 @@ TODO: document me!
 TODO: document me!
 
 ### Dynamic Unwind
+TODO: document me!
+
+### Standard Library
 TODO: document me!
