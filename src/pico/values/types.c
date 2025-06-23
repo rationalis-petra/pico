@@ -463,14 +463,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
         else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
 
-        PtrArray args = mk_ptr_array(type->binder.vars.len + 2, a);
-        push_ptr(mk_str_doc(mv_string("["), a), &args);
+        PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &args);
         }
-        push_ptr(mk_str_doc(mv_string("]"), a), &args);
-
-        push_ptr(mv_sep_doc(args, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type(type->binder.body, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -829,12 +826,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TAll: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("All [" ), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &nodes);
+        PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &args);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
