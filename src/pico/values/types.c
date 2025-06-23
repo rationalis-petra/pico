@@ -1495,7 +1495,17 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
         return pi_type_eql(lhs->proc.ret, rhs->proc.ret);
         break;
     case TStruct:
-        panic(mv_string("pi_type_eql not implemented for structs"));
+        if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
+
+        for (size_t i = 0; i < lhs->structure.fields.len; i++) {
+            SymPtrCell lhcell = lhs->structure.fields.data[i];
+            SymPtrCell rhcell = lhs->structure.fields.data[i];
+            if (!symbol_eq(lhcell.key, rhcell.key) ||
+                !pi_type_eql(lhcell.val, rhcell.val)) 
+                return false;
+        }
+        return true;
+        break;
     case TEnum:
         panic(mv_string("pi_type_eql not implemented for enums"));
     case TReset:

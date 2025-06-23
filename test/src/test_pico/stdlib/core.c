@@ -1,5 +1,5 @@
 #include "test_pico/stdlib/components.h"
-#include "test_pico/stdlib/helper.h"
+#include "test_pico/helper.h"
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     // -------------------------------------------------------------------------

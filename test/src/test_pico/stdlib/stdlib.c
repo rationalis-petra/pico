@@ -4,9 +4,9 @@
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
 
+#include "test_pico/helper.h"
 #include "test_pico/stdlib/stdlib.h"
 #include "test_pico/stdlib/components.h"
-#include "test_pico/stdlib/helper.h"
 
 void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     // Setup

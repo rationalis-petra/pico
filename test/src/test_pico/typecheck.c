@@ -6,8 +6,7 @@
 
 #include "test_pico/stdlib/stdlib.h"
 #include "test_pico/stdlib/components.h"
-#include "test_pico/stdlib/helper.h"
-
+#include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
 
@@ -42,21 +41,24 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         // TODO (BUG): this leaks - set current allocator?
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        uint64_t expected = 10;
-        test_toplevel_eq("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))",
-            &expected, module, log, a) ;
+        PiType* expected = mk_prim_type(&arena, Int_64);
+        test_typecheck_eq("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))",
+            expected, module, log, a) ;
         set_std_current_allocator(current_old);
     }
 
-    /* if (test_start(log, mv_string("Default struct from field constraints"))) { */
-    /*     // TODO (BUG): this leaks - set current allocator? */
-    /*     Allocator current_old = get_std_current_allocator(); */
-    /*     set_std_current_allocator(arena); */
-    /*     uint64_t expected = 10; */
-    /*     test_toplevel_eq("(proc [point] (i64.+ point.x point.y))", */
-    /*         &expected, module, log, a) ; */
-    /*     set_std_current_allocator(current_old); */
-    /* } */
+    if (test_start(log, mv_string("Default struct from field constraints"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType *expected =
+            mk_proc_type(&arena, 1,
+                         mk_struct_type(&arena, 2, "x", mk_prim_type(&arena, Int_64),
+                                        "y", mk_prim_type(&arena, Int_64)), mk_prim_type(&arena, Int_64));
+        test_typecheck_eq("(proc [point] (i64.+ point.x point.y))",
+            expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
 
     delete_module(module);
     delete_assembler(ass);
