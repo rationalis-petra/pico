@@ -34,6 +34,8 @@ typedef struct {
     ImportClauseArray clauses;
 } Imports;
 
+bool imclause_eq(ImportClause c1, ImportClause c2);
+
 //------------------------------------------------------------------------------
 // Export Clauses
 //------------------------------------------------------------------------------

@@ -33,9 +33,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     if (catch_error(pi_point)) goto on_pi_error;
 
     // Step 1: Parse Module header, get the result (ph_res)
-    // TODO (BUG) header & module (below) will be uninitialized if parse fails.
     ParseResult ph_res = parse_rawtree(in, &arena);
-    if (ph_res.type == ParseNone) goto on_exit;
+    if (ph_res.type == ParseNone) goto on_noparse;
 
     if (ph_res.type == ParseFail) {
         MultiError multi = (MultiError) {
@@ -43,8 +42,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
             .error = ph_res.error,
         };
         display_error(multi, in, serr, a);
-        release_arena_allocator(arena);
-        return;
+        goto on_noparse;
     }
 
     // Step 2: check / abstract module header
@@ -123,6 +121,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
 
  on_exit:
     add_module(header->name, module, package);
+ on_noparse:
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
