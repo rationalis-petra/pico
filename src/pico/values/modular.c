@@ -90,8 +90,8 @@ Result add_module(Symbol symbol, Module* module, Package* package) {
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
-    // TODO (PERF): check for if this clause already exists!
-    // check if the clause already exists.
+    // Check if the clause already exists.
+    // This saves us from redundantly traversing a module when loading the environment. 
     ImportClauseArray imclauses = module->header.imports.clauses;
     for (size_t i = 0; i < module->header.imports.clauses.len; i++) {
         if (imclause_eq(clause, imclauses.data[i])) return;
