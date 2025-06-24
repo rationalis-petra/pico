@@ -283,7 +283,21 @@ static const char* wind_class_name = "Relic Window Class";
 
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    Window* window = (Window*)lParam;
+    Window* window;
+    if (uMsg == WM_NCCREATE) {
+        CREATESTRUCT* pCreate = (CREATESTRUCT*)lParam;
+        window = pCreate->lpCreateParams;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)window);
+
+        RECT windowArea;
+        GetClientRect(hwnd, &windowArea);
+        window->width = windowArea.right - windowArea.left;
+        window->height = windowArea.bottom - windowArea.top;
+
+    } else {
+        window = (Window*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    }
+
     if (uMsg == WM_CLOSE) {
         window->should_close = true;
         return 0;

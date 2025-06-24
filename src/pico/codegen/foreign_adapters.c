@@ -780,7 +780,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
         return ctype.prim == CLongLong && ctype.is_signed == Unsigned; 
     }
     case UInt_32: {
-        return (ctype.prim == CInt && ctype.prim == CLong) && ctype.is_signed == Unsigned; 
+        return (ctype.prim == CInt || ctype.prim == CLong) && ctype.is_signed == Unsigned; 
     }
     case UInt_16: {
         return ctype.prim == CShort && ctype.is_signed == Unsigned;

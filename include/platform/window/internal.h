@@ -30,6 +30,9 @@ struct Window {
 struct Window {
     HWND impl;
     bool should_close;
+
+    uint16_t width;
+    uint16_t height;
 };
 
 #else

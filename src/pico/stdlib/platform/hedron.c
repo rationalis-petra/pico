@@ -69,7 +69,7 @@ void build_create_command_pool_fn(PiType* type, Assembler* ass, Allocator* a, Er
 }
 
 void build_destroy_command_pool_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(a, 1, "pool", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
     convert_c_fn(destroy_command_pool, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }

@@ -570,7 +570,15 @@ HedronSurface *create_window_surface(struct Window *window) {
 
     // TODO: check for present support on graphics queue
 
-#elif OS_FAMILY == WINDOWS 
+#elif OS_FAMILY == WINDOWS
+    VkWin32SurfaceCreateInfoKHR create_info = (VkWin32SurfaceCreateInfoKHR) {
+        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+        .hwnd = window->impl,
+        .hinstance = GetModuleHandle(NULL),
+    };
+
+    VkResult result = vkCreateWin32SurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
+    if (result != VK_SUCCESS) return NULL;
 #else
 #error "unrecognized OS"
 #endif
