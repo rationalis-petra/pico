@@ -237,7 +237,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
             .type = ParseFail,
             .error.message = mv_cstr_doc("Unexpected end of stream. List started here was still parsing", a),
             .error.range.start = start,
-            .error.range.end = start,
+            .error.range.end = start + 1,
         };
     } else if (sres != StreamSuccess) {
         out = (ParseResult) {
