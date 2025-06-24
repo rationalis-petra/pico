@@ -60,6 +60,32 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("Un-annotated variant in match"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType *expected =
+            mk_proc_type(&arena, 1,
+                         mk_enum_type(&arena, 2, "left", 1, mk_prim_type(&arena, UInt_64),
+                                      "right", 1, mk_prim_type(&arena, Address)), mk_prim_type(&arena, UInt_64));
+        test_typecheck_eq("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])",
+            expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("enum from variant constraints"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType *expected = mk_proc_type(&arena, 1, mk_prim_type(&arena, Bool),
+                                        mk_enum_type(&arena, 2,
+                                                     "left", 1, mk_prim_type(&arena, Int_64),
+                                                     "right", 1, mk_prim_type(&arena, Address)));
+        test_typecheck_eq("(proc [which] if which (:left 10) (:right (malloc 8)))",
+            expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
+
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

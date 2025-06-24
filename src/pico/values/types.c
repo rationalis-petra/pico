@@ -1506,7 +1506,22 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
         return true;
         break;
     case TEnum:
-        panic(mv_string("pi_type_eql not implemented for enums"));
+        if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) return false;
+
+        for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
+            SymPtrCell lhcell = lhs->structure.fields.data[i];
+            SymPtrCell rhcell = lhs->structure.fields.data[i];
+            if (!symbol_eq(lhcell.key, rhcell.key)) 
+                return false;
+            PtrArray* lhvars = lhcell.val;
+            PtrArray* rhvars = rhcell.val;
+            if (lhvars->len != rhvars->len) return false;
+            for (size_t j = 0; j < lhvars->len; j++) {
+                if (!pi_type_eql(lhvars->data[j], rhvars->data[j])) return false;
+            }
+        }
+        return true;
+        break;
     case TReset:
         panic(mv_string("pi_type_eql not implemented for resets"));
     case TResumeMark:

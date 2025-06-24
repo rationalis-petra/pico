@@ -882,7 +882,7 @@ UnifyResult add_variant_constraint(UVarType *uvar, Range range, Symbol variant, 
             uvar->default_behaviour = Enum;
             bool append = true;
             for (size_t i = 0; i < uvar->constraints.len; i++) {
-                if (uvar->constraints.data[i].type != ConField) {
+                if (uvar->constraints.data[i].type != ConVariant) {
                     return (UnifyResult) {
                         .type = USimpleError,
                         .message = mv_cstr_doc("incompatible uvar constraints!", a),
