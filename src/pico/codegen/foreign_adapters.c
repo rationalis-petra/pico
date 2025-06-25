@@ -491,16 +491,16 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
     // Calculate input area size:
     if (pass_in_memory) {
-        input_area_size += return_arg_size;
+        input_area_size += pi_stack_align(return_arg_size);
     }
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
       if (i < 4) {
           Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
           if (class == Win64LargeAggregate || class == Win64LargeAggregate) {
-              input_area_size += c_size_of(ctype->proc.args.data[i].val);
+              input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
           }
       } else {
-          input_area_size += c_size_of(ctype->proc.args.data[i].val);
+          input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
       }
     }
 
@@ -508,27 +508,23 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
 
     const size_t expected_stack_align = 16;
-    size_t needed_stack_offset = (input_area_size + 0x8) % expected_stack_align;
-    needed_stack_offset = needed_stack_offset == 0 ? 0 : expected_stack_align - needed_stack_offset;
-    // Check if the stack is aligned (and align if not). This is done as follows:
-    // Check the offset of the stack (RSP)
-    // If this is equal to the needed offset (input 
+    size_t needed_stack_offset = input_area_size % expected_stack_align;
+    needed_stack_offset = expected_stack_align - needed_stack_offset;
+
+    // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
+    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    // Get the bottom byte of RSP (store in RAX), which is the info we need to
+    // perform (16-byte) alignment.
     build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(R10, sz_64), imm64(expected_stack_align), a, point);
-    build_binary_op(ass, Mov, reg(R11, sz_64), imm64(needed_stack_offset), a, point);
+    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
 
-    build_nullary_op(ass, CQO, a, point);
-    build_unary_op(ass, IDiv, reg(R10, sz_64), a, point);
+    // Do some fancy stuff
+    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(needed_stack_offset), a, point);
+    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
+    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
 
-    build_binary_op(ass, Sub, reg(R11, sz_64), reg(RDX, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R11, sz_64), a, point);
-    build_unary_op(ass, Neg, reg(R11, sz_64), a, point);
-
-    // Was RDX < R10? 
-    build_binary_op(ass, CMovL, reg(R11, sz_64), reg(RDX, sz_64), a, point);
-    
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R11, sz_64), a, point);
-    build_unary_op(ass, Push, reg(R11, sz_64), a, point);
 
     // Check for return arg/space
     if (pass_in_memory) {
