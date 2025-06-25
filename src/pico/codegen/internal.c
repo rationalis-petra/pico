@@ -331,8 +331,7 @@ void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler*
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_struct_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_struct_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -427,8 +426,7 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_enum_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_enum_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -465,8 +463,7 @@ void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_reset_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_reset_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -498,8 +495,7 @@ void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_dynamic_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_dynamic_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -532,8 +528,8 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 #else 
     #error "Unknown calling convention"
 #endif
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_type_var), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+    generate_c_call(mk_type_var, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x30), a, point);
@@ -579,8 +575,7 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_forall_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_forall_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -624,8 +619,7 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_fam_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_fam_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -657,8 +651,7 @@ void gen_mk_c_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_c_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_c_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -691,8 +684,7 @@ void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_named_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_named_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -724,8 +716,7 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_distinct_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_distinct_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -758,8 +749,7 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_opaque_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_opaque_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
@@ -812,8 +802,7 @@ void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location
     #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&mk_trait_ty), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(mk_trait_ty, ass, a, point);
 
 #if ABI == WIN_64
     build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
