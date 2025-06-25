@@ -217,12 +217,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->ec_links.len; i++) {
             LinkMetaData link = links->ec_links.data[i];
             void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
-            *address_ptr= out.code.data + link.dest_offset;
+            *address_ptr = out.code.data + link.dest_offset;
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
             LinkMetaData link = links->cc_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
-            *address_ptr= out.code.data + link.dest_offset;
+            *address_ptr = out.code.data + link.dest_offset;
         }
     }
     return out;

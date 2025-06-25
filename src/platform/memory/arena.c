@@ -27,6 +27,11 @@ typedef struct {
     Allocator* internal_allocator;
 } ArenaContext;
 
+size_t align_padding(size_t size, size_t align) {
+    size_t rem = size % align;
+    size_t pad = rem == 0 ? 0 : align - rem;
+    return pad;
+}
 
 void* arena_malloc(size_t memsize, void* vctx) {
     ArenaContext* ctx = (ArenaContext*)vctx;
@@ -37,6 +42,7 @@ void* arena_malloc(size_t memsize, void* vctx) {
     // allocate a larger than usual block
     // the '+ sizeof(size_t)' accounts for the fact that all memory has a short
     // prefix that denotes it's storage location
+
     if (alloc_size + sizeof(size_t) > ctx->blocksize) {
         // Allocate new (full) block for the large memory
         ArenaBlock data_block;
@@ -58,9 +64,10 @@ void* arena_malloc(size_t memsize, void* vctx) {
         ArenaBlock* current_block =
             ctx->memory_blocks.data + ctx->memory_blocks.len - 1;
 
+        size_t pad = align_padding(current_block->bmp, 8);
         if (alloc_size < ctx->blocksize - current_block->bmp) {
-            void* data = current_block->data + current_block->bmp;
-            current_block->bmp += alloc_size;
+            void* data = current_block->data + current_block->bmp + pad;
+            current_block->bmp += alloc_size + pad;
             *(size_t*)data = memsize;
             return data + sizeof(size_t);
         } else {
