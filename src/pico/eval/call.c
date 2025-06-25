@@ -115,6 +115,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "push %%rbp       \n" // Nonvolatile on System V + Win64
         "push %%rbx       \n" // Nonvolatile on System V + Win64
         "push %%rdi       \n" // Nonvolatile on Win 64
+        "push %%rsi       \n" // Nonvolatile on Win 64
         "push %%r15       \n" // for dynamic vars
         "push %%r14       \n" // for dynamic memory space
         "push %%r13       \n" // for control/indexing memory space
@@ -130,15 +131,13 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "pop %%r13        \n"
         "pop %%r14        \n"
         "pop %%r15        \n"
-        "pop %%rdi        \n" 
+        "pop %%rsi        \n"
+        "pop %%rdi        \n"
         "pop %%rbx        \n"
         "pop %%rbp        \n"
-        : "=r" (out)
+        : "=r"(out)
 
-        : "r" (instructions.data)
-        , "r" (dvars)
-        , "r" (dynamic_memory_space)
-        , "r" (offset_memory_space)) ;
+        : "r"(instructions.data), "r"(dvars), "r"(dynamic_memory_space), "r"(offset_memory_space));
 
     set_std_temp_allocator(old_temp_alloc);
     mem_free(dynamic_memory_space, a);

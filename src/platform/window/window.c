@@ -357,7 +357,7 @@ bool window_should_close(Window *window) {
 
 void poll_events() {
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, PM_REMOVE)) {
+        while (PeekMessage(&msg, NULL,  0, 0, PM_REMOVE))  {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }

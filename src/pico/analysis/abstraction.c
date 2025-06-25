@@ -1987,6 +1987,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "push %%rbp       \n" // Nonvolatile on System V + Win64
                                          "push %%rbx       \n" // Nonvolatile on System V + Win64
                                          "push %%rdi       \n" // Nonvolatile on Win 64
+                                         "push %%rsi       \n" // Nonvolatile on Win 64
                                          "push %%r15       \n" // for dynamic vars
                                          "push %%r14       \n" // for dynamic memory space
                                          "push %%r13       \n" // for control/indexing memory space
@@ -2047,6 +2048,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "pop %%r13        \n"
                                          "pop %%r14        \n"
                                          "pop %%r15        \n"
+                                         "pop %%rsi        \n" 
                                          "pop %%rdi        \n" 
                                          "pop %%rbx        \n"
                                          "pop %%rbp        \n"
