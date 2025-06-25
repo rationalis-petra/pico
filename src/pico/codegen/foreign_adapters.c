@@ -259,7 +259,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     unsigned char current_integer_register = 0;
 
     U8Array return_classes = system_v_arg_classes(ctype->proc.ret, a);
-    size_t return_arg_size = c_size_of(*ctype->proc.ret);
+    size_t return_arg_size = pi_stack_align(c_size_of(*ctype->proc.ret));
 
     // Check if return arg in memory, if so then the return arg takes the spot of
     // a 'hidden' extra argument - specifically, the first, with the ptr being
@@ -334,7 +334,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         if (pass_in_memory) {
             push_u64(i, &in_memory_args);
-            input_area_size += c_size_of(c_arg);
+            input_area_size += pi_stack_align(c_size_of(c_arg));
         }
 
         sdelete_u8_array(classes);
@@ -486,7 +486,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
     const Win64ArgClass return_class = win_64_arg_class(ctype->proc.ret);
     const bool pass_in_memory = return_class == Win64LargeAggregate || return_class == Win64LargeAggregate;
-    const size_t return_arg_size = c_size_of(*(CType*)ctype->proc.ret);
+    const size_t return_arg_size = pi_stack_align(c_size_of(*(CType*)ctype->proc.ret));
     size_t input_area_size = 0;
 
     // Calculate input area size:
@@ -529,7 +529,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     // Check for return arg/space
     if (pass_in_memory) {
         Regname next_reg = integer_registers[current_register++];
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(c_size_of(*ctype->proc.ret)), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), a, point);
         build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
     }
 
