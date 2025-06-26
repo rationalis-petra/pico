@@ -106,6 +106,7 @@ const char *required_extensions[] = {
 const uint32_t num_required_device_extensions = 1;
 const char *required_device_extensions[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
 };
 
 
@@ -631,6 +632,10 @@ void destroy_window_surface(HedronSurface *surface) {
     vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
     vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
     mem_free(surface, hd_alloc);
+}
+
+uint32_t num_swapchain_images(HedronSurface* surface) {
+    return surface->num_images;
 }
 
 HedronShaderModule* create_shader_module(U8Array code) {

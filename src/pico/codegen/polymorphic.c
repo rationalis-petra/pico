@@ -163,6 +163,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_unary_op(ass, Push, imm8(immediate), a, point);
         break;
     }
+    case SLitUnit: {
+        break;
+    }
     case SLitString: {
         String immediate = syn.string; 
         if (immediate.memsize > UINT32_MAX) 

@@ -27,6 +27,8 @@ void teardown_hedron();
 HedronSurface* create_window_surface(struct Window* window);
 void destroy_window_surface(HedronSurface*);
 
+uint32_t num_swapchain_images(HedronSurface*);
+
 HedronShaderModule* create_shader_module(U8Array code);
 void destroy_shader_module(HedronShaderModule* module);
 

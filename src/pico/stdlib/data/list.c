@@ -63,6 +63,13 @@ void add_list_module(Module *data, Allocator *a) {
         "    val))";
     compile_toplevel(eset_fn, module, &point, &pi_point, a);
 
+    const char *each_fn = 
+        "(def each all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
+        "  (let [new-list (mk-list {B} lst.len lst.len)]\n"
+        "    (loop [for i from 0 below lst.len]\n"
+        "      (eset i (fn (elt i lst)) new-list))))";
+    compile_toplevel(each_fn, module, &point, &pi_point, a);
+
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
         "  [let! new-terms (mk-list {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len))\n"

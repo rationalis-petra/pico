@@ -30,6 +30,13 @@ void build_destroy_window_surface_fn(PiType* type, Assembler* ass, Allocator* a,
     delete_c_type(fn_ctype, a);
 }
 
+void build_num_swapchain_images_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(a, 1, "surface", mk_voidptr_ctype(a),
+                               mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+    convert_c_fn(num_swapchain_images, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
 void build_create_shader_module_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 1, "code", mk_array_ctype(a), mk_voidptr_ctype(a));
     convert_c_fn(create_shader_module, &fn_ctype, type, ass, a, point); 
@@ -323,6 +330,15 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     typep = mk_proc_type(a, 1, copy_pi_type_p(surface_ty, a), mk_prim_type(a, Unit));
     build_destroy_window_surface_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("destroy-window-surface"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(surface_ty, a), mk_prim_type(a, UInt_32));
+    build_num_swapchain_images_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("num-swapchain-images"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
