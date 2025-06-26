@@ -35,7 +35,7 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
     build_nullary_op (ass, Ret, a, point);
 }
 
-void build_special_binary_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RDI, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
@@ -54,7 +54,7 @@ void build_special_binary_fn(Assembler* ass, UnaryOp op, LocationSize sz, Alloca
     }
     build_unary_op (ass, op, reg(RDI, sz), a, point);
 
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op (ass, Push, reg(out, sz_64), a, point);
     build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
     build_nullary_op (ass, Ret, a, point);
 }
@@ -210,15 +210,22 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IMul : Mul, sz, a, &point);
+    build_special_binary_fn(ass, is_signed ? IMul : Mul, RAX, sz, a, &point);
     sym = string_to_symbol(mv_string("*"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IDiv : Div, sz, a, &point);
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, RAX, sz, a, &point);
     sym = string_to_symbol(mv_string("/"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, RDX, sz, a, &point);
+    sym = string_to_symbol(mv_string("mod"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

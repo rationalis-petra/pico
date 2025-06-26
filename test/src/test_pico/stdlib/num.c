@@ -13,14 +13,29 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(i64.- 147483647 2147483647)", &expected, module, log, a) ;
     }
 
+    if (test_start(log, mv_string("unsigned-modulo"))) {
+        uint64_t expected = 7001;
+        test_toplevel_eq("(u64.mod 20594361 9232)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("unsigned-divide"))) {
+        uint64_t expected = 2231;
+        test_toplevel_eq("(u64./ 20594361 9231)", &expected, module, log, a) ;
+    }
+
     if (test_start(log, mv_string("signed-mul"))) {
         int64_t expected = 2577581361;
         test_toplevel_eq("(i64.* 9231 279231)", &expected, module, log, a) ;
     }
 
-    if (test_start(log, mv_string("signed-div"))) {
+    if (test_start(log, mv_string("signed-divide"))) {
         int64_t expected = 2231;
         test_toplevel_eq("(i64./ 20594361 9231)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("signed-modulo"))) {
+        int64_t expected = 7001;
+        test_toplevel_eq("(i64.mod 20594361 9232)", &expected, module, log, a) ;
     }
 
     // Unsigned Int 32

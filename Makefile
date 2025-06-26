@@ -11,6 +11,9 @@ SRC_DIRS := ./src
 C_VERSION := c99
 CC := gcc
 
+CONFIG = default.config
+include ${CONFIG}
+
 ## Platform specifics and configuration
 ##-------------------------------------
 RELEASE_FLAGS := -Ofast
@@ -18,7 +21,7 @@ DEBUG_FLAGS := -O0 -DDEBUG
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client -fsanitize=address,leak 
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client -fsanitize=address,leak,undefined
 	LINK_FLAGS := -ldl -lm
     RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else
