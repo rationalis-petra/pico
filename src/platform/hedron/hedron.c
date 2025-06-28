@@ -388,13 +388,13 @@ uint32_t clamp(uint32_t val, uint32_t min, uint32_t max) {
     return val;
 }
 
-VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, struct Window* window) {
+VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t width, uint32_t height) {
     if (capabilities.currentExtent.width != UINT32_MAX) {
         return capabilities.currentExtent;
     } else {
         VkExtent2D actualExtent = {
-            .width = window->width,
-            .height = window->height,
+            .width = width,
+            .height = height,
         };
 
         actualExtent.width = clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
@@ -404,12 +404,12 @@ VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, struct Wind
     }
 }
 
-void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, struct Window *window, HedronSurface* hd_surface) {
+void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, uint32_t width, uint32_t height, HedronSurface* hd_surface) {
 
     VkSurfaceFormatKHR surface_format = choose_swap_surface_format(swap_chain_details.formats, swap_chain_details.num_formats);
     VkPresentModeKHR mode = choose_swap_present_mode(swap_chain_details.present_modes, swap_chain_details.num_present_modes);
     // TODO: push extent back to window!
-    VkExtent2D extent = choose_swap_extent(swap_chain_details.capabilities, window);
+    VkExtent2D extent = choose_swap_extent(swap_chain_details.capabilities, width, height);
 
     uint32_t image_count = swap_chain_details.capabilities.minImageCount + 1;
     if (swap_chain_details.capabilities.maxImageCount > 0 && image_count > swap_chain_details.capabilities.maxImageCount) {
@@ -557,6 +557,16 @@ void create_framebuffers(HedronSurface *surface) {
     surface->buffers = buffers;
 }
 
+void cleanup_swap_chain(HedronSurface *surface) {
+    for (size_t i = 0; i < surface->num_buffers; i++) {
+        vkDestroyFramebuffer(logical_device, surface->buffers[i], NULL);
+    }
+    for (size_t i = 0; i < surface->num_images; i++) {
+        vkDestroyImageView(logical_device, surface->image_views[i], NULL);
+    }
+    vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
+}
+
 HedronSurface *create_window_surface(struct Window *window) {
     VkSurfaceKHR surface;
 
@@ -609,8 +619,11 @@ HedronSurface *create_window_surface(struct Window *window) {
     }
 
     // The surface is populated with swapchain details by create_swapchain
+
+
+    //create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, struct Window *window, HedronSurface* hd_surface) {
     HedronSurface* hd_surface = mem_alloc(sizeof(HedronSurface), hd_alloc);
-    create_swapchain(swap_chain_details, surface, window, hd_surface);
+    create_swapchain(swap_chain_details, surface, window->width, window->height, hd_surface);
     free_swapchain_details(swap_chain_details, hd_alloc);
 
     create_renderpass(hd_surface);
@@ -621,16 +634,24 @@ HedronSurface *create_window_surface(struct Window *window) {
     return hd_surface;
 }
 
+void resize_window_surface(HedronSurface* surface, Extent extent) {
+    vkDeviceWaitIdle(logical_device);
+
+    cleanup_swap_chain(surface);
+    uint32_t width = extent.width;
+    uint32_t height = extent.height;
+
+    SwapChainSupportDetails swap_chain_details = query_swapchain_support_details(physical_device, surface->surface, hd_alloc);
+    create_swapchain(swap_chain_details, surface->surface, width, height, surface);
+    create_framebuffers(surface);
+    free_swapchain_details(swap_chain_details, hd_alloc);
+}
+
 void destroy_window_surface(HedronSurface *surface) {
-    for (size_t i = 0; i < surface->num_buffers; i++) {
-        vkDestroyFramebuffer(logical_device, surface->buffers[i], NULL);
-    }
-    vkDestroyRenderPass(logical_device, surface->renderpass, NULL);
-    for (size_t i = 0; i < surface->num_images; i++) {
-        vkDestroyImageView(logical_device, surface->image_views[i], NULL);
-    }
-    vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
+    cleanup_swap_chain(surface);
     vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
+
+    vkDestroyRenderPass(logical_device, surface->renderpass, NULL);
     mem_free(surface, hd_alloc);
 }
 

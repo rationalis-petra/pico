@@ -35,6 +35,7 @@ ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
+size_t calc_variant_stack_size(PtrArray* types);
 size_t calc_variant_size(PtrArray* types);
 void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
@@ -554,7 +555,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* enum_type = strip_type(syn.ptype);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
-        size_t variant_stack_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+        size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         // Make space to fit the (final) variant
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size), a, point);
@@ -589,7 +590,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(variant_stack_size - tag_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_stack_offset), a, point);
 
         // Grow the stack to account for the difference in enum & variant sizes
         data_stack_shrink(env, variant_stack_size - tag_size);
@@ -664,7 +665,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t curr_pos = get_pos(ass);
         for (size_t i = 0; i < body_positions.len; i++) {
             size_t body_pos = body_positions.data[i];
-            uint8_t* body_ref = body_refs.data[i];
+            uint32_t* body_ref = body_refs.data[i];
 
             if (curr_pos - body_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
@@ -1266,7 +1267,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Step 5.
         //--------
-        out = build_unary_op(ass, JMP, imm8(0), a, point);
+        out = build_unary_op(ass, JMP, imm32(0), a, point);
         size_t end_expr_link = out.backlink;
         size_t end_expr_pos = get_pos(ass);
 
@@ -1318,10 +1319,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         //--------
         size_t cleanup_start_pos = get_pos(ass);
         dist = cleanup_start_pos - end_expr_pos;
-        if (dist > INT8_MAX) {
-            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT8_MAX"));
+        if (dist > INT32_MAX) {
+            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT32_MAX"));
         }
-        *(get_instructions(ass).data + end_expr_link) = (int8_t) dist;
+        *(get_instructions(ass).data + end_expr_link) = (int32_t) dist;
 
         break;
     }
@@ -1952,7 +1953,7 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
             .branch.nodes.data = NULL, // this will be backlinked later
             .branch.nodes.len = tree.branch.nodes.len,
             .branch.nodes.size = tree.branch.nodes.len,
-            .branch.nodes.gpa = NULL,
+            // TODO; add allocator callbacks!
         };
         // Step 1: Copy in the tree
         add_u8_chunk((uint8_t*)&copy, sizeof(RawTree), target.data_aux);

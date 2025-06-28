@@ -81,4 +81,22 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(struct AS [.x 1527] [.y -5] [.z 2])", &expected, module, log, a) ;
     }
 
+    // -----------------------------------------------------
+    // 
+    // Enumeration
+    // 
+    // -----------------------------------------------------
+
+    typedef struct {
+        uint64_t tag;
+        int32_t x;
+        int32_t y;
+    } SimpleEnum;
+    run_toplevel("(def SE Enum [:simple I32 I32])", module, log, a) ;
+
+    if (test_start(log, mv_string("enum-simple"))) {
+        SimpleEnum expected = (SimpleEnum) {.tag = 0, .x = 1086, .y = -200};
+        test_toplevel_eq("(SE:simple 1086 -200)", &expected, module, log, a) ;
+    }
+
 }

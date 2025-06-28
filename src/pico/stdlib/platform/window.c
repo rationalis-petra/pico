@@ -45,7 +45,7 @@ WinMessageArray relic_poll_events(Window* window) {
 }
 
 void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 0, mk_list_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, mk_voidptr_ctype(a), mk_list_ctype(a));
 
     convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 
@@ -95,6 +95,7 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     delete_pi_type_p(typep, a);
 
     // Message Type
+    
     typep = mk_enum_type(a, 1,
                          "resize", 2, mk_prim_type(a, UInt_32), mk_prim_type(a, UInt_32));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
@@ -133,8 +134,7 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     delete_pi_type_p(typep, a);
 
     //typep = mk_proc_type(a, 0, copy_pi_type_p(window_message_ty, a));
-    
-    typep = mk_proc_type(a, 0, mk_app_type(a, get_list_type(), window_message_ty));
+    typep = mk_proc_type(a, 1,  copy_pi_type_p(window_ty, a), mk_app_type(a, get_list_type(), window_message_ty));
     build_poll_events_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);

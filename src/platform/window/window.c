@@ -104,17 +104,22 @@ void shell_ping(void* data, struct xdg_wm_base* sh, uint32_t ser) {
 // - ...
 void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int32_t height, struct wl_array* states) {
     // TODO: check that a resize actually happened.
-    WinMessage message = (WinMessage) {
-        .type = WindowResized,
-        .dims.width = width,
-        .dims.height = height,
-    };
-
     Window* window = data;
-    window->width = width;
-    window->height = height;
+    if (window->width != width || window->height != height) {
+        window->width = width;
+        window->height = height;
 
-    push_wm(message, &window->messages);
+        WinMessage message = (WinMessage) {
+            .type = WindowResized,
+            .dims.width = width,
+            .dims.height = height,
+        };
+
+        window->width = width;
+        window->height = height;
+
+        push_wm(message, &window->messages);
+    }
 }
 
 void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
@@ -286,7 +291,7 @@ bool window_should_close(Window *window) {
 }
 
 WinMessageArray poll_events(Window* window, Allocator* a) {
-    wl_display_dispatch(wl_display);
+    wl_display_dispatch_pending(wl_display);
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
     return out;

@@ -8,6 +8,11 @@
 // forward-declaration of window (platform/window/window.h)
 struct Window;
 
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+} Extent;
+
 typedef struct HedronSurface HedronSurface;
 typedef struct HedronShaderModule HedronShaderModule;
 typedef struct HedronPipeline HedronPipeline;
@@ -25,6 +30,7 @@ void teardown_hedron();
 
 // Window System Interaction Surfaces 
 HedronSurface* create_window_surface(struct Window* window);
+void resize_window_surface(HedronSurface* surface, Extent extent);
 void destroy_window_surface(HedronSurface*);
 
 uint32_t num_swapchain_images(HedronSurface*);

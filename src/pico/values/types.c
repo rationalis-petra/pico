@@ -1661,7 +1661,21 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         return true;
     }
     case TEnum: {
-        panic(mv_string("Not implemented: comparing values of type enum"));
+        uint64_t lhs_tag = *(uint64_t*)lhs;
+        uint64_t rhs_tag = *(uint64_t*)rhs;
+        if (lhs_tag != rhs_tag) return false;
+
+        size_t offset = 0;
+        PtrArray* types = type->enumeration.variants.data[lhs_tag].val;
+        for (size_t i = 0; i < types->len; i++) {
+            PiType* ty = types->data[i];
+            offset = pi_size_align(offset, pi_align_of(*ty));
+            if (!pi_value_eql(ty, lhs + offset, rhs + offset)) {
+                return false;
+            }
+            offset += pi_size_of(*ty);
+        }
+        return true;
     }
     case TReset: {
         panic(mv_string("Not implemented: comparing values of type reset"));
