@@ -99,4 +99,8 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(SE:simple 1086 -200)", &expected, module, log, a) ;
     }
 
+    if (test_start(log, mv_string("match-simple"))) {
+        int32_t expected = 886;
+        test_toplevel_eq("(match (SE:simple 1086 -200) [[:simple x y] (i32.+ x y)])", &expected, module, log, a) ;
+    }
 }
