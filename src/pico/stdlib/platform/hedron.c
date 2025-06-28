@@ -38,7 +38,7 @@ void build_num_swapchain_images_fn(PiType* type, Assembler* ass, Allocator* a, E
 }
 
 void build_create_shader_module_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "code", mk_array_ctype(a), mk_voidptr_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, "code", mk_list_ctype(a), mk_voidptr_ctype(a));
     convert_c_fn(create_shader_module, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
@@ -50,7 +50,7 @@ void build_destroy_shader_module_fn(PiType* type, Assembler* ass, Allocator* a, 
 }
 
 void build_create_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 2, "shaders", mk_array_ctype(a),
+  CType fn_ctype = mk_fn_ctype(a, 2, "shaders", mk_list_ctype(a),
                                "surface", mk_voidptr_ctype(a),
                                mk_voidptr_ctype(a));
     convert_c_fn(create_pipeline, &fn_ctype, type, ass, a, point); 

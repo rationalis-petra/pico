@@ -89,39 +89,43 @@ Document* pretty_ctype(CType* type, Allocator* a) {
     case CSStruct: {
         // struct name { name : var, n2 : var2 }
         PtrArray main_nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("struct"), a), &main_nodes);
+        push_ptr(mk_str_doc(mv_string("struct {"), a), &main_nodes);
         if (!type->proc.named_tag) {
             push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
         }
 
-        PtrArray arg_nodes = mk_ptr_array(type->structure.fields.len * 4, a);
-        for (size_t i = 0; i < type->proc.args.len; i++) {
+        PtrArray field_nodes = mk_ptr_array(type->structure.fields.len, a);
+        for (size_t i = 0; i < type->structure.fields.len; i++) {
+            PtrArray arg_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(*name_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
-            push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
             push_ptr(pretty_ctype(&type->structure.fields.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
-                push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
+                push_ptr(mk_str_doc(mv_string(";"), a), &arg_nodes);
             }
+            push_ptr(mv_group_doc(mv_hsep_doc(arg_nodes, a), a), &field_nodes);
         }
-        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &main_nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(field_nodes, a), a), &main_nodes);
+        push_ptr(mk_cstr_doc("}", a), &main_nodes);
         return mv_sep_doc(main_nodes, a);
     }
     
     case CSUnion: {
         // union { name : var, n2 : var2 }
         PtrArray main_nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("union"), a), &main_nodes);
+        push_ptr(mk_str_doc(mv_string("union {"), a), &main_nodes);
 
-        PtrArray arg_nodes = mk_ptr_array(type->cunion.fields.len * 4, a);
-        for (size_t i = 0; i < type->proc.args.len; i++) {
+        PtrArray field_nodes = mk_ptr_array(type->cunion.fields.len, a);
+        for (size_t i = 0; i < type->cunion.fields.len; i++) {
+            PtrArray arg_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(*name_to_string(type->cunion.fields.data[i].key), a), &arg_nodes);
-            push_ptr(mk_str_doc(mv_string(" : "), a), &arg_nodes);
             push_ptr(pretty_ctype(type->cunion.fields.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
-                push_ptr(mk_str_doc(mv_string(", "), a), &arg_nodes);
+                push_ptr(mk_str_doc(mv_string(";"), a), &arg_nodes);
             }
+            push_ptr(mv_group_doc(mv_hsep_doc(arg_nodes, a), a), &field_nodes);
         }
-        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &main_nodes);
+        push_ptr(mv_nest_doc(2, mv_vsep_doc(field_nodes, a), a), &main_nodes);
+        push_ptr(mk_cstr_doc("}", a), &main_nodes);
         return mv_sep_doc(main_nodes, a);
     }
     case CSPtr: {
@@ -585,12 +589,20 @@ CType mk_string_ctype(Allocator *a) {
                     "bytes", mk_voidptr_ctype(a));
 }
 
-CType mk_array_ctype(Allocator *a) {
-  return mk_struct_ctype(a, 4,
-                         "data", mk_voidptr_ctype(a),
-                         "len", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                         "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                         "allocator", mk_voidptr_ctype(a));
+CType mk_allocator_ctype(Allocator *a) {
+    return mk_struct_ctype(a, 4,
+                           "malloc", mk_voidptr_ctype(a),
+                           "realloc", mk_voidptr_ctype(a),
+                           "free", mk_voidptr_ctype(a),
+                           "context", mk_voidptr_ctype(a));
+}
+
+CType mk_list_ctype(Allocator *a) {
+    return mk_struct_ctype(a, 4,
+                           "data", mk_voidptr_ctype(a),
+                           "len", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                           "allocator", mk_allocator_ctype(a));
 }
 
 CType c_size_type;

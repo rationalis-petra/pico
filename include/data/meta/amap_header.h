@@ -14,8 +14,8 @@
     typedef struct tprefix ## AMap {                                    \
         size_t capacity;                                                \
         size_t len;                                                     \
-        Allocator* gpa;                                                 \
-        tprefix ## Cell* data;                                           \
+        Allocator gpa;                                                  \
+        tprefix ## Cell* data;                                          \
     } tprefix ## AMap;                                                  \
                                                                         \
     tprefix##AMap mk_##fprefix##_amap(size_t capacity, Allocator* a);   \

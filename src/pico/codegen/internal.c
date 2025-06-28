@@ -255,7 +255,8 @@ void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point)
 }
 
 void* tmp_malloc(uint64_t memsize) {
-    return mem_alloc(memsize, get_std_temp_allocator());
+    Allocator a = get_std_temp_allocator();
+    return mem_alloc(memsize, &a);
 }
 
 void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -275,15 +276,15 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
 }
 
 PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
     // make args correct way round!
-    void** args = mem_alloc(sizeof(void*) * num_args, a);
+    void** args = mem_alloc(sizeof(void*) * num_args, &a);
     for (size_t i = 0; i < num_args; i++){
         args[i] = args_rev[(num_args - 1) - i];
     }
     PiType fam = *val;
     PtrArray arr = (PtrArray){.data = (void**)args, .len = num_args, .size = num_args};
-    return type_app (fam, arr, a);
+    return type_app (fam, arr, &a);
 }
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -306,9 +307,9 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
 }
 
 void* mk_struct_ty(size_t len, void* data) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TStruct,
         .structure.fields.data = data,
@@ -343,9 +344,9 @@ void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler*
 }
 
 void* mk_proc_ty(size_t len, void** data, void* ret) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TProc,
         .proc.args.data = data,
@@ -378,11 +379,11 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
 }
 
 void* mk_enum_ty(size_t len, uint64_t* shape, SymPtrCell* data) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    SymPtrAMap variants = mk_sym_ptr_amap(len, a);
+    SymPtrAMap variants = mk_sym_ptr_amap(len, &a);
     for (size_t i = 0; i < len; i++) {
-        PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+        PtrArray* arr = mem_alloc(sizeof(PtrArray), &a);
         uint64_t num_vals = shape[i];
 
         *arr = (PtrArray) {
@@ -394,7 +395,7 @@ void* mk_enum_ty(size_t len, uint64_t* shape, SymPtrCell* data) {
         sym_ptr_insert(data[i].key, arr, &variants);
     }
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TEnum,
         .enumeration.variants = variants,
@@ -438,9 +439,9 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
 }
 
 void* mk_reset_ty(PiType* in, PiType* out) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TReset,
         .reset.in = in,
@@ -473,9 +474,9 @@ void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 
 void* mk_dynamic_ty(PiType* dynamic) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TDynamic,
         .dynamic = dynamic,
@@ -504,9 +505,9 @@ void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_type_var(Symbol var) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TVar,
         .var = var,
@@ -538,9 +539,9 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 }
 
 void* mk_forall_ty(size_t len, Symbol* syms, PiType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TAll,
         .binder.vars.data = syms,
@@ -584,9 +585,9 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
 }
 
 void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TFam,
         .binder.vars.data = syms,
@@ -628,9 +629,9 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
 }
 
 void* mk_c_ty(CType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TCType,
         .c_type = *body,
@@ -660,9 +661,9 @@ void gen_mk_c_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_named_ty(Symbol name, PiType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TNamed,
         .named.name = name,
@@ -693,9 +694,9 @@ void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_distinct_ty(PiType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TDistinct,
         .distinct.type = body,
@@ -725,10 +726,10 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_opaque_ty(PiType* body) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
     Module* current = get_std_current_module();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TDistinct,
         .distinct.type = body,
@@ -759,9 +760,9 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 
 void* mk_trait_ty(size_t sym_len, Symbol* syms, size_t field_len, void* data) {
-    Allocator* a = get_std_temp_allocator();
+    Allocator a = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), a);
+    PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
         .sort = TTrait,
         .trait.id = distinct_id(),

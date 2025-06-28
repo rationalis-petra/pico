@@ -1,4 +1,5 @@
 #include "platform/machine_info.h"
+#include "platform/window/window.h"
 #include "data/string.h"
 
 #if OS_FAMILY == UNIX
@@ -21,6 +22,7 @@ struct Window {
 
     // Internal state (used by us!)
     bool should_close;
+    WinMessageArray messages;
 };
 
 #elif OS_FAMILY == WINDOWS
@@ -30,6 +32,7 @@ struct Window {
 struct Window {
     HWND impl;
     bool should_close;
+    WinMessageArray out;
 
     uint16_t width;
     uint16_t height;

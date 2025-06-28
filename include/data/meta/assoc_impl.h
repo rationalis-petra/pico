@@ -10,7 +10,7 @@
             .capacity = capacity,                                       \
             .len = 0,                                                   \
             .data = mem_alloc(capacity * sizeof(tprefix##ACell), a),    \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
     }                                                                   \
                                                                         \
@@ -19,11 +19,11 @@
             delete_key(map.data[i].key);                                \
             delete_val(map.data[i].val);                                \
         }                                                               \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     void sdelete_##fprefix##_assoc(tprefix##Assoc map) {                 \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     tprefix##Assoc scopy_##fprefix##_assoc(tprefix##Assoc map, Allocator* a) { \
@@ -31,14 +31,14 @@
             .capacity = map.len,                                        \
             .len = map.len,                                             \
             .data = mem_alloc(map.len * sizeof(tprefix##ACell), a),      \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
     }                                                                   \
                                                                         \
     void fprefix##_bind(key_t key, val_t val, tprefix##Assoc* map) {    \
         if (map->len >= map->capacity) {                                \
             map->capacity = map->capacity == 0 ? 8 : map->capacity * 2; \
-            map->data = mem_realloc(map->data, sizeof(tprefix##ACell) * map->capacity, map->gpa); \
+            map->data = mem_realloc(map->data, sizeof(tprefix##ACell) * map->capacity, &map->gpa); \
         }                                                               \
         map->data[map->len].key = key;                                  \
         map->data[map->len].val = val;                                  \

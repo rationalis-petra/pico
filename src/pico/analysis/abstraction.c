@@ -1978,7 +1978,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                     void* dynamic_memory_space = mem_alloc(4096, a);
                     void* offset_memory_space = mem_alloc(1024, a);
 
-                    Allocator* old_temp_alloc = set_std_temp_allocator(a);
+                    Allocator old_temp_alloc = set_std_temp_allocator(*a);
                     Allocator old_current_alloc = set_std_current_allocator(*a);
 
                     int64_t out;
@@ -2003,6 +2003,9 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                          "push %7          \n" // sizeof (MacroResult)
 
                                          // Push arg (array) onto stack
+                                         "push 0x30(%5)       \n"
+                                         "push 0x28(%5)       \n"
+                                         "push 0x20(%5)       \n"
                                          "push 0x18(%5)       \n"
                                          "push 0x10(%5)       \n"
                                          "push 0x8(%5)        \n"
@@ -2019,17 +2022,17 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #if ABI == SYSTEM_V_64
                                          // memcpy (dest = rdi, src = rsi, size = rdx)
                                          // retval = rax 
-                                         // Note: 0x48 = sizeof(MacroResult)
-                                         "mov 0x48(%%rsp), %%rdx   \n"
-                                         "mov 0x50(%%rsp), %%rdi   \n"
+                                         // Note: 0x60 = sizeof(MacroResult)
+                                         "mov 0x60(%%rsp), %%rdx   \n"
+                                         "mov 0x68(%%rsp), %%rdi   \n"
                                          "mov %%rsp, %%rsi         \n"
                                          "call memcpy              \n"
 
 #elif ABI == WIN_64
                                          // memcpy (dest = rcx, src = rdx, size = r8)
                                          // retval = rax
-                                         "mov 0x48(%%rsp), %%r8    \n"
-                                         "mov 0x50(%%rsp), %%rcx   \n"
+                                         "mov 0x60(%%rsp), %%r8    \n"
+                                         "mov 0x68(%%rsp), %%rcx   \n"
                                          "mov %%rsp, %%rdx         \n"
                                          "sub $0x20, %%rsp         \n"
                                          "call memcpy              \n"
@@ -2038,8 +2041,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 #error "Unknown calling convention"
 #endif
                                          // pop value from stack 
-                                         // Note: 0x48 = sizeof(MacroResult)
-                                         "mov 0x48(%%rsp), %%rax   \n"
+                                         // Note: 0x60 = sizeof(MacroResult)
+                                         "mov 0x60(%%rsp), %%rax   \n"
                                          "add %%rax, %%rsp         \n"
                                          // pop stashed size & dest from stack
                                          "add $0x10, %%rsp          \n"

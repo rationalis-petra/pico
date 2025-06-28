@@ -514,20 +514,18 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         ptr_type = e->value;
 
         // Allocator Type
-        PiType *alloc_type = mk_named_type(a, "Allocator",
-                                           mk_struct_type(a, 3,
-                                                          "alloc", mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                                          "realloc", mk_proc_type(a, 2, mk_prim_type(a, Address), mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                                          "free", mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit))));
+        PiType *alloc_type = mk_named_type(
+            a, "Allocator",
+            mk_struct_type(a, 4, 
+                           "alloc", mk_prim_type(a, Address),
+                           "realloc", mk_prim_type(a, Address),
+                           "free", mk_prim_type(a, Address),
+                           "ctx", mk_prim_type(a, Address)));
         type_data = alloc_type;
         sym = string_to_symbol(mv_string("Allocator"));
         type.kind.nargs = 0;
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        // (Ptr Alloc)
-        PiType* alloc_ptr_type = mk_app_type(a, ptr_type, alloc_type);
-        delete_pi_type_p(alloc_type, a);
-        
         // Array Type 
         // Make a ptr
         vars = mk_symbol_array(1, a);
@@ -541,7 +539,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
                                                         "data", mk_prim_type(a, Address),
                                                         "len", mk_prim_type(a, UInt_64),
                                                         "capacity", mk_prim_type(a, UInt_64),
-                                                        "gpa", alloc_ptr_type)));
+                                                        "gpa", alloc_type)));
         type_data = type_val;
         sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);

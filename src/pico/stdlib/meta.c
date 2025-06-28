@@ -53,7 +53,7 @@ CType mk_branch_ctype(Allocator* a) {
     return mk_struct_ctype(a, 3,
                            "range", mk_range_ctype(a),
                            "hint", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                           "branch", mk_array_ctype(a));
+                           "branch", mk_list_ctype(a));
 }
 
 CType mk_syntax_ctype(Allocator* a) {

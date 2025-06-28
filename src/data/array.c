@@ -14,7 +14,7 @@ void add_u8_chunk(uint8_t* chunk, size_t memsize, U8Array* array) {
         array->len += memsize;
     } else {
         // TODO (BUG): realloc - must account for failure (return NULL)
-        array->data = mem_realloc(array->data, memsize + array->size, array->gpa);
+        array->data = mem_realloc(array->data, memsize + array->size, &array->gpa);
         memcpy(array->data + array->len, chunk, memsize);
         array->len += memsize;
     }

@@ -11,7 +11,7 @@
             .capacity = capacity,                                       \
             .len = 0,                                                   \
             .data = mem_alloc(capacity * sizeof(tprefix##Cell), a),     \
-            .gpa= a,                                                    \
+            .gpa= *a,                                                   \
         };                                                              \
     }                                                                   \
                                                                         \
@@ -20,7 +20,7 @@
             .capacity = map.capacity,                                   \
             .len = map.len,                                             \
             .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
         for (size_t i = 0; i < map.len; i++) {                          \
             out.data[i].key = copy_key(map.data[i].key, a);             \
@@ -34,7 +34,7 @@
             .capacity = map.capacity,                                   \
             .len = map.len,                                             \
             .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
     }                                                                   \
                                                                         \
@@ -43,11 +43,11 @@
             delete_key(map.data[i].key);                                \
             delete_val(map.data[i].val);                                \
         }                                                               \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     void sdelete_##fprefix##_amap(tprefix##AMap map) {                  \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     val_t* fprefix##_lookup(key_t key, tprefix##AMap map) {             \
@@ -81,7 +81,7 @@
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
                 map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, map->gpa); \
+                map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \
@@ -95,7 +95,7 @@
             .capacity = capacity,                                       \
             .len = 0,                                                   \
             .data = mem_alloc(capacity * sizeof(tprefix##Cell), a),     \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
     }                                                                   \
                                                                         \
@@ -104,7 +104,7 @@
             .capacity = map.capacity,                                   \
             .len = map.len,                                             \
             .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
         for (size_t i = 0; i < map.len; i++) {                          \
             out.data[i].key = copy_key(map.data[i].key, a);             \
@@ -118,7 +118,7 @@
             .capacity = map.capacity,                                   \
             .len = map.len,                                             \
             .data = mem_alloc(map.capacity * sizeof(tprefix##Cell), a), \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                  \
         };                                                              \
     }                                                                   \
                                                                         \
@@ -128,11 +128,11 @@
             delete_key(map.data[i].key);                                \
             delete_val(map.data[i].val);                                \
         }                                                               \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     void sdelete_##fprefix##_amap(tprefix##AMap map) {                  \
-        mem_free(map.data, map.gpa);                                    \
+        mem_free(map.data, &map.gpa);                                   \
     }                                                                   \
                                                                         \
     val_t* fprefix##_lookup(key_t key, tprefix##AMap map) {             \
@@ -166,7 +166,7 @@
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
                 map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(tprefix##Cell) * map->capacity, map->gpa); \
+                map->data = mem_realloc(map->data, sizeof(tprefix##Cell) * map->capacity, &map->gpa); \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \

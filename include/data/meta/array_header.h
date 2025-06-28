@@ -9,7 +9,7 @@
         type* data;                                                     \
         size_t len;                                                     \
         size_t size;                                                    \
-        Allocator* gpa;                                                 \
+        Allocator gpa;                                                 \
     } tprefix##Array;                                                   \
                                                                         \
     tprefix##Array mk_ ## fprefix ## _array (const size_t size, Allocator* a); \
@@ -18,7 +18,7 @@
                                                                         \
     void delete_ ## fprefix ## _array(tprefix##Array arr, void (*delete_elem)(type elem)); \
     void sdelete_ ## fprefix ## _array(tprefix##Array arr);             \
-    void reverse_ ## fprefix ## _array(tprefix##Array arr);             \
+    void reverse_ ## fprefix ## _array(tprefix##Array arr);                 \
                                                                         \
     void push_ ## fprefix(type val, tprefix##Array* arr);               \
     type pop_ ## fprefix(tprefix##Array* arr);                          \

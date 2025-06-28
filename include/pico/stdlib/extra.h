@@ -24,8 +24,8 @@ Allocator set_std_current_allocator(Allocator al);
 Allocator get_std_perm_allocator();
 Allocator set_std_perm_allocator(Allocator al);
 
-Allocator* get_std_temp_allocator();
-Allocator* set_std_temp_allocator(Allocator* al);
+Allocator get_std_temp_allocator();
+Allocator set_std_temp_allocator(Allocator al);
 
 Allocator* get_std_comptime_allocator();
 Allocator* set_std_comptime_allocator(Allocator* al);

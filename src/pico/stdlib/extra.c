@@ -44,7 +44,7 @@ Allocator get_std_current_allocator() {
 }
 
 Allocator set_std_current_allocator(Allocator al) {
-    Allocator** data = get_dynamic_memory();
+    void** data = get_dynamic_memory();
     Allocator* dyn = data[std_current_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
@@ -58,23 +58,23 @@ Allocator get_std_perm_allocator() {
 }
 
 Allocator set_std_perm_allocator(Allocator al) {
-    Allocator** data = get_dynamic_memory();
+    void** data = get_dynamic_memory();
     Allocator* dyn = data[std_perm_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
     return old;
 }
 
-Allocator* get_std_temp_allocator() {
+Allocator get_std_temp_allocator() {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_temp_allocator]; 
+    Allocator* dyn = data[std_temp_allocator]; 
     return *dyn;
 }
 
-Allocator* set_std_temp_allocator(Allocator* al) {
+Allocator set_std_temp_allocator(Allocator al) {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_temp_allocator]; 
-    Allocator* old = *dyn;
+    Allocator* dyn = data[std_temp_allocator]; 
+    Allocator old = *dyn;
     *dyn = al;
     return old;
 }
@@ -763,7 +763,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
 }
 
 void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_macro_result_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
 
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
@@ -800,12 +800,14 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     a = &arena;
     
     // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
-    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
-    typep = mk_dynamic_type(a, mk_struct_type(a, 4,
-                                             "malloc", mk_prim_type(a, Address),
-                                             "realloc", mk_prim_type(a, Address),
-                                             "free", mk_prim_type(a, Address),
-                                             "ctx", mk_prim_type(a, Address)));
+    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator);
+    typep = mk_dynamic_type(a,
+                            mk_named_type(a, "Allocator",
+                                mk_struct_type(a, 4,
+                                                 "alloc", mk_prim_type(a, Address),
+                                                 "realloc", mk_prim_type(a, Address),
+                                                 "free", mk_prim_type(a, Address),
+                                                 "ctx", mk_prim_type(a, Address))));
     sym = string_to_symbol(mv_string("perm-allocator"));
     add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
 
@@ -814,7 +816,8 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
     void* nul = NULL;
-    std_temp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
+    Allocator nul_alloc = (Allocator){.malloc = NULL, .realloc = NULL, .free= NULL};
+    std_temp_allocator = mk_dynamic_var(sizeof(Allocator), &nul_alloc); 
     std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     typep = mk_dynamic_type(a, mk_prim_type(a, Address));

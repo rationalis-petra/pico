@@ -1,5 +1,6 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
+#include "pretty/string_printer.h"
 
 #include "pico/codegen/internal.h"
 #include "pico/codegen/foreign_adapters.h"
@@ -221,7 +222,13 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
     if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
-        panic(mv_string("Attempted to do invalid conversion of function return types!"));
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function reuturn types -", a), &nodes);
+        push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
+        push_ptr(mv_cstr_doc("and", a), &nodes);
+        push_ptr(pretty_type(ptype->proc.ret, a), &nodes);
+        push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
+        panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
     }
 
     // We need knowledge of the stack layout of the input arguments when
@@ -238,7 +245,13 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
         if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
-            panic(mv_string("Attempted to do invalid conversion"));
+            PtrArray nodes = mk_ptr_array(4, a);
+            push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
+            push_ptr(pretty_ctype(&ctype->proc.args.data[i].val, a), &nodes);
+            push_ptr(mv_cstr_doc("and", a), &nodes);
+            push_ptr(pretty_type(ptype->proc.args.data[i], a), &nodes);
+            push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
+            panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
         }
     }
     arg_offsets.data[0] = offset;
@@ -401,21 +414,40 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
-        build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+        if (input_area_size <= INT8_MAX) {
+            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+        } else {
+            build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(input_area_size), a, point);
+            build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RCX, 0, sz_64), a, point);
+        }
+
+        // TODO: check usages of input area size: may be > 127
 
         // Use to to calculate the location of the return address (store in RCX)
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        if (input_area_size <= INT8_MAX) {
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        } else {
+            build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(input_area_size), a, point);
+            build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSI, sz_64), a, point);
+        }
         build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
         // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
         build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  
 
         // To copy the value, first store target address (END of where return value is copied) in RDX 
         build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
+        if (unadjusted_offset <= INT8_MAX) {
+            build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
+        } else {
+            build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(unadjusted_offset), a, point);
+            build_binary_op(ass, Add, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
+        }
         build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
 
         // Now, generate a stack copy targeting RDX
+        // TODO: check for not overfloating imm8 maximum
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), a, point);
         generate_stack_copy(RDX, return_arg_size, ass, a, point);
 
@@ -478,7 +510,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
     sdelete_u8_array(return_classes);
     sdelete_u64_array(in_memory_args);
-        
+
 
 #elif ABI == WIN_64
     const Regname integer_registers[4] = {RCX, RDX, R8, R9};
@@ -605,6 +637,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         //        address, so we subtract 0x8 from 0x10 to get 0x8 
         size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
+        if (input_area_size > INT8_MAX || unadjusted_offset > INT8_MAX) {
+            panic(mv_string("Inputs area size or unadjusted offset exceeded INT8 maximum"));
+        }
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
 

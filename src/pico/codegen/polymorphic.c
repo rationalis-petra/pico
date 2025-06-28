@@ -802,6 +802,39 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_binary_op(ass, Sub, reg(R13, sz_64), imm32(-0x16), a, point);
         break;
     }
+    case SDynamicUse: {
+        // TODO: check that the dynamic use handles stack alignment correctly
+        generate_polymorphic_i(*syn.use, env, target, links, a, point);
+
+        // We now have a dynamic variable: get its' value as ptr
+
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi
+        build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx
+        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+#else
+#error "unknown ABI"
+#endif
+
+        // call function
+        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)get_dynamic_val), a, point);
+        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+
+#if ABI == WIN_64 
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
+#endif
+        // Now, allocate space on stack
+        size_t val_size = pi_size_of(*syn.ptype);
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+
+        // TODO (check if replace with stack copy)
+        generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
+        break;
+    }
     case SLet: {
         // Store the (current) RSP on top of the stack.
         generate_index_push(reg(RSP, sz_64), ass, a, point);

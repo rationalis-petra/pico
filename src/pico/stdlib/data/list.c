@@ -43,7 +43,7 @@ void add_list_module(Module *data, Allocator *a) {
     const char *mk_list_fn = 
         "(def mk-list all [A] proc [capacity len]\n"
         "  (struct (List A)\n"
-        "    [.gpa (name (Ptr Allocator) (num-to-address 0))]\n"
+        "    [.gpa (use current-allocator)]\n"
         "    [.capacity capacity]\n"
         "    [.len len]\n"
         "    [.data (malloc (u64.* (size-of A) len))]))";

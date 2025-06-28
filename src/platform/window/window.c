@@ -1,6 +1,9 @@
+#include "data/meta/array_impl.h"
 #include "platform/window/window.h"
 #include "platform/window/internal.h"
 #include "platform/machine_info.h"
+
+ARRAY_COMMON_IMPL(WinMessage, wm, WinMessage)
 
 #if OS_FAMILY == UNIX
 #include <string.h> // for memset, TODO: remove?
@@ -64,7 +67,6 @@ void resize(Window* window) {
     close(fd);
 }
 
-
 void draw(Window* window) {
     // colour = grep
     uint8_t colour = 128;
@@ -80,9 +82,11 @@ void draw(Window* window) {
     wl_surface_commit(window->surface); 
 }
 
-// callback
+// The xdg surface configure event is sent by wayland whenever the window's configuration
+// 
 void xdg_surface_conf(void *data, struct xdg_surface* xdg_surface, uint32_t serial) {
     Window* window = data;
+
     xdg_surface_ack_configure(xdg_surface, serial);
     // TODO: see if we can get the window passed in via data?
     if (!window->pixles) resize(window);
@@ -94,11 +98,23 @@ void shell_ping(void* data, struct xdg_wm_base* sh, uint32_t ser) {
 	xdg_wm_base_pong(sh, ser);
 }
 
-// callback: toplevel window
+// callback: toplevel window configuration changes This includes
+// - When a window is resized  
+// - When a window is minimised or maximised
+// - ...
 void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int32_t height, struct wl_array* states) {
+    // TODO: check that a resize actually happened.
+    WinMessage message = (WinMessage) {
+        .type = WindowResized,
+        .dims.width = width,
+        .dims.height = height,
+    };
+
     Window* window = data;
     window->width = width;
     window->height = height;
+
+    push_wm(message, &window->messages);
 }
 
 void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
@@ -221,6 +237,7 @@ Window *create_window(String name, int width, int height) {
         .height = height,
         .name = name,
         .should_close = false,
+        .messages = mk_wm_array(8, wsa),
     };
 
     struct wl_surface* surface = wl_compositor_create_surface(wl_compositor);
@@ -268,8 +285,11 @@ bool window_should_close(Window *window) {
     return window->should_close;
 }
 
-void poll_events() {
+WinMessageArray poll_events(Window* window, Allocator* a) {
     wl_display_dispatch(wl_display);
+    WinMessageArray out = scopy_wm_array(window->messages, a);
+    window->messages.len = 0;
+    return out;
 }
 
 #elif OS_FAMILY == WINDOWS
