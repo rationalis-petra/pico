@@ -1041,6 +1041,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
         generate(*syn.if_expr.true_branch, env, target, links, a, point);
+        // Shrink the stack by the result size
+        data_stack_shrink(env, pi_stack_size_of(*syn.ptype));
 
         // Generate jump to end of false branch to be backlinked later
         out = build_unary_op(ass, JMP, imm32(0), a, point);

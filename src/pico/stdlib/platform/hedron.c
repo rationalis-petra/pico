@@ -27,7 +27,7 @@ void build_create_window_surface_fn(PiType* type, Assembler* ass, Allocator* a, 
 void build_resize_window_surface_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType extent_type = mk_struct_ctype(a, 2, "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
                                               "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
-    CType fn_ctype = mk_fn_ctype(a, 2, "window", mk_voidptr_ctype(a), extent_type, (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(a, 2, "window", mk_voidptr_ctype(a), "extent", extent_type, (CType){.sort = CSVoid});
     convert_c_fn(resize_window_surface, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }

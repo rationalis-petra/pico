@@ -75,7 +75,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     type_check(&abs, env, &arena, &pi_point);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
-    EvalResult evres =pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    EvalResult evres = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
