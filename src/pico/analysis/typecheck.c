@@ -882,12 +882,15 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         type_check_i(untyped->if_expr.condition,
                      t, env, a, point);
 
-        type_infer_i(untyped->if_expr.true_branch, env, a, point);
+        PiType* out_type = mk_uvar(a);
+        type_check_i(untyped->if_expr.true_branch,
+                     out_type,
+                     env, a, point);
 
         type_check_i(untyped->if_expr.false_branch,
-                     untyped->if_expr.true_branch->ptype,
+                     out_type,
                      env, a, point);
-        untyped->ptype = untyped->if_expr.false_branch->ptype;
+        untyped->ptype = out_type;
         break;
     }
     case SGoTo: {

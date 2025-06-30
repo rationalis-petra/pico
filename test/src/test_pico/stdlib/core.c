@@ -66,6 +66,22 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(if-proc-inv :false 720 -12)", &expected, module, log, a) ;
     }
 
+    typedef struct {
+        uint64_t tag;
+        int64_t num;
+    } MaybeI64;
+
+    run_toplevel("(def if-make-maybe proc [b] if b :none (:some 64))", module, log, a) ;
+    if (test_start(log, mv_string("if-match-proc-some"))) {
+        MaybeI64 expected = (MaybeI64){.tag = 0, .num = 64};
+        test_toplevel_eq("(if-make-maybe :false)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("if-match-proc-none"))) {
+        MaybeI64 expected = (MaybeI64){.tag = 1};
+        test_toplevel_eq("(if-make-maybe :true)", &expected, module, log, a) ;
+    }
+
     // -----------------------------------------------------
     // 
     // Struct

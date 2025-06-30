@@ -390,9 +390,12 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
 UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
     // ------------------------------------------------------------
     // Uvar Subst
+    //  -------- 
+    // 
     // The goal of uvar subst is to ensure that the uvar substitutes in type. If
     // typeis itself a uvar, then the constraints from the uvar argument must be
     // propagated into the type argument.
+    // 
     // ------------------------------------------------------------
 
     if (type->sort == TUVar) {
@@ -408,7 +411,6 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                     UnifyResult res = add_constraint(uvar->constraints.data[i], type->uvar, a);
                     if (res.type != UOk) return res;
                 }
-                return (UnifyResult){.type = UOk};
             } else {
                 return (UnifyResult) {
                     .type = USimpleError,
