@@ -203,7 +203,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             // Then, find the location of the variable on the stack 
             // *(RBP + stack offset) = offset2
-            // RBP + offset2 = dest (stored here in R9)
+            // RBP + offset2 = dest (stored hrun_pico_stdlib_data_pair_testsere in R9)
             build_binary_op(ass, Mov, reg(R8, sz_64), rref8(RBP, e.stack_offset, sz_64), a, point);
             // We need to stack-align the value!
 
@@ -814,18 +814,13 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 #elif ABI == WIN_64 
         // arg1 = rcx
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
 
         // call function
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)get_dynamic_val), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        generate_c_call(get_dynamic_val, ass, a, point);
 
-#if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
@@ -1515,7 +1510,7 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
             push_u8(RDX, &inputs);
             U8Array regs = free_registers(inputs, a);
 
-            generate_size_of(regs.data[1], type, env, ass, a, point);
+            generate_size_of(regs.data[0], type, env, ass, a, point);
             build_unary_op(ass, Push, reg(regs.data[0], sz_64), a, point);
             generate_align_of(regs.data[1], type, env, ass, a, point);
             build_unary_op(ass, Pop, reg(regs.data[0], sz_64), a, point);
@@ -1583,18 +1578,12 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), size, a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
     // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(memcpy, ass, a, point);
 }
 
 void generate_poly_stack_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -1605,7 +1594,7 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
         panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
     }
 
-    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // memmove (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
     build_binary_op(ass, Mov, reg(RDI, sz_64), dest, a, point);
     build_binary_op(ass, Add, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
@@ -1618,7 +1607,7 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
         panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
     }
 
-    // memcpy (dest = rcx, src = rdx, size = r8)
+    // memmove (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), dest, a, point);
     build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), src, a, point);

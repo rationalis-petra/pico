@@ -153,6 +153,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         int32_t y;
     } SimpleEnum;
     run_toplevel("(def SE Enum [:simple I32 I32])", module, log, a) ;
+    run_toplevel("(def PSE Enum [:simple I32 I32])", module, log, a) ;
 
     if (test_start(log, mv_string("enum-simple"))) {
         SimpleEnum expected = (SimpleEnum) {.tag = 0, .x = 1086, .y = -200};
@@ -167,6 +168,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     run_toplevel("(def add proc [val] match val [[:simple x y] (i32.+ x y)])", module, log, a) ;
     if (test_start(log, mv_string("match-proc-simple"))) {
         int32_t expected = 886;
-        test_toplevel_eq("(add (SE:simple 1086 -200))", &expected, module, log, a) ;
+        test_toplevel_eq("(add (SE:simple 1086 -200))", &expected, module, log, a);
+    }
+
+    if (test_start(log, mv_string("match-struct-inner"))) {
+        int32_t expected = 900;
+        test_toplevel_eq("(match (:some (struct [.x (is 1100 I32)] [.y (is -200 I32)]))\n"
+                 "  [[:some pr] (i32.+ pr.x pr.y)])", &expected, module, log, a) ;
     }
 }

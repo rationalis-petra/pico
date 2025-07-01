@@ -29,5 +29,25 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Allocator *a)
         test_toplevel_eq("(pair.pair 1432 -120938)", &expected, module, log, a) ;
     }
 
+    typedef struct {
+        int32_t x;
+        int32_t y;
+    } Point32;
+    /* if (test_start(log, mv_string("pair-small-size"))) { */
+    /*     Point32 expected = (Point32) {.x = 1432, .y = -960}; */
+    /*     test_toplevel_eq("(pair.pair (is 1432 I32) (is -960 I32))", &expected, module, log, a) ; */
+    /* } */
+
+    typedef struct {
+        uint64_t tag;
+        int32_t x;
+        int32_t y;
+    } EnumPoint;
+
+    if (test_start(log, mv_string("pair-in-enum"))) {
+        EnumPoint expected = (EnumPoint) {.tag = 0, .x = 1432, .y = -120938};
+        test_toplevel_eq("(:some (pair.pair {I32 I32} 1432 -120938))", &expected, module, log, a) ;
+    }
+
     release_arena_allocator(arena);
 }

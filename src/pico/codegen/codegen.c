@@ -67,6 +67,9 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
         generate(*top.expr, a_env, target, &links, a, point);
+#ifdef DEBUG_ASSERT
+        check_address_env(a_env, pi_stack_size_of(*top.expr->ptype), a);
+#endif
         delete_address_env(a_env, a);
         break;
     }
@@ -886,18 +889,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // arg1 = rcx, arg2 = rdx
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
 
         // call function
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)mk_dynamic_var), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        generate_c_call(mk_dynamic_var, ass, a, point);
 
-#if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
         // Pop value off stack
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -918,18 +916,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 #elif ABI == WIN_64 
         // arg1 = rcx
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
 
         // call function
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)get_dynamic_val), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        generate_c_call(get_dynamic_val, ass, a, point);
 
-#if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);

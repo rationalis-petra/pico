@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
+#include "pico/codegen/internal.h"
 #include "pico/stdlib/core.h"
 
 static PiType* ptr_type;
@@ -80,19 +81,12 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RDI, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), reg(R9, sz_64), a, point);
-
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    // call memcpy
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    // copy memcpy into RCX & call
+    generate_c_call(memcpy, ass, a, point);
 
     // Store return address in R9
     build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 8, sz_64), a, point);
@@ -176,29 +170,19 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // memcpy (dest = rdi, src = rsi, size = rdx)
     build_binary_op(ass, Mov, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RDI, sz_64), imm8(ADDRESS_SIZE), a, point);
-
-    // build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R8, sz_64), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RCX, sz_64), imm8(ADDRESS_SIZE), a, point);
-
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
-    // build_binary_op(ass, Mov, reg(R8, sz_64), reg(R8, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
     // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(memcpy, ass, a, point);
 
     // Return
     build_nullary_op(ass, Ret, a, point);

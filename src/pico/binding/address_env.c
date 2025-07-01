@@ -130,9 +130,21 @@ void delete_local_env(LocalAddrs* local, Allocator* a) {
     mem_free(local, a);
 }
 
+void check_address_env(AddressEnv *env, size_t size, Allocator *a) {
+    if (0 < env->local_envs.len) {
+        LocalAddrs* local = env->local_envs.data[0];
+        if (local->stack_head > 0) 
+            panic(mv_string("check_address_env failed - stack_head > 0!"));
+
+        if ((uint64_t)(-local->stack_head) != size) 
+            panic(mv_string("check_address_env failed!"));
+    }
+}
+
 void delete_address_env(AddressEnv* env, Allocator* a) {
-    for (size_t i = 0; i < env->local_envs.len; i++)
+    for (size_t i = 0; i < env->local_envs.len; i++) {
         delete_local_env(env->local_envs.data[i], a);
+    }
     sdelete_ptr_array(env->local_envs);
     mem_free(env, a);
 }

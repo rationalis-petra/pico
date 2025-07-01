@@ -17,11 +17,11 @@ include ${CONFIG}
 ## Platform specifics and configuration
 ##-------------------------------------
 RELEASE_FLAGS := -Ofast
-DEBUG_FLAGS := -O0 -DDEBUG
+DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client -fsanitize=address,leak,undefined
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client $(SANITIZERS)
 	LINK_FLAGS := -ldl -lm
     RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else

@@ -12,6 +12,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/internal.h"
 
 #include "app/module_load.h"
 
@@ -110,16 +111,9 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&realloc),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(realloc, ass, a, point);
 
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -146,15 +140,9 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #elif ABI == WIN_64
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&relic_malloc),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(relic_malloc, ass, a, point);
 
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -178,15 +166,9 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // copy address into RCX
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&free),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(free, ass, a, point);
 
     build_nullary_op(ass, Ret, a, point);
 }
@@ -207,11 +189,8 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // panic (&str = rcx)
     // copy address into RCX
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&panic),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-    // Panic does not return
+    generate_c_call(panic, ass, a, point);
 }
 
 PiType* build_panic_fn_ty(Allocator* a) {
@@ -230,8 +209,7 @@ void exit_callback() {
 }
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)exit_callback), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(exit_callback, ass, a, point);
 }
 
 void relic_print_fn(String s) {
@@ -285,17 +263,11 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     // store ptr to struct in rcx
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&load_module_c_fun), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(load_module_c_fun, ass, a, point);
 
     // To return:
     // + pop argument we pushed onto stack
