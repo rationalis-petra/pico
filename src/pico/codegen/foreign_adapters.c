@@ -413,6 +413,9 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         //        address, so we subtract 0x8 from 0x10 to get 0x8 
         size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
+        if (input_area_size - return_arg_size > INT8_MAX || return_arg_size > INT8_MAX) {
+            panic(mv_string("Either input area - return arg or return arg exceeded INT8 maximum"));
+        }
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         if (input_area_size <= INT8_MAX) {
             build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
@@ -640,12 +643,26 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         if (input_area_size > INT8_MAX || unadjusted_offset > INT8_MAX) {
             panic(mv_string("Inputs area size or unadjusted offset exceeded INT8 maximum"));
         }
+        if (input_area_size - return_arg_size > INT8_MAX || return_arg_size > INT8_MAX) {
+            panic(mv_string("Either input area - return arg or return arg exceeded INT8 maximum"));
+        }
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
-        build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+        if (input_area_size <= INT8_MAX) {
+            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+        } else {
+            build_binary_op(ass, Mov, reg(R8, sz_64), reg(RSP, sz_64), a, point);
+            build_binary_op(ass, Add, reg(R8, sz_64), imm32(input_area_size), a, point);
+            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(R8, 0, sz_64), a, point);
+        }
 
         // Use to to calculate the location of the return address (store in RCX)
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        if (input_area_size <= INT8_MAX) {
+            build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+        } else {
+            build_binary_op(ass, Mov, reg(R8, sz_64), imm32(input_area_size), a, point);
+            build_binary_op(ass, Add, reg(RCX, sz_64), reg(R8, sz_64), a, point);
+        }
         build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
         // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
         build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  

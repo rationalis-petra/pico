@@ -113,6 +113,12 @@ PiType build_load_fn_ty(Allocator* a) {
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
 
+void relic_memcpy(char *dest, char *src, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        dest[i] = src[i];
+    }
+}
+
 void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // The usual calling convention for polymorphic functions is assumed, hence
     // stack has the form:
@@ -182,7 +188,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #endif
 
     // copy memcpy into RCX & call
-    generate_c_call(memcpy, ass, a, point);
+    generate_c_call(relic_memcpy, ass, a, point);
 
     // Return
     build_nullary_op(ass, Ret, a, point);

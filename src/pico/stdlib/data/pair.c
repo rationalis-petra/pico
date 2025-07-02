@@ -39,9 +39,9 @@ void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
     //  - map
     //  - each
 
-    const char *mk_pair_fn =
-        "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])";
-    compile_toplevel(mk_pair_fn, module, &point, &pi_point, a);
+    /* const char *mk_pair_fn = */
+    /*     "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])"; */
+    /* compile_toplevel(mk_pair_fn, module, &point, &pi_point, a); */
 
     Result r = add_module_def(data, string_to_symbol(mv_string("pair")), module);
     if (r.type == Err) panic(r.error_message);

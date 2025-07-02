@@ -45,7 +45,7 @@ WinMessageArray relic_poll_events(Window* window) {
 }
 
 void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, mk_voidptr_ctype(a), mk_list_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), mk_list_ctype(a));
 
     convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 

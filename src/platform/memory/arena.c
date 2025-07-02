@@ -64,7 +64,7 @@ void* arena_malloc(size_t memsize, void* vctx) {
         ArenaBlock* current_block =
             ctx->memory_blocks.data + ctx->memory_blocks.len - 1;
 
-        size_t pad = align_padding(current_block->bmp, 8);
+        size_t pad = align_padding(current_block->bmp, 16);
         if (alloc_size + pad < ctx->blocksize - current_block->bmp) {
             void* data = current_block->data + current_block->bmp + pad;
             current_block->bmp += alloc_size + pad;

@@ -1087,7 +1087,11 @@ void teardown_hedron()
   {panic(mv_string("Hedron not supported on this build"));}
 HedronSurface *create_window_surface(struct Window * win)
   {panic(mv_string("Hedron not supported on this build"));}
+void resize_window_surface(HedronSurface* surface, Extent extent)
+  {panic(mv_string("Hedron not supported on this build"));}
 void destroy_window_surface(HedronSurface* surface)
+  {panic(mv_string("Hedron not supported on this build"));}
+uint32_t num_swapchain_images(HedronSurface* surface)
   {panic(mv_string("Hedron not supported on this build"));}
 HedronShaderModule* create_shader_module(U8Array code)
   {panic(mv_string("Hedron not supported on this build"));}
