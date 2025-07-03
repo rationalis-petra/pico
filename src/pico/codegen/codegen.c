@@ -1,3 +1,4 @@
+#include "data/num.h"
 #include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
@@ -81,17 +82,17 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
         void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
 
     return links.links;
@@ -668,13 +669,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t curr_pos = get_pos(ass);
         for (size_t i = 0; i < body_positions.len; i++) {
             size_t body_pos = body_positions.data[i];
-            uint32_t* body_ref = body_refs.data[i];
+            int32_t* body_ref = body_refs.data[i];
 
             if (curr_pos - body_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
             } 
 
-            *body_ref = (int32_t)(curr_pos - body_pos);
+            set_unaligned_i32(body_ref, (int32_t)(curr_pos - body_pos));
         }
 
         generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
@@ -1047,7 +1048,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         } 
 
         // backlink
-        *jmp_loc = end_pos - start_pos;
+        set_unaligned_i32(jmp_loc, end_pos - start_pos);
         jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
         start_pos = get_pos(ass);
 
@@ -1061,7 +1062,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
-        *jmp_loc = end_pos - start_pos;
+        set_unaligned_i32(jmp_loc, end_pos - start_pos);
         break;
     }
     case SLabels: {
@@ -1144,7 +1145,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 
                 int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
                 int32_t* loc = (int32_t*)loc_byte;
-                *loc = (int32_t) amt;
+                set_unaligned_i32(loc, (int32_t)amt);
             }
 
 
@@ -1161,7 +1162,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 
                 int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
                 int32_t* loc = (int32_t*)loc_byte;
-                *loc = (int32_t) amt;
+                set_unaligned_i32(loc, (int32_t)amt);
             }
         }
 

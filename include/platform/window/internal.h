@@ -32,7 +32,7 @@ struct Window {
 struct Window {
     HWND impl;
     bool should_close;
-    WinMessageArray messages;
+    WinMessageArray messagesout;
 
     uint16_t width;
     uint16_t height;

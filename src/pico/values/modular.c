@@ -2,6 +2,7 @@
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
 
+#include "data/num.h"
 #include "data/array.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
@@ -196,18 +197,18 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->ed_links.len; i++) {
             LinkMetaData link = links->ed_links.data[i];
             void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cd_links.len; i++) {
             LinkMetaData link = links->cd_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
 
         for (size_t i = 0; i < links->dd_links.len; i++) {
             LinkMetaData link = links->dd_links.data[i];
             void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
     }
 
@@ -217,12 +218,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->ec_links.len; i++) {
             LinkMetaData link = links->ec_links.data[i];
             void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
-            *address_ptr = out.code.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
             LinkMetaData link = links->cc_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
-            *address_ptr = out.code.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
     }
     return out;

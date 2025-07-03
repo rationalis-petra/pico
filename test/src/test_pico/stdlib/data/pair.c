@@ -33,10 +33,10 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Allocator *a)
         int32_t x;
         int32_t y;
     } Point32;
-    /* if (test_start(log, mv_string("pair-small-size"))) { */
-    /*     Point32 expected = (Point32) {.x = 1432, .y = -960}; */
-    /*     test_toplevel_eq("(pair.pair (is 1432 I32) (is -960 I32))", &expected, module, log, a) ; */
-    /* } */
+    if (test_start(log, mv_string("pair-small-size"))) {
+        Point32 expected = (Point32) {.x = 1432, .y = -960};
+        test_toplevel_eq("(pair.pair (is 1432 I32) (is -960 I32))", &expected, module, log, a) ;
+    }
 
     typedef struct {
         uint64_t tag;
