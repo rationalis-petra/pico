@@ -1069,10 +1069,17 @@ void wait_for_device() {
     vkDeviceWaitIdle(logical_device);
 }
 
-uint32_t acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphore) {
+
+ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphore) {
     uint32_t index;
-    vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
-    return index;
+    int result = vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return (ImageResult){.type = Resized};
+    }
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        panic(mv_string("acqurie next image!"));
+    }
+    return (ImageResult){.type = IROk, .image = index};
 }
 
 #else

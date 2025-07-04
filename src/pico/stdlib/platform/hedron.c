@@ -224,9 +224,10 @@ void build_wait_for_device_fn(PiType* type, Assembler* ass, Allocator* a, ErrorP
 }
 
 void build_acquire_next_image_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 2, "surface", mk_voidptr_ctype(a),
-                                     "semaphore", mk_voidptr_ctype(a),
-                               mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
+    CType ret_type = mk_struct_ctype(a, 2, "type", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
+                                     "image", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
+    
+    CType fn_ctype = mk_fn_ctype(a, 2, "surface", mk_voidptr_ctype(a), "semaphore", mk_voidptr_ctype(a), ret_type);
     convert_c_fn(acquire_next_image, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
@@ -594,7 +595,10 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, a);
 
-    typep = mk_proc_type(a, 2, copy_pi_type_p(surface_ty, a), copy_pi_type_p(semaphore_ty, a), mk_prim_type(a, UInt_32));
+    typep = mk_proc_type(a, 2, copy_pi_type_p(surface_ty, a), copy_pi_type_p(semaphore_ty, a),
+                         mk_enum_type(a, 2,
+                                      "image", 1, mk_prim_type(a, UInt_32),
+                                      "resized", 0));
     build_acquire_next_image_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("acquire-next-image"));
     fn_segments.code = get_instructions(ass);

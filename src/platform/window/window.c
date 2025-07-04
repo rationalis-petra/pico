@@ -104,6 +104,7 @@ void shell_ping(void* data, struct xdg_wm_base* sh, uint32_t ser) {
 // - ...
 void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int32_t height, struct wl_array* states) {
     // TODO: check that a resize actually happened.
+    // TODO: check width, height >= 0
     Window* window = data;
     if (window->width != width || window->height != height) {
         window->width = width;

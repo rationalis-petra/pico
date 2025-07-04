@@ -17,8 +17,8 @@ struct Window {
     uint8_t* pixles; // pointer to the shared memory (pixels)
 
     String name;
-    uint16_t width;
-    uint16_t height;
+    uint32_t width;
+    uint32_t height;
 
     // Internal state (used by us!)
     bool should_close;
@@ -34,8 +34,8 @@ struct Window {
     bool should_close;
     WinMessageArray messages;
 
-    uint16_t width;
-    uint16_t height;
+    uint32_t width;
+    uint32_t height;
 };
 
 #else

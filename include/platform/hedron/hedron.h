@@ -76,6 +76,11 @@ void reset_fence(HedronFence* fence);
 
 void wait_for_device();
 
-uint32_t acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore);
+typedef enum : uint64_t {IROk, Resized} ImageResultType;
+typedef struct {
+    ImageResultType type;
+    uint32_t image;
+} ImageResult;
+ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore);
 
 #endif
