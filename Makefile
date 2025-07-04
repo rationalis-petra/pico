@@ -29,8 +29,8 @@ else
 endif
 
 ifdef HEDRON
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -lvulkan -DUSE_VULKAN
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -lvulkan -DUSE_VULKAN
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
 endif
 
 # Find all the C files we want to compile

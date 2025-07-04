@@ -640,9 +640,6 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         //        address, so we subtract 0x8 from 0x10 to get 0x8 
         size_t unadjusted_offset = 0x8 + input_area_size + arg_offsets.data[0] - return_arg_size;
 
-        if (input_area_size > INT8_MAX || unadjusted_offset > INT8_MAX) {
-            panic(mv_string("Inputs area size or unadjusted offset exceeded INT8 maximum"));
-        }
         if (input_area_size - return_arg_size > INT8_MAX || return_arg_size > INT8_MAX) {
             panic(mv_string("Either input area - return arg or return arg exceeded INT8 maximum"));
         }

@@ -323,12 +323,41 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         window = (Window*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
 
-    if (uMsg == WM_CLOSE) {
+    switch (uMsg) {
+    case WM_SIZE: {
+        uint32_t width = LOWORD(lParam);
+        uint32_t height = HIWORD(lParam);
+        WinMessage message = (WinMessage) {
+            .type = WindowResized,
+            .dims.width = height,
+            .dims.height = height,
+        };
+        window->width = width;
+        window->height = height;
+        push_wm(message, &window->messages);
+        break;
+    }
+    case WM_SIZING: {
+        RECT* winRect = (RECT*)lParam;
+        uint32_t width = winRect->right - winRect->left;
+        uint32_t height = winRect->bottom - winRect->top;
+        WinMessage message = (WinMessage) {
+            .type = WindowResized,
+            .dims.width = height,
+            .dims.height = height,
+        };
+        window->width = width;
+        window->height = height;
+        push_wm(message, &window->messages);
+        break;
+    }
+    case WM_CLOSE:
         window->should_close = true;
-        return 0;
-    } else {
+        break;
+    default:
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
+    return 0;
 }
 
 int init_window_system(Allocator* a) {
@@ -380,12 +409,15 @@ bool window_should_close(Window *window) {
     return window->should_close;
 }
 
-void poll_events() {
+WinMessageArray poll_events(Window* window, Allocator* a) {
     MSG msg;
-        while (PeekMessage(&msg, NULL,  0, 0, PM_REMOVE))  {
+        while (PeekMessage(&msg, window->impl,  0, 0, PM_REMOVE))  {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    WinMessageArray out = scopy_wm_array(window->messages, a);
+    window->messages.len = 0;
+    return out;
 }
 
 #else
