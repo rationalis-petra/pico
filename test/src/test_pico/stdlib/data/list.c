@@ -8,11 +8,6 @@
 void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Allocator *a) {
     Allocator arena = mk_arena_allocator(4096, a);
 
-    typedef struct {
-        int64_t x;
-        int64_t y;
-    } Point;
-
     run_toplevel("(def list-1 (list.mk-list {I64} 5 10))", module, log, a) ;
     if (test_start(log, mv_string("list-len"))) {
         int64_t expected = 5;
@@ -49,9 +44,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Allocator *a)
         set_std_current_allocator(current_old);
     }
 
-    //run_toplevel("(each (proc [x] (i64.+ x 1)) list-1)", module, log, a) ;
-
-    // free the data associated with list-1
+    // Free the data associated with the lists generated durin the test
     run_toplevel("(free list-1.data)", module, log, a) ;
     run_toplevel("(free list-2.data)", module, log, a) ;
 

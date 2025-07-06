@@ -1056,11 +1056,6 @@ void destroy_fence(HedronFence* fence) {
     mem_free(fence, hd_alloc);
 }
 
-#include <stdio.h>
-void print_fence(HedronFence* fence) {
-    printf("hd-fence: %p, vk-fence: %p", fence, fence->fence);
-}
-
 void wait_for_fence(HedronFence *fence) {
     vkWaitForFences(logical_device, 1, &fence->fence, VK_TRUE, UINT64_MAX);
 }
@@ -1072,7 +1067,6 @@ void reset_fence(HedronFence *fence) {
 void wait_for_device() {
     vkDeviceWaitIdle(logical_device);
 }
-
 
 ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphore) {
     uint32_t index;

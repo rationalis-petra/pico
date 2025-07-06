@@ -203,12 +203,6 @@ void build_destroy_fence_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
     delete_c_type(fn_ctype, a);
 }
 
-void build_print_fence_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "fence", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
-    convert_c_fn(print_fence, &fn_ctype, type, ass, a, point); 
-    delete_c_type(fn_ctype, a);
-}
-
 void build_wait_for_fence_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(a, 1, "fence", mk_voidptr_ctype(a),
                                (CType){.sort = CSVoid});
@@ -568,15 +562,6 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     typep = mk_proc_type(a, 1, copy_pi_type_p(fence_ty, a), mk_prim_type(a, Unit));
     build_destroy_fence_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("destroy-fence"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-    delete_pi_type_p(typep, a);
-
-    typep = mk_proc_type(a, 1, copy_pi_type_p(fence_ty, a), mk_prim_type(a, Unit));
-    build_print_fence_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("print-fence"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

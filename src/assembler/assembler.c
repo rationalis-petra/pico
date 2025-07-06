@@ -1618,7 +1618,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "And", "Or", "Xor" "SHL", "SHR",
+        "Add", "Sub", "Cmp", "And", "Or", "Xor", "SHL", "SHR",
         "Mov", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.

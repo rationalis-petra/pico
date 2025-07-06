@@ -1412,6 +1412,36 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SWiden:
         // TODO (BUG): appropriately widen (sign-extend/double broaden)
         generate(*syn.widen.val, env, target, links, a, point);
+        if (syn.widen.val->ptype->prim < UInt_8) {
+            // is signed, 
+            panic(mv_string("can't widen signed ints yet!"));
+        } else if (syn.widen.val->ptype->prim < Float_32) {
+            // is unsigned, so the movzx instruction will do:
+            LocationSize sz;
+            switch (syn.widen.val->ptype->prim) {
+            case UInt_8:
+                sz = sz_8;
+                break;
+            case UInt_16:
+                sz = sz_16;
+                break;
+            case UInt_32:
+                sz = sz_32;
+                break;
+            case UInt_64:
+                sz = sz_64;
+                break;
+            default:
+                panic(mv_string("impossible code path"));
+            }
+
+            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RCX, sz), reg(RAX, sz), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+        } else {
+            panic(mv_string("can't widen this yet!"));
+        }
+
         break;
     case SNarrow:
         // TODO: if signed -ve => 0??

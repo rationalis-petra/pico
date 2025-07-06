@@ -2,6 +2,17 @@
 #include "test_pico/helper.h"
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
+    // -----------------------------------------------------
+    // 
+    //  Widen/Narrow
+    // 
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("widen-u32-u64"))) {
+        int64_t expected = 678;
+        test_toplevel_eq("(widen (is 678 U32) U64)", &expected, module, log, a) ;
+    }
+
+
     // -------------------------------------------------------------------------
     //
     // Sequence testing
