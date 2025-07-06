@@ -69,6 +69,9 @@ void command_draw(HedronCommandBuffer *buffer, uint32_t vertex_count,
 HedronSemaphore* create_semaphore(); 
 void destroy_semaphore(HedronSemaphore* semaphore); 
 
+
+void print_fence(HedronFence* fence); 
+
 HedronFence* create_fence(); 
 void destroy_fence(HedronFence* fence); 
 void wait_for_fence(HedronFence* fence);

@@ -1056,6 +1056,10 @@ void destroy_fence(HedronFence* fence) {
     mem_free(fence, hd_alloc);
 }
 
+#include <stdio.h>
+void print_fence(HedronFence* fence) {
+    printf("hd-fence: %p, vk-fence: %p", fence, fence->fence);
+}
 
 void wait_for_fence(HedronFence *fence) {
     vkWaitForFences(logical_device, 1, &fence->fence, VK_TRUE, UINT64_MAX);
@@ -1074,7 +1078,8 @@ ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphor
     uint32_t index;
     int result = vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        return (ImageResult){.type = Resized};
+        //return (ImageResult){.type = Resized};
+        return (ImageResult){.type = IROk, .image = index};
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         panic(mv_string("acqurie next image!"));

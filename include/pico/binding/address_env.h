@@ -51,8 +51,12 @@ typedef struct TypeEnv TypeEnv;
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
 AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
 
-void check_address_env(AddressEnv* env, size_t size, Allocator* a);
 void delete_address_env(AddressEnv* env, Allocator* a);
+
+// Debug utility functions
+// These are used by the codegenerator to assert properties of the address environment
+// in debug mode.
+int64_t debug_get_stack_head(AddressEnv* env);
 
 /* Address environment interface
  * Lookups return either:

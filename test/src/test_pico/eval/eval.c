@@ -5,10 +5,10 @@
 #include "pico/stdlib/extra.h"
 
 #include "test_pico/helper.h"
-#include "test_pico/stdlib/stdlib.h"
-#include "test_pico/stdlib/components.h"
+#include "test_pico/eval/eval.h"
+#include "test_pico/eval/components.h"
 
-void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
+void run_pico_eval_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
@@ -35,28 +35,8 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    if (suite_start(log, mv_string("core"))) {
-        run_pico_stdlib_core_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("num"))) {
-        run_pico_stdlib_num_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("extra"))) {
-        run_pico_stdlib_extra_tests(log, module, a);
-        suite_end(log);
-    }
-
-    if (suite_start(log, mv_string("data"))) {
-        if (suite_start(log, mv_string("pair"))) {
-            run_pico_stdlib_data_pair_tests(log, module, a);
-        }
-        if (suite_start(log, mv_string("list"))) {
-            run_pico_stdlib_data_list_tests(log, module, a);
-        }
+    if (suite_start(log, mv_string("literals"))) {
+        run_pico_eval_literals_tests(log, module, a);
         suite_end(log);
     }
 

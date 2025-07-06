@@ -28,6 +28,38 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(seq [let! x 2 y 3] (u32.+ x y))", &expected, module, log, a) ;
     }
 
+
+    // -----------------------------------------------------
+    // 
+    //      Procedures, Application and all
+    // 
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("proc-const"))) {
+        int64_t expected = -985;
+        test_toplevel_eq("((proc [(x U64)] -985) 127)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("proc-id"))) {
+        int64_t expected = 127;
+        test_toplevel_eq("((proc [x] x) 127)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("proc-add"))) {
+        int64_t expected = 5;
+        test_toplevel_eq("((proc [x y] (u64.+ x y)) 2 3)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("proc-higher-order"))) {
+        int64_t expected = -128;
+        test_toplevel_eq("((proc [(f (Proc [I64 I64] I64)) x y] f x y) i64.+ -256 128)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("proc-all-id"))) {
+        int64_t expected = -75;
+        test_toplevel_eq("((all [A] proc [(x A)] x) -75)", &expected, module, log, a) ;
+    }
+
+
     // -------------------------------------------------------------------------
     //
     // Conditional testing
@@ -84,7 +116,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
 
     // -----------------------------------------------------
     // 
-    // Struct
+    //      Struct
     // 
     // -----------------------------------------------------
 
@@ -176,4 +208,20 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(match (:some (struct [.x (is 1100 I32)] [.y (is -200 I32)]))\n"
                  "  [[:some pr] (i32.+ pr.x pr.y)])", &expected, module, log, a) ;
     }
+
+    // -----------------------------------------------------
+    // 
+    //      Type Constructors
+    // 
+    // -----------------------------------------------------
+    /* if (test_start(log, mv_string("I64"))) { */
+    /*     PiType* expected = mk_prim_type(a, Int_64); */
+    /*     test_toplevel_eq("I64", &expected, module, log, a) ; */
+    /* } */
+
+    /* if (test_start(log, mv_string("proc-const"))) { */
+    /*     int64_t expected = -985; */
+    /*     test_toplevel_eq("(Proc [U64 U64] U64)", &expected, module, log, a) ; */
+    /*     run_toplevel("(Proc [U64 U64] U64)", module, log, a) ; */
+    /* } */
 }

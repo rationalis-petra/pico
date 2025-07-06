@@ -2,7 +2,6 @@
 #define __TEST_STDLIB_COMPONENTS_H
 
 #include "pico/values/modular.h"
-
 #include "test/test_log.h"
 
 void run_pico_stdlib_core_tests(TestLog* log, Module* module, Allocator* a);

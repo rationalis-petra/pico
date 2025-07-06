@@ -41,7 +41,7 @@ void add_list_module(Module *data, Allocator *a) {
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
-        "(def mk-list all [A] proc [capacity len]\n"
+        "(def mk-list all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
         "    [.capacity capacity]\n"
@@ -63,12 +63,19 @@ void add_list_module(Module *data, Allocator *a) {
         "    val))";
     compile_toplevel(eset_fn, module, &point, &pi_point, a);
 
-    const char *each_fn = 
-        "(def each all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
-        "  (let [new-list (mk-list {B} lst.len lst.len)]\n"
-        "    (loop [for i from 0 below lst.len]\n"
-        "      (eset i (fn (elt i lst)) new-list))))";
+    const char *each_fn =
+        "(def each all [A] proc [(fn (Proc [A] Unit)) (lst (List A))]\n"
+        "  (loop [for i from 0 below lst.len]\n"
+        "    (fn (elt i lst))))";
     compile_toplevel(each_fn, module, &point, &pi_point, a);
+
+    const char *map_fn =
+        "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
+        "  (let [new-list (mk-list {B} lst.len lst.len)] (seq\n"
+        "    (loop [for i from 0 below lst.len]\n"
+        "      (eset i (fn (elt i lst)) new-list))\n"
+        "      new-list)))";
+    compile_toplevel(map_fn, module, &point, &pi_point, a);
 
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
