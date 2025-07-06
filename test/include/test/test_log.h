@@ -30,7 +30,10 @@ typedef struct {
 TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
 void delete_test_log(TestLog* log, Allocator* a);
 
-void test_start(TestLog* log, String name);
+bool suite_start(TestLog* log, String name);
+void suite_end(TestLog* log);
+
+bool test_start(TestLog* log, String name);
 
 void test_pass(TestLog* log);
 void test_fail(TestLog* log);

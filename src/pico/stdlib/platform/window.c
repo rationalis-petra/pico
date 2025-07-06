@@ -3,10 +3,13 @@
 
 #include "pico/values/ctypes.h"
 #include "pico/codegen/foreign_adapters.h"
+#include "pico/stdlib/core.h"
+#include "pico/stdlib/extra.h"
 #include "pico/stdlib/platform/window.h"
 
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
+static PiType* window_message_ty;
 
 void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),
@@ -36,10 +39,15 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, Er
     delete_c_type(fn_ctype, a);
 }
 
-void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 0, mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
+WinMessageArray relic_poll_events(Window* window) {
+    Allocator a = get_std_current_allocator();
+    return poll_events(window, &a);
+}
 
-    convert_c_fn(poll_events, &fn_ctype, type, ass, a, point);
+void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), mk_list_ctype(a));
+
+    convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, a);
 }
@@ -86,6 +94,18 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     window_ty = e->value;
     delete_pi_type_p(typep, a);
 
+    // Message Type
+    
+    typep = mk_enum_type(a, 1,
+                         "resize", 2, mk_prim_type(a, UInt_32), mk_prim_type(a, UInt_32));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Message"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    window_message_ty = e->value;
+    delete_pi_type_p(typep, a);
+
     typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
     build_create_window_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("create-window"));
@@ -113,7 +133,8 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, a);
 
-    typep = mk_proc_type(a, 0, mk_prim_type(a, Bool));
+    //typep = mk_proc_type(a, 0, copy_pi_type_p(window_message_ty, a));
+    typep = mk_proc_type(a, 1,  copy_pi_type_p(window_ty, a), mk_app_type(a, get_list_type(), window_message_ty));
     build_poll_events_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);

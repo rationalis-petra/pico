@@ -3,6 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
+#include "pico/codegen/internal.h"
 #include "pico/stdlib/core.h"
 
 static PiType* ptr_type;
@@ -10,9 +11,9 @@ PiType* get_ptr_type() {
     return ptr_type;
 }
 
-static PiType* array_type;
-PiType* get_array_type() {
-    return array_type;
+static PiType* list_type;
+PiType* get_list_type() {
+    return list_type;
 }
 
 static PiType* maybe_type;
@@ -80,19 +81,12 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RDI, sz_64), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Mov, reg(R8, sz_64), reg(R9, sz_64), a, point);
-
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    // call memcpy
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    // copy memcpy into RCX & call
+    generate_c_call(memcpy, ass, a, point);
 
     // Store return address in R9
     build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 8, sz_64), a, point);
@@ -117,6 +111,12 @@ PiType build_load_fn_ty(Allocator* a) {
     push_symbol(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
+}
+
+void relic_memcpy(char *dest, char *src, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        dest[i] = src[i];
+    }
 }
 
 void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -176,29 +176,19 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // memcpy (dest = rdi, src = rsi, size = rdx)
     build_binary_op(ass, Mov, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RDI, sz_64), imm8(ADDRESS_SIZE), a, point);
-
-    // build_binary_op(ass, Mov, reg(RSI), reg(RSP), a, point);
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R8, sz_64), a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
     build_binary_op(ass, Add, reg(RCX, sz_64), imm8(ADDRESS_SIZE), a, point);
-
     build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
-    // build_binary_op(ass, Mov, reg(R8, sz_64), reg(R8, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
     // copy memcpy into RCX & call
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&memcpy), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(relic_memcpy, ass, a, point);
 
     // Return
     build_nullary_op(ass, Ret, a, point);
@@ -514,41 +504,39 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         ptr_type = e->value;
 
         // Allocator Type
-        PiType *alloc_type = mk_named_type(a, "Allocator",
-                                           mk_struct_type(a, 3,
-                                                          "alloc", mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                                          "realloc", mk_proc_type(a, 2, mk_prim_type(a, Address), mk_prim_type(a, UInt_64), mk_prim_type(a, Address)),
-                                                          "free", mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit))));
+        PiType *alloc_type = mk_named_type(
+            a, "Allocator",
+            mk_struct_type(a, 4, 
+                           "alloc", mk_prim_type(a, Address),
+                           "realloc", mk_prim_type(a, Address),
+                           "free", mk_prim_type(a, Address),
+                           "ctx", mk_prim_type(a, Address)));
         type_data = alloc_type;
         sym = string_to_symbol(mv_string("Allocator"));
         type.kind.nargs = 0;
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        // (Ptr Alloc)
-        PiType* alloc_ptr_type = mk_app_type(a, ptr_type, alloc_type);
-        delete_pi_type_p(alloc_type, a);
-        
         // Array Type 
         // Make a ptr
         vars = mk_symbol_array(1, a);
         push_symbol(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
         type_val = 
-            mk_named_type(a, "Array",
+            mk_named_type(a, "List",
                           mk_type_family(a,
                                          vars,
                                          mk_struct_type(a, 4,
                                                         "data", mk_prim_type(a, Address),
                                                         "len", mk_prim_type(a, UInt_64),
                                                         "capacity", mk_prim_type(a, UInt_64),
-                                                        "gpa", alloc_ptr_type)));
+                                                        "gpa", alloc_type)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Array"));
+        sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
         delete_pi_type_p(type_val, a);
 
         e = get_def(sym, module);
-        array_type = e->value;
+        list_type = e->value;
         
         // Maybe Type 
         vars = mk_symbol_array(1, a);

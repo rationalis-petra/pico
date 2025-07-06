@@ -1,19 +1,29 @@
-#include "data/amap.h"
-
 #include "test_pico/parse/parse.h"
-#include "test_pico/pipeline/pipeline.h"
+#include "test_pico/stdlib/stdlib.h"
+#include "test_pico/eval/eval.h"
+#include "test_pico/typecheck.h"
 
 #include "test_pico/pico.h"
 
 
-void run_pico_tests(RunDescriptor to_run, TestLog* log, Allocator* a) {
-  StrPtrAMap tests = mk_str_ptr_amap(16, a);
-  str_ptr_insert(mv_string("parse"), run_pico_parse_tests, &tests);
-  str_ptr_insert(mv_string("pipeline"), run_pico_pipeline_tests, &tests);
+void run_pico_tests(TestLog* log, Allocator* a) {
+    if (suite_start(log, mv_string("parse"))) {
+        run_pico_parse_tests(log, a);
+        suite_end(log);
+    }
 
-  test_log_info(log, mv_string("Beginning Pico Tests!"));
-  run_tests(tests, to_run, log, a);
-  test_log_info(log, mv_string("Ending Pico tests!"));
+    if (suite_start(log, mv_string("typecheck"))) {
+        run_pico_typecheck_tests(log, a);
+        suite_end(log);
+    }
 
-  sdelete_str_ptr_amap(tests);
+    if (suite_start(log, mv_string("eval"))) {
+        run_pico_eval_tests(log, a);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("stdlib"))) {
+        run_pico_stdlib_tests(log, a);
+        suite_end(log);
+    }
 }

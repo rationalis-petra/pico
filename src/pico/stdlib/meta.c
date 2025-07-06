@@ -53,7 +53,7 @@ CType mk_branch_ctype(Allocator* a) {
     return mk_struct_ctype(a, 3,
                            "range", mk_range_ctype(a),
                            "hint", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                           "branch", mk_array_ctype(a));
+                           "branch", mk_list_ctype(a));
 }
 
 CType mk_syntax_ctype(Allocator* a) {
@@ -227,7 +227,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(a, "Syntax");
-        PiType* syn_array = mk_app_type(a, get_array_type(), syn_name_ty);
+        PiType* syn_array = mk_app_type(a, get_list_type(), syn_name_ty);
         delete_pi_type_p(syn_name_ty, a);
 
         typep = mk_named_type(a, "Syntax",

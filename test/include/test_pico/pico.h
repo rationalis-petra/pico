@@ -1,8 +1,8 @@
 #ifndef __TEST_PICO_PICO_H
 #define __TEST_PICO_PICO_H
 
-#include "test/suite.h"
+#include "test/test_log.h"
 
-void run_pico_tests(RunDescriptor to_run, TestLog* log, Allocator* a);
+void run_pico_tests(TestLog* log, Allocator* a);
 
 #endif

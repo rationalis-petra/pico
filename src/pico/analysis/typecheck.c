@@ -274,7 +274,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+        PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
         PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
 
         type_check_i(untyped->transformer, transformer_proc, env, a, point);
@@ -304,7 +304,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                err.message = mv_cstr_doc("Incorrect number of function arguments", a);
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected ", a), &nodes);
+                push_ptr(pretty_u64(fn_type.proc.args.len, a), &nodes);
+                push_ptr(mv_cstr_doc("but got ", a), &nodes);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
+                err.message = mv_hsep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 
@@ -566,64 +571,97 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         // Typecheck the input 
         type_infer_i(untyped->match.val, env, a, point);
 
-        PiType* enum_type = untyped->match.val->ptype;
-        enum_type = unwrap_type(enum_type, a);
+        PiType* enum_type = unwrap_type(untyped->match.val->ptype, a); 
+        if (enum_type->sort == TEnum) {
+            // Typecheck each variant, ensure they are the same
+            PiType* out_ty = mk_uvar(a);
+            untyped->ptype = out_ty;
+            U8Array used_indices = mk_u8_array(untyped->match.clauses.len, a);
+            for (size_t i = 0; i < untyped->match.clauses.len; i++)
+                push_u8(0, &used_indices);
 
-        if (enum_type->sort != TEnum) {
-            err.message = mv_cstr_doc("Match expects value to have an enum type.", a);
-            throw_pi_error(point, err);
-        }
-
-        // Typecheck each variant, ensure they are the same
-        PiType* out_ty = mk_uvar(a);
-        untyped->ptype = out_ty;
-        U8Array used_indices = mk_u8_array(untyped->match.clauses.len, a);
-        for (size_t i = 0; i < untyped->match.clauses.len; i++)
-            push_u8(0, &used_indices);
-
-        for (size_t i = 0; i < untyped->match.clauses.len; i++) {
-            SynClause* clause = untyped->match.clauses.data[i];
-            bool found_tag = false;
-            for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
-                if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
-                    found_tag = true;
-                    clause->tag = j;
-                    if (used_indices.data[j] != 0) {
-                        err.message = mv_cstr_doc("Same tag occurs twice in match body.", a);
-                        throw_pi_error(point, err);
+            for (size_t i = 0; i < untyped->match.clauses.len; i++) {
+                SynClause* clause = untyped->match.clauses.data[i];
+                bool found_tag = false;
+                for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
+                    if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
+                        found_tag = true;
+                        clause->tag = j;
+                        if (used_indices.data[j] != 0) {
+                            err.message = mv_cstr_doc("Same tag occurs twice in match body.", a);
+                            throw_pi_error(point, err);
+                        }
+                        used_indices.data[j] = 1;
                     }
-                    used_indices.data[j] = 1;
                 }
+
+                if (!found_tag) {
+                    err.message = mv_cstr_doc("Unable to find variant tag in match", a);
+                    throw_pi_error(point, err);
+                }
+
+                // Now we've found the tag, typecheck the body
+                PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
+                if (types_to_bind->len != clause->vars.len) {
+                    err.message = mv_cstr_doc("Bad number of binds!", a);
+                    throw_pi_error(point, err);
+                }
+
+                for (size_t j = 0; j < types_to_bind->len; j++) {
+                    Symbol arg = clause->vars.data[j];
+                    PiType* aty = types_to_bind->data[j];
+                    type_var(arg, aty, env);
+                }
+
+                type_check_i(clause->body, out_ty, env, a, point);
+                pop_types(env, types_to_bind->len);
             }
 
-            if (!found_tag) {
-                err.message = mv_cstr_doc("Unable to find variant tag in match", a);
+            // Finally, check that all indices are accounted for;
+            bool all_indices = true;
+            for (size_t i = 0; i < used_indices.len; i++) all_indices &= used_indices.data[i];
+
+            if (!all_indices) {
+                err.message = mv_cstr_doc("Not all enumerations used in match expression", a);
                 throw_pi_error(point, err);
             }
+        } else if (enum_type->sort == TUVar) {
+            // TODO (FEAT): Adjust this so there is room for re-ordering! 
+            //   possibly placing constraints on the enum, but constraining it
+            //   to only have the provided fields?? a special unification??
+            PiType* enum_type = mem_alloc(sizeof(PiType), a);
+            *enum_type = (PiType) {
+                .sort = TEnum,
+                .enumeration.variants = mk_sym_ptr_amap(untyped->match.clauses.len, a),
+            };
 
-            // Now we've found the tag, typecheck the body
-            PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
-            if (types_to_bind->len != clause->vars.len) {
-                err.message = mv_cstr_doc("Bad number of binds!", a);
-                throw_pi_error(point, err);
+            PiType* out_ty = mk_uvar(a);
+            untyped->ptype = out_ty;
+            for (size_t i = 0; i < untyped->match.clauses.len; i++) {
+                SynClause* clause = untyped->match.clauses.data[i];
+
+                PtrArray types = mk_ptr_array(clause->vars.len, a);
+                for (size_t j = 0; j < clause->vars.len; j++) {
+                    Symbol arg = clause->vars.data[j];
+                    PiType* aty = mk_uvar(a);
+                    push_ptr(aty, &types);
+                    type_var(arg, aty, env);
+                }
+
+                type_check_i(clause->body, out_ty, env, a, point);
+                pop_types(env, types.len);
+
+                PtrArray* to_insert = mem_alloc(sizeof(PtrArray), a);
+                *to_insert = types;
+                sym_ptr_insert(clause->tagname, to_insert, &enum_type->enumeration.variants);
             }
-
-            for (size_t j = 0; j < types_to_bind->len; j++) {
-                Symbol arg = clause->vars.data[j];
-                PiType* aty = types_to_bind->data[j];
-                type_var(arg, aty, env);
-            }
-
-            type_check_i(clause->body, out_ty, env, a, point);
-            pop_types(env, types_to_bind->len);
-        }
-
-        // Finally, check that all indices are accounted for;
-        bool all_indices = true;
-        for (size_t i = 0; i < used_indices.len; i++) all_indices &= used_indices.data[i];
-        
-        if (!all_indices) {
-            err.message = mv_cstr_doc("Not all enumerations used in match expression", a);
+            type_check_i(untyped->match.val, enum_type, env, a, point);
+        } else {
+            err.range = untyped->match.val->range;
+            PtrArray nodes;
+            push_ptr(mv_cstr_doc("Unexpected type provided to match. Expected an enum type, but got:", a),  &nodes);
+            push_ptr(pretty_type(untyped->match.val->ptype, a), &nodes);
+            err.message = mv_hsep_doc(nodes, a);
             throw_pi_error(point, err);
         }
         break;
@@ -844,12 +882,15 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         type_check_i(untyped->if_expr.condition,
                      t, env, a, point);
 
-        type_infer_i(untyped->if_expr.true_branch, env, a, point);
+        PiType* out_type = mk_uvar(a);
+        type_check_i(untyped->if_expr.true_branch,
+                     out_type,
+                     env, a, point);
 
         type_check_i(untyped->if_expr.false_branch,
-                     untyped->if_expr.true_branch->ptype,
+                     out_type,
                      env, a, point);
-        untyped->ptype = untyped->if_expr.false_branch->ptype;
+        untyped->ptype = out_type;
         break;
     }
     case SGoTo: {

@@ -116,7 +116,8 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...);
 
 // Ctypes used within our data/* libraries 
 CType mk_string_ctype(Allocator* a);
-CType mk_array_ctype(Allocator* a);
+CType mk_allocator_ctype(Allocator* a);
+CType mk_list_ctype(Allocator* a);
 
 void init_ctypes();
 

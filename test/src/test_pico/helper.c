@@ -75,7 +75,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     type_check(&abs, env, &arena, &pi_point);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
-    EvalResult evres =pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    EvalResult evres = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
@@ -263,4 +263,150 @@ void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a
         .on_exit = log_exit,
     };
     run_toplevel_internal(string, module, callbacks, NULL, log, a);
+}
+
+typedef struct {
+    void (* on_expr)(PiType* actual, void* data, TestLog* log);
+    void (* on_top)(void* data, TestLog* log);
+    void (* on_pi_error)(MultiError err, IStream* sin, TestLog* log);
+    void (* on_error)(String msg, TestLog* log);
+    void (* on_exit)(void* data, TestLog* log);
+} TypeCallbacks;
+
+void test_typecheck_internal(const char *string, Module *module, TypeCallbacks callbacks, void* data, TestLog* log, Allocator* a) {
+    IStream* sin = mk_string_istream(mv_string(string), a);
+    Allocator exalloc = mk_executable_allocator(a);
+    Allocator* exec = &exalloc;
+    // Note: we need to be aware of the arena and error point, as both are used
+    // by code in the 'true' branches of the nonlocal exits, and may be stored
+    // in registers, so they cannotbe changed (unless marked volatile).
+    Allocator arena = mk_arena_allocator(4096, a);
+    IStream* cin = mk_capturing_istream(sin, &arena);
+
+    Target gen_target = {
+        .target = mk_assembler(exec),
+        .code_aux = mk_assembler(exec),
+        .data_aux = mem_alloc(sizeof(U8Array), &arena)
+    };
+    *gen_target.data_aux = mk_u8_array(128, &arena);
+
+    Environment* env = env_from_module(module, &arena);
+
+    jump_buf exit_point;
+    if (set_jump(exit_point)) goto on_exit;
+    set_exit_callback(&exit_point);
+
+    ErrorPoint point;
+    if (catch_error(point)) goto on_error;
+
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
+    ParseResult res = parse_rawtree(cin, &arena);
+    if (res.type == ParseNone) {
+        throw_error(&point, mv_string("Parse Returned None!"));
+    }
+    if (res.type == ParseFail) {
+        throw_pi_error(&pi_point, res.error);
+    }
+    if (res.type != ParseSuccess) {
+        // If parse is invalid, means internal bug, so better exit soon!
+        throw_error(&point, mv_string("Parse Returned Invalid Result!\n"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Resolution
+    // -------------------------------------------------------------------------
+
+    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
+
+    type_check(&abs, env, &arena, &pi_point);
+
+    if (abs.type == TLExpr) {
+        if (callbacks.on_expr) {
+            callbacks.on_expr(abs.expr->ptype, data, log);
+        }
+    } else {
+        if (callbacks.on_top) {
+            callbacks.on_top(data, log);
+        }
+    }
+    // TODO: check evres == expected_val 
+
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    release_executable_allocator(exalloc);
+    delete_istream(sin, a);
+    return;
+
+ on_pi_error:
+    if (callbacks.on_pi_error) {
+        callbacks.on_pi_error(pi_point.multi, cin, log);
+    }
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    release_executable_allocator(exalloc);
+    delete_istream(sin, a);
+    return;
+
+ on_error:
+    if (callbacks.on_error) {
+        callbacks.on_error(point.error_message, log);
+    }
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    release_executable_allocator(exalloc);
+    delete_istream(sin, a);
+    return;
+
+ on_exit:
+    if (callbacks.on_exit) {
+        callbacks.on_exit(data, log);
+    }
+    delete_assembler(gen_target.target);
+    delete_assembler(gen_target.code_aux);
+    release_arena_allocator(arena);
+    release_executable_allocator(exalloc);
+    return;
+}
+
+void type_eql(PiType* type, void* data, TestLog* log) {
+    if (!pi_type_eql(type, data)) {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        FormattedOStream* os = get_fstream(log);
+        write_fstring(mv_string("Expected: "), os);
+        Document* doc = pretty_type(data, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\nGot: "), os);
+        doc = pretty_type(type, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\n"), os);
+        test_fail(log);
+        release_arena_allocator(arena);
+    } else {
+        test_pass(log);
+    }
+}
+
+void top_type(void *data, TestLog *log) {
+    FormattedOStream* os = get_fstream(log);
+    write_fstring(mv_string("Typecheck tests only typecheck expressions."), os);
+    test_fail(log);
+}
+
+void test_typecheck_eq(const char *string, PiType* expected, Module *module, TestLog* log, Allocator* a) {
+    TypeCallbacks callbacks = (TypeCallbacks) {
+        .on_expr = type_eql,
+        .on_top = top_type,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    test_typecheck_internal(string, module, callbacks, expected, log, a);
 }

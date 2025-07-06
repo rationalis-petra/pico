@@ -1,8 +1,8 @@
 #ifndef __TEST_PICO_PARSE_PARSE_H
 #define __TEST_PICO_PARSE_PARSE_H
 
-#include "test/suite.h"
+#include "test/test_log.h"
 
-void run_pico_parse_tests(RunDescriptor to_run, TestLog* log, Allocator* a);
+void run_pico_parse_tests(TestLog* log, Allocator* a);
 
 #endif

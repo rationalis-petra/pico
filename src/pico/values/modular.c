@@ -2,6 +2,7 @@
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
 
+#include "data/num.h"
 #include "data/array.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
@@ -90,7 +91,12 @@ Result add_module(Symbol symbol, Module* module, Package* package) {
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
-    // TODO (PERF): check for if this clause already exists!
+    // Check if the clause already exists.
+    // This saves us from redundantly traversing a module when loading the environment. 
+    ImportClauseArray imclauses = module->header.imports.clauses;
+    for (size_t i = 0; i < module->header.imports.clauses.len; i++) {
+        if (imclause_eq(clause, imclauses.data[i])) return;
+    } 
     clause.path = scopy_symbol_array(clause.path, module->allocator);
     push_import_clause(clause, &module->header.imports.clauses);
 }
@@ -191,18 +197,18 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->ed_links.len; i++) {
             LinkMetaData link = links->ed_links.data[i];
             void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cd_links.len; i++) {
             LinkMetaData link = links->cd_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
 
         for (size_t i = 0; i < links->dd_links.len; i++) {
             LinkMetaData link = links->dd_links.data[i];
             void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
-            *address_ptr= out.data.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
     }
 
@@ -212,12 +218,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         for (size_t i = 0; i < links->ec_links.len; i++) {
             LinkMetaData link = links->ec_links.data[i];
             void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
-            *address_ptr= out.code.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
             LinkMetaData link = links->cc_links.data[i];
             void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
-            *address_ptr= out.code.data + link.dest_offset;
+            set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
     }
     return out;

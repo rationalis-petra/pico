@@ -21,10 +21,18 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
   return out;
 }
 
-void test_start(TestLog* log, String name) {
+bool suite_start(TestLog *log, String name) {
+    return true;
+}
+
+void suite_end(TestLog *log) {
+}
+
+bool test_start(TestLog* log, String name) {
     log->in_test = true;
     log->current_test = name;
     log->test_count++;
+    return true;
 }
 
 void test_pass(TestLog* log) {

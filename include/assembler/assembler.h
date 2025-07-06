@@ -183,12 +183,12 @@ typedef struct {
 
 // Location Constructors 
 Location reg(Regname name, LocationSize sz);
-Location rref8(Regname name, int8_t offset, LocationSize sz);
+Location rref8(Regname name, int64_t offset, LocationSize sz);
 Location rref32(Regname name, int32_t offset, LocationSize sz);
-Location sib(Regname base, Regname index, uint8_t scale, LocationSize sz);
-Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement, LocationSize sz);
-Location sib32(Regname base, Regname index, uint8_t scale, int32_t displacement, LocationSize sz);
-Location imm8(int8_t immediate);
+Location sib(Regname base, Regname index, int64_t scale, LocationSize sz);
+Location sib8(Regname base, Regname index, int64_t scale, int64_t displacement, LocationSize sz);
+Location sib32(Regname base, Regname index, int64_t scale, int32_t displacement, LocationSize sz);
+Location imm8(int64_t immediate);
 Location imm16(int16_t immediate);
 Location imm32(int32_t immediate);
 Location imm64(int64_t immediate);

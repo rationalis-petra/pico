@@ -1,4 +1,5 @@
 #include "platform/machine_info.h"
+#include "platform/window/window.h"
 #include "data/string.h"
 
 #if OS_FAMILY == UNIX
@@ -16,11 +17,12 @@ struct Window {
     uint8_t* pixles; // pointer to the shared memory (pixels)
 
     String name;
-    uint16_t width;
-    uint16_t height;
+    uint32_t width;
+    uint32_t height;
 
     // Internal state (used by us!)
     bool should_close;
+    WinMessageArray messages;
 };
 
 #elif OS_FAMILY == WINDOWS
@@ -30,6 +32,10 @@ struct Window {
 struct Window {
     HWND impl;
     bool should_close;
+    WinMessageArray messages;
+
+    uint32_t width;
+    uint32_t height;
 };
 
 #else

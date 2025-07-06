@@ -1,3 +1,5 @@
+#include "platform/signals.h"
+
 #include "pico/syntax/header.h"
 #include "data/meta/array_impl.h"
 
@@ -24,6 +26,28 @@ int cmp_export_clauses(ExportClause lhs, ExportClause rhs) {
 ARRAY_CMP_IMPL(ImportClause, cmp_import_clauses, import_clause, ImportClause);
 
 ARRAY_CMP_IMPL(ExportClause, cmp_export_clauses, export_clause, ExportClause);
+
+bool imclause_eq(ImportClause c1, ImportClause c2) {
+    if (c1.type != c2.type) return false;
+    if (c1.path.len != c2.path.len) return false;
+    for (size_t i = 0; i < c1.path.len; i++) {
+        if (cmp_symbol(c1.path.data[i], c2.path.data[i]) != 0) return false;
+    }
+    switch (c1.type) {
+    case Import:
+        return cmp_symbol(c1.member, c2.member) == 0;
+    case ImportAs:
+        return cmp_symbol(c1.rename, c2.rename) == 0;
+    case ImportMany:
+        for (size_t i = 0; i < c1.path.len; i++) {
+            if (cmp_symbol(c1.members.data[i], c2.members.data[i]) != 0) return false;
+        }
+        return true;
+    case ImportAll:
+        return true;
+    }
+    panic(mv_string("bad caluse"));
+}
 
 ImportClause copy_import_clause(ImportClause clause, Allocator* a) {
     ImportClause out = clause;

@@ -390,9 +390,12 @@ UnifyResult unify_eq(PiType* lhs, PiType* rhs, SymPairArray* rename, Allocator* 
 UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
     // ------------------------------------------------------------
     // Uvar Subst
+    //  -------- 
+    // 
     // The goal of uvar subst is to ensure that the uvar substitutes in type. If
     // typeis itself a uvar, then the constraints from the uvar argument must be
     // propagated into the type argument.
+    // 
     // ------------------------------------------------------------
 
     if (type->sort == TUVar) {
@@ -408,7 +411,6 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                     UnifyResult res = add_constraint(uvar->constraints.data[i], type->uvar, a);
                     if (res.type != UOk) return res;
                 }
-                return (UnifyResult){.type = UOk};
             } else {
                 return (UnifyResult) {
                     .type = USimpleError,
@@ -752,7 +754,7 @@ void squash_type(PiType* type, Allocator* a) {
                   squash_type(con.has_field.type, a);
                   sym_ptr_insert(con.has_field.name, con.has_field.type, &out_fields);
               }
-              *type = (PiType){.sort = TEnum, .structure.fields = out_fields};
+              *type = (PiType){.sort = TStruct, .structure.fields = out_fields};
               break;
           }
           case Enum: {
@@ -882,7 +884,7 @@ UnifyResult add_variant_constraint(UVarType *uvar, Range range, Symbol variant, 
             uvar->default_behaviour = Enum;
             bool append = true;
             for (size_t i = 0; i < uvar->constraints.len; i++) {
-                if (uvar->constraints.data[i].type != ConField) {
+                if (uvar->constraints.data[i].type != ConVariant) {
                     return (UnifyResult) {
                         .type = USimpleError,
                         .message = mv_cstr_doc("incompatible uvar constraints!", a),

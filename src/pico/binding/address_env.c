@@ -131,10 +131,20 @@ void delete_local_env(LocalAddrs* local, Allocator* a) {
 }
 
 void delete_address_env(AddressEnv* env, Allocator* a) {
-    for (size_t i = 0; i < env->local_envs.len; i++)
+    for (size_t i = 0; i < env->local_envs.len; i++) {
         delete_local_env(env->local_envs.data[i], a);
+    }
     sdelete_ptr_array(env->local_envs);
     mem_free(env, a);
+}
+
+int64_t debug_get_stack_head(AddressEnv *env) {
+    if (0 < env->local_envs.len) {
+        LocalAddrs* local = env->local_envs.data[env->local_envs.len - 1];
+        return local->stack_head;
+    } else {
+        panic(mv_string("unexpected local address env"));
+    }
 }
 
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {

@@ -1,3 +1,4 @@
+#include "data/num.h"
 #include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
@@ -35,6 +36,7 @@ ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 
 void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
+size_t calc_variant_stack_size(PtrArray* types);
 size_t calc_variant_size(PtrArray* types);
 void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
@@ -77,23 +79,24 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
         void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
     }
 
     return links.links;
 }
 
 LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+    
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
@@ -149,6 +152,10 @@ void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, 
 }
 
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+#ifdef DEBUG_ASSERT
+    int64_t old_head = debug_get_stack_head(env);
+#endif
+
     Assembler* ass = target.target;
     switch (syn.type) {
     case SLitUntypedIntegral: 
@@ -223,7 +230,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t size = pi_stack_size_of(*syn.ptype);
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
-            if (e.stack_offset > INT8_MAX || e.stack_offset < INT8_MIN) {
+            if (e.stack_offset + size > INT8_MAX || e.stack_offset - size < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
                     build_binary_op(ass, Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
@@ -322,6 +329,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
         backlink_code(target, out.backlink, links);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
 
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
@@ -388,6 +396,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
         backlink_code(target, out.backlink, links);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
 
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
@@ -554,7 +563,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         PiType* enum_type = strip_type(syn.ptype);
         size_t enum_size = pi_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
-        size_t variant_stack_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+        size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         // Make space to fit the (final) variant
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size), a, point);
@@ -589,7 +598,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(variant_stack_size - tag_size), a, point);
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_stack_offset), a, point);
 
         // Grow the stack to account for the difference in enum & variant sizes
         data_stack_shrink(env, variant_stack_size - tag_size);
@@ -664,13 +673,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t curr_pos = get_pos(ass);
         for (size_t i = 0; i < body_positions.len; i++) {
             size_t body_pos = body_positions.data[i];
-            uint8_t* body_ref = body_refs.data[i];
+            int32_t* body_ref = body_refs.data[i];
 
             if (curr_pos - body_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
             } 
 
-            *body_ref = (int32_t)(curr_pos - body_pos);
+            set_unaligned_i32(body_ref, (int32_t)(curr_pos - body_pos));
         }
 
         generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
@@ -885,18 +894,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // arg1 = rcx, arg2 = rdx
         build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
 
         // call function
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)mk_dynamic_var), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        generate_c_call(mk_dynamic_var, ass, a, point);
 
-#if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
         // Pop value off stack
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -917,18 +921,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 #elif ABI == WIN_64 
         // arg1 = rcx
         build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "unknown ABI"
 #endif
 
         // call function
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)get_dynamic_val), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        generate_c_call(get_dynamic_val, ass, a, point);
 
-#if ABI == WIN_64 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
@@ -1040,6 +1039,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
         generate(*syn.if_expr.true_branch, env, target, links, a, point);
+        // Shrink the stack by the result size
+        data_stack_shrink(env, pi_stack_size_of(*syn.ptype));
 
         // Generate jump to end of false branch to be backlinked later
         out = build_unary_op(ass, JMP, imm32(0), a, point);
@@ -1051,7 +1052,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         } 
 
         // backlink
-        *jmp_loc = end_pos - start_pos;
+        set_unaligned_i32(jmp_loc, end_pos - start_pos);
         jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
         start_pos = get_pos(ass);
 
@@ -1065,7 +1066,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
-        *jmp_loc = end_pos - start_pos;
+        set_unaligned_i32(jmp_loc, end_pos - start_pos);
         break;
     }
     case SLabels: {
@@ -1148,7 +1149,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 
                 int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
                 int32_t* loc = (int32_t*)loc_byte;
-                *loc = (int32_t) amt;
+                set_unaligned_i32(loc, (int32_t)amt);
             }
 
 
@@ -1165,7 +1166,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 
                 int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
                 int32_t* loc = (int32_t*)loc_byte;
-                *loc = (int32_t) amt;
+                set_unaligned_i32(loc, (int32_t)amt);
             }
         }
 
@@ -1266,7 +1267,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Step 5.
         //--------
-        out = build_unary_op(ass, JMP, imm8(0), a, point);
+        out = build_unary_op(ass, JMP, imm32(0), a, point);
         size_t end_expr_link = out.backlink;
         size_t end_expr_pos = get_pos(ass);
 
@@ -1318,10 +1319,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         //--------
         size_t cleanup_start_pos = get_pos(ass);
         dist = cleanup_start_pos - end_expr_pos;
-        if (dist > INT8_MAX) {
-            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT8_MAX"));
+        if (dist > INT32_MAX) {
+            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT32_MAX"));
         }
-        *(get_instructions(ass).data + end_expr_link) = (int8_t) dist;
+        *(get_instructions(ass).data + end_expr_link) = (int32_t) dist;
 
         break;
     }
@@ -1411,6 +1412,36 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     case SWiden:
         // TODO (BUG): appropriately widen (sign-extend/double broaden)
         generate(*syn.widen.val, env, target, links, a, point);
+        if (syn.widen.val->ptype->prim < UInt_8) {
+            // is signed, 
+            panic(mv_string("can't widen signed ints yet!"));
+        } else if (syn.widen.val->ptype->prim < Float_32) {
+            // is unsigned, so the movzx instruction will do:
+            LocationSize sz;
+            switch (syn.widen.val->ptype->prim) {
+            case UInt_8:
+                sz = sz_8;
+                break;
+            case UInt_16:
+                sz = sz_16;
+                break;
+            case UInt_32:
+                sz = sz_32;
+                break;
+            case UInt_64:
+                sz = sz_64;
+                break;
+            default:
+                panic(mv_string("impossible code path"));
+            }
+
+            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RCX, sz), reg(RAX, sz), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+        } else {
+            panic(mv_string("can't widen this yet!"));
+        }
+
         break;
     case SNarrow:
         // TODO: if signed -ve => 0??
@@ -1482,6 +1513,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Finally, generate function call to make type
         gen_mk_proc_ty(reg(RAX, sz_64), imm32(syn.proc_type.args.len), reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
 
         break;
     case SStructType:
@@ -1516,7 +1548,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Finally, generate function call to make type
         gen_mk_struct_ty(reg(RAX, sz_64), imm32(syn.struct_type.fields.len), reg(RAX, sz_64), ass, a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     case SEnumType:
         // Generate enum type: malloc array for enum
@@ -1574,7 +1606,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Finally, generate function call to make type
         gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, reg(RAX, sz_64), ass, a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     case SResetType:
         generate(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
@@ -1843,6 +1875,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         panic(mv_string("Invalid abstract supplied to monomorphic codegen."));
     }
     }
+
+#ifdef DEBUG_ASSERT
+    int64_t new_head = debug_get_stack_head(env);
+    int64_t diff = old_head - new_head;
+    if (diff < 0) panic(mv_string("diff < 0!"));
+
+    if (diff != pi_stack_size_of(*syn.ptype))
+        panic(mv_string("address constraint violated!"));
+#endif
 }
 
 size_t calc_variant_size(PtrArray* types) {
@@ -1952,7 +1993,7 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
             .branch.nodes.data = NULL, // this will be backlinked later
             .branch.nodes.len = tree.branch.nodes.len,
             .branch.nodes.size = tree.branch.nodes.len,
-            .branch.nodes.gpa = NULL,
+            // TODO; add allocator callbacks!
         };
         // Step 1: Copy in the tree
         add_u8_chunk((uint8_t*)&copy, sizeof(RawTree), target.data_aux);

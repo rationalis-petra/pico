@@ -9,7 +9,7 @@
             .data = (type*)mem_alloc(sizeof(type) * size, a),           \
             .size = size,                                               \
             .len = 0,                                                   \
-            .gpa = a,                                                   \
+            .gpa = *a,                                                   \
         };                                                              \
     }                                                                   \
     tprefix##Array copy_##fprefix##_array(const tprefix##Array source, type (*copy_elt)(type, Allocator*), Allocator* a) { \
@@ -18,7 +18,7 @@
             .data = mem_alloc(memsize, a),                              \
                 .len = source.len,                                      \
                 .size = source.size,                                    \
-                .gpa = a,                                               \
+                .gpa = *a,                                               \
         };                                                              \
         for (size_t i = 0; i < out.len; i++) {                          \
             out.data[i] = copy_elt(source.data[i], a);                  \
@@ -32,7 +32,7 @@
         out.data = mem_alloc(memsize, a);                               \
         out.len = source.len;                                           \
         out.size = source.size;                                         \
-        out.gpa = a;                                                    \
+        out.gpa = *a;                                                    \
         memcpy(out.data, source.data, memsize);                         \
         return out;                                                     \
     }                                                                   \
@@ -41,11 +41,11 @@
         for (size_t i = 0; i < arr.len; i++) {                          \
             delete_elem(arr.data[i]);                                   \
         }                                                               \
-        mem_free(arr.data, arr.gpa);                                    \
+        mem_free(arr.data, &arr.gpa);                                   \
     }                                                                   \
                                                                         \
     void sdelete_ ## fprefix ## _array(tprefix ## Array arr) {          \
-        mem_free(arr.data, arr.gpa);                                    \
+        mem_free(arr.data, &arr.gpa);                                   \
     }                                                                   \
     void reverse_ ## fprefix ##_array(tprefix##Array arr) {             \
         for (size_t i = 0; i < arr.len / 2; i++) {                      \
@@ -62,7 +62,7 @@
         }                                                               \
         else {                                                          \
             arr->size = arr->size == 0 ? 8 : arr->size * 2;             \
-            arr->data = mem_realloc(arr->data, arr->size * sizeof(type), arr->gpa); \
+            arr->data = mem_realloc(arr->data, arr->size * sizeof(type), &arr->gpa); \
             arr->data[arr->len] = val;                                  \
             arr->len++;                                                 \
         }                                                               \

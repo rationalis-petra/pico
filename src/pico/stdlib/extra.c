@@ -12,6 +12,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/internal.h"
 
 #include "app/module_load.h"
 
@@ -44,7 +45,7 @@ Allocator get_std_current_allocator() {
 }
 
 Allocator set_std_current_allocator(Allocator al) {
-    Allocator** data = get_dynamic_memory();
+    void** data = get_dynamic_memory();
     Allocator* dyn = data[std_current_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
@@ -58,23 +59,23 @@ Allocator get_std_perm_allocator() {
 }
 
 Allocator set_std_perm_allocator(Allocator al) {
-    Allocator** data = get_dynamic_memory();
+    void** data = get_dynamic_memory();
     Allocator* dyn = data[std_perm_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
     return old;
 }
 
-Allocator* get_std_temp_allocator() {
+Allocator get_std_temp_allocator() {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_temp_allocator]; 
+    Allocator* dyn = data[std_temp_allocator]; 
     return *dyn;
 }
 
-Allocator* set_std_temp_allocator(Allocator* al) {
+Allocator set_std_temp_allocator(Allocator al) {
     void** data = get_dynamic_memory();
-    Allocator** dyn = data[std_temp_allocator]; 
-    Allocator* old = *dyn;
+    Allocator* dyn = data[std_temp_allocator]; 
+    Allocator old = *dyn;
     *dyn = al;
     return old;
 }
@@ -110,16 +111,9 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&realloc),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(realloc, ass, a, point);
 
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -146,15 +140,9 @@ void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #elif ABI == WIN_64
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&relic_malloc),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(relic_malloc, ass, a, point);
 
     build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
@@ -178,15 +166,9 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // copy address into RCX
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&free),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(free, ass, a, point);
 
     build_nullary_op(ass, Ret, a, point);
 }
@@ -207,11 +189,8 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // panic (&str = rcx)
     // copy address into RCX
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #endif
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&panic),  a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-    // Panic does not return
+    generate_c_call(panic, ass, a, point);
 }
 
 PiType* build_panic_fn_ty(Allocator* a) {
@@ -230,8 +209,7 @@ void exit_callback() {
 }
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)exit_callback), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+    generate_c_call(exit_callback, ass, a, point);
 }
 
 void relic_print_fn(String s) {
@@ -285,17 +263,11 @@ void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     // store ptr to struct in rcx
     build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
 #else
 #error "Unknown calling convention"
 #endif
 
-    build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)&load_module_c_fun), a, point);
-    build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
-
-#if ABI == WIN_64
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(32), a, point);
-#endif
+    generate_c_call(load_module_c_fun, ass, a, point);
 
     // To return:
     // + pop argument we pushed onto stack
@@ -348,7 +320,7 @@ RawTree atom_symbol(const char *str) {
     };
 }
 
-typedef enum {UpTo, Below, Above, DownTo} RangeType; 
+typedef enum {UpTo, Below, Above, DownTo, Then} RangeType; 
 
 typedef struct {
     RangeType type;
@@ -357,36 +329,41 @@ typedef struct {
     RawTree to;
 } ForRange;
 
-RawTree mk_condition(ForRange range, Allocator *a) {
+bool mk_condition(ForRange range, RawTree* out, Allocator *a) {
     const char* comparator = NULL;
-    switch (range.type) {
-    case UpTo: comparator = "<="; break;
-    case Below: comparator = "<"; break;
-    case Above: comparator = ">"; break;
-    case DownTo: comparator = ">="; break;
-    }
+    if (range.type != Then) {
+        switch (range.type) {
+        case UpTo: comparator = "<="; break;
+        case Below: comparator = "<"; break;
+        case Above: comparator = ">"; break;
+        case DownTo: comparator = ">="; break;
+        default: panic(mv_string("unrecognised comparator"));
+        }
     
-    RawTreeArray proj_nodes = mk_rawtree_array(3, a);
-    push_rawtree(atom_symbol("."), &proj_nodes);
-    push_rawtree(atom_symbol(comparator), &proj_nodes);
-    push_rawtree(atom_symbol("u64"), &proj_nodes);
+        RawTreeArray proj_nodes = mk_rawtree_array(3, a);
+        push_rawtree(atom_symbol("."), &proj_nodes);
+        push_rawtree(atom_symbol(comparator), &proj_nodes);
+        push_rawtree(atom_symbol("u64"), &proj_nodes);
 
-    RawTree proj = (RawTree) {
-        .type = RawBranch,
-        .branch.hint = HExpression,
-        .branch.nodes = proj_nodes,
-    };
+        RawTree proj = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = proj_nodes,
+        };
 
-    RawTreeArray comp_nodes = mk_rawtree_array(3, a);
-    push_rawtree(proj, &comp_nodes);
-    push_rawtree(range.name, &comp_nodes);
-    push_rawtree(range.to, &comp_nodes);
+        RawTreeArray comp_nodes = mk_rawtree_array(3, a);
+        push_rawtree(proj, &comp_nodes);
+        push_rawtree(range.name, &comp_nodes);
+        push_rawtree(range.to, &comp_nodes);
 
-    return (RawTree) {
-        .type = RawBranch,
-        .branch.hint = HExpression,
-        .branch.nodes = comp_nodes,
-    };
+        *out = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = comp_nodes,
+        };
+        return true;
+    }
+    return false;
 }
 
 MacroResult loop_macro(RawTreeArray nodes) {
@@ -411,6 +388,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
     // loop-check 
     push_rawtree((RawTree){}, &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
+    PtrArray loop_gfors = mk_ptr_array(2, &a);
     PtrArray loop_whiles = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
@@ -450,46 +428,63 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
                 range.name = branch.branch.nodes.data[1];
 
-                if (!eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
+                if (eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("=")))) {
+                    range.from = branch.branch.nodes.data[3];
+
+                    if (!eq_symbol(&branch.branch.nodes.data[4], string_to_symbol(mv_string("then")))) {
+                        return (MacroResult) {
+                            .result_type = Left,
+                            .err.message = mv_string("for x = loop clause expects 'then' as next token"),
+                            .err.range = branch.branch.nodes.data[4].range,
+                        };
+                    } 
+                    range.type = Then;
+
+                    range.to = branch.branch.nodes.data[5];
+
+                    ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+                    *rp = range;
+                    push_ptr(rp, &loop_fors);
+                } else if (eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
+                    range.from = branch.branch.nodes.data[3];
+
+                    if (!is_symbol(branch.branch.nodes.data[4])) {
+                        return (MacroResult) {
+                            .result_type = Left,
+                            .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
+                            .err.range = branch.branch.nodes.data[4].range,
+                        };
+                    } else {
+                        Symbol s = branch.branch.nodes.data[4].atom.symbol;
+                        if (symbol_eq(s, string_to_symbol(mv_string("upto")))) {
+                            range.type = UpTo;
+                        } else if (symbol_eq(s, string_to_symbol(mv_string("below")))) {
+                            range.type = Below;
+                        } else if (symbol_eq(s, string_to_symbol(mv_string("downto")))) {
+                            range.type = DownTo;
+                        } else if (symbol_eq(s, string_to_symbol(mv_string("above")))) {
+                            range.type = Above;
+                        } else {
+                            return (MacroResult) {
+                                .result_type = Left,
+                                .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
+                                .err.range = branch.branch.nodes.data[4].range,
+                            };
+                        }
+                    }
+
+                    range.to = branch.branch.nodes.data[5];
+
+                    ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+                    *rp = range;
+                    push_ptr(rp, &loop_fors);
+                } else {
                     return (MacroResult) {
                         .result_type = Left,
                         .err.message = mv_string("For loop expects 'from'"),
                         .err.range = branch.branch.nodes.data[2].range,
                     };
                 }
-
-                range.from = branch.branch.nodes.data[3];
-
-                if (!is_symbol(branch.branch.nodes.data[4])) {
-                    return (MacroResult) {
-                        .result_type = Left,
-                        .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
-                        .err.range = branch.branch.nodes.data[4].range,
-                    };
-                } else {
-                    Symbol s = branch.branch.nodes.data[4].atom.symbol;
-                    if (symbol_eq(s, string_to_symbol(mv_string("upto")))) {
-                        range.type = UpTo;
-                    } else if (symbol_eq(s, string_to_symbol(mv_string("below")))) {
-                        range.type = Below;
-                    } else if (symbol_eq(s, string_to_symbol(mv_string("downto")))) {
-                        range.type = DownTo;
-                    } else if (symbol_eq(s, string_to_symbol(mv_string("above")))) {
-                        range.type = Above;
-                    } else {
-                        return (MacroResult) {
-                            .result_type = Left,
-                            .err.message = mv_string("For loop expects one of 'upto', 'below', 'downto', 'above'"),
-                            .err.range = branch.branch.nodes.data[4].range,
-                        };
-                    }
-                }
-
-                range.to = branch.branch.nodes.data[5];
-
-                ForRange* rp = mem_alloc(sizeof(ForRange), &a);
-                *rp = range;
-                push_ptr(rp, &loop_fors);
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("while")))) {
                 RawTree *raw_term = (branch.branch.nodes.len == 2)
                     ? &branch.branch.nodes.data[1]
@@ -525,10 +520,17 @@ MacroResult loop_macro(RawTreeArray nodes) {
         };
     }
 
+    bool cond_initialized = false;
     if (loop_fors.len > 0) {
-        loop_condition = mk_condition(*(ForRange*)loop_fors.data[0], &a);
-        for (size_t i = 1; i < loop_fors.len; i++) {
-            RawTree new_condition = mk_condition(*(ForRange*)loop_fors.data[i], &a);
+        for (size_t i = 0; i < loop_fors.len; i++) {
+            RawTree new_condition;
+            if (mk_condition(*(ForRange*)loop_fors.data[i], &new_condition, &a)) {
+                if (!cond_initialized) {
+                    cond_initialized = true;
+                    loop_condition = new_condition;
+                    continue;
+                }
+            }
             RawTreeArray and_fn_nodes = mk_rawtree_array(3, &a);
             push_rawtree(atom_symbol("."), &and_fn_nodes);
             push_rawtree(atom_symbol("and"), &and_fn_nodes);
@@ -554,7 +556,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
     if (loop_whiles.len > 0) {
         size_t start_idx = 0;
-        if (loop_fors.len == 0) {
+        if (!cond_initialized) {
             loop_condition = *(RawTree*)loop_whiles.data[0];
             start_idx++;
         }
@@ -583,8 +585,6 @@ MacroResult loop_macro(RawTreeArray nodes) {
         }
     }
 
-    // _nodes = mk_rawtree_array(4, &a); // (if condition (go-to loop-body ...) (go-to exit))
-
     RawTreeArray loop_body_arg_nodes = mk_rawtree_array(loop_fors.len, &a);
     
     for (size_t i = 0; i < loop_fors.len; i++) {
@@ -592,36 +592,40 @@ MacroResult loop_macro(RawTreeArray nodes) {
         push_rawtree(fr->from, &start_go_to_nodes);
 
         push_rawtree(fr->name, &loop_body_arg_nodes);
+        if (fr->type == Then) {
+            push_rawtree(fr->to, &continue_go_to_nodes);
+        } else {
 
-        // Increment or decrement appropriately
-        // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
-        RawTreeArray func_nodes = mk_rawtree_array(3, &a);
-        push_rawtree(atom_symbol("."), &func_nodes);
-        push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
-        push_rawtree(atom_symbol("u64"), &func_nodes);
-        RawTree func_term = (RawTree) {
-            .type = RawBranch,
-            .branch.hint = HExpression,
-            .branch.nodes = func_nodes,
-        };
+            // Increment or decrement appropriately
+            // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
+            RawTreeArray func_nodes = mk_rawtree_array(3, &a);
+            push_rawtree(atom_symbol("."), &func_nodes);
+            push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
+            push_rawtree(atom_symbol("u64"), &func_nodes);
+            RawTree func_term = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = func_nodes,
+            };
 
-        RawTreeArray call_nodes = mk_rawtree_array(4, &a);
-        push_rawtree(func_term, &call_nodes);
-        push_rawtree(fr->name, &call_nodes);
+            RawTreeArray call_nodes = mk_rawtree_array(4, &a);
+            push_rawtree(func_term, &call_nodes);
+            push_rawtree(fr->name, &call_nodes);
 
-        RawTree one_atom = (RawTree) {
-            .type = RawAtom,
-            .atom.type = AIntegral,
-            .atom.int_64 = 1,
-        };
-        push_rawtree(one_atom, &call_nodes);
+            RawTree one_atom = (RawTree) {
+                .type = RawAtom,
+                .atom.type = AIntegral,
+                .atom.int_64 = 1,
+            };
+            push_rawtree(one_atom, &call_nodes);
 
-        RawTree next_val = (RawTree) {
-            .type = RawBranch,
-            .branch.hint = HExpression,
-            .branch.nodes = call_nodes,
-        };
-        push_rawtree(next_val, &continue_go_to_nodes);
+            RawTree next_val = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = call_nodes,
+            };
+            push_rawtree(next_val, &continue_go_to_nodes);
+        }
     }
 
     RawTree loop_body_args = (RawTree) {
@@ -731,7 +735,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
 }
 
 void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_array_ctype(a), mk_macro_result_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
 
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
@@ -768,12 +772,14 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     a = &arena;
     
     // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
-    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
-    typep = mk_dynamic_type(a, mk_struct_type(a, 4,
-                                             "malloc", mk_prim_type(a, Address),
-                                             "realloc", mk_prim_type(a, Address),
-                                             "free", mk_prim_type(a, Address),
-                                             "ctx", mk_prim_type(a, Address)));
+    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator);
+    typep = mk_dynamic_type(a,
+                            mk_named_type(a, "Allocator",
+                                mk_struct_type(a, 4,
+                                                 "alloc", mk_prim_type(a, Address),
+                                                 "realloc", mk_prim_type(a, Address),
+                                                 "free", mk_prim_type(a, Address),
+                                                 "ctx", mk_prim_type(a, Address))));
     sym = string_to_symbol(mv_string("perm-allocator"));
     add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
 
@@ -782,7 +788,8 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
     void* nul = NULL;
-    std_temp_allocator = mk_dynamic_var(sizeof(void*), &nul); 
+    Allocator nul_alloc = (Allocator){.malloc = NULL, .realloc = NULL, .free= NULL};
+    std_temp_allocator = mk_dynamic_var(sizeof(Allocator), &nul_alloc); 
     std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     typep = mk_dynamic_type(a, mk_prim_type(a, Address));
@@ -875,7 +882,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType* syntax_array = mk_app_type(a, get_array_type(), get_syntax_type());
+    PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
     PiType* macro_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
 
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax

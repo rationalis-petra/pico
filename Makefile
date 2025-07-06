@@ -11,14 +11,17 @@ SRC_DIRS := ./src
 C_VERSION := c99
 CC := gcc
 
+CONFIG = default.config
+include ${CONFIG}
+
 ## Platform specifics and configuration
 ##-------------------------------------
 RELEASE_FLAGS := -Ofast
-DEBUG_FLAGS := -O0
+DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -fsanitize=address,leak -lwayland-client -DDEBUG
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client $(SANITIZERS)
 	LINK_FLAGS := -ldl -lm
     RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
 else
@@ -26,8 +29,8 @@ else
 endif
 
 ifdef HEDRON
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -lvulkan -DUSE_VULKAN
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -lvulkan -DUSE_VULKAN
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
 endif
 
 # Find all the C files we want to compile

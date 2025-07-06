@@ -463,14 +463,11 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
         else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
 
-        PtrArray args = mk_ptr_array(type->binder.vars.len + 2, a);
-        push_ptr(mk_str_doc(mv_string("["), a), &args);
+        PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
             push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &args);
         }
-        push_ptr(mk_str_doc(mv_string("]"), a), &args);
-
-        push_ptr(mv_sep_doc(args, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type(type->binder.body, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -829,12 +826,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TAll: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("All [" ), a), &nodes);
+        PtrArray nodes = mk_ptr_array(2, a);
+
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &nodes);
+        PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), &nodes);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(*symbol_to_string(type->binder.vars.data[i]), a), a), &args);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -1495,9 +1494,34 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
         return pi_type_eql(lhs->proc.ret, rhs->proc.ret);
         break;
     case TStruct:
-        panic(mv_string("pi_type_eql not implemented for structs"));
+        if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
+
+        for (size_t i = 0; i < lhs->structure.fields.len; i++) {
+            SymPtrCell lhcell = lhs->structure.fields.data[i];
+            SymPtrCell rhcell = lhs->structure.fields.data[i];
+            if (!symbol_eq(lhcell.key, rhcell.key) ||
+                !pi_type_eql(lhcell.val, rhcell.val)) 
+                return false;
+        }
+        return true;
+        break;
     case TEnum:
-        panic(mv_string("pi_type_eql not implemented for enums"));
+        if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) return false;
+
+        for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
+            SymPtrCell lhcell = lhs->structure.fields.data[i];
+            SymPtrCell rhcell = lhs->structure.fields.data[i];
+            if (!symbol_eq(lhcell.key, rhcell.key)) 
+                return false;
+            PtrArray* lhvars = lhcell.val;
+            PtrArray* rhvars = rhcell.val;
+            if (lhvars->len != rhvars->len) return false;
+            for (size_t j = 0; j < lhvars->len; j++) {
+                if (!pi_type_eql(lhvars->data[j], rhvars->data[j])) return false;
+            }
+        }
+        return true;
+        break;
     case TReset:
         panic(mv_string("pi_type_eql not implemented for resets"));
     case TResumeMark:
@@ -1637,7 +1661,21 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         return true;
     }
     case TEnum: {
-        panic(mv_string("Not implemented: comparing values of type enum"));
+        uint64_t lhs_tag = *(uint64_t*)lhs;
+        uint64_t rhs_tag = *(uint64_t*)rhs;
+        if (lhs_tag != rhs_tag) return false;
+
+        size_t offset = 0;
+        PtrArray* types = type->enumeration.variants.data[lhs_tag].val;
+        for (size_t i = 0; i < types->len; i++) {
+            PiType* ty = types->data[i];
+            offset = pi_size_align(offset, pi_align_of(*ty));
+            if (!pi_value_eql(ty, lhs + offset, rhs + offset)) {
+                return false;
+            }
+            offset += pi_size_of(*ty);
+        }
+        return true;
     }
     case TReset: {
         panic(mv_string("Not implemented: comparing values of type reset"));

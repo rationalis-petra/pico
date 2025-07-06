@@ -105,13 +105,18 @@ Location ref(Regname name, LocationSize sz) {
     };
 }
 
-Location rref8(Regname name, int8_t offset, LocationSize sz) {
+Location rref8(Regname name, int64_t offset, LocationSize sz) {
+#ifdef DEBUG_ASSERT
+  if (offset > INT8_MAX || offset < INT8_MIN) {
+      panic(mv_string("offset out of bounds"));
+  }
+#endif
     return (Location) {
         .type = Dest_Deref,
         .sz = sz,
         .reg = name,
         .disp_sz = 1,
-        .disp_8 = offset,
+        .disp_8 = (int8_t)offset,
     };
 }
 
@@ -125,49 +130,68 @@ Location rref32(Regname name, int32_t offset, LocationSize sz) {
     };
 }
 
-Location sib(Regname base, Regname index, uint8_t scale, LocationSize sz) {
+Location sib(Regname base, Regname index, int64_t scale, LocationSize sz) {
+#ifdef DEBUG_ASSERT
+    if (scale < INT8_MIN || scale > INT8_MAX)
+        panic(mv_string("scale in sib exceeds int8_t bounds"));
+#endif
     return (Location) {
         .type = Dest_Deref,
         .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
-        .scale = scale,
+        .scale = (int8_t)scale,
     };
 }
 
-Location sib8(Regname base, Regname index, uint8_t scale, int8_t displacement, LocationSize sz) {
+Location sib8(Regname base, Regname index, int64_t scale, int64_t displacement, LocationSize sz) {
+#ifdef DEBUG_ASSERT
+    if (scale < INT8_MIN || scale > INT8_MAX)
+        panic(mv_string("scale in sib8 exceeds int8_t bounds"));
+    if (displacement < INT8_MIN || displacement > INT8_MAX)
+        panic(mv_string("displacement in sib8 exceeds int8_t bounds"));
+#endif
     return (Location) {
         .type = Dest_Deref,
         .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
-        .scale = scale,
+        .scale = (int8_t)scale,
 
         .disp_sz = 1, 
-        .disp_8 = displacement,
+        .disp_8 = (int8_t)displacement,
     };
 }
 
-Location sib_32(Regname base, LocationSize sz, Regname index, uint8_t scale, int32_t displacement) {
+Location sib_32(Regname base, LocationSize sz, Regname index, int64_t scale, int32_t displacement) {
+#ifdef DEBUG_ASSERT
+    if (scale < INT32_MIN || scale > INT32_MAX)
+        panic(mv_string("scale in sib32 exceeds int32_t bounds"));
+#endif
     return (Location) {
         .type = Dest_Deref,
         .sz = sz,
         .reg = base,
         .index = index,
         .is_scale = true,
-        .scale = scale,
+        .scale = (int32_t)scale,
         .disp_sz = 4, 
-        .disp_32 = displacement,
+        .disp_32 = (int32_t)displacement,
     };
 }
 
-Location imm8(int8_t immediate) {
+Location imm8(int64_t immediate) {
+#ifdef DEBUG_ASSERT
+  if (immediate > INT8_MAX || immediate < INT8_MIN) {
+      panic(mv_string("immediate out of bounds"));
+  }
+#endif
     return (Location) {
       .type = Dest_Immediate,
       .sz = sz_8,
-      .immediate_8 = immediate,
+      .immediate_8 = (int8_t)immediate,
     };
 }
 Location imm16(int16_t immediate) {
@@ -1594,7 +1618,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "And", "Or", "Xor" "SHL", "SHR",
+        "Add", "Sub", "Cmp", "And", "Or", "Xor", "SHL", "SHR",
         "Mov", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.

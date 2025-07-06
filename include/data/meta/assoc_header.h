@@ -17,7 +17,7 @@
         struct tprefix ## ACell* data;                                 \
         size_t len;                                                    \
         size_t capacity;                                               \
-        Allocator* gpa;                                                \
+        Allocator gpa;                                                 \
     } tprefix##Assoc;                                                  \
                                                                        \
     tprefix##Assoc mk_##fprefix##_assoc(size_t capacity, Allocator* a); \
