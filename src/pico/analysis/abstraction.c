@@ -1388,6 +1388,31 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FOffsetOf: {
+        if (raw.branch.nodes.len != 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'offset-of' expects precisely 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+
+        if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("offset-of requires first term to be a symbol (fieldname) of a structure", a);
+            throw_pi_error(point, err);
+        }
+        Symbol field = raw.branch.nodes.data[1].atom.symbol;
+        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], env, a, point);
+        
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SOffsetOf,
+            .ptype = NULL,
+            .range = raw.range,
+            .offset_of.field = field,
+            .offset_of.body = term,
+        };
+        return res;
+    }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;

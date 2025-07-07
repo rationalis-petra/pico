@@ -219,6 +219,41 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(match (:some (struct [.x (is 1100 I32)] [.y (is -200 I32)]))\n"
                  "  [[:some pr] (i32.+ pr.x pr.y)])", &expected, module, log, a) ;
     }
+    // -----------------------------------------------------
+    // 
+    //      Type Metadata (size, align, offset)
+    // 
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("test-size-of-I64"))) {
+        uint64_t expected = 8;
+        test_toplevel_eq("(size-of I64)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("test-size-of-structs"))) {
+        uint64_t expected = 12;
+        test_toplevel_eq("(size-of (Struct [.x U8] [.y I32] [.z U16]))", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("test-align-of-I64"))) {
+        uint64_t expected = 8;
+        test_toplevel_eq("(align-of I64)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("test-align-of-structs"))) {
+        uint64_t expected = 4;
+        test_toplevel_eq("(align-of (Struct [.x U8] [.y I32] [.z U16]))", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("test-offset-point"))) {
+        uint64_t expected = 8;
+        test_toplevel_eq("(offset-of y (Struct [.x I64] [.y I64]))", &expected, module, log, a) ;
+    }
+
+    /* if (test_start(log, mv_string("proc-const"))) { */
+    /*     int64_t expected = -985; */
+    /*     test_toplevel_eq("(Proc [U64 U64] U64)", &expected, module, log, a) ; */
+    /*     run_toplevel("(Proc [U64 U64] U64)", module, log, a) ; */
+    /* } */
 
     // -----------------------------------------------------
     // 

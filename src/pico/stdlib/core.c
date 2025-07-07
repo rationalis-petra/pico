@@ -367,6 +367,10 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("align-of"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FOffsetOf;
+    sym = string_to_symbol(mv_string("offset-of"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former, null_segments, NULL);

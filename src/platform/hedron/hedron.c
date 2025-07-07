@@ -1072,11 +1072,10 @@ ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphor
     uint32_t index;
     int result = vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        //return (ImageResult){.type = Resized};
-        return (ImageResult){.type = IROk, .image = index};
+        return (ImageResult){.type = Resized, .image = index};
     }
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        panic(mv_string("acqurie next image!"));
+        panic(mv_string("vulkan failure in acqurie next image!"));
     }
     return (ImageResult){.type = IROk, .image = index};
 }

@@ -1135,6 +1135,33 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = out; 
         break;
     }
+    case SOffsetOf: {
+        eval_type(untyped->offset_of.body, env, a, point);
+        PiType* out = mem_alloc(sizeof(PiType), a);
+
+        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, a);
+        if (struct_type->sort != TStruct) {
+            err.range = untyped->offset_of.body->range;
+            err.message = mv_cstr_doc("Unsupported operand: taking offset of non-struct type.",a);
+            throw_pi_error(point, err); 
+        }
+
+        bool found_field = false;
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            if (symbol_eq(untyped->offset_of.field, struct_type->structure.fields.data[i].key))
+                found_field = true;
+        }
+
+        if (!found_field) {
+            err.range = untyped->offset_of.body->range;
+            err.message = mv_cstr_doc("Field missing in provided structure type.",a);
+            throw_pi_error(point, err); 
+        }
+
+        *out = (PiType){.sort = TPrim, .prim = UInt_64};
+        untyped->ptype = out; 
+        break;
+    }
     case SModule: {
         panic(mv_string("Unsupported operation: inferring type of module"));
     }
@@ -1783,6 +1810,9 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SAlignOf:
         post_unify(syn->size, env, a, point);
         break;
+    case SOffsetOf:
+        post_unify(syn->offset_of.body, env, a, point);
+        break;
     case SModule:
         panic(mv_string("instantiate implicits not implemented for module"));
 
@@ -2036,6 +2066,9 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SSizeOf:
     case SAlignOf:
         squash_types(typed->size, a, point);
+        break;
+    case SOffsetOf:
+        squash_types(typed->offset_of.body, a, point);
         break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {

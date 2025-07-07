@@ -1003,7 +1003,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             size_t tmp_align;
             Result_t res = pi_maybe_align_of(*(PiType*)type.structure.fields.data[i].val, &tmp_align);
             if (res != Ok) return res;
-            align = align > tmp_align? align : tmp_align;
+            align = align > tmp_align ? align : tmp_align;
             total = pi_size_align(total, tmp_align);
             size_t field_size;
             res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);

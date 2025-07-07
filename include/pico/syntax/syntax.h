@@ -74,6 +74,7 @@ typedef enum {
     SDynAlloc,
     SSizeOf,
     SAlignOf,
+    SOffsetOf,
     SModule,
 
     // Types & Type formers
@@ -294,6 +295,11 @@ typedef struct {
 } SynName;
 
 typedef struct {
+    Symbol field;
+    Syntax* body;
+} SynOffsetOf;
+
+typedef struct {
     PtrArray args;
     Syntax* return_type;
 } SynProcType;
@@ -365,6 +371,7 @@ struct Syntax {
         SynIs widen;
         SynIs narrow;
         Syntax* size;
+        SynOffsetOf offset_of;
 
         SynProcType proc_type;
         SynStructType struct_type;

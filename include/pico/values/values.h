@@ -90,6 +90,7 @@ typedef enum TermFormer {
     FDynAlloc,
     FSizeOf,
     FAlignOf,
+    FOffsetOf,
 
     // Type formers
     FProcType,
