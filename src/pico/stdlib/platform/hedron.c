@@ -11,6 +11,12 @@ static PiType* surface_ty;
 static PiType* shader_module_ty;
 static PiType* pipeline_ty;
 
+static PiType* input_rate_ty;
+static PiType* input_format_ty;
+static PiType* binder_desc_ty;
+static PiType* attribute_desc_ty;
+static PiType* buffer_ty;
+
 static PiType* command_pool_ty;
 static PiType* command_buffer_ty;
 
@@ -58,9 +64,12 @@ void build_destroy_shader_module_fn(PiType* type, Assembler* ass, Allocator* a, 
 }
 
 void build_create_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 2, "shaders", mk_list_ctype(a),
-                               "surface", mk_voidptr_ctype(a),
-                               mk_voidptr_ctype(a));
+    CType fn_ctype = mk_fn_ctype(a, 4,
+                                 "binder_describe", mk_list_ctype(a),
+                                 "attrib_describe", mk_list_ctype(a),
+                                 "shaders", mk_list_ctype(a),
+                                 "surface", mk_voidptr_ctype(a),
+                                 mk_voidptr_ctype(a));
     convert_c_fn(create_pipeline, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
@@ -68,6 +77,30 @@ void build_create_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, ErrorP
 void build_destroy_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 1, "pipeline", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
     convert_c_fn(destroy_pipeline, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
+// ------------------------------------------------
+//
+//    Data contract (vertex/input formats, etc.)
+// 
+// ------------------------------------------------
+
+void build_create_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), mk_voidptr_ctype(a));
+    convert_c_fn(create_buffer, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
+void build_destroy_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "size", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+    convert_c_fn(destroy_buffer, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
+void build_set_buffer_data_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 2, "buffer", mk_voidptr_ctype(a), "data", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+    convert_c_fn(set_buffer_data, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
 
@@ -133,10 +166,10 @@ void build_reset_command_buffer_fn(PiType* type, Assembler* ass, Allocator* a, E
 }
 
 void build_command_begin_renderpass_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 3, "buffer", mk_voidptr_ctype(a),
-                               "surface", mk_voidptr_ctype(a),
-                               "image_index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
-                               (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(a, 3, "buffer", mk_voidptr_ctype(a),
+                                 "surface", mk_voidptr_ctype(a),
+                                 "image_index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
+                                 (CType){.sort = CSVoid});
     convert_c_fn(command_begin_render_pass, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
@@ -148,12 +181,22 @@ void build_command_end_renderpass_fn(PiType* type, Assembler* ass, Allocator* a,
 }
 
 void build_command_bind_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 2, "buffer", mk_voidptr_ctype(a),
-                               "pipeline", mk_voidptr_ctype(a),
-                               (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(a, 2, "command_buffer", mk_voidptr_ctype(a),
+                                 "pipeline", mk_voidptr_ctype(a),
+                                 (CType){.sort = CSVoid});
     convert_c_fn(command_bind_pipeline, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
+
+void build_command_bind_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 2, "command_buffer", mk_voidptr_ctype(a),
+                                 "buffer", mk_voidptr_ctype(a),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(command_bind_buffer, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
+// void command_bind_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
 
 void build_command_set_surface_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(a, 2, "buffer", mk_voidptr_ctype(a),
@@ -291,6 +334,63 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     pipeline_ty = e->value;
     delete_pi_type_p(typep, a);
 
+    typep = mk_enum_type(a, 2,
+                         "vertex", 0,
+                         "instance", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("InputRate"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    input_rate_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_struct_type(a, 3,
+                           "binding", mk_prim_type(a, UInt_32),
+                           "stride", mk_prim_type(a, UInt_32),
+                           "input_rate", copy_pi_type_p(input_rate_ty, a));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("BinderDescription"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    binder_desc_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_enum_type(a, 3,
+                         "float-1", 0,
+                         "float-2", 0,
+                         "float-3", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("InputFormat"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    input_format_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_struct_type(a, 4,
+                           "binding", mk_prim_type(a, UInt_32),
+                           "location", mk_prim_type(a, UInt_32),
+                           "format", copy_pi_type_p(input_format_ty, a),
+                           "offset", mk_prim_type(a, UInt_32));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("AttributeDescription"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    attribute_desc_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Buffer"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    buffer_ty = e->value;
+    delete_pi_type_p(typep, a);
+
     typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
@@ -387,7 +487,10 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, a);
 
-    typep = mk_proc_type(a, 2, mk_app_type(a, get_list_type(), shader_module_ty),
+    typep = mk_proc_type(a, 4,
+                         mk_app_type(a, get_list_type(), binder_desc_ty),
+                         mk_app_type(a, get_list_type(), attribute_desc_ty),
+                         mk_app_type(a, get_list_type(), shader_module_ty),
                          copy_pi_type_p(surface_ty, a),
                          copy_pi_type_p(pipeline_ty, a));
     build_create_pipeline_fn(typep, ass, a, &point);
@@ -401,6 +504,33 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     typep = mk_proc_type(a, 1, copy_pi_type_p(pipeline_ty, a), mk_prim_type(a, Unit));
     build_destroy_pipeline_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("destroy-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), copy_pi_type_p(buffer_ty, a));
+    build_create_buffer_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("create-buffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 1, copy_pi_type_p(buffer_ty, a), mk_prim_type(a, Unit));
+    build_destroy_buffer_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("destroy-buffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 2, copy_pi_type_p(buffer_ty, a), mk_prim_type(a, Address), mk_prim_type(a, Unit));
+    build_set_buffer_data_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("set-buffer-data"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -505,6 +635,15 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     typep = mk_proc_type(a, 2, copy_pi_type_p(command_buffer_ty, a), copy_pi_type_p(pipeline_ty, a),mk_prim_type(a, Unit));
     build_command_bind_pipeline_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("command-bind-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 2, copy_pi_type_p(command_buffer_ty, a), copy_pi_type_p(buffer_ty, a), mk_prim_type(a, Unit));
+    build_command_bind_buffer_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("command-bind-buffer"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
 #include "platform/signals.h"
@@ -682,45 +684,83 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronPipeline *create_pipeline(PtrArray shaders, HedronSurface* surface) {
+HedronPipeline *create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface) {
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }
     HedronShaderModule* vert_shader = shaders.data[0];
     HedronShaderModule* frag_shader = shaders.data[1];
 
-    VkPipelineShaderStageCreateInfo vertex_shader_info = (VkPipelineShaderStageCreateInfo){};
-    vertex_shader_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertex_shader_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertex_shader_info.module = vert_shader->module;
-    vertex_shader_info.pName = "main";
+    VkPipelineShaderStageCreateInfo vertex_shader_info = (VkPipelineShaderStageCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_VERTEX_BIT,
+        .module = vert_shader->module,
+        .pName = "main",
+    };
 
-    VkPipelineShaderStageCreateInfo fragment_shader_info = (VkPipelineShaderStageCreateInfo){};
-    fragment_shader_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragment_shader_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragment_shader_info.module = frag_shader->module;
-    fragment_shader_info.pName = "main";
+    VkPipelineShaderStageCreateInfo fragment_shader_info = (VkPipelineShaderStageCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = frag_shader->module,
+        .pName = "main",
+    };
 
     VkPipelineShaderStageCreateInfo shader_stages[2] = {vertex_shader_info, fragment_shader_info};
-    
-    // TODO: the vertex input data layout should be provided as an argument to
-    // this function! 
-    VkPipelineVertexInputStateCreateInfo vertex_input_info = (VkPipelineVertexInputStateCreateInfo){};
-    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertex_input_info.vertexBindingDescriptionCount = 0;
-    vertex_input_info.pVertexBindingDescriptions = NULL; // Optional
-    vertex_input_info.vertexAttributeDescriptionCount = 0;
-    vertex_input_info.pVertexAttributeDescriptions = NULL; // Optional
 
-    VkPipelineInputAssemblyStateCreateInfo input_assembly = (VkPipelineInputAssemblyStateCreateInfo){};
-    input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    input_assembly.primitiveRestartEnable = VK_FALSE;
+    VkVertexInputBindingDescription binding_descriptions[bdesc.len];
+    for (size_t i = 0; i < bdesc.len; i++) {
+        uint32_t input_rate = bdesc.data[i].input_rate == Vertex
+            ? VK_VERTEX_INPUT_RATE_VERTEX
+            : VK_VERTEX_INPUT_RATE_INSTANCE;
+
+        binding_descriptions[i] = (VkVertexInputBindingDescription) {
+            .binding = bdesc.data[i].binding,
+            .stride = bdesc.data[i].stride,
+            .inputRate = input_rate,
+        };
+    }
+
+    VkVertexInputAttributeDescription attribute_descriptions[adesc.len];
+    for (size_t i = 0; i < adesc.len; i++) {
+        uint32_t format;
+        switch (adesc.data[i].format) {
+        case Float_1:
+            format = VK_FORMAT_R32_SFLOAT;
+            break;
+        case Float_2:
+            format = VK_FORMAT_R32G32_SFLOAT;
+            break;
+        case Float_3:
+            format = VK_FORMAT_R32G32B32_SFLOAT;
+            break;
+        }; 
+
+        attribute_descriptions[i] = (VkVertexInputAttributeDescription) {
+            .binding = adesc.data[i].binding,
+            .location = adesc.data[i].location,
+            .format = format,
+            .offset = adesc.data[i].offset,
+        };
+    }
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_info = (VkPipelineVertexInputStateCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = bdesc.len,
+        .pVertexBindingDescriptions = binding_descriptions,
+        .vertexAttributeDescriptionCount = adesc.len,
+        .pVertexAttributeDescriptions = attribute_descriptions,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly = (VkPipelineInputAssemblyStateCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE,
+    };
 
     VkViewport viewport = (VkViewport) {
         viewport.x = 0.0f,
         viewport.y = 0.0f,
-        viewport.width = (float) surface->extent.width, // TODO: how to get input
+        viewport.width = (float) surface->extent.width,
         viewport.height = (float) surface->extent.height,
         viewport.minDepth = 0.0f,
         viewport.maxDepth = 1.0f,
@@ -852,6 +892,156 @@ void destroy_pipeline(HedronPipeline *pipeline) {
     vkDestroyPipeline(logical_device, pipeline->pipeline, NULL);
     mem_free(pipeline, hd_alloc);
 }
+
+// Buffers
+
+struct HedronBuffer {
+    VkBuffer vulkan_buffer;
+    VkDeviceMemory device_memory;
+    uint64_t size;
+};
+
+
+
+// -------------------------------------------
+//
+// Data contract (vertex/input formats, etc.)
+// 
+// -------------------------------------------
+
+uint32_t find_memory_type(uint32_t filter, VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties mem_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_properties);
+
+    for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
+        if (filter & (1 << i) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    panic(mv_string("failed to find suitable memory type!"));
+}
+
+
+HedronBuffer *create_buffer(uint64_t size) {
+    VkBufferCreateInfo buffer_info = (VkBufferCreateInfo){};
+    buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    buffer_info.size = size;
+    buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer vertex_buffer;
+    if (vkCreateBuffer(logical_device, &buffer_info, NULL, &vertex_buffer) != VK_SUCCESS) {
+        panic(mv_string("failed to create vertex buffer!"));
+    }
+
+    VkMemoryRequirements mem_requirements;
+    vkGetBufferMemoryRequirements(logical_device, vertex_buffer, &mem_requirements);
+
+    VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {};
+    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    alloc_info.allocationSize = mem_requirements.size;
+    alloc_info.memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    VkDeviceMemory vertex_buffer_memory;
+    if (vkAllocateMemory(logical_device, &alloc_info, NULL, &vertex_buffer_memory) != VK_SUCCESS) {
+        panic(mv_string("failed to allocate vertex buffer memory!"));
+    }
+
+    vkBindBufferMemory(logical_device, vertex_buffer, vertex_buffer_memory, 0);
+
+    HedronBuffer* out = mem_alloc(sizeof(HedronBuffer), hd_alloc);
+    *out = (HedronBuffer) {
+        .vulkan_buffer = vertex_buffer,
+        .device_memory = vertex_buffer_memory,
+        .size = size,
+    };
+
+    return out;
+}
+
+void destroy_buffer(HedronBuffer *buffer) {
+    vkFreeMemory(logical_device, buffer->device_memory, NULL);
+    vkDestroyBuffer(logical_device, buffer->vulkan_buffer, NULL);
+}
+
+void set_buffer_data(HedronBuffer* buffer, void* source) {
+    void* data;
+    vkMapMemory(logical_device, buffer->device_memory, 0, buffer->size, 0, &data);
+    memcpy(data, source, buffer->size);
+    vkUnmapMemory(logical_device, buffer->device_memory);
+}
+
+// -----------------------------------------------------------------------------
+//
+//                                Syncrhonisation
+//
+// -----------------------------------------------------------------------------
+
+HedronSemaphore* create_semaphore() {
+    HedronSemaphore* sem = mem_alloc(sizeof(HedronSemaphore), hd_alloc);
+    VkSemaphoreCreateInfo semaphore_info = (VkSemaphoreCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+
+    if (vkCreateSemaphore(logical_device, &semaphore_info, NULL, &sem->semaphore) != VK_SUCCESS) {
+        panic(mv_string("Semaphore creation failed!"));
+    }
+    return sem;
+}
+
+void destroy_semaphore(HedronSemaphore* semaphore) {
+    vkDestroySemaphore(logical_device, semaphore->semaphore, NULL);
+    mem_free(semaphore, hd_alloc);
+}
+
+HedronFence* create_fence() {
+    HedronFence* fence = mem_alloc(sizeof(HedronFence), hd_alloc);
+    VkFenceCreateInfo fence_info = (VkFenceCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+
+    if (vkCreateFence(logical_device, &fence_info, NULL, &fence->fence) != VK_SUCCESS) {
+        panic(mv_string("Fence creation failed!"));
+    }
+    return fence;
+}
+void destroy_fence(HedronFence* fence) {
+    vkDestroyFence(logical_device, fence->fence, NULL);
+    mem_free(fence, hd_alloc);
+}
+
+void wait_for_fence(HedronFence *fence) {
+    vkWaitForFences(logical_device, 1, &fence->fence, VK_TRUE, UINT64_MAX);
+}
+
+void reset_fence(HedronFence *fence) {
+    vkResetFences(logical_device, 1, &fence->fence);
+}
+
+void wait_for_device() {
+    vkDeviceWaitIdle(logical_device);
+}
+
+ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphore) {
+    uint32_t index;
+    int result = vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return (ImageResult){.type = Resized, .image = index};
+    }
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        panic(mv_string("vulkan failure in acqurie next image!"));
+    }
+    return (ImageResult){.type = IROk, .image = index};
+}
+
+
+// -------------------------------------------
+//
+//        Commands, Queues and Drawing
+// 
+// -------------------------------------------
 
 HedronCommandPool *create_command_pool() {
     QueueFamilyIndices queues = find_queue_families(physical_device);
@@ -988,8 +1178,14 @@ void command_end_render_pass(HedronCommandBuffer *buffer) {
     vkCmdEndRenderPass(buffer->buffer);
 }
 
-void command_bind_pipeline(HedronCommandBuffer *buffer, HedronPipeline *pipeline) {
-    vkCmdBindPipeline(buffer->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeline) {
+    vkCmdBindPipeline(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+}
+
+void command_bind_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
+    VkBuffer vertex_buffers[1] = {buffer->vulkan_buffer};
+    VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
 }
 
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {
@@ -1014,70 +1210,6 @@ void command_draw(HedronCommandBuffer *buffer,
                   uint32_t vertex_count, uint32_t instance_count,
                   uint32_t first_vertex, uint32_t first_instance) {
     vkCmdDraw(buffer->buffer, vertex_count, instance_count, first_vertex, first_instance);
-}
-
-// -----------------------------------------------------------------------------
-//
-//                                Syncrhonisation
-//
-// -----------------------------------------------------------------------------
-
-HedronSemaphore* create_semaphore() {
-    HedronSemaphore* sem = mem_alloc(sizeof(HedronSemaphore), hd_alloc);
-    VkSemaphoreCreateInfo semaphore_info = (VkSemaphoreCreateInfo) {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-    };
-
-    if (vkCreateSemaphore(logical_device, &semaphore_info, NULL, &sem->semaphore) != VK_SUCCESS) {
-        panic(mv_string("Semaphore creation failed!"));
-    }
-    return sem;
-}
-
-void destroy_semaphore(HedronSemaphore* semaphore) {
-    vkDestroySemaphore(logical_device, semaphore->semaphore, NULL);
-    mem_free(semaphore, hd_alloc);
-}
-
-HedronFence* create_fence() {
-    HedronFence* fence = mem_alloc(sizeof(HedronFence), hd_alloc);
-    VkFenceCreateInfo fence_info = (VkFenceCreateInfo) {
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-    };
-
-    if (vkCreateFence(logical_device, &fence_info, NULL, &fence->fence) != VK_SUCCESS) {
-        panic(mv_string("Fence creation failed!"));
-    }
-    return fence;
-}
-void destroy_fence(HedronFence* fence) {
-    vkDestroyFence(logical_device, fence->fence, NULL);
-    mem_free(fence, hd_alloc);
-}
-
-void wait_for_fence(HedronFence *fence) {
-    vkWaitForFences(logical_device, 1, &fence->fence, VK_TRUE, UINT64_MAX);
-}
-
-void reset_fence(HedronFence *fence) {
-    vkResetFences(logical_device, 1, &fence->fence);
-}
-
-void wait_for_device() {
-    vkDeviceWaitIdle(logical_device);
-}
-
-ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphore) {
-    uint32_t index;
-    int result = vkAcquireNextImageKHR(logical_device, surface->swapchain, UINT64_MAX, semaphore->semaphore, VK_NULL_HANDLE, &index);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        return (ImageResult){.type = Resized, .image = index};
-    }
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        panic(mv_string("vulkan failure in acqurie next image!"));
-    }
-    return (ImageResult){.type = IROk, .image = index};
 }
 
 #else

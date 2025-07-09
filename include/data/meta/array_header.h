@@ -4,13 +4,17 @@
 #include <stddef.h>
 #include "platform/memory/allocator.h"
 
+// define the type only
+#define ARRAY_HEADER_TYPE(type, tprefix)            \
+    typedef struct tprefix##Array {                 \
+        type* data;                                 \
+        size_t len;                                 \
+        size_t size;                                \
+        Allocator gpa;                              \
+    } tprefix##Array;                               \
+
 #define ARRAY_HEADER(type, fprefix, tprefix)                            \
-    typedef struct tprefix##Array {                                     \
-        type* data;                                                     \
-        size_t len;                                                     \
-        size_t size;                                                    \
-        Allocator gpa;                                                 \
-    } tprefix##Array;                                                   \
+    ARRAY_HEADER_TYPE(type, tprefix);                                   \
                                                                         \
     tprefix##Array mk_ ## fprefix ## _array (const size_t size, Allocator* a); \
     tprefix##Array scopy_ ## fprefix ## _array(const tprefix##Array source, Allocator* a); \
@@ -18,7 +22,7 @@
                                                                         \
     void delete_ ## fprefix ## _array(tprefix##Array arr, void (*delete_elem)(type elem)); \
     void sdelete_ ## fprefix ## _array(tprefix##Array arr);             \
-    void reverse_ ## fprefix ## _array(tprefix##Array arr);                 \
+    void reverse_ ## fprefix ## _array(tprefix##Array arr);             \
                                                                         \
     void push_ ## fprefix(type val, tprefix##Array* arr);               \
     type pop_ ## fprefix(tprefix##Array* arr);                          \
