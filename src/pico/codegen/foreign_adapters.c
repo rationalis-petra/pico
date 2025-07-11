@@ -388,7 +388,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     for (size_t i = 0; i < in_memory_args.len; i++) {
         // TODO (BUG) - this needs reversing maybe??
         // pass in memory - reserve space on stack:
-        size_t arg_idx = in_memory_args.data[i];
+        size_t arg_idx = in_memory_args.data[in_memory_args.len - (i + 1)];
         size_t arg_size = arg_offsets.data[arg_idx] - arg_offsets.data[arg_idx + 1];
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
         build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);

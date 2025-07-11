@@ -704,7 +704,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
                     type_check_i(*field_syn, field_ty, env, a, point);
                 } else {
-                    err.message = mv_cstr_doc("Structure is missing a field", a);
+                    panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
                     throw_pi_error(point, err);
                 }
             }
@@ -714,6 +714,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 .structure.fields = mk_sym_ptr_amap(untyped->structure.fields.len, a),
             };
             for (size_t i = 0; i < untyped->structure.fields.len; i++) {
+                // TODO (FEATURE): allow the inference algorithm to later
+                //                 reorder the fields!
                 // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
                 type_infer_i(cell.val, env, a, point);

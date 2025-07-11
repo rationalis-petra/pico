@@ -348,9 +348,9 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     typep = mk_struct_type(a, 3,
                            "binding", mk_prim_type(a, UInt_32),
                            "stride", mk_prim_type(a, UInt_32),
-                           "input_rate", copy_pi_type_p(input_rate_ty, a));
+                           "input-rate", copy_pi_type_p(input_rate_ty, a));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("BinderDescription"));
+    sym = string_to_symbol(mv_string("BindingDescription"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def(sym, module);

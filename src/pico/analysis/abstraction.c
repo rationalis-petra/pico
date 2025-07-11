@@ -863,9 +863,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             if (is_special) {
                 index++;
                 Symbol sym;
-                if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
+                if (bind.type != RawBranch || bind.branch.nodes.len < 2) {
                     err.range = bind.range;
-                    err.message = mv_cstr_doc("Malformed symbol binding in let-expression", a);
+                    err.message = mv_cstr_doc("Malformed symbol binding in let-expression, not enough terms!", a);
                     throw_pi_error(point, err);
                 }
                 if (!get_label(&bind, &sym)) {
@@ -875,7 +875,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 }
 
                 shadow_var(sym, env);
-                Syntax* bind_body = abstract_expr_i(bind.branch.nodes.data[1], env, a, point);
+                Syntax *bind_body = bind.branch.nodes.len == 2
+                    ? abstract_expr_i(bind.branch.nodes.data[1], env, a, point)
+                    : abstract_expr_i(*raw_slice(&bind, 1, a), env, a, point);
+
                 sym_ptr_insert(sym, bind_body, &bindings);
             }
         }

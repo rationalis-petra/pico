@@ -40,6 +40,11 @@ void run_pico_eval_tests(TestLog* log, Allocator* a) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("foreign-adapter"))) {
+        run_pico_eval_foreign_adapter_tests(log, module, a);
+        suite_end(log);
+    }
+
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
