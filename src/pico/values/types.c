@@ -371,7 +371,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
-            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+            Document* fd_doc = mv_group_doc(mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a), a);
 
             push_ptr(fd_doc, &nodes);
             current_offset += pi_size_of(*ftype);
@@ -633,6 +633,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         PtrArray nodes = mk_ptr_array(2, a);
         PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &nodes);
+
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->structure.fields.data[i].key), a), a);
@@ -640,7 +641,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
-            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+            Document* fd_doc = mv_group_doc(mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a), a);
 
             push_ptr(fd_doc, &fields);
         }
@@ -653,7 +654,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     case TEnum: {
         PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
         PtrArray variants = mk_ptr_array(1 + type->enumeration.variants.len, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum ", a)), a), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum", a)), a), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(fstyle, mk_str_doc(*symbol_to_string(type->enumeration.variants.data[i].key), a), a);
@@ -666,11 +667,17 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             }
 
             push_ptr(fname, &var_nodes);
+            Document* var_doc;
             if (ty_nodes.len != 0) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
+                var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
+            } else {
+                PtrArray cat = mk_ptr_array(2, a);
+                push_ptr(mk_cstr_doc(":", a), &cat);
+                push_ptr(mv_sep_doc(var_nodes, a), &cat);
+                var_doc = mk_cat_doc(cat, a); 
             }
-            Document* var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
 
             push_ptr(var_doc, &variants);
         }
