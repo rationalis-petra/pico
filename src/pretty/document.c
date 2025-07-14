@@ -88,6 +88,14 @@ Document *mv_group_doc(Document* group, Allocator *a) {
     return doc;
 }
 
+Document *mv_hook_doc(Document* hook, Allocator *a) {
+    Document* doc = mem_alloc(sizeof(Document), a);
+    doc->type = HookDocument;
+    doc->hook = hook;
+    doc->requirement = hook->requirement;
+    return doc;
+}
+
 Document* mv_sep_doc(const PtrArray source, Allocator* a) {
     Document* doc = mem_alloc(sizeof(Document), a);
 
@@ -194,6 +202,9 @@ void delete_doc(Document* doc, Allocator* a) {
         break;
     case GroupDocument:
         delete_doc(doc->group, a);
+        break;
+    case HookDocument:
+        delete_doc(doc->hook, a);
         break;
     case CatDocument:
     case SepDocument:

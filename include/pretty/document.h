@@ -15,6 +15,7 @@ typedef enum {
     CatDocument,
     NestDocument,
     GroupDocument,
+    HookDocument,
 
     // Utility/extra
     SepDocument,
@@ -68,6 +69,7 @@ struct Document {
     union {
         String string;
         Document* group;
+        Document* hook;
         DocNested nest;
         DocSeparated sep;
         PtrArray docs;
@@ -87,6 +89,7 @@ Document* mk_cat_doc(const PtrArray docs, Allocator* a);
 Document* mv_nest_doc(size_t idx, Document* nested, Allocator* a);
 
 Document* mv_group_doc(Document* group, Allocator* a);
+Document* mv_hook_doc(Document* hook, Allocator* a);
 
 Document* mv_hsep_doc(const PtrArray docs, Allocator* a);
 Document* mk_hsep_doc(const PtrArray docs, Allocator* a);

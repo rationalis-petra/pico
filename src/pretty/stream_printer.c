@@ -50,6 +50,12 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
         render_doc(doc->group, state, os);
         break;
     }
+    case HookDocument: {
+        if (state.indent < *state.current_column)
+            state.indent = *state.current_column;
+        render_doc(doc->hook, state, os);
+        break;
+    }
     case SepDocument:
         for (size_t i = 0; i < doc->docs.len; i++) {
             render_doc(doc->docs.data[i], state, os);
@@ -145,6 +151,12 @@ void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
             && doc->requirement.cols + *state.current_column < state.width) {
             state.flatten = true;
         }
+        frender_doc(doc->group, state, os);
+        break;
+    }
+    case HookDocument: {
+        if (state.indent < *state.current_column)
+            state.indent = *state.current_column;
         frender_doc(doc->group, state, os);
         break;
     }

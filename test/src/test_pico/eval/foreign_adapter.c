@@ -8,24 +8,16 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-
-typedef struct {
-    int64_t a; 
-    int64_t b; 
-    int64_t c; 
-    int64_t d; 
-    int64_t e; 
-    int64_t f; 
-    int64_t g; 
-    int64_t h; 
-} LargeStruct;
-
 typedef struct {
     int64_t a; 
     int64_t b; 
     int64_t c; 
     int64_t d; 
 } Struct4Words;
+
+int64_t foreign_add_10(int64_t val) {
+    return val + 10;
+}
 
 bool examine_two_structs(Struct4Words st, Struct4Words st2) {
     bool out = false;
@@ -52,6 +44,31 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         .code = mk_u8_array(0, a),
         .data = mk_u8_array(0, a),
     };
+
+    if (test_start(log, mv_string("add-10"))) {
+        ErrorPoint point;
+        if (catch_error(point)) {
+            test_log_error(log, point.error_message);
+            test_fail(log);
+        }
+
+        CType ctype = mk_fn_ctype(a, 1, "4word-struct", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
+                                  mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}));
+
+        PiType* ptype = mk_proc_type(a, 1, mk_prim_type(a, Int_64), mk_prim_type(a, Int_64));
+        convert_c_fn(foreign_add_10, &ctype, ptype, ass, a, &point); 
+
+        Symbol sym = string_to_symbol(mv_string("foreign-add-10"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+        delete_pi_type_p(ptype, a);
+        delete_c_type(ctype, a);
+        
+        int64_t expected = -90;
+        test_toplevel_eq("(foreign-add-10 -100)\n", &expected, module, log, a) ;
+    }
         
     if (test_start(log, mv_string("4word-struct"))) {
         ErrorPoint point;
