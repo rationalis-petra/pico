@@ -592,7 +592,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
               // argument, so we can safely use it as a scratch register.
               // In this case, it stores the source of the stack argument (to copy)
               build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
-              build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+              if (arg_offsets.data[i+1] > INT8_MAX) {
+                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), a, point);
+              } else {
+                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+              }
 
               // TODO (IMPROVEMENT) what if different sizes?
               // Copy the argument to the bottom of the stack.
