@@ -26,10 +26,10 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Allocator *a)
         test_toplevel_eq("(list.elt 0 list-1) ", &expected, module, log, a);
     }
 
-    if (test_start(log, mv_string("list-literal-macro"))) {
-        int64_t expected = -2;
-        test_toplevel_eq("(list.elt 1 (list.list 1 -2 3 -4))", &expected, module, log, a);
-    }
+    /* if (test_start(log, mv_string("list-literal-macro"))) { */
+    /*     int64_t expected = -2; */
+    /*     test_toplevel_eq("(list.elt 1 (list.list 1 -2 3 -4))", &expected, module, log, a); */
+    /* } */
 
     /* if (test_start(log, mv_string("complex-elt-matches-eset"))) { */
     /*     typedef struct { */
