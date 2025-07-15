@@ -497,7 +497,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                     {
                         PtrArray types = *uvar->constraints.data[i].has_variant.types;
                         PtrArray ptypes = mk_ptr_array(types.len, a);
-                        for (size_t i = 0; i < uvar->constraints.data[i].has_variant.types->len; i++) {
+                        for (size_t j = 0; j < uvar->constraints.data[i].has_variant.types->len; j++) {
                             push_ptr(pretty_type(type, a), &ptypes);
                         }
                         push_ptr(mv_grouped_sep_doc(ptypes, a), &nodes);
