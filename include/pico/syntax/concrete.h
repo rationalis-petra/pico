@@ -32,7 +32,6 @@ typedef struct {
 } Atom;
 
 typedef enum : uint64_t {
-    HNone,
     HExpression,
     HSpecial,
     HImplicit,
@@ -62,6 +61,7 @@ struct RawTree {
     };
 };
 
+bool is_expr(RawTree tree);
 Document* pretty_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a);

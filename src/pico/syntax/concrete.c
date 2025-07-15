@@ -13,6 +13,9 @@ int cmp_rawtree(RawTree lhs, RawTree rhs) {
 
 ARRAY_CMP_IMPL(RawTree, cmp_rawtree, rawtree, RawTree)
 
+bool is_expr(RawTree tree) {
+    return tree.type == RawAtom || tree.branch.hint == HExpression;
+}
 
 Document* pretty_rawtree(RawTree tree, Allocator* a) {
     Document* out = NULL;

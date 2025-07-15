@@ -562,6 +562,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             err.message = mv_cstr_doc("Match expects at least 1 argument", a);
             throw_pi_error(point, err);
         }
+        if (!is_expr(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("Match expects first argument to be expression (use parentheses '(' and ')')", a);
+            throw_pi_error(point, err);
+        }
         Syntax* sval = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
 
         ClauseArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
@@ -735,8 +740,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         size_t start_idx = 1;
         RawTree current = raw.branch.nodes.data[start_idx];
 
-        switch (current.type == RawBranch ? current.branch.hint : HNone) {
-        case HNone: goto parse_constraint;
+        switch (current.type == RawBranch ? current.branch.hint : HExpression) {
         case HExpression: goto parse_constraint;
         case HImplicit: goto parse_implicits;
         case HSpecial: goto parse_params;
@@ -752,8 +756,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
 
         current = raw.branch.nodes.data[++start_idx];
-        switch (current.type == RawBranch ? current.branch.hint : HNone) {
-        case HNone: goto parse_constraint;
+        switch (current.type == RawBranch ? current.branch.hint : HExpression) {
         case HExpression: goto parse_constraint;
         case HImplicit: goto parse_implicits;
         case HSpecial:
@@ -1975,6 +1978,13 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
             err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);
+            throw_pi_error(point, err);
+        }
+
+        if (!is_expr(raw.branch.nodes.data[0])) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("Unprocessed non-expression: syntax hints '[', ']' or implicits '{' '}'\n" 
+                                      "should only be used for term specific syntax or implicit arguments, respectively.", a);
             throw_pi_error(point, err);
         }
 

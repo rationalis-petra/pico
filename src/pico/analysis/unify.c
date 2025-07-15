@@ -500,7 +500,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                         for (size_t j = 0; j < uvar->constraints.data[i].has_variant.types->len; j++) {
                             push_ptr(pretty_type(type, a), &ptypes);
                         }
-                        push_ptr(mv_grouped_sep_doc(ptypes, a), &nodes);
+                        push_ptr(mv_grouped_sep_doc(ptypes, a), &ptypes);
                     }
                     push_ptr(mv_cstr_doc("in type:", a), &nodes);
                     push_ptr(pretty_type(type, a), &nodes);

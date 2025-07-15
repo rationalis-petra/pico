@@ -1536,9 +1536,9 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     case TDynamic:
         panic(mv_string("pi_type_eql not implemented for dynamics"));
 
-  case TNamed:
+    case TNamed:
         panic(mv_string("pi_type_eql not implemented for named"));
-    // 'Special'
+        // 'Special'
     case TDistinct:
         panic(mv_string("pi_type_eql not implemented for distinct types"));
     case TTrait:
@@ -1546,7 +1546,7 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     case TTraitInstance: // note: not a "real" type in the theory
         panic(mv_string("pi_type_eql not implemented for trait instance types"));
 
-    // Quantified Types
+        // Quantified Types
     case TVar: // note: not a "real" type in the theory
         panic(mv_string("pi_type_eql not implemented for type vars"));
     case TAll:
@@ -1554,13 +1554,13 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
     case TExists:
         panic(mv_string("pi_type_eql not implemented for existential types"));
 
-    // Used by Sytem-Fω (type constructors)
+        // Used by Sytem-Fω (type constructors)
     case TCApp:
         panic(mv_string("pi_type_eql not implemented for type applications"));
     case TFam:
         panic(mv_string("pi_type_eql not implemented for type families"));
 
-    // Kinds (higher kinds not supported)
+        // Kinds (higher kinds not supported)
     case TKind:
         panic(mv_string("pi_type_eql not implemented for kinds"));
     case TConstraint:

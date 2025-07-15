@@ -194,7 +194,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 .type = RawBranch,
                 .range.start = terms.data[0].range.start,
                 .range.end = current.range.end,
-                .branch.hint = HNone,
+                .branch.hint = HExpression,
                 .branch.nodes = children,
             };
         };
@@ -356,7 +356,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
                 .type = RawBranch,
                 .range.start = current.range.start,
                 .range.end = terms.data[i+1].range.end,
-                .branch.hint = HNone,
+                .branch.hint = HExpression,
                 .branch.nodes = children,
             };
         };
@@ -532,7 +532,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
             .type = RawBranch,
             .range.start = start,
             .range.end = bytecount(is),
-            .branch.hint = HNone,
+            .branch.hint = HExpression,
             .branch.nodes = nodes,
         };
     }
