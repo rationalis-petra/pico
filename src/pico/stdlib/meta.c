@@ -213,7 +213,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         sym = string_to_symbol(mv_string("Atom"));
         add_def(module, sym, type, &typep, null_segments, NULL);
 
-        PiType* hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
+        PiType* hint_type = mk_enum_type(a, 3, "expr", 0, "special", 0, "implicit", 0);
         typep = hint_type;
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &typep, null_segments, NULL);
