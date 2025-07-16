@@ -401,6 +401,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FQuote:
         out = mk_str_doc(mv_string("::quote"), a);
         break;
+    case FCapture:
+        out = mk_str_doc(mv_string("::capture"), a);
+        break;
     }
 
     if (out == NULL) {

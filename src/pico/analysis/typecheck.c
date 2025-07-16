@@ -1459,6 +1459,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = get_syntax_type();
         break;
     }
+    case SCapture: {
+        untyped->ptype = get_syntax_type();
+        break;
+    }
 
     }
     if (untyped->ptype == NULL) {
@@ -1855,8 +1859,8 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe: 
-        break;
     case SQuote: 
+    case SCapture: 
         break;
     }
 }
@@ -2144,8 +2148,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe:
-        break;
     case SQuote:
+    case SCapture: 
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));

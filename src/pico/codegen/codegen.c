@@ -206,7 +206,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
         // Push the u8
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
@@ -230,7 +230,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t size = pi_stack_size_of(*syn.ptype);
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
-            if (e.stack_offset + size > INT8_MAX || e.stack_offset - size < INT8_MIN) {
+            if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
                     build_binary_op(ass, Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
@@ -1882,6 +1882,34 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
             build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
         }
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        break;
+    }
+    case SCapture: {
+        // Setup: push the memory address (in data) of the Syntax value into stack.
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        backlink_data(target, out.backlink, links);
+
+        RawTree raw = (RawTree) {
+          .type = RawAtom,
+          .atom = (Atom) {
+              .type = ACapture,
+              .capture = (Capture) {
+                  .type = syn.capture.type,
+                  .value = syn.capture.value,
+              }
+          },
+        };
+        // Now copy the entire concrete syntax tree into the data-segment,
+        // setting allocators to null
+        add_rawtree(raw, target, links);
+
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), a, point);
+        for (size_t i = 0; i < sizeof(RawTree); i += sizeof(uint64_t)) {
+            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
+        }
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     default: {
@@ -1894,7 +1922,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     int64_t diff = old_head - new_head;
     if (diff < 0) panic(mv_string("diff < 0!"));
 
-    if (diff != pi_stack_size_of(*syn.ptype))
+    // Justification: stack size of is extremely unlikely to be 2^63 bytes
+    //  in size!
+    if (diff != (int64_t)pi_stack_size_of(*syn.ptype))
         panic(mv_string("address constraint violated!"));
 #endif
 }

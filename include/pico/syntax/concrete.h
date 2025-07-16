@@ -7,6 +7,7 @@
 #include "platform/memory/allocator.h"
 #include "pretty/document.h"
 #include "pico/values/values.h"
+#include "pico/values/types.h"
 
 /* This file describes the concrete syntax tree of pico. It is manipulated directly by L1 macros.
  */
@@ -17,7 +18,13 @@ typedef enum : uint64_t {
     AFloating,
     ASymbol,
     AString,
+    ACapture,
 } Atom_t;
+
+typedef struct  {
+    PiType* type;
+    void* value;
+} Capture;
 
 // Total value
 typedef struct {
@@ -28,6 +35,7 @@ typedef struct {
         double float_64;
         Symbol symbol;
         String string;
+        Capture capture;
     };
 } Atom;
 

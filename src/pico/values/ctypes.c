@@ -98,11 +98,15 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray arg_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(*name_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
-            push_ptr(pretty_ctype(&type->structure.fields.data[i].val, a), &arg_nodes);
+            Document* tydoc = pretty_ctype(&type->structure.fields.data[i].val, a);
             if (i - 1 != type->proc.args.len) {
-                push_ptr(mk_str_doc(mv_string(";"), a), &arg_nodes);
-            }
-            push_ptr(mv_group_doc(mv_hsep_doc(arg_nodes, a), a), &field_nodes);
+                PtrArray cat_nodes = mk_ptr_array(2, a);
+                push_ptr(tydoc, &cat_nodes);
+                push_ptr(mk_str_doc(mv_string(";"), a), &cat_nodes);
+                tydoc = mv_cat_doc(cat_nodes, a);
+            } 
+            push_ptr(mv_nest_doc(2, tydoc, a), &arg_nodes);
+            push_ptr(mv_group_doc(mv_sep_doc(arg_nodes, a), a), &field_nodes);
         }
         push_ptr(mv_nest_doc(2, mv_sep_doc(field_nodes, a), a), &main_nodes);
         push_ptr(mk_cstr_doc("}", a), &main_nodes);
@@ -118,11 +122,15 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         for (size_t i = 0; i < type->cunion.fields.len; i++) {
             PtrArray arg_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(*name_to_string(type->cunion.fields.data[i].key), a), &arg_nodes);
-            push_ptr(pretty_ctype(type->cunion.fields.data[i].val, a), &arg_nodes);
+            Document* tydoc = pretty_ctype(type->cunion.fields.data[i].val, a);
             if (i - 1 != type->proc.args.len) {
-                push_ptr(mk_str_doc(mv_string(";"), a), &arg_nodes);
+                PtrArray cat_nodes = mk_ptr_array(2, a);
+                push_ptr(tydoc, &cat_nodes);
+                push_ptr(mk_str_doc(mv_string(";"), a), &cat_nodes);
+                tydoc = mv_cat_doc(cat_nodes, a);
             }
-            push_ptr(mv_group_doc(mv_hsep_doc(arg_nodes, a), a), &field_nodes);
+            push_ptr(tydoc, &arg_nodes);
+            push_ptr(mv_group_doc(mv_sep_doc(arg_nodes, a), a), &field_nodes);
         }
         push_ptr(mv_nest_doc(2, mv_vsep_doc(field_nodes, a), a), &main_nodes);
         push_ptr(mk_cstr_doc("}", a), &main_nodes);

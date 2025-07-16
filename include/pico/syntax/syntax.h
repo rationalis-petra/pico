@@ -104,6 +104,7 @@ typedef enum {
     STypeOf,
     SDescribe,
     SQuote,
+    SCapture,
 } Syntax_t;
 
 
@@ -329,6 +330,11 @@ typedef struct {
     Syntax* body;
 } SynConvert;
 
+typedef struct {
+    PiType* type;
+    void* value;
+} SynCapture;
+
 struct Syntax {
     Syntax_t type;
     union {
@@ -389,9 +395,11 @@ struct Syntax {
         SynReinterpret reinterpret;
         SynConvert convert;
 
+        // Metaprogramming
         Syntax* type_of;
         Symbol to_describe;
         RawTree quoted;
+        SynCapture capture;
     };
     PiType* ptype;
     Range range;

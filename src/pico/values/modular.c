@@ -269,9 +269,9 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
     if (links) {
         entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
         *(entry.backlinks) = copy_sym_sarr_amap(links->external_links,
-                                                 copy_symbol,
-                                                 scopy_size_array,
-                                                 module->allocator);
+                                                copy_symbol,
+                                                scopy_size_array,
+                                                module->allocator);
 
         // swap out self-references
         SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
