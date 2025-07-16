@@ -28,22 +28,11 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Allocator *a)
 
     if (test_start(log, mv_string("list-literal-macro"))) {
         int64_t expected = -2;
-        test_toplevel_eq("(seq [let! mlist (list.list 1 -2 3 -4) elt (list.elt 1 mlist)] (free mlist.data) elt)", &expected, module, log, a);
+        test_toplevel_eq("(seq [let! mlist (list.list 1 -2 3 -4)\n"
+                         "          elt (list.elt 1 mlist)]\n"
+                         "    (free mlist.data)\n"
+                         "    elt)", &expected, module, log, a);
     }
-
-    /* if (test_start(log, mv_string("complex-elt-matches-eset"))) { */
-    /*     typedef struct { */
-    /*         int32_t a; */
-    /*         int32_t b; */
-    /*         int32_t c; */
-    /*         int32_t d; */
-    /*     } Point4; */
-    /*     Point4 expected = (Point4) {.a = 0, .b = -1, .c = 2, .d = -3}; */
-    /*     run_toplevel("(def Point4 Struct [.a I32] [.b I32] [.b I32] [.c I32])", module, log, a) ; */
-    /*     run_toplevel("(def Point4 Struct [.a I32] [.b I32] [.b I32] [.c I32])", module, log, a) ; */
-    /*     run_toplevel("(list.eset 0 () list-1)", module, log, a) ; */
-    /*     test_toplevel_eq("(list.elt 0 list-1) ", &expected, module, log, a); */
-    /* } */
 
     if (test_start(log, mv_string("each-print"))) {
         Allocator current_old = get_std_current_allocator();

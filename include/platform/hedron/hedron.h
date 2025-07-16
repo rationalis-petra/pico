@@ -39,8 +39,8 @@ uint32_t num_swapchain_images(HedronSurface*);
 HedronShaderModule* create_shader_module(U8Array code);
 void destroy_shader_module(HedronShaderModule* module);
 
-typedef enum {Vertex, Instance} InputRate;
-typedef enum {Float_1, Float_2, Float_3} VertexFormat;
+typedef enum : uint64_t {Vertex, Instance} InputRate;
+typedef enum : uint64_t {Float_1, Float_2, Float_3} VertexFormat;
 
 typedef struct {
     uint32_t binding;
