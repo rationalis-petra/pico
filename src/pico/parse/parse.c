@@ -439,10 +439,11 @@ ParseResult parse_number(IStream* is, Allocator* a) {
             rhs_result += tens * rhs.data[i-1];
             tens *= 10;
         }
-        lhs_result *= is_positive ? 1 : -1;
         double dlhs = (double)lhs_result;
         double drhs = (double)rhs_result;
         drhs = drhs / powl(10, rhs.len);
+        double total = dlhs + drhs; 
+        total *= is_positive ? 1 : -1;
 
         return (ParseResult) {
             .type = ParseSuccess,
@@ -450,7 +451,7 @@ ParseResult parse_number(IStream* is, Allocator* a) {
             .result.range.start = start,
             .result.range.end = bytecount(is),
             .result.atom.type = AFloating,
-            .result.atom.float_64 = dlhs + drhs,
+            .result.atom.float_64 = total,
         };
     } else {
         int64_t int_result = 0;
