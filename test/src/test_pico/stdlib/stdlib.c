@@ -1,6 +1,7 @@
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
+#include "assembler/assembler.h"
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
 
@@ -12,7 +13,7 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
-    Assembler* ass = mk_assembler(&exalloc);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
     Imports imports = (Imports) {

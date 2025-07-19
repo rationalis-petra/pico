@@ -17,8 +17,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
-        .target = mk_assembler(&exec),
-        .code_aux = mk_assembler(&exec),
+        .target = mk_assembler(current_cpu_feature_flags(), &exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
         .data_aux = mem_alloc(sizeof(U8Array), a),
     };
     *target.data_aux = mk_u8_array(256, a);
@@ -148,8 +148,8 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
-        .target = mk_assembler(&exec),
-        .code_aux = mk_assembler(&exec),
+        .target = mk_assembler(current_cpu_feature_flags(), &exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
         .data_aux = mem_alloc(sizeof(U8Array), a),
     };
     *target.data_aux = mk_u8_array(256, a);

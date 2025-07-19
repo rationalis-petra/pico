@@ -38,8 +38,8 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     Target gen_target = {
-        .target = mk_assembler(exec),
-        .code_aux = mk_assembler(exec),
+        .target = mk_assembler(current_cpu_feature_flags(), exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
@@ -250,6 +250,7 @@ void log_error(String err, TestLog* log) {
 }
 
 void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
+    // TODO: improve the test log error to take in a document 
     Allocator arena = mk_arena_allocator(4096, get_std_allocator());
     display_error(err, cin, get_fstream(log), &arena);
     test_log_error(log, mv_string("Test failure - message logged"));
@@ -284,8 +285,8 @@ void test_typecheck_internal(const char *string, Module *module, TypeCallbacks c
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     Target gen_target = {
-        .target = mk_assembler(exec),
-        .code_aux = mk_assembler(exec),
+        .target = mk_assembler(current_cpu_feature_flags(), exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);

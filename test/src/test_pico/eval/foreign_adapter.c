@@ -37,7 +37,7 @@ bool examine_struct(Struct4Words st) {
 }
 
 void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator *a) {
-    Assembler* ass = mk_assembler(a);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
     Segments prepped;
     Segments fn_segments = {.data = mk_u8_array(0, a),};
     Segments null_segments = (Segments) {

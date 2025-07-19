@@ -1,0 +1,66 @@
+#include "platform/memory/arena.h"
+#include "assembler/assembler.h"
+
+#include "test_assembler/test_assembler.h"
+#include "test_assembler/helper.h"
+
+#define ASM_TEST() ErrorPoint point; if (catch_error(point)) { test_log_error(log, point.error_message); test_fail(log); clear_assembler(ass); } else 
+
+void run_assembler_tests(TestLog *log, Allocator *a) {
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
+    Allocator arena = mk_arena_allocator(4096, a);
+
+    if (test_start(log, mv_string("asm-add-r64-imm8"))) { // Add RAX, 12
+        ASM_TEST() {
+            uint8_t expected[] = { 0x48, 0x83, 0xC0, 0x0C, 0x90 };
+            build_binary_op(ass, Add, reg(RAX, sz_64), imm8(12), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-add-r64-r64"))) { // Add RBX, RCX
+        ASM_TEST() {
+            uint8_t expected[] = { 0x48, 0x03, 0xD9, 0x90 };
+            build_binary_op(ass, Add, reg(RBX, sz_64), reg(RCX, sz_64), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-add-r64-m64"))) { // Add RDX, [R9 + 8]
+        ASM_TEST() {
+            uint8_t expected[] = { 0x49, 0x03, 0x51, 0x08, 0x90 };
+            build_binary_op(ass, Add, reg(RDX, sz_64), rref8(R9, 8, sz_64), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-add-r8-m8"))) { // Add DL, [R9 + 8]b
+        ASM_TEST() {
+            // 41 02 51 08
+            uint8_t expected[] =  { 0x41, 0x02, 0x51, 0x08, 0x90 } ;
+            build_binary_op(ass, Add, reg(RDX, sz_8), rref8(R9, 8, sz_8), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-mov-m8-r8"))) { // Mov [RSI + 8]b, DIL, 
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x40, 0x88, 0x7E, 0x08, 0x90 } ;
+            build_binary_op(ass, Mov, rref8(RSI, 8, sz_8), reg(RDI, sz_8), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    delete_assembler(ass);
+    release_arena_allocator(arena);
+}

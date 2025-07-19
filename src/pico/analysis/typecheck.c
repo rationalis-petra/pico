@@ -2184,8 +2184,8 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* p
     if (catch_error(cleanup_point)) goto on_error;
 
     Target gen_target = {
-        .target = mk_assembler(&exalloc),
-        .code_aux = mk_assembler(&exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exalloc),
         .data_aux = mem_alloc(sizeof(U8Array), a)
     };
     *gen_target.data_aux = mk_u8_array(128, a);

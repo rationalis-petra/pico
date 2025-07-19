@@ -12,7 +12,7 @@ void run_pico_eval_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
-    Assembler* ass = mk_assembler(&exalloc);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
     Imports imports = (Imports) {

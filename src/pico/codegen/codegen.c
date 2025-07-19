@@ -1962,7 +1962,7 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
 
     // As we will The 
     Target gen_target = {
-        .target = mk_assembler(&exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
         .code_aux = target.code_aux,
         .data_aux = target.data_aux,
     };

@@ -27,8 +27,8 @@ void compile_toplevel(const char *string, Module *module, ErrorPoint *final_poin
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     Target gen_target = {
-        .target = mk_assembler(exec),
-        .code_aux = mk_assembler(exec),
+        .target = mk_assembler(current_cpu_feature_flags(), exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);

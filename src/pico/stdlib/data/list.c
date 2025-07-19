@@ -36,8 +36,7 @@ void add_list_module(Module *data, Allocator *a) {
 
     // TODO (FEAT): add/implement the following:
     //  - list-free or delete-list
-    //  - map
-    //  - each
+    //  - push/pop (using alter)
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
