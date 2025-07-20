@@ -782,7 +782,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             }
 
             generate_stack_move(src_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
-            // now, remove the original struct from the stack
+            // Now, remove the original struct from the stack
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_sz), a, point);
 
             data_stack_shrink(env, src_sz);
