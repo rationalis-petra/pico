@@ -2159,7 +2159,8 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
                                    , "r" (offset_memory_space)
                                    , "r" (&input)
                                    , "r" (&output)
-                                   , "c" (sizeof(MacroResult))) ;
+                                   , "c" (sizeof(MacroResult)) 
+                                 : "r13", "r14", "r15");
 
             set_std_temp_allocator(old_temp_alloc);
             set_std_current_allocator(old_current_alloc);
