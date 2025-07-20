@@ -67,6 +67,10 @@
  *   4. Binary And this with the supported types - 0011 & 1101 = 1
  *   5. Count the bits in this number - index = 1
  * 
+ * Outstanding Tasks:
+ *  - Some instructions working with 64-bits are incorrectly given a Rex prefix.
+ *    add to the binary op table to determine whether this is necessary.
+ * 
  */
 
 typedef enum : uint32_t {
@@ -793,6 +797,19 @@ void build_binary_opcode_tables() {
         };
     }
 
+    {   // Move Double. Source - Intel Manual Vol 2. 848
+        static uint32_t sup = XMM64_XMM64 | M64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[3];
+        add_op3(0xF2, 0x0F, 0x10, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x10, XMM64_M64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x11, M64_XMM64, sup, ops);
+
+        binary_opcode_tables[MovSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
+
     {   // Load Effective Address. Source - Intel Manual Vol 2. 705
         // Lea is much more limited in how it works - operand 1 is always a register
         //      and operand 2 is a memory location.
@@ -902,6 +919,7 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
           if (src.type == Dest_Register && (src.reg & XMM0) && src.sz == dest.sz) {
               if (src.sz == sz_32) type = XMM32_XMM32;
               else if (src.sz == sz_64) type = XMM64_XMM64;
+              else goto report_error;
           } else if (src.type == Dest_Deref && src.sz == dest.sz) {
             if (src.sz == sz_32) {
                 type = XMM32_M32;
@@ -1912,7 +1930,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
         "Add", "Sub", "Cmp", "And", "Or", "Xor", "SHL", "SHR",
-        "Mov", "MovSS", "LEA", "CMovE", "CMovL", "CMovG",
+        "Mov", "MovSS", "MovSD", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.
     return mk_str_doc(mv_string(names[op]), a);

@@ -434,8 +434,8 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     add_integral_module(mv_string("i32"), sz_32, true, ass, module, a);
     add_integral_module(mv_string("i64"), sz_64, true, ass, module, a);
 
-    /* add_float_module(mv_string("f32"), Float_32, ass, module, a); */
-    /* add_float_module(mv_string("f64"), Float_64, ass, module, a); */
+    add_float_module(mv_string("f32"), Float_32, ass, module, a);
+    add_float_module(mv_string("f64"), Float_64, ass, module, a);
 
     add_module(string_to_symbol(mv_string("num")), module, base);
 }

@@ -91,6 +91,16 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("movsd-xmm64-m64"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x48, 0xF2, 0x0F, 0x10, 0x44, 0x24, 0x08, 0x90 } ;
+            build_binary_op(ass, MovSD, reg(XMM0, sz_64), rref8(RSP, 8, sz_64), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
     // TODO: add test for XMM{n} where n >= 8
 
     delete_assembler(ass);
