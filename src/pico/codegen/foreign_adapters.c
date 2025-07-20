@@ -540,6 +540,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
 
 #elif ABI == WIN_64
     const Regname integer_registers[4] = {RCX, RDX, R8, R9};
+    const Regname float_registers[4] = {XMM0, XMM1, XMM2, XMM3};
     size_t current_register = 0;
 
     const Win64ArgClass return_class = win_64_arg_class(ctype->proc.ret);
@@ -600,7 +601,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
           case Win64None: // Do nothing!
             break;
           case Win64Floating:
-              throw_error(point, mv_string("Not implemented: register arg of class Win64 float "));
+              Regname next_reg = float_registers[current_register++];
+              build_binary_op(ass, MovSD, reg(next_reg, sz_64),
+                              rref8(RBX, arg_offsets.data[i + 1], sz_64),
+                              a, point);
+              break;
           case Win64Integer:
           case Win64SmallAggregate: {
               Regname next_reg = integer_registers[current_register++];

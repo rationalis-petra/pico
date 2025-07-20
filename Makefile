@@ -15,11 +15,11 @@ CONFIG = default.config
 include ${CONFIG}
 
 ifeq ($(OS), Windows_NT)
-VULKAN_LINK=-l$(VULKAN_DIR)\Lib\vulkan-1.lib
-VULKAN_FLAGS=-I$(VULKAN_DIR)\Include 
+VULKAN_LINK=$(VULKAN_DIR)\Lib\vulkan-1.lib
+VULKAN_INCLUDE=-I$(VULKAN_DIR)\Include 
 else
-VULKAN_INCLUDE=
 VULKAN_LINK=-lvulkan
+VULKAN_INCLUDE=
 endif
 
 
