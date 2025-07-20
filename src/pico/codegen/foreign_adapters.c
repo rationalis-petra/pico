@@ -268,8 +268,12 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     size_t input_area_size = 0;
 
     const int max_integer_registers = 6;
-    const Regname integer_registers[8] = {RDI, RSI, RDX, RCX, R8, R9};
+    const Regname integer_registers[6] = {RDI, RSI, RDX, RCX, R8, R9};
     unsigned char current_integer_register = 0;
+
+    const int max_float_registers = 8;
+    const Regname float_registers[8] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7};
+    unsigned char current_float_register = 0;
 
     U8Array return_classes = system_v_arg_classes(ctype->proc.ret, a);
     size_t return_arg_size = pi_stack_align(c_size_of(*ctype->proc.ret));
@@ -293,6 +297,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         U8Array classes = system_v_arg_classes(&c_arg, a);
 
         unsigned char saved_integer_register = current_integer_register;
+        unsigned char saved_float_register = current_integer_register;
         size_t assembler_pos = get_pos(ass);
         bool pass_in_memory = classes.len == 0;
 
@@ -318,9 +323,26 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
               }
               break;
           }
-          case SysVSSE:
-              panic(mv_string("Not yet implemented: passing arg of class SSE"));
+          case SysVSSE: {
+              if (current_float_register >= max_float_registers) {
+                  // TODO: move ptr to value into address
+                  set_pos(ass, assembler_pos);
+                  current_float_register = saved_float_register;
+                  pass_in_memory = true; // this breaks us out of the loop
+              } else {
+                  Regname next_reg = float_registers[current_float_register++];
+                  // I8 max = 127
+                  if (arg_offsets.data[i + 1] > 127) {
+                      throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
+                  }
+                  // Explanation - copy into current register
+                  // copy from RSP + current offset + return address offset + eightbyte_index
+                  build_binary_op(ass, MovSD, reg(next_reg, sz_64),
+                                  rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
+                                  a, point);
+              }
               break;
+          }
           case SysVSSEUp:
               panic(mv_string("Not yet implemented: passing arg of class SSE UP"));
               break;
@@ -339,6 +361,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
           case SysVMemory:
               set_pos(ass, assembler_pos);
               current_integer_register = saved_integer_register;
+              current_float_register = saved_float_register;
               pass_in_memory = true; // this breaks us out of the loop
               break;
           }
@@ -388,7 +411,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     for (size_t i = 0; i < in_memory_args.len; i++) {
         // TODO (BUG) - this needs reversing maybe??
         // pass in memory - reserve space on stack:
-        size_t arg_idx = in_memory_args.data[i];
+        size_t arg_idx = in_memory_args.data[in_memory_args.len - (i + 1)];
         size_t arg_size = arg_offsets.data[arg_idx] - arg_offsets.data[arg_idx + 1];
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
         build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
@@ -592,7 +615,11 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
               // argument, so we can safely use it as a scratch register.
               // In this case, it stores the source of the stack argument (to copy)
               build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
-              build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+              if (arg_offsets.data[i+1] > INT8_MAX) {
+                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), a, point);
+              } else {
+                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+              }
 
               // TODO (IMPROVEMENT) what if different sizes?
               // Copy the argument to the bottom of the stack.

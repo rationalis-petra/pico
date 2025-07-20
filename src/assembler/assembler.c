@@ -30,12 +30,88 @@
  * | X          | 1            | Etension of the SIB index field
  * | B          | 0            | Extension of any of ModR/M,SIB or Opcode Reg
  * 
- */ 
+ *    Implementation Notes
+ * --------------------------------
+ * Overview
+ * ---------
+ * For details of the instruction encoding, refer to the Intel Manuals for
+ * Software developers (Intel 64 and IA-32). These can be found at
+ * https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+ * the list of all available instructions can be found in Volume 2, and
+ * instructions may reference the relevant page of this volume.
+ * 
+ * Nullary Operations
+ * ------------------
+ * 
+ * Unary Operations
+ * ------------------
+ *
+ * Binary Operations
+ * ------------------
+ *  Referring to, for example, the add instruction (p142), we see there are many
+ *  different encodings for different operand pairs. There is Add r64, r/m64, 
+ *  Add r/m32 imm8, etc. The possible encodable instruction pairs across all
+ *  instructions is much smaller than the set of possible pairs. For example,  
+ *  there is no pair imm8, imm16 or rm8, imm64. For this reason, the supported pairs
+ *  are encoded into their own enum type: BinOpType. This type is setup as a
+ *  flag, with each occupying a unique bit.
+ * 
+ *  Then, each operation (Add, Sub, etc.) is given a unique table in binary_opcode_tables
+ *  the table indicates which operand pairs are supported with a BinOpType
+ *  variable, and has an array of opcodes (one for each type). 
+ * 
+ *  To calculate the index of an in the array, do as follows: 
+ *   1. Take the entry type, e.g. RM16_Imm8 = 0100
+ *   2. Take the supported types, e.g. 1101 = R16_Imm16 | R16_Imm8 | R8_Imm8
+ *   3. Consider all bits less than the value: 0100 - 1 = 0011
+ *   4. Binary And this with the supported types - 0011 & 1101 = 1
+ *   5. Count the bits in this number - index = 1
+ * 
+ * Outstanding Tasks:
+ *  - Some instructions working with 64-bits are incorrectly given a Rex prefix.
+ *    add to the binary op table to determine whether this is necessary.
+ * 
+ */
+
+typedef enum : uint32_t {
+    R8_Imm8     = 0b1,
+    RM8_Imm8    = 0b10,
+    RM16_Imm8   = 0b100,
+    R16_Imm16   = 0b1000,
+    RM16_Imm16  = 0b10000,
+    RM32_Imm8   = 0b100000,
+    R32_Imm32   = 0b1000000,
+    RM32_Imm32  = 0b10000000,
+    R64_Imm8    = 0b100000000,
+    R64_Imm32   = 0b1000000000,
+    R64_Imm64   = 0b10000000000,
+    RM64_Imm8   = 0b100000000000,
+    RM64_Imm32  = 0b1000000000000,
+    RM8_R8      = 0b10000000000000,
+    RM16_R16    = 0b100000000000000,
+    RM32_R32    = 0b1000000000000000,
+    RM64_R64    = 0b10000000000000000,
+    R8_RM8      = 0b100000000000000000,
+    R16_RM16    = 0b1000000000000000000,
+    R32_RM32    = 0b10000000000000000000,
+    R64_RM64    = 0b100000000000000000000,
+    XMM32_XMM32 = 0b1000000000000000000000,
+    XMM32_M32   = 0b10000000000000000000000,
+    M32_XMM32   = 0b100000000000000000000000,
+    XMM64_XMM64 = 0b1000000000000000000000000,
+    XMM64_M64   = 0b10000000000000000000000000,
+    M64_XMM64   = 0b100000000000000000000000000,
+} BinOpType; 
 
 struct Assembler {
     U8Array instructions;
+    CPUFeatureFlags flags; 
     Allocator* gpa;
 };
+
+CPUFeatureFlags current_cpu_feature_flags() {
+    return SSE;
+}
 
 void clear_assembler(Assembler* assembler) {
     assembler->instructions.len = 0;
@@ -44,12 +120,16 @@ void clear_assembler(Assembler* assembler) {
     }
 }
                                             
-Assembler* mk_assembler(Allocator* a) {
+Assembler* mk_assembler(CPUFeatureFlags flags, Allocator* a) {
     Assembler* out = (Assembler*)mem_alloc(sizeof(Assembler), a);
     const size_t initial_capacity = 4096;
 
-    out->instructions = mk_u8_array(initial_capacity, a);
-    out->gpa = a;
+    *out = (Assembler) {
+        .instructions = mk_u8_array(initial_capacity, a),
+        .flags = flags,
+        .gpa = a,
+    };
+
     for (size_t i = 0; i < initial_capacity; i++) {
         out->instructions.data[i] = 0x90;
     }
@@ -244,7 +324,20 @@ typedef struct {
 
 static BinaryTableEntry binary_table[256];
 
-static uint8_t binary_opcode_table[Binary_Op_Count][256][4];
+typedef struct {
+    uint8_t b1;
+    uint8_t b2;
+    uint8_t b3;
+    uint8_t reg_ext;
+} BinOpBytes;
+
+typedef struct {
+    uint32_t supported;
+    BinOpBytes* entries;
+    CPUFeatureFlags flags;
+} BinaryOpTable;
+
+static BinaryOpTable binary_opcode_tables[Binary_Op_Count];
 
 uint8_t bindex(Dest_t dest_ty, LocationSize dest_sz, Dest_t src_ty, LocationSize src_sz) {
     return dest_ty | (dest_sz << 2) | (src_ty << 4) | (src_sz << 6) ;
@@ -486,266 +579,306 @@ void build_binary_table() {
 
 }
 
-void build_binary_opcode_table() {
-    for (size_t i = 0; i < 256 * Binary_Op_Count; i++) {
-        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][0] = 0x90;
-        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][1] = 0x90;
-        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][2] = 0x90;
-        binary_opcode_table[i % Binary_Op_Count][i/Binary_Op_Count][3] = 0x09;
+void add_op_ext(uint8_t op, uint8_t ext, BinOpType type, uint32_t supported, BinOpBytes* ops) {
+#ifdef DEBUG_ASSERT
+    if (!(type & supported)) {
+        panic(mv_string("Error in setup: unsupported binop type."));
+    }
+#endif
+    size_t idx = __builtin_popcount(supported & (type - 1));
+    ops[idx] = (BinOpBytes) {.b1 = op, .b2 = 0x90, .b3 = 0x90, .reg_ext = ext};
+}
+
+void add_op(uint8_t op, BinOpType type, uint32_t supported, BinOpBytes* ops) {
+#ifdef DEBUG_ASSERT
+    if (!(type & supported)) {
+        panic(mv_string("Error in setup: unsupported binop type."));
+    }
+#endif
+    size_t idx = __builtin_popcount(supported & (type - 1));
+    ops[idx] = (BinOpBytes) {.b1 = op, .b2 = 0x90, .b3 = 0x90, .reg_ext = 0x9};
+}
+
+void add_op2(uint8_t op1, uint8_t op2, BinOpType type, uint32_t supported, BinOpBytes* ops) {
+#ifdef DEBUG_ASSERT
+    if (!(type & supported)) {
+        panic(mv_string("Error in setup: unsupported binop type."));
+    }
+#endif
+    size_t idx = __builtin_popcount(supported & (type - 1));
+    ops[idx] = (BinOpBytes) {.b1 = op1, .b2 = op2, .b3 = 0x90, .reg_ext = 0x9};
+}
+
+void add_op3(uint8_t op1, uint8_t op2, uint8_t op3, BinOpType type, uint32_t supported, BinOpBytes* ops) {
+#ifdef DEBUG_ASSERT
+    if (!(type & supported)) {
+        panic(mv_string("Error in setup: unsupported binop type."));
+    }
+#endif
+    size_t idx = __builtin_popcount(supported & (type - 1));
+    ops[idx] = (BinOpBytes) {.b1 = op1, .b2 = op2, .b3 = op3, .reg_ext = 0x9};
+}
+
+void build_binary_opcode_tables() {
+    for (size_t i = 0; i < Binary_Op_Count; i++) {
+        binary_opcode_tables[i] = (BinaryOpTable){0, NULL, 0};
     }
 
-    // Add
-    // r/m64, imm8 & imm64
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x0;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x0;
+    {   // Add Operation. Source - Intel Manual Vol 2. p142
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
+        static BinOpBytes ops[7];
+        add_op_ext(0x83, 0x0, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x0, RM64_Imm32, sup, ops);
 
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x0;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x0;
+        add_op(0x01, RM64_R64, sup, ops);
+        add_op(0x03, R64_RM64, sup, ops);
 
-    // r/m64, r64
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x01;
-    binary_opcode_table[Add][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x01;
+        add_op(0x03, R32_RM32, sup, ops);
+        add_op(0x03, R16_RM16, sup, ops);
+        add_op(0x02, R8_RM8, sup, ops);
+        binary_opcode_tables[Add] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // r64, r/m64
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x03;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x03;
+    {   // Sub Operation. Source - Intel Manual Vol 2. p1407
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
+        static BinOpBytes ops[7];
+        add_op_ext(0x83, 0x5, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x5, RM64_Imm32, sup, ops);
 
-    // r32, r32 | r16, r16 | r8, r8
-    binary_opcode_table[Add][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x03;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x03;
-    binary_opcode_table[Add][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x02;
+        add_op(0x29, RM64_R64, sup, ops);
+        add_op(0x2B, R64_RM64, sup, ops);
 
-    // Sub
-    // r/m64, imm8 & imm64
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x05;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x05;
+        add_op(0x2B, R32_RM32, sup, ops);
+        add_op(0x2B, R16_RM16, sup, ops);
+        add_op(0x2A, R8_RM8, sup, ops);
+        binary_opcode_tables[Sub] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // r/m64, r64
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x29;
-    binary_opcode_table[Sub][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x29;
+    {   // Cmp Operation. Source - Intel Manual Vol 2. p1407
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
+        static BinOpBytes ops[7];
+        add_op_ext(0x83, 0x7, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x7, RM64_Imm32, sup, ops);
 
-    // r64, r/m64
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x2B;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x2B;
+        add_op(0x39, RM64_R64, sup, ops);
+        add_op(0x3B, R64_RM64, sup, ops);
 
-    // r32, r32 | r16, r16 | r8, r8
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x2B;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x2B;
-    binary_opcode_table[Sub][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x2A;
-
-    // Cmp
-    // r/m64, imm8 & imm64
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x07;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x07;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x07;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x07;
-
-    // r/m64, r64
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x39;
-    binary_opcode_table[Cmp][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x39;
-
-    // r64, r/m64
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x3B;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x3B;
-
-    // r32, r32 | r16, r16 | r8, r8
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x3B;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x3B;
-    binary_opcode_table[Cmp][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x3A;
+        add_op(0x3B, R32_RM32, sup, ops);
+        add_op(0x3B, R16_RM16, sup, ops);
+        add_op(0x3A, R8_RM8, sup, ops);
+        binary_opcode_tables[Cmp] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
     // ------------------
     //  Logic
     // ------------------
-    // And
-    // r/m64, imm8 & imm64
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x04;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x04;
 
-    // r/m64, r64
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x21;
-    binary_opcode_table[And][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x21;
+    {   // And Operation. Source - Intel Manual Vol 2. p1407
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R8_RM8;
+        static BinOpBytes ops[5];
+        add_op_ext(0x83, 0x4, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x4, RM64_Imm32, sup, ops);
 
-    // r64, r/m64
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x23;
-    binary_opcode_table[And][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x23;
+        add_op(0x21, RM64_R64, sup, ops);
+        add_op(0x23, R64_RM64, sup, ops);
 
-    // r8, r/m8
-    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x22;
-    binary_opcode_table[And][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x22;
+        add_op(0x22, R8_RM8, sup, ops);
+        binary_opcode_tables[And] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // Or
-    // r/m64, imm8 & imm64
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x01;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x01;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
+    {   // Or Operation. Source - Intel Manual Vol 2. p902
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R8_RM8;
+        static BinOpBytes ops[5];
+        add_op_ext(0x83, 0x1, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x1, RM64_Imm32, sup, ops);
 
-    // r/m64, r64
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x09;
-    binary_opcode_table[Or][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x09;
+        add_op(0x09, RM64_R64, sup, ops);
+        add_op(0x0B, R64_RM64, sup, ops);
 
-    // r64, r/m64
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0B;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0B;
+        add_op(0x0A, R8_RM8, sup, ops);
+        binary_opcode_tables[Or] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // r8, r/m8
-    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x0A;
-    binary_opcode_table[Or][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x0A;
+    {   // XOr Operation. Source - Intel Manual Vol 2. p2236
+        static uint32_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R8_RM8;
+        static BinOpBytes ops[5];
+        add_op_ext(0x83, 0x6, RM64_Imm8, sup, ops);
+        add_op_ext(0x81, 0x6, RM64_Imm32, sup, ops);
 
-    // XOr
-    // r/m64, imm8 & imm64
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x06;
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x01;
-    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0x83;
-    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x06;
-    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0x81;
-    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x06;
+        add_op(0x31, RM64_R64, sup, ops);
+        add_op(0x33, R64_RM64, sup, ops);
 
-    // r/m64, r64
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x31;
-    binary_opcode_table[Xor][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x31;
-
-    // r64, r/m64
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x33;
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x33;
-
-    // r8, r/m8
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x30;
-    binary_opcode_table[Xor][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x32;
-
+        add_op(0x32, R8_RM8, sup, ops);
+        binary_opcode_tables[Xor] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
     // ------------------
     //  Bit Manipulation
     // ------------------
-    // Shift Left
-    // r/m64, imm8 
-    binary_opcode_table[SHL][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[SHL][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
-    binary_opcode_table[SHL][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[SHL][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x04;
+    {   // Shift Left. Source - Intel Manual Vol 2. ??
+        static uint32_t sup = RM64_Imm8;
+        static BinOpBytes ops[1];
+        add_op_ext(0xC1, 0x4, RM64_Imm8, sup, ops);
+        binary_opcode_tables[SHL] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // Shift Right
-    // r/m64, imm8
-    binary_opcode_table[SHR][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[SHR][bindex(Dest_Register, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
-    binary_opcode_table[SHR][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][0] = 0xC1;
-    binary_opcode_table[SHR][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_8)][3] = 0x05;
+    {   // Shift Right. Source - Intel Manual Vol 2. ??
+        static uint32_t sup = RM64_Imm8;
+        static BinOpBytes ops[1];
+        add_op_ext(0xC1, 0x5, RM64_Imm8, sup, ops);
+        binary_opcode_tables[SHR] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
     // ------------------
     //  Memory
     // ------------------
-    //Mov,   // p 769.
-    // r64, imm64
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_64)][0] = 0xB8;
-    // r/m64, imm32
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Immediate, sz_32)][3] = 0x00;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Immediate, sz_32)][3] = 0x00;
 
-    // r/m64, r64 then r64, r/m64
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_64, Dest_Register, sz_64)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x8B;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x8B;
+    {   // Move. Source - Intel Manual Vol 2. 769
+      static uint32_t sup = R64_Imm64 | RM64_Imm32 | RM64_R64 | R64_RM64 |
+                            RM32_R32 | R32_RM32 | RM16_R16 | R16_RM16 | RM8_R8 |
+                            R8_RM8 | RM32_Imm32 | RM16_Imm16 | R8_Imm8;
+        static BinOpBytes ops[14];
+        add_op(0xB8, R64_Imm64, sup, ops);
+        add_op_ext(0xC7, 0x0, RM64_Imm32, sup, ops);
+        add_op_ext(0xC7, 0x0, RM64_Imm32, sup, ops);
 
-    // r/m32, r32 then r32, r/m32
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Register, sz_32)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Register, sz_32)][0] = 0x8B;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Deref, sz_32)][0] = 0x8B;
-    // r/m32, imm32
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_32, Dest_Immediate, sz_32)][3] = 0x00;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)][3] = 0x00;
+        add_op(0x89, RM64_R64, sup, ops);
+        add_op(0x8B, R64_RM64, sup, ops);
+        add_op(0x89, RM32_R32, sup, ops);
+        add_op(0x8B, R32_RM32, sup, ops);
+        add_op(0x89, RM16_R16, sup, ops);
+        add_op(0x8B, R16_RM16, sup, ops);
+        add_op(0x88, RM8_R8, sup, ops);
+        add_op(0x8A, R8_RM8, sup, ops);
 
-    // r/m16, r16 then  r16, r/m16
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Register, sz_16)][0] = 0x89;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Register, sz_16)][0] = 0x8B;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Deref, sz_16)][0] = 0x8B;
-    // r/m16, imm16
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Immediate, sz_16)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_16, Dest_Immediate, sz_16)][3] = 0x00;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Immediate, sz_16)][0] = 0xC7;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_16, Dest_Immediate, sz_16)][3] = 0x00;
+        add_op_ext(0xC7, 0x0, RM32_Imm32, sup, ops);
+        add_op_ext(0xC7, 0x0, RM16_Imm16, sup, ops);
+        add_op(0xC6, R8_Imm8, sup, ops);
+        binary_opcode_tables[Mov] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // r/m8, r8 thhen r8, r/m8 then r/m8, imm8
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x88;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_8, Dest_Register, sz_8)][0] = 0x88;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_8, Dest_Register, sz_8)][0] = 0x8A;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_8, Dest_Deref, sz_8)][0] = 0x8A;
-    binary_opcode_table[Mov][bindex(Dest_Register, sz_8, Dest_Immediate, sz_8)][0] = 0xC6;
-    binary_opcode_table[Mov][bindex(Dest_Deref, sz_8, Dest_Immediate, sz_8)][0] = 0xC6;
+    {   // Move Float. Source - Intel Manual Vol 2. 857
+        static uint32_t sup = XMM32_XMM32 | M32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[3];
+        add_op3(0xF3, 0x0F, 0x10, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x10, XMM32_M32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x11, M32_XMM32, sup, ops);
 
-    //Lea,   // p 705.
-    // Lea is much more limited in how it works - operand 1 is always a register
-    //      and operand 2 is a "Dest_Deref"
-    // r64, r/m64
-    binary_opcode_table[LEA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x8D;
+        binary_opcode_tables[MovSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
+
+    {   // Move Double. Source - Intel Manual Vol 2. 848
+        static uint32_t sup = XMM64_XMM64 | M64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[3];
+        add_op3(0xF2, 0x0F, 0x10, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x10, XMM64_M64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x11, M64_XMM64, sup, ops);
+
+        binary_opcode_tables[MovSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
+
+    {   // Load Effective Address. Source - Intel Manual Vol 2. 705
+        // Lea is much more limited in how it works - operand 1 is always a register
+        //      and operand 2 is a memory location.
+        // TODO (BUG): This restriction is (will be) enforced elsewhere by a
+        //   check_special_conditions() function for binary operations
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op(0x8D, R64_RM64, sup, ops);
+        binary_opcode_tables[LEA] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
 
     // -------------------
     //  Conditional Moves
     // -------------------
     // CMoves, p 285.
-    // r64, r/m64
-    // 0F 44
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x44;
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovE][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x44;
 
-    // CMovB = 0F 42
-    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x42;
-    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovB][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x42;
+    {   // Move if equal.
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op2(0x0F, 0x44, R64_RM64, sup, ops);
+        binary_opcode_tables[CMovE] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // CMovA = 0F 47
-    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x47;
-    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovA][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x47;
+    {   // Move if below.
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op2(0x0F, 0x42, R64_RM64, sup, ops);
+        binary_opcode_tables[CMovB] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // CMovL = 0F 4C
-    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4C;
-    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovL][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4C;
+    {   // Move if above.
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op2(0x0F, 0x47, R64_RM64, sup, ops);
+        binary_opcode_tables[CMovA] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 
-    // CMovG = 0F 4F
-    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Register, sz_64)][1] = 0x4F;
-    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][0] = 0x0F;
-    binary_opcode_table[CMovG][bindex(Dest_Register, sz_64, Dest_Deref, sz_64)][1] = 0x4F;
+    {   // Move if less.
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op2(0x0F, 0x4C, R64_RM64, sup, ops);
+        binary_opcode_tables[CMovL] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
+
+    {   // Move if Greater.
+        static uint32_t sup = R64_RM64;
+        static BinOpBytes ops[1];
+        add_op2(0x0F, 0x4F, R64_RM64, sup, ops);
+        binary_opcode_tables[CMovG] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
 }
 
 uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
@@ -760,6 +893,166 @@ uint8_t rex_rm_ext(uint8_t bit) { return (bit & 0b1); }
 uint8_t rex_sb_ext(uint8_t bit) { return (bit & 0b1) << 1; }
 uint8_t rex_reg_ext(uint8_t bit) { return (bit & 0b1) << 2; }
 
+BinOpType retry_type(BinOpType type) {
+    switch (type) {
+    case R8_Imm8:
+        return RM8_Imm8;
+    case R16_Imm16:
+        return RM16_Imm16;
+    case R32_Imm32:
+        return RM32_Imm32;
+    case R64_Imm8:
+        return RM64_Imm8;
+    default:
+        return 0;
+    }
+}
+
+BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
+    BinOpType type = 0;
+
+    // Step 1: determine memory type
+    switch (dest.type) {
+    case Dest_Register:
+      // XMM register?
+      if (dest.reg & XMM0) {
+          if (src.type == Dest_Register && (src.reg & XMM0) && src.sz == dest.sz) {
+              if (src.sz == sz_32) type = XMM32_XMM32;
+              else if (src.sz == sz_64) type = XMM64_XMM64;
+              else goto report_error;
+          } else if (src.type == Dest_Deref && src.sz == dest.sz) {
+            if (src.sz == sz_32) {
+                type = XMM32_M32;
+            } else if (src.sz == sz_64) {
+                type = XMM64_M64;
+            } else {
+              goto report_error;
+            }
+          } else {
+              goto report_error;
+          }
+      } else {
+          if (src.type == Dest_Immediate) {
+              if (src.sz == sz_8) {
+                  if (dest.sz == sz_8) {
+                      type = R8_Imm8;
+                  } else if (dest.sz == sz_16) {
+                      type = RM16_Imm8;
+                  } else if (dest.sz == sz_32) {
+                      type = RM32_Imm8;
+                  } else if (dest.sz == sz_64) {
+                      type = R64_Imm8;
+                  } else {
+                      goto report_error;
+                  }
+              } else if (src.sz == sz_16 && dest.sz == sz_16) {
+                  type = R16_Imm16;
+              } else if (src.sz == sz_32) {
+                if (dest.sz == sz_32) {
+                      type = R32_Imm32;
+                } else if (dest.sz == sz_64) {
+                    // TODO : two-type this
+                    type = RM64_Imm32;
+                } else {
+                    goto report_error;
+                }
+              } else if ((src.sz == sz_64) & (dest.sz == sz_64)) {
+                  type = R64_Imm64;
+              }
+              else {
+                  goto report_error;
+              }
+          } else {
+              if (src.sz == dest.sz) {
+                if (src.sz == sz_8) {
+                    type = R8_RM8;
+                } else if (src.sz == sz_16) {
+                    type = R16_RM16;
+                } else if (src.sz == sz_32) {
+                    type = R32_RM32;
+                } else if (src.sz == sz_64) {
+                    type = R64_RM64;
+                } else {
+                    goto report_error;
+                }
+              } else {
+                  goto report_error;
+              }
+          }
+      }
+      break;
+    case Dest_Deref:
+        if (src.type == Dest_Immediate) {
+            switch (dest.sz) {
+            case sz_8:
+                goto report_error;
+            case sz_16:
+                if (src.sz == sz_16) type = RM16_Imm16;
+                else goto report_error;
+                break;
+            case sz_32:
+                if (src.sz == sz_32) type = RM32_Imm32;
+                else goto report_error;
+                break;
+            case sz_64:
+                if (src.sz == sz_8) type = RM64_Imm8;
+                else if (src.sz == sz_32) type = RM64_Imm32;
+                else goto report_error;
+                break;
+            }
+        } else if (src.type == Dest_Register) {
+            if (src.sz == dest.sz) {
+                if (src.reg & XMM0) {
+                    if (src.sz == dest.sz) {
+                        if (src.sz == sz_32) {
+                            type = M32_XMM32;
+                        } else if (src.sz == sz_64) {
+                            type = M64_XMM64;
+                        } else {
+                            goto report_error;
+                        }
+                    } else {
+                        goto report_error;
+                    }
+                } else {
+                    if (src.sz == sz_8)
+                        type = RM8_R8;
+                    else if (src.sz == sz_16)
+                        type = RM16_R16;
+                    else if  (src.sz == sz_32)
+                        type = RM32_R32;
+                    else if (src.sz == sz_64)
+                        type = RM64_R64;
+                }
+            } else {
+                goto report_error;
+            }
+
+        } else {
+            goto report_error;
+        }
+        break;
+    case Dest_Immediate:
+        goto report_error;
+    }
+
+    if (type != 0) {
+        BinaryOpTable table = binary_opcode_tables[op];
+        if (!(table.supported & type)) {
+            type = retry_type(type);
+            if (!(table.supported & type)) goto report_error;
+        }
+        size_t idx = __builtin_popcount(table.supported & (type  - 1));
+        return table.entries[idx];
+    }
+
+ report_error: {
+        PtrArray nodes = mk_ptr_array(8, err_allocator);
+        push_ptr(mk_str_doc(mv_string("Unsupported operand pair for: "), err_allocator), &nodes);
+        push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
+        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
+    }
+}
 
 AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
@@ -784,7 +1077,8 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     /* uint8_t imm_bytes [8]; */
 
     // Step1: Opcode
-    opcode_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][0];
+    BinOpBytes opcode_bytes = lookup_binop_bytes(op, dest, src, err_allocator, point);
+    opcode_byte = opcode_bytes.b1;
     if (opcode_byte == 0x90) {
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary opcode table entry for: "), err_allocator), &nodes);
@@ -792,7 +1086,7 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
         throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
     }
     if (be.has_opcode_ext) {
-        uint8_t ext_byte = binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][3]; 
+        uint8_t ext_byte = opcode_bytes.reg_ext; 
         modrm_byte |= modrm_reg(ext_byte);
         if (ext_byte == 0x09) {
             PtrArray nodes = mk_ptr_array(8, err_allocator);
@@ -951,12 +1245,12 @@ AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Loca
     // opcode
     push_u8(opcode_byte, instructions);
 
-    // 2nd opcode byte (optional)
-    if (0x90 != binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1]) {
-        push_u8(binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][1], instructions);
+    // 2nd & 3rd opcode bytes (optional)
+    if (0x90 != opcode_bytes.b2) {
+        push_u8(opcode_bytes.b2, instructions);
     }
-    if (0x90 != binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][2]) {
-        push_u8(binary_opcode_table[op][bindex(dest.type, dest.sz, src.type, src.sz)][2], instructions);
+    if (0x90 != opcode_bytes.b3) {
+        push_u8(opcode_bytes.b3, instructions);
     }
 
     if (be.use_modrm_byte)
@@ -1518,12 +1812,12 @@ void init_asm() {
     build_unary_opcode_table();
 
     build_binary_table();
-    build_binary_opcode_table();
+    build_binary_opcode_tables();
 }
 
 // Utility & Pretty
 Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
-    char* names[17][4] = {
+    char* names[33][4] = {
         {"AL", "AX", "EAX", "RAX"},
         {"CL", "CX", "ECX", "RCX"},
         {"DL", "DX", "EDX", "RDX"},
@@ -1541,6 +1835,23 @@ Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
         {"R13b", "R13w", "R13d", "R13"},
         {"R14b", "R14w", "R14d", "R14"},
         {"R15b", "R15w", "R15d", "R15"},
+
+        {"XMM0b", "XMM0w", "XMM0d", "XMM0"},
+        {"XMM1b", "XMM1w", "XMM1d", "XMM1"},
+        {"XMM2b", "XMM2w", "XMM2d", "XMM2"},
+        {"XMM3b", "XMM3w", "XMM3d", "XMM3"},
+        {"XMM4b", "XMM4w", "XMM4d", "XMM4"},
+        {"XMM5b", "XMM5w", "XMM5d", "XMM5"},
+        {"XMM6b", "XMM6w", "XMM6d", "XMM6"},
+        {"XMM7b", "XMM7w", "XMM7d", "XMM7"},
+        {"XMM8b", "XMM8w", "XMM8d", "XMM8"},
+        {"XMM9b", "XMM9w", "XMM9d", "XMM9"},
+        {"XMM10b", "XMM10w", "XMM10d", "XMM10"},
+        {"XMM11b", "XMM11w", "XMM11d", "XMM11"},
+        {"XMM12b", "XMM12w", "XMM12d", "XMM12"},
+        {"XMM13b", "XMM13w", "XMM13d", "XMM13"},
+        {"XMM14b", "XMM14w", "XMM14d", "XMM14"},
+        {"XMM15b", "XMM15w", "XMM15d", "XMM15"},
 
         /* // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2 */
         // Note that I believe the non-64 bit 'IP' are invalid
@@ -1619,7 +1930,7 @@ Document* pretty_location(Location loc, Allocator* a) {
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
     char* names[Binary_Op_Count] = {
         "Add", "Sub", "Cmp", "And", "Or", "Xor", "SHL", "SHR",
-        "Mov", "LEA", "CMovE", "CMovL", "CMovG",
+        "Mov", "MovSS", "MovSD", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.
     return mk_str_doc(mv_string(names[op]), a);

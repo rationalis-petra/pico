@@ -1,3 +1,9 @@
+#include "platform/memory/executable.h"
+#include "assembler/assembler.h"
+
+#include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/extra.h"
+
 #include "test_pico/parse/parse.h"
 #include "test_pico/stdlib/stdlib.h"
 #include "test_pico/eval/eval.h"
@@ -7,6 +13,18 @@
 
 
 void run_pico_tests(TestLog* log, Allocator* a) {
+    Allocator* stdalloc = get_std_allocator();
+    Allocator exalloc = mk_executable_allocator(stdalloc);
+
+    Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exalloc);
+    Package* base = base_package(ass_base, stdalloc, stdalloc);
+    delete_assembler(ass_base);
+
+    Module* module = get_module(string_to_symbol(mv_string("user")), base);
+
+    set_std_current_module(module);
+    set_current_package(base);
+
     if (suite_start(log, mv_string("parse"))) {
         run_pico_parse_tests(log, a);
         suite_end(log);
@@ -26,4 +44,7 @@ void run_pico_tests(TestLog* log, Allocator* a) {
         run_pico_stdlib_tests(log, a);
         suite_end(log);
     }
+
+    delete_package(base);
+    release_executable_allocator(exalloc);
 }

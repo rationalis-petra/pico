@@ -206,7 +206,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
         // Push the u8
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), a, point);
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
@@ -230,7 +230,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t size = pi_stack_size_of(*syn.ptype);
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
-            if (e.stack_offset + size > INT8_MAX || e.stack_offset - size < INT8_MIN) {
+            if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
                     build_binary_op(ass, Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
@@ -767,7 +767,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Second, generate the structure/instance object
         generate(*syn.projector.val, env, target, links, a, point);
-        size_t src_sz = pi_size_of(*source_type);
+        size_t src_sz = pi_stack_size_of(*source_type);
 
         // From this point, behaviour depends on whether we are projecting from
         // a structure or from an instance
@@ -782,13 +782,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             }
 
             generate_stack_move(src_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
-            // now, remove the original struct from the stack
+            // Now, remove the original struct from the stack
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_sz), a, point);
 
             data_stack_shrink(env, src_sz);
         } else {
             // Pop the pointer to the instance from the stack - store in RSI
-            data_stack_shrink(env, pi_stack_align(src_sz));
+            data_stack_shrink(env, src_sz);
             build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
             // Now, calculate offset for field 
@@ -1472,6 +1472,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
+    case SOffsetOf: {
+        size_t sz = 0;
+        PiType* struct_type = strip_type(syn.offset_of.body->type_val);
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            sz = pi_size_align(sz, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
+            if (symbol_eq(struct_type->structure.fields.data[i].key, syn.offset_of.field))
+                break;
+            sz += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
+        }
+        build_unary_op(ass, Push, imm32(sz), a, point);
+        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
+        break;
+    }
     case SCheckedType: {
         build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
         build_unary_op(ass, Push, reg(R9, sz_64), a, point);
@@ -1869,6 +1882,34 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
             build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
         }
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        break;
+    }
+    case SCapture: {
+        // Setup: push the memory address (in data) of the Syntax value into stack.
+        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        backlink_data(target, out.backlink, links);
+
+        RawTree raw = (RawTree) {
+          .type = RawAtom,
+          .atom = (Atom) {
+              .type = ACapture,
+              .capture = (Capture) {
+                  .type = syn.capture.type,
+                  .value = syn.capture.value,
+              }
+          },
+        };
+        // Now copy the entire concrete syntax tree into the data-segment,
+        // setting allocators to null
+        add_rawtree(raw, target, links);
+
+        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), a, point);
+        for (size_t i = 0; i < sizeof(RawTree); i += sizeof(uint64_t)) {
+            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
+        }
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     default: {
@@ -1881,8 +1922,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     int64_t diff = old_head - new_head;
     if (diff < 0) panic(mv_string("diff < 0!"));
 
-    if (diff != pi_stack_size_of(*syn.ptype))
-        panic(mv_string("address constraint violated!"));
+    // Justification: stack size of is extremely unlikely to be 2^63 bytes
+    //  in size!
+    if (diff != (int64_t)pi_stack_size_of(*syn.ptype))
+        panic(mv_string("address environment constraint violated: expected size of the stack is wrong!"));
 #endif
 }
 
@@ -1919,7 +1962,7 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
 
     // As we will The 
     Target gen_target = {
-        .target = mk_assembler(&exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
         .code_aux = target.code_aux,
         .data_aux = target.data_aux,
     };

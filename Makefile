@@ -14,6 +14,15 @@ CC := gcc
 CONFIG = default.config
 include ${CONFIG}
 
+ifeq ($(OS), Windows_NT)
+VULKAN_LINK=-l$(VULKAN_DIR)\Lib\vulkan-1.lib
+VULKAN_FLAGS=-I$(VULKAN_DIR)\Include 
+else
+VULKAN_INCLUDE=
+VULKAN_LINK=-lvulkan
+endif
+
+
 ## Platform specifics and configuration
 ##-------------------------------------
 RELEASE_FLAGS := -Ofast
@@ -29,8 +38,9 @@ else
 endif
 
 ifdef HEDRON
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -DUSE_VULKAN $(VULKAN_FLAGS)
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -DUSE_VULKAN $(VULKAN_INCLUDE)
+    RELEASE_FLAGS := $(RELEASE_FLAGS) -DUSE_VULKAN $(VULKAN_INCLUDE)
+	LINK_FLAGS := $(LINK_FLAGS) $(VULKAN_LINK)
 endif
 
 # Find all the C files we want to compile

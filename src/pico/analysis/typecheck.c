@@ -704,7 +704,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
                     type_check_i(*field_syn, field_ty, env, a, point);
                 } else {
-                    err.message = mv_cstr_doc("Structure is missing a field", a);
+                    panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
                     throw_pi_error(point, err);
                 }
             }
@@ -714,6 +714,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 .structure.fields = mk_sym_ptr_amap(untyped->structure.fields.len, a),
             };
             for (size_t i = 0; i < untyped->structure.fields.len; i++) {
+                // TODO (FEATURE): allow the inference algorithm to later
+                //                 reorder the fields!
                 // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
                 type_infer_i(cell.val, env, a, point);
@@ -1135,6 +1137,33 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = out; 
         break;
     }
+    case SOffsetOf: {
+        eval_type(untyped->offset_of.body, env, a, point);
+        PiType* out = mem_alloc(sizeof(PiType), a);
+
+        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, a);
+        if (struct_type->sort != TStruct) {
+            err.range = untyped->offset_of.body->range;
+            err.message = mv_cstr_doc("Unsupported operand: taking offset of non-struct type.",a);
+            throw_pi_error(point, err); 
+        }
+
+        bool found_field = false;
+        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+            if (symbol_eq(untyped->offset_of.field, struct_type->structure.fields.data[i].key))
+                found_field = true;
+        }
+
+        if (!found_field) {
+            err.range = untyped->offset_of.body->range;
+            err.message = mv_cstr_doc("Field missing in provided structure type.",a);
+            throw_pi_error(point, err); 
+        }
+
+        *out = (PiType){.sort = TPrim, .prim = UInt_64};
+        untyped->ptype = out; 
+        break;
+    }
     case SModule: {
         panic(mv_string("Unsupported operation: inferring type of module"));
     }
@@ -1427,6 +1456,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SQuote: {
+        untyped->ptype = get_syntax_type();
+        break;
+    }
+    case SCapture: {
         untyped->ptype = get_syntax_type();
         break;
     }
@@ -1783,6 +1816,9 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SAlignOf:
         post_unify(syn->size, env, a, point);
         break;
+    case SOffsetOf:
+        post_unify(syn->offset_of.body, env, a, point);
+        break;
     case SModule:
         panic(mv_string("instantiate implicits not implemented for module"));
 
@@ -1823,8 +1859,8 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe: 
-        break;
     case SQuote: 
+    case SCapture: 
         break;
     }
 }
@@ -2037,6 +2073,9 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SAlignOf:
         squash_types(typed->size, a, point);
         break;
+    case SOffsetOf:
+        squash_types(typed->offset_of.body, a, point);
+        break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {
             squash_types(typed->proc_type.args.data[i], a, point);
@@ -2109,8 +2148,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDescribe:
-        break;
     case SQuote:
+    case SCapture: 
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));
@@ -2145,8 +2184,8 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* p
     if (catch_error(cleanup_point)) goto on_error;
 
     Target gen_target = {
-        .target = mk_assembler(&exalloc),
-        .code_aux = mk_assembler(&exalloc),
+        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), &exalloc),
         .data_aux = mem_alloc(sizeof(U8Array), a)
     };
     *gen_target.data_aux = mk_u8_array(128, a);

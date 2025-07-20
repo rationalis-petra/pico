@@ -114,49 +114,65 @@ String relic_i8_to_string(int8_t i8) {
     return string_u8(i8, &a);
 }
 
+String relic_f32_to_string(float32_t f32) {
+    Allocator a = get_std_current_allocator();
+    return string_f32(f32, &a);
+}
+
+String relic_f64_to_string(float64_t f64) {
+    Allocator a = get_std_current_allocator();
+    return string_f64(f64, &a);
+}
+
 void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CPrimInt cint;
+    CType argty;
     void* cfn;
     switch (prim) {
     case UInt_64:
-        cint = (CPrimInt){.prim = CLongLong, .is_signed = Unsigned};
+        argty = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
         cfn = relic_u64_to_string;
         break;
     case Int_64:
-        cint = (CPrimInt){.prim = CLongLong, .is_signed = Signed};
+        argty = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed});
         cfn = relic_i64_to_string;
         break;
     case UInt_32:
-        cint = (CPrimInt){.prim = CInt, .is_signed = Unsigned};
+        argty = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned});
         cfn = relic_u32_to_string;
         break;
     case Int_32:
-        cint = (CPrimInt){.prim = CInt, .is_signed = Signed};
+        argty = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Signed});
         cfn = relic_i32_to_string;
         break;
     case UInt_16:
-        cint = (CPrimInt){.prim = CShort, .is_signed = Unsigned};
+        argty = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unsigned});
         cfn = relic_u16_to_string;
         break;
     case Int_16:
-        cint = (CPrimInt){.prim = CShort, .is_signed = Signed};
+        argty = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
         cfn = relic_i16_to_string;
         break;
     case UInt_8:
-        cint = (CPrimInt){.prim = CChar, .is_signed = Unsigned};
+        argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
         cfn = relic_u8_to_string;
         break;
     case Int_8:
-        cint = (CPrimInt){.prim = CChar, .is_signed = Signed};
+        argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Signed});
         cfn = relic_i8_to_string;
+        break;
+    case Float_32:
+        argty = (CType){.sort = CSFloat};
+        cfn = relic_f32_to_string;
+        break;
+    case Float_64:
+        argty = (CType){.sort = CSDouble};
+        cfn = relic_f64_to_string;
         break;
     default:
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
     }
 
-    CType c_type = mk_fn_ctype(a, 1,
-                               "num", mk_primint_ctype(cint),
-                               mk_string_ctype(a));
+    CType c_type = mk_fn_ctype(a, 1, "num", argty, mk_string_ctype(a));
 
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 
@@ -349,6 +365,47 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     if (r.type == Err) panic(r.error_message);
 }
 
+void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, a),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("core")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, get_package(num), NULL, a);
+    delete_module_header(header);
+    Symbol sym;
+
+    PiType* typep;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(point.error_message);
+    }
+
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
+    Segments prepped;
+
+    typep = mk_proc_type(a, 1, mk_prim_type(a, prim), mk_string_type(a));
+    build_to_string_fn(typep, prim, ass, a, &point);
+    sym = string_to_symbol(mv_string("to-string"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    sdelete_u8_array(fn_segments.data);
+
+    Result r = add_module_def(num, string_to_symbol(name), module);
+    if (r.type == Err) panic(r.error_message);
+}
+
 void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -376,6 +433,9 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
     add_integral_module(mv_string("i16"), sz_16, true, ass, module, a);
     add_integral_module(mv_string("i32"), sz_32, true, ass, module, a);
     add_integral_module(mv_string("i64"), sz_64, true, ass, module, a);
+
+    add_float_module(mv_string("f32"), Float_32, ass, module, a);
+    add_float_module(mv_string("f64"), Float_64, ass, module, a);
 
     add_module(string_to_symbol(mv_string("num")), module, base);
 }

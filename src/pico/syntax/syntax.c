@@ -30,8 +30,13 @@ Syntax* mk_lit_typed_int_syn(const int64_t value, PrimType prim, Allocator* a) {
     return out;
 }
 
-Document* pretty_syntax(Syntax* syntax, Allocator* a) {
+Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     Document* out = NULL;
+    DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
+    DocStyle field_style = scolour(colour(237, 218, 50), dstyle);
+    DocStyle var_style = scolour(colour(212, 130, 42), dstyle);
+    //DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
+
     switch (syntax->type) {
     case SLitUntypedIntegral: {
     case SLitTypedIntegral: 
@@ -80,7 +85,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SProcedure: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_str_doc((mk_string("proc", a)), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mv_str_doc((mk_string("proc", a)), a), a), &nodes);
 
         if (syntax->procedure.implicits.len != 0) {
             PtrArray impl_nodes = mk_ptr_array(syntax->procedure.implicits.len, a);
@@ -96,9 +101,9 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             Document* arg = mk_str_doc(*symbol_to_string(syntax->procedure.args.data[i].key), a);
             push_ptr(mv_nest_doc(2, arg, a), &arg_nodes);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_style_doc(var_style, mv_sep_doc(arg_nodes, a), a), a), &nodes);
 
-        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->procedure.body, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->procedure.body, a), a), &nodes);
         out = mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
         break;
     }
@@ -110,7 +115,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(arg, &nodes);
         }
         push_ptr(mv_str_doc((mk_string("]", a)), a), &nodes);
-        push_ptr(pretty_syntax(syntax->all.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->all.body, a), &nodes);
         push_ptr(mv_str_doc((mk_string(")", a)), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -118,17 +123,17 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SMacro: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mv_str_doc((mk_string("macro", a)), a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->transformer, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->transformer, a), a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SApplication: {
-        Document* head = pretty_syntax(syntax->application.function, a);
+        Document* head = pretty_syntax_internal(syntax->application.function, a);
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(head, &nodes);
         PtrArray args = mk_ptr_array(syntax->application.args.len, a);
         for (size_t i = 0; i < syntax->application.args.len; i++) {
-            Document* node = pretty_syntax(syntax->application.args.data[i], a);
+            Document* node = pretty_syntax_internal(syntax->application.args.data[i], a);
             push_ptr(node, &args);
         }
         push_ptr(mv_nest_doc(2, mv_sep_doc(args, a), a), &nodes);
@@ -136,20 +141,20 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         break;
     }
     case SAllApplication: {
-        Document* head = pretty_syntax(syntax->all_application.function, a);
+        Document* head = pretty_syntax_internal(syntax->all_application.function, a);
         bool print_types = syntax->all_application.types.len != 0;
         PtrArray nodes = mk_ptr_array((print_types ? 3 : 1) + syntax->all_application.types.len + syntax->all_application.args.len, a);
         push_ptr(head, &nodes);
 
         if (print_types) push_ptr(mk_str_doc(mv_string("{"), a), &nodes);
         for (size_t i = 0; i < syntax->all_application.types.len; i++) {
-            Document* node = pretty_syntax(syntax->all_application.types.data[i], a);
+            Document* node = pretty_syntax_internal(syntax->all_application.types.data[i], a);
             push_ptr(node, &nodes);
         }
         if (print_types) push_ptr(mk_str_doc(mv_string("}"), a), &nodes);
 
         for (size_t i = 0; i < syntax->all_application.args.len; i++) {
-            Document* node = pretty_syntax(syntax->all_application.args.data[i], a);
+            Document* node = pretty_syntax_internal(syntax->all_application.args.data[i], a);
             push_ptr(node, &nodes);
         }
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
@@ -158,7 +163,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SConstructor: {
         PtrArray nodes = mk_ptr_array(3, a);
         if (syntax->constructor.enum_type) {
-            push_ptr(pretty_syntax(syntax->constructor.enum_type, a), &nodes);
+            push_ptr(pretty_syntax_internal(syntax->constructor.enum_type, a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(":"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &nodes);
@@ -170,14 +175,14 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray ctor_parts = mk_ptr_array(3, a);
 
         if (syntax->variant.enum_type) {
-            push_ptr(pretty_syntax(syntax->variant.enum_type, a), &ctor_parts);
+            push_ptr(pretty_syntax_internal(syntax->variant.enum_type, a), &ctor_parts);
         }
         push_ptr(mk_str_doc(mv_string(":") , a), &ctor_parts);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->variant.tagname), a), &ctor_parts);
         push_ptr(mv_cat_doc(ctor_parts, a), &nodes);
 
         for (size_t i = 0; i < syntax->variant.args.len; i++) {
-            push_ptr(pretty_syntax(syntax->variant.args.data[i], a), &nodes);
+            push_ptr(pretty_syntax_internal(syntax->variant.args.data[i], a), &nodes);
         }
         
         if (syntax->variant.args.len > 0) {
@@ -192,7 +197,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(syntax->match.clauses.len + 3, a);
 
         push_ptr(mk_str_doc(mv_string("(match"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->match.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->match.val, a), &nodes);
 
         for (size_t i = 0; i < syntax->match.clauses.len; i++) {
             SynClause* clause = syntax->match.clauses.data[i];
@@ -210,7 +215,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("]"), a), &ptn_nodes);
 
             push_ptr(mv_sep_doc(ptn_nodes, a), &clause_nodes);
-            push_ptr(pretty_syntax(clause->body, a), &clause_nodes);
+            push_ptr(pretty_syntax_internal(clause->body, a), &clause_nodes);
             push_ptr(mk_str_doc(mv_string(")"), a), &clause_nodes);
 
             push_ptr(mv_cat_doc(clause_nodes, a), &nodes);
@@ -222,35 +227,24 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax->structure.fields.len, a);
-        push_ptr(mv_str_doc(mk_string("(struct", a), a), &nodes);
-
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("struct", a), a), &nodes);
 
         for (size_t i = 0; i < syntax->structure.fields.len; i++) {
-            PtrArray field_nodes = mk_ptr_array(4, a);
-            Document* temp;
-            temp = mk_str_doc(mv_string("[."), a);
-            push_ptr(temp, &field_nodes);
+            PtrArray field_nodes = mk_ptr_array(2, a);
 
-            temp = mk_str_doc(*symbol_to_string(syntax->structure.fields.data[i].key), a);
-            push_ptr(temp, &field_nodes);
+            push_ptr(mv_style_doc(field_style, mk_str_doc(*symbol_to_string(syntax->structure.fields.data[i].key), a), a), &field_nodes);
+            push_ptr(pretty_syntax_internal(syntax->structure.fields.data[i].val, a), &field_nodes);
 
-            temp = pretty_syntax(syntax->structure.fields.data[i].val, a);
-            push_ptr(temp, &field_nodes);
-
-            temp = mk_str_doc(mv_string("]"), a);
-            push_ptr(temp, &field_nodes);
-
-            Document* fdoc = mv_sep_doc(field_nodes, a);
+            Document* fdoc = mv_nest_doc(2, mv_group_doc(mk_paren_doc("[.", "]", mv_sep_doc(field_nodes, a), a), a), a);
             push_ptr(fdoc, &nodes);
         }
-        push_ptr(mv_str_doc(mk_string(")", a), a), &nodes);
-        out = mv_sep_doc(nodes, a);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SProjector: {
         PtrArray nodes = mk_ptr_array(3, a);
 
-        push_ptr(pretty_syntax(syntax->projector.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->projector.val, a), &nodes);
         push_ptr(mk_str_doc(mv_string("."), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->projector.field), a), &nodes);
         out = mv_sep_doc(nodes, a);
@@ -277,7 +271,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
                 if (implicits.data[i].val) {
                     PtrArray anodes = mk_ptr_array(2, a);
                     push_ptr(mk_str_doc(*symbol_to_string(implicits.data[i].key), a), &anodes);
-                    push_ptr(pretty_syntax(implicits.data[i].val, a), &anodes);
+                    push_ptr(pretty_syntax_internal(implicits.data[i].val, a), &anodes);
                     push_ptr(mk_paren_doc("(", ")", mv_sep_doc(anodes, a), a), &inodes);
                 } else {
                     push_ptr(mk_str_doc(*symbol_to_string(implicits.data[i].key), a), &inodes);
@@ -286,12 +280,12 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(inodes, a), a), &nodes);
         }
 
-        push_ptr(pretty_syntax(syntax->instance.constraint, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->instance.constraint, a), &nodes);
 
         for (size_t i = 0; i < syntax->instance.fields.len; i++) {
             PtrArray fnodes = mk_ptr_array(2, a);
             push_ptr(mk_str_doc(*symbol_to_string(syntax->instance.fields.data[i].key), a), &fnodes);
-            push_ptr(pretty_syntax(syntax->instance.fields.data[i].val, a), &fnodes);
+            push_ptr(pretty_syntax_internal(syntax->instance.fields.data[i].val, a), &fnodes);
             push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
         }
 
@@ -302,7 +296,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(3, a);
 
         push_ptr(mk_str_doc(mv_string("(dynamic "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->dynamic, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->dynamic, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_cat_doc(nodes, a);
         break;
@@ -310,7 +304,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SDynamicUse: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("use "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->use, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->use, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -323,12 +317,12 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             PtrArray let_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
             push_ptr(mk_str_doc(*symbol_to_string(name), a), &let_nodes);
-            push_ptr(pretty_syntax(expr, a), &nodes);
+            push_ptr(pretty_syntax_internal(expr, a), &nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
             push_ptr(mv_sep_doc(let_nodes, a), &nodes);
         }
-        push_ptr(pretty_syntax(syntax->let_expr.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->let_expr.body, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -341,13 +335,13 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             DynBinding* bind = syntax->dyn_let_expr.bindings.data[i];
             PtrArray let_nodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
-            push_ptr(pretty_syntax(bind->var, a), &let_nodes);
-            push_ptr(pretty_syntax(bind->expr, a), &let_nodes);
+            push_ptr(pretty_syntax_internal(bind->var, a), &let_nodes);
+            push_ptr(pretty_syntax_internal(bind->expr, a), &let_nodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
             push_ptr(mv_sep_doc(let_nodes, a), &nodes);
         }
-        push_ptr(pretty_syntax(syntax->let_expr.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->let_expr.body, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -355,69 +349,76 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
     case SIf: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(pretty_syntax(syntax->if_expr.condition, a), &nodes);
-        push_ptr(pretty_syntax(syntax->if_expr.true_branch, a), &nodes);
-        push_ptr(pretty_syntax(syntax->if_expr.false_branch, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->if_expr.condition, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->if_expr.true_branch, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->if_expr.false_branch, a), &nodes);
         out = mk_paren_doc("(if ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
 
     case SIs: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->is.val, a), &nodes);
-        push_ptr(pretty_syntax(syntax->is.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->is.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->is.type, a), &nodes);
         out = mk_paren_doc("(is ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SInTo: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->into.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->into.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->into.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->into.val, a), &nodes);
         out = mk_paren_doc("(into ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SOutOf: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->out_of.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->out_of.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->out_of.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->out_of.val, a), &nodes);
         out = mk_paren_doc("(out-of ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SName: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->name.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->name.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->name.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->name.val, a), &nodes);
         out = mk_paren_doc("(name ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SUnName: {
-        out = mk_paren_doc("(unname ", ")", pretty_syntax(syntax->unname, a), a);
+        out = mk_paren_doc("(unname ", ")", pretty_syntax_internal(syntax->unname, a), a);
         break;
     }
     case SWiden: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->widen.val, a), &nodes);
-        push_ptr(pretty_syntax(syntax->widen.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->widen.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->widen.type, a), &nodes);
         out = mk_paren_doc("(widen ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
     case SNarrow: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(pretty_syntax(syntax->narrow.val, a), &nodes);
-        push_ptr(pretty_syntax(syntax->narrow.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->narrow.val, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->narrow.type, a), &nodes);
         out = mk_paren_doc("(narrow ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
     case SDynAlloc: {
-        out = mk_paren_doc("(dyn-alloc ", ")", pretty_syntax(syntax->size, a), a);
+        out = mk_paren_doc("(dyn-alloc ", ")", pretty_syntax_internal(syntax->size, a), a);
         break;
     }
     case SSizeOf: {
-        out = mk_paren_doc("(size-of ", ")", pretty_syntax(syntax->size, a), a);
+        out = mk_paren_doc("(size-of ", ")", pretty_syntax_internal(syntax->size, a), a);
         break;
     }
     case SAlignOf: {
-        out = mk_paren_doc("(align-of ", ")", pretty_syntax(syntax->size, a), a);
+        out = mk_paren_doc("(align-of ", ")", pretty_syntax_internal(syntax->size, a), a);
+        break;
+    }
+    case SOffsetOf: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(*symbol_to_string(syntax->offset_of.field), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->offset_of.body, a), &nodes);
+        out = mk_paren_doc("(offset-of ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SModule: {
@@ -427,7 +428,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SLabels: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("labels"), a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_syntax(syntax->labels.entry, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->labels.entry, a), a), &nodes);
 
         PtrArray label_terms = mk_ptr_array(syntax->labels.terms.len, a);
         for (size_t i = 0; i < syntax->labels.terms.len; i++) {
@@ -445,7 +446,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             if (arg_nodes.len > 0) {
                 push_ptr(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), a), &label_nodes);
             }
-            push_ptr(mv_nest_doc(2, pretty_syntax(branch->body, a), a), &label_nodes);
+            push_ptr(mv_nest_doc(2, pretty_syntax_internal(branch->body, a), a), &label_nodes);
 
             push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(label_nodes, a), a), &label_terms);
         }
@@ -460,7 +461,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 
         PtrArray args = mk_ptr_array(syntax->go_to.args.len, a);
         for (size_t i = 0; i < syntax->go_to.args.len; i++) {
-            push_ptr(mv_nest_doc(2, pretty_syntax(syntax->go_to.args.data[i], a), a), &args);
+            push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->go_to.args.data[i], a), a), &args);
         }
         if (args.len > 0) {
             push_ptr(mv_sep_doc(args, a), &nodes);
@@ -475,14 +476,14 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.point_sym), a), &nodes);
         push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
 
-        push_ptr(pretty_syntax(syntax->with_reset.expr, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->with_reset.expr, a), &nodes);
 
         push_ptr(mk_str_doc(mv_string("[handler"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.in_sym), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->with_reset.cont_sym), a), &nodes);
         push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
 
-        push_ptr(pretty_syntax(syntax->with_reset.handler, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->with_reset.handler, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -490,29 +491,29 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SResetTo: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("(reset-to "), a), &nodes);
-        push_ptr(pretty_syntax(syntax->reset_to.point, a), &nodes);
-        push_ptr(pretty_syntax(syntax->reset_to.arg, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reset_to.point, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reset_to.arg, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
     case SSequence: {
-        PtrArray nodes = mk_ptr_array(2 + syntax->sequence.elements.len, a);
+        PtrArray nodes = mk_ptr_array(1 + syntax->sequence.elements.len, a);
+        push_ptr(mv_style_doc(former_style, mv_cstr_doc("seq", a), a), &nodes);
         for (size_t i = 0; i < syntax->sequence.elements.len; i++) {
             SeqElt* elt = syntax->sequence.elements.data[i];
             if (elt->is_binding) {
-                PtrArray let_nodes = mk_ptr_array(4, a);
-                push_ptr(mk_str_doc(mv_string("[let!"), a), &let_nodes);
-                push_ptr(mk_str_doc(*symbol_to_string(elt->symbol), a), &let_nodes);
-                push_ptr(pretty_syntax(elt->expr, a), &let_nodes);
-                push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
+                PtrArray let_nodes = mk_ptr_array(3, a);
+                push_ptr(mv_style_doc(former_style, mv_cstr_doc("let!", a), a), &let_nodes);
+                push_ptr(mv_style_doc(var_style, mk_str_doc(*symbol_to_string(elt->symbol), a), a), &let_nodes);
+                push_ptr(pretty_syntax_internal(elt->expr, a), &let_nodes);
 
-                push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+                push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), a), a), &nodes);
             } else {
-                push_ptr(pretty_syntax(elt->expr, a), &nodes);
+                push_ptr(pretty_syntax_internal(elt->expr, a), &nodes);
             }
         }
-        out = mk_paren_doc("(seq ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
+        out = mk_paren_doc("(", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
     case SProcType: {
@@ -520,11 +521,11 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         push_ptr(mv_str_doc(mk_string("(Proc (", a), a), &nodes);
         
         for (size_t i = 0; i < syntax->proc_type.args.len ; i++)  {
-            push_ptr(pretty_syntax(syntax->proc_type.args.data[i], a), &nodes);
+            push_ptr(pretty_syntax_internal(syntax->proc_type.args.data[i], a), &nodes);
         }
 
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->proc_type.return_type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->proc_type.return_type, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -537,7 +538,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             PtrArray fnodes = mk_ptr_array(4, a);
             push_ptr(mk_str_doc(mv_string("[."), a), &fnodes);
             push_ptr(mk_str_doc(*symbol_to_string(syntax->struct_type.fields.data[i].key), a), &fnodes);
-            push_ptr(pretty_syntax(syntax->struct_type.fields.data[i].val, a), &fnodes);
+            push_ptr(pretty_syntax_internal(syntax->struct_type.fields.data[i].val, a), &fnodes);
             push_ptr(mk_str_doc(mv_string("]"), a), &fnodes);
 
             push_ptr(mv_sep_doc(fnodes, a), &nodes);
@@ -559,7 +560,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             PtrArray* args = syntax->enum_type.variants.data[i].val;
             PtrArray anodes = mk_ptr_array(args->len, a);
             for (size_t j = 0; j < args->len; j++) {
-                push_ptr(pretty_syntax(args->data[j], a), &anodes);
+                push_ptr(pretty_syntax_internal(args->data[j], a), &anodes);
             }
 
             push_ptr(mv_sep_doc(anodes, a), &fnodes);
@@ -575,8 +576,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SResetType: {
         PtrArray nodes = mk_ptr_array(4, a) ;
         push_ptr(mv_str_doc(mk_string("(Reset ", a), a), &nodes);
-        push_ptr(pretty_syntax(syntax->reset_type.in, a), &nodes);
-        push_ptr(pretty_syntax(syntax->reset_type.out, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reset_type.in, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reset_type.out, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -584,7 +585,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case SDynamicType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("Dynamic"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->dynamic_type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->dynamic_type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -592,21 +593,21 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("Named"), a), &nodes);
         push_ptr(mk_str_doc(*symbol_to_string(syntax->named_type.name), a), &nodes);
-        push_ptr(pretty_syntax(syntax->named_type.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->named_type.body, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SDistinctType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("Distinct"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->distinct_type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->distinct_type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SOpaqueType: {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("Opaque"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->opaque_type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->opaque_type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -623,7 +624,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         for (size_t i = 0; i < syntax->trait.fields.len ; i++)  {
             PtrArray fnodes = mk_ptr_array(2, a);
             push_ptr(mk_str_doc(*symbol_to_string(syntax->trait.fields.data[i].key), a), &fnodes);
-            push_ptr(pretty_syntax(syntax->trait.fields.data[i].val, a), &fnodes);
+            push_ptr(pretty_syntax_internal(syntax->trait.fields.data[i].val, a), &fnodes);
             push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(fnodes, a), a), &nodes);
         }
 
@@ -641,7 +642,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         push_ptr(mv_sep_doc(arg_nodes, a), &nodes);
         push_ptr(mk_str_doc(mv_string("]"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->bind_type.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->bind_type.body, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
@@ -661,7 +662,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
 
-        push_ptr(pretty_syntax(syntax->bind_type.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->bind_type.body, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -669,7 +670,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
         PtrArray nodes = mk_ptr_array(2, a) ;
         push_ptr(mk_str_doc(mv_string("C-Type"), a), &nodes);
 
-        push_ptr(pretty_syntax(syntax->c_type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->c_type, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -689,8 +690,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("reinterpret-relic"), a), &nodes);
         }
 
-        push_ptr(pretty_syntax(syntax->reinterpret.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->reinterpret.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reinterpret.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->reinterpret.body, a), &nodes);
 
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
@@ -703,8 +704,8 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("convert-relic"), a), &nodes);
         }
 
-        push_ptr(pretty_syntax(syntax->convert.type, a), &nodes);
-        push_ptr(pretty_syntax(syntax->convert.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->convert.type, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->convert.body, a), &nodes);
 
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
@@ -712,7 +713,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     case STypeOf: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("type-of"), a), &nodes);
-        push_ptr(pretty_syntax(syntax->type_of, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->type_of, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -731,10 +732,15 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     }
 
     if (out == NULL)  {
-        panic(mv_string("Internal Error in pretty_syntax: Unknown syntax Type"));
+        panic(mv_string("Internal Error in pretty_syntax_internal: Unknown syntax Type"));
     }
     out = mv_group_doc(out, a);
     return out;
+}
+
+Document* pretty_syntax(Syntax* syntax, Allocator* a) {
+    DocStyle text_style = scolour(colour(195, 195, 209), dstyle);
+    return mv_style_doc(text_style, pretty_syntax_internal(syntax, a), a);
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {

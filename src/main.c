@@ -29,7 +29,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.0.6";
+static const char* version = "0.0.7";
 
 typedef struct {
     bool debug_print;
@@ -46,8 +46,8 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     reset_bytecount(cin);
 
     Target gen_target = {
-        .target = mk_assembler(exec),
-        .code_aux = mk_assembler(exec),
+        .target = mk_assembler(current_cpu_feature_flags(), exec),
+        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
@@ -210,11 +210,15 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
+    // Init terminal first, as other initializers may panic (and therefore write
+    // to stdout)
+    init_terminal(stdalloc);
+
+    // Initialization order here is not important
     init_ctypes();
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
-    init_terminal(stdalloc);
     if (init_window_system(stdalloc)) {
         write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
@@ -225,8 +229,8 @@ int main(int argc, char** argv) {
     }
     thread_init_dynamic_vars();
 
-    Assembler* ass = mk_assembler(&exalloc);
-    Assembler* ass_base = mk_assembler(&exalloc);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
+    Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = base_package(ass_base, stdalloc, stdalloc);
     delete_assembler(ass_base);
 

@@ -37,13 +37,20 @@ CType mk_range_ctype(Allocator* a) {
                            "end", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
 }
 
+CType mk_capture_ctype(Allocator* a) {
+    return mk_struct_ctype(a, 2,
+                           "type", mk_voidptr_ctype(a),
+                           "value", mk_voidptr_ctype(a));
+}
+
 CType mk_atom_ctype(Allocator* a) {
-    CType atom_union = mk_union_ctype(a, 5,
+    CType atom_union = mk_union_ctype(a, 6,
                                       "bool", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
                                       "int_64", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                       "double", (CType){.sort = CSDouble},
                                       "Symbol", mk_symbol_ctype(a),
-                                      "String", mk_string_ctype(a));
+                                      "String", mk_string_ctype(a),
+                                      "Capture", mk_capture_ctype(a));
     return mk_struct_ctype(a, 2,
                            "tag", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                            "term", atom_union);
@@ -183,6 +190,10 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("quote"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FCapture;
+    sym = string_to_symbol(mv_string("capture"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     // ------------------------------------------------------------------------
     // Types 
     // ------------------------------------------------------------------------
@@ -203,17 +214,18 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         e = get_def(sym, module);
         symbol_type = e->value;
 
-        PiType* atom_type = mk_enum_type(a, 5,
-                                        "bool", 1, mk_prim_type(a, Bool),
-                                        "integral", 1, mk_prim_type(a, Int_64),
-                                        "floating", 1, mk_prim_type(a, Float_64),
-                                        "symbol", 1,  copy_pi_type_p(symbol_type, a),
-                                        "string", 1, mk_string_type(a));
+        PiType* atom_type = mk_enum_type(a, 6,
+                                         "bool", 1, mk_prim_type(a, Bool),
+                                         "integral", 1, mk_prim_type(a, Int_64),
+                                         "floating", 1, mk_prim_type(a, Float_64),
+                                         "symbol", 1,  copy_pi_type_p(symbol_type, a),
+                                         "string", 1, mk_string_type(a),
+                                         "capture", 2, mk_prim_type(a, Address), mk_prim_type(a, Address));
         typep = atom_type;
         sym = string_to_symbol(mv_string("Atom"));
         add_def(module, sym, type, &typep, null_segments, NULL);
 
-        PiType* hint_type = mk_enum_type(a, 4, "none", 0, "expr", 0, "special", 0, "implicit", 0);
+        PiType* hint_type = mk_enum_type(a, 3, "expr", 0, "special", 0, "implicit", 0);
         typep = hint_type;
         sym = string_to_symbol(mv_string("Hint"));
         add_def(module, sym, type, &typep, null_segments, NULL);

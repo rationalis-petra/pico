@@ -8,13 +8,18 @@ ARRAY_IMPL(void*, ptr, Ptr)
 ARRAY_IMPL(uint8_t, u8, U8)
 
 void add_u8_chunk(uint8_t* chunk, size_t memsize, U8Array* array) {
-    // TODO (BUG) assumes sizeof(uint_t) == 1.
+    // TODO (BUG) assumes sizeof(uint8_t) == 1.
     if (array->len + memsize < array->size) {
         memcpy(array->data + array->len, chunk, memsize);
         array->len += memsize;
     } else {
         // TODO (BUG): realloc - must account for failure (return NULL)
-        array->data = mem_realloc(array->data, memsize + array->size, &array->gpa);
+        size_t new_size = memsize + array->size < 2 * memsize 
+            ? 2 * memsize 
+            : memsize + array->size;
+        array->data = mem_realloc(array->data, new_size, &array->gpa);
+        array->size = new_size;
+
         memcpy(array->data + array->len, chunk, memsize);
         array->len += memsize;
     }

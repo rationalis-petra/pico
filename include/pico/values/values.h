@@ -90,6 +90,7 @@ typedef enum TermFormer {
     FDynAlloc,
     FSizeOf,
     FAlignOf,
+    FOffsetOf,
 
     // Type formers
     FProcType,
@@ -120,6 +121,7 @@ typedef enum TermFormer {
     FTypeOf,
     FDescribe,
     FQuote,
+    FCapture,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

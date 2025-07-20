@@ -105,7 +105,7 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 void delete_module(Module* module);
 
 // If we are going to define the result of evaluating (target), then it must be prepped
-// so that the code and data segments are owned by the module
+// so that the code and data segments are owned by the module.
 // This needs to be done BEFORE evaluation
 Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
 

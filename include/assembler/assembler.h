@@ -8,8 +8,14 @@
 
 /* The assembler writes encoded instructions directly to a byte-array. */
 
+typedef enum {
+    SSE = 0b1,
+} CPUFeatureFlags;
+
+CPUFeatureFlags current_cpu_feature_flags();
+
 typedef struct Assembler Assembler; 
-struct Assembler* mk_assembler(Allocator* a);
+struct Assembler* mk_assembler(CPUFeatureFlags flags, Allocator* a);
 void delete_assembler(Assembler* assembler);
 void clear_assembler(Assembler* assembler);
 
@@ -42,9 +48,11 @@ typedef enum {
     SHR, // Right shift
 
     // ------------------
-    //  Memory
+    //  Memory & Registers
     // ------------------
     Mov,   // p 769.
+    MovSS, // p 857.
+    MovSD, // p 848.
     LEA,
 
     // ------------------
@@ -133,8 +141,25 @@ typedef enum {
     R14 = 0b1110,
     R15 = 0b1111,
 
+    XMM0  = 0b10000,
+    XMM1  = 0b10001,
+    XMM2  = 0b10010,
+    XMM3  = 0b10011,
+    XMM4  = 0b10100,
+    XMM5  = 0b10101,
+    XMM6  = 0b10110,
+    XMM7  = 0b10111,
+    XMM8  = 0b11000,
+    XMM9  = 0b11001,
+    XMM10 = 0b11010,
+    XMM11 = 0b11011,
+    XMM12 = 0b11100,
+    XMM13 = 0b11101,
+    XMM14 = 0b11110,
+    XMM15 = 0b11111,
+
     // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2
-    RIP = 0b10101,
+    RIP = 0b100101,
 } Regname;
 
 typedef enum {

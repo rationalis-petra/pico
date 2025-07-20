@@ -22,17 +22,17 @@
 
 
 #include "platform/memory/std_allocator.h"
-#include "platform/memory/executable.h"
 
 #include "data/string.h"
 #include "data/stream.h"
 
-#include "assembler/assembler.h"
-#include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
 
 #include "test/command_line_opts.h"
 #include "test_pico/pico.h"
+#include "test_assembler/test_assembler.h"
+
+void all_suites(TestLog *log, Allocator *a);
 
 int main(int argc, char** argv) {
     // Setup
@@ -40,24 +40,18 @@ int main(int argc, char** argv) {
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();
-    Allocator exalloc = mk_executable_allocator(stdalloc);
 
+    // Init terminal first, as other initializers may panic (and therefore write
+    // to stdout)
+    init_terminal(stdalloc);
+
+    // Initialization order here is not important
     init_ctypes();
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
-    init_terminal(stdalloc);
     thread_init_dynamic_vars();
 
-    Assembler* ass = mk_assembler(&exalloc);
-    Assembler* ass_base = mk_assembler(&exalloc);
-    Package* base = base_package(ass_base, stdalloc, stdalloc);
-    delete_assembler(ass_base);
-
-    Module* module = get_module(string_to_symbol(mv_string("user")), base);
-
-    set_std_current_module(module);
-    set_current_package(base);
     set_std_istream(cin);
     set_std_ostream(cout);
 
@@ -100,10 +94,7 @@ int main(int argc, char** argv) {
     int out = 1;
     switch (command.type) {
     case CAll: {
-        if (suite_start(log, mv_string("pico"))) {
-            run_pico_tests(log, stdalloc);
-            suite_end(log);
-        }
+        all_suites(log, stdalloc);
         out = summarize_tests(log, stdalloc);
         break;
     }
@@ -132,13 +123,21 @@ int main(int argc, char** argv) {
     delete_formatted_ostream(cos, stdalloc);
 
     // Cleanup
-    delete_package(base);
-    delete_assembler(ass);
-    release_executable_allocator(exalloc);
-
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
 
     return out;
+}
+
+void all_suites(TestLog *log, Allocator *a) {
+    if (suite_start(log, mv_string("pico"))) {
+        run_pico_tests(log, a);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("assembler"))) {
+        run_assembler_tests(log, a);
+        suite_end(log);
+    }
 }

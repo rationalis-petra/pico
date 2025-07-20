@@ -9,7 +9,6 @@
 
 #include "pico/values/values.h"
 
-
 // The global symbol table
 static StrU64AMap symbol_table;
 static PtrArray symbol_names;
@@ -339,6 +338,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FAlignOf:
         out = mk_str_doc(mv_string("::align-of"), a);
         break;
+    case FOffsetOf:
+        out = mk_str_doc(mv_string("::offset-of"), a);
+        break;
 
         // Type formers
     case FStructType:
@@ -398,6 +400,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FQuote:
         out = mk_str_doc(mv_string("::quote"), a);
+        break;
+    case FCapture:
+        out = mk_str_doc(mv_string("::capture"), a);
         break;
     }
 

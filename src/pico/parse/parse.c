@@ -194,7 +194,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 .type = RawBranch,
                 .range.start = terms.data[0].range.start,
                 .range.end = current.range.end,
-                .branch.hint = HNone,
+                .branch.hint = HExpression,
                 .branch.nodes = children,
             };
         };
@@ -356,7 +356,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
                 .type = RawBranch,
                 .range.start = current.range.start,
                 .range.end = terms.data[i+1].range.end,
-                .branch.hint = HNone,
+                .branch.hint = HExpression,
                 .branch.nodes = children,
             };
         };
@@ -439,10 +439,11 @@ ParseResult parse_number(IStream* is, Allocator* a) {
             rhs_result += tens * rhs.data[i-1];
             tens *= 10;
         }
-        lhs_result *= is_positive ? 1 : -1;
         double dlhs = (double)lhs_result;
         double drhs = (double)rhs_result;
         drhs = drhs / powl(10, rhs.len);
+        double total = dlhs + drhs; 
+        total *= is_positive ? 1 : -1;
 
         return (ParseResult) {
             .type = ParseSuccess,
@@ -450,7 +451,7 @@ ParseResult parse_number(IStream* is, Allocator* a) {
             .result.range.start = start,
             .result.range.end = bytecount(is),
             .result.atom.type = AFloating,
-            .result.atom.float_64 = dlhs + drhs,
+            .result.atom.float_64 = total,
         };
     } else {
         int64_t int_result = 0;
@@ -532,7 +533,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
             .type = RawBranch,
             .range.start = start,
             .range.end = bytecount(is),
-            .branch.hint = HNone,
+            .branch.hint = HExpression,
             .branch.nodes = nodes,
         };
     }

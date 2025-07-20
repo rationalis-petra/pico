@@ -36,8 +36,7 @@ void add_list_module(Module *data, Allocator *a) {
 
     // TODO (FEAT): add/implement the following:
     //  - list-free or delete-list
-    //  - map
-    //  - each
+    //  - push/pop (using alter)
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
@@ -86,19 +85,19 @@ void add_list_module(Module *data, Allocator *a) {
         "        ar (get-range (elt 0 terms))\n"
         "\n"
         "        local-sym (Syntax:atom ar (Atom:symbol (mk-unique-symbol \"local-list\")))\n"
-        "        eset-sym (Syntax:atom ar (:symbol (mk-symbol \"eset\")))\n"
+        "        eset-sym (capture eset)\n"
         "\n"
         "        eset-elt-terms (mk-list {Syntax} 4 4)\n"
         "\n"
         "        ]\n"
         "\n"
-        "  (eset 0 (Syntax:atom ar (:symbol (mk-symbol \"mk-list\"))) arr-terms)\n"
+        "  (eset 0 (capture mk-list) arr-terms)\n"
         "  (eset 1 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
         "  (eset 2 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
         "\n"
         "  (eset 0 (Syntax:atom ar (:symbol (mk-symbol \"let!\"))) let-terms)\n"
         "  (eset 1 local-sym let-terms)\n"
-        "  (eset 2 (Syntax:node ar :none arr-terms) let-terms)\n"
+        "  (eset 2 (Syntax:node ar :expr arr-terms) let-terms)\n"
         "\n"
         "  (eset 0 (Syntax:atom ar (:symbol (mk-symbol \"seq\"))) new-terms)\n"
         "  (eset 1 (Syntax:node ar :special let-terms) new-terms)\n"
@@ -113,7 +112,7 @@ void add_list_module(Module *data, Allocator *a) {
         "      (eset 2 (elt i terms) eset-elt-terms)\n"
         "      (eset 3 local-sym eset-elt-terms)\n"
         "\n"
-        "      (eset (u64.+ 1 i) (Syntax:node elt-range :none eset-elt-terms) new-terms)\n"
+        "      (eset (u64.+ 1 i) (Syntax:node elt-range :expr eset-elt-terms) new-terms)\n"
         "\n"
         "      (if (u64.= i terms.len) (go-to end) (go-to loop (u64.+ i 1)))]\n"
         "    [end :unit])\n"

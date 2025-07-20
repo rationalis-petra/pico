@@ -74,6 +74,7 @@ typedef enum {
     SDynAlloc,
     SSizeOf,
     SAlignOf,
+    SOffsetOf,
     SModule,
 
     // Types & Type formers
@@ -103,6 +104,7 @@ typedef enum {
     STypeOf,
     SDescribe,
     SQuote,
+    SCapture,
 } Syntax_t;
 
 
@@ -294,6 +296,11 @@ typedef struct {
 } SynName;
 
 typedef struct {
+    Symbol field;
+    Syntax* body;
+} SynOffsetOf;
+
+typedef struct {
     PtrArray args;
     Syntax* return_type;
 } SynProcType;
@@ -322,6 +329,11 @@ typedef struct {
     Syntax* type;
     Syntax* body;
 } SynConvert;
+
+typedef struct {
+    PiType* type;
+    void* value;
+} SynCapture;
 
 struct Syntax {
     Syntax_t type;
@@ -365,6 +377,7 @@ struct Syntax {
         SynIs widen;
         SynIs narrow;
         Syntax* size;
+        SynOffsetOf offset_of;
 
         SynProcType proc_type;
         SynStructType struct_type;
@@ -382,9 +395,11 @@ struct Syntax {
         SynReinterpret reinterpret;
         SynConvert convert;
 
+        // Metaprogramming
         Syntax* type_of;
         Symbol to_describe;
         RawTree quoted;
+        SynCapture capture;
     };
     PiType* ptype;
     Range range;
