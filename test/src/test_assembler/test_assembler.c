@@ -61,6 +61,38 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("movss-xmm32-xmm32"))) { // MovSS XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x0F, 0x10, 0xC1, 0x90 };
+            build_binary_op(ass, MovSS, reg(XMM0, sz_32), reg(XMM1, sz_32), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("movss-xmm32-m32"))) { // MovSS XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x0F, 0x10, 0x54, 0x24, 0x08, 0x90 };
+            build_binary_op(ass, MovSS, reg(XMM2, sz_32), rref8(RSP, 8, sz_32), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("movss-xmm32-m32"))) { // MovSS XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF3, 0x0F, 0x11, 0x6F, 0x08, 0x90 };
+            build_binary_op(ass, MovSS, rref8(RDI, 8, sz_32), reg(XMM5, sz_32), &arena, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    // TODO: add test for XMM{n} where n >= 8
+
     delete_assembler(ass);
     release_arena_allocator(arena);
 }

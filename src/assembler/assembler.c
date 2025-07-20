@@ -70,32 +70,33 @@
  */
 
 typedef enum : uint32_t {
-    R8_Imm8    = 0b1,
-    RM8_Imm8   = 0b10,
-    RM16_Imm8  = 0b100,
-    R16_Imm16  = 0b1000,
-    RM16_Imm16 = 0b10000,
-    RM32_Imm8  = 0b100000,
-    R32_Imm32  = 0b1000000,
-    RM32_Imm32 = 0b10000000,
-    R64_Imm8   = 0b100000000,
-    R64_Imm32  = 0b1000000000,
-    R64_Imm64  = 0b10000000000,
-    RM64_Imm8  = 0b100000000000,
-    RM64_Imm32 = 0b1000000000000,
-    RM8_R8     = 0b10000000000000,
-    RM16_R16   = 0b100000000000000,
-    RM32_R32   = 0b1000000000000000,
-    RM64_R64   = 0b10000000000000000,
-    R8_RM8     = 0b100000000000000000,
-    R16_RM16   = 0b1000000000000000000,
-    R32_RM32   = 0b10000000000000000000,
-    R64_RM64   = 0b100000000000000000000,
-    XMM_XMM    = 0b1000000000000000000000,
-    XMM_M32    = 0b10000000000000000000000,
-    M32_XMM    = 0b100000000000000000000000,
-    XMM_M64    = 0b1000000000000000000000000,
-    M64_XMM    = 0b10000000000000000000000000,
+    R8_Imm8     = 0b1,
+    RM8_Imm8    = 0b10,
+    RM16_Imm8   = 0b100,
+    R16_Imm16   = 0b1000,
+    RM16_Imm16  = 0b10000,
+    RM32_Imm8   = 0b100000,
+    R32_Imm32   = 0b1000000,
+    RM32_Imm32  = 0b10000000,
+    R64_Imm8    = 0b100000000,
+    R64_Imm32   = 0b1000000000,
+    R64_Imm64   = 0b10000000000,
+    RM64_Imm8   = 0b100000000000,
+    RM64_Imm32  = 0b1000000000000,
+    RM8_R8      = 0b10000000000000,
+    RM16_R16    = 0b100000000000000,
+    RM32_R32    = 0b1000000000000000,
+    RM64_R64    = 0b10000000000000000,
+    R8_RM8      = 0b100000000000000000,
+    R16_RM16    = 0b1000000000000000000,
+    R32_RM32    = 0b10000000000000000000,
+    R64_RM64    = 0b100000000000000000000,
+    XMM32_XMM32 = 0b1000000000000000000000,
+    XMM32_M32   = 0b10000000000000000000000,
+    M32_XMM32   = 0b100000000000000000000000,
+    XMM64_XMM64 = 0b1000000000000000000000000,
+    XMM64_M64   = 0b10000000000000000000000000,
+    M64_XMM64   = 0b100000000000000000000000000,
 } BinOpType; 
 
 struct Assembler {
@@ -604,6 +605,16 @@ void add_op2(uint8_t op1, uint8_t op2, BinOpType type, uint32_t supported, BinOp
     ops[idx] = (BinOpBytes) {.b1 = op1, .b2 = op2, .b3 = 0x90, .reg_ext = 0x9};
 }
 
+void add_op3(uint8_t op1, uint8_t op2, uint8_t op3, BinOpType type, uint32_t supported, BinOpBytes* ops) {
+#ifdef DEBUG_ASSERT
+    if (!(type & supported)) {
+        panic(mv_string("Error in setup: unsupported binop type."));
+    }
+#endif
+    size_t idx = __builtin_popcount(supported & (type - 1));
+    ops[idx] = (BinOpBytes) {.b1 = op1, .b2 = op2, .b3 = op3, .reg_ext = 0x9};
+}
+
 void build_binary_opcode_tables() {
     for (size_t i = 0; i < Binary_Op_Count; i++) {
         binary_opcode_tables[i] = (BinaryOpTable){0, NULL, 0};
@@ -769,6 +780,19 @@ void build_binary_opcode_tables() {
         };
     }
 
+    {   // Move Float. Source - Intel Manual Vol 2. 857
+        static uint32_t sup = XMM32_XMM32 | M32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[3];
+        add_op3(0xF3, 0x0F, 0x10, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x10, XMM32_M32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x11, M32_XMM32, sup, ops);
+
+        binary_opcode_tables[MovSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+        };
+    }
+
     {   // Load Effective Address. Source - Intel Manual Vol 2. 705
         // Lea is much more limited in how it works - operand 1 is always a register
         //      and operand 2 is a memory location.
@@ -876,12 +900,13 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
       // XMM register?
       if (dest.reg & XMM0) {
           if (src.type == Dest_Register && (src.reg & XMM0) && src.sz == dest.sz) {
-              type = XMM_XMM;
+              if (src.sz == sz_32) type = XMM32_XMM32;
+              else if (src.sz == sz_64) type = XMM64_XMM64;
           } else if (src.type == Dest_Deref && src.sz == dest.sz) {
             if (src.sz == sz_32) {
-                type = XMM_M32;
+                type = XMM32_M32;
             } else if (src.sz == sz_64) {
-                type = XMM_M64;
+                type = XMM64_M64;
             } else {
               goto report_error;
             }
@@ -960,11 +985,11 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
         } else if (src.type == Dest_Register) {
             if (src.sz == dest.sz) {
                 if (src.reg & XMM0) {
-                    if (src.type == Dest_Deref && src.sz == dest.sz) {
+                    if (src.sz == dest.sz) {
                         if (src.sz == sz_32) {
-                            type = M32_XMM;
+                            type = M32_XMM32;
                         } else if (src.sz == sz_64) {
-                            type = M64_XMM;
+                            type = M64_XMM64;
                         } else {
                             goto report_error;
                         }
@@ -1774,7 +1799,7 @@ void init_asm() {
 
 // Utility & Pretty
 Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
-    char* names[17][4] = {
+    char* names[33][4] = {
         {"AL", "AX", "EAX", "RAX"},
         {"CL", "CX", "ECX", "RCX"},
         {"DL", "DX", "EDX", "RDX"},
@@ -1792,6 +1817,23 @@ Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
         {"R13b", "R13w", "R13d", "R13"},
         {"R14b", "R14w", "R14d", "R14"},
         {"R15b", "R15w", "R15d", "R15"},
+
+        {"XMM0b", "XMM0w", "XMM0d", "XMM0"},
+        {"XMM1b", "XMM1w", "XMM1d", "XMM1"},
+        {"XMM2b", "XMM2w", "XMM2d", "XMM2"},
+        {"XMM3b", "XMM3w", "XMM3d", "XMM3"},
+        {"XMM4b", "XMM4w", "XMM4d", "XMM4"},
+        {"XMM5b", "XMM5w", "XMM5d", "XMM5"},
+        {"XMM6b", "XMM6w", "XMM6d", "XMM6"},
+        {"XMM7b", "XMM7w", "XMM7d", "XMM7"},
+        {"XMM8b", "XMM8w", "XMM8d", "XMM8"},
+        {"XMM9b", "XMM9w", "XMM9d", "XMM9"},
+        {"XMM10b", "XMM10w", "XMM10d", "XMM10"},
+        {"XMM11b", "XMM11w", "XMM11d", "XMM11"},
+        {"XMM12b", "XMM12w", "XMM12d", "XMM12"},
+        {"XMM13b", "XMM13w", "XMM13d", "XMM13"},
+        {"XMM14b", "XMM14w", "XMM14d", "XMM14"},
+        {"XMM15b", "XMM15w", "XMM15d", "XMM15"},
 
         /* // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2 */
         // Note that I believe the non-64 bit 'IP' are invalid
