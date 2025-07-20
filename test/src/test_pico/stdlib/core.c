@@ -144,6 +144,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     run_toplevel("(def MAS Struct [.x I8] [.y I16] [.z I32])", module, log, a) ;
 
     typedef struct {
+        int8_t x;
+        int8_t y;
+    } SmallStruct;
+    run_toplevel("(def SML Struct [.x I8] [.y I8])", module, log, a) ;
+
+    typedef struct {
         int32_t x;
         int16_t y;
         int8_t z;
@@ -182,6 +188,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     if (test_start(log, mv_string("struct-packed-aligned"))) {
         AlignedStruct expected = (AlignedStruct) {.x = 1527, .y = -5, .z = 2};
         test_toplevel_eq("(struct AS [.x 1527] [.y -5] [.z 2])", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("struct-small"))) {
+        SmallStruct expected = (SmallStruct) {.x = 3, .y = -8};
+        test_toplevel_eq("(struct SML [.x 3] [.y -8])", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("project-struct-small"))) {
+        int8_t expected = 3;
+        test_toplevel_eq("(seq [let! st (struct SML [.x 3] [.y -8])] st.x)", &expected, module, log, a) ;
     }
 
     // -----------------------------------------------------

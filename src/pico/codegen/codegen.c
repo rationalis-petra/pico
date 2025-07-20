@@ -767,7 +767,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Second, generate the structure/instance object
         generate(*syn.projector.val, env, target, links, a, point);
-        size_t src_sz = pi_size_of(*source_type);
+        size_t src_sz = pi_stack_size_of(*source_type);
 
         // From this point, behaviour depends on whether we are projecting from
         // a structure or from an instance
@@ -788,7 +788,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             data_stack_shrink(env, src_sz);
         } else {
             // Pop the pointer to the instance from the stack - store in RSI
-            data_stack_shrink(env, pi_stack_align(src_sz));
+            data_stack_shrink(env, src_sz);
             build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
 
             // Now, calculate offset for field 
@@ -1925,7 +1925,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     // Justification: stack size of is extremely unlikely to be 2^63 bytes
     //  in size!
     if (diff != (int64_t)pi_stack_size_of(*syn.ptype))
-        panic(mv_string("address constraint violated!"));
+        panic(mv_string("address environment constraint violated: expected size of the stack is wrong!"));
 #endif
 }
 
