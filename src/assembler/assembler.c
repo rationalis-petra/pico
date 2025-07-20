@@ -30,11 +30,42 @@
  * | X          | 1            | Etension of the SIB index field
  * | B          | 0            | Extension of any of ModR/M,SIB or Opcode Reg
  * 
- *  Implementation Notes
- * ----------------------
+ *    Implementation Notes
+ * --------------------------------
+ * Overview
+ * ---------
+ * For details of the instruction encoding, refer to the Intel Manuals for
+ * Software developers (Intel 64 and IA-32). These can be found at
+ * https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+ * the list of all available instructions can be found in Volume 2, and
+ * instructions may reference the relevant page of this volume.
  * 
+ * Nullary Operations
+ * ------------------
  * 
+ * Unary Operations
+ * ------------------
+ *
+ * Binary Operations
+ * ------------------
+ *  Referring to, for example, the add instruction (p142), we see there are many
+ *  different encodings for different operand pairs. There is Add r64, r/m64, 
+ *  Add r/m32 imm8, etc. The possible encodable instruction pairs across all
+ *  instructions is much smaller than the set of possible pairs. For example,  
+ *  there is no pair imm8, imm16 or rm8, imm64. For this reason, the supported pairs
+ *  are encoded into their own enum type: BinOpType. This type is setup as a
+ *  flag, with each occupying a unique bit.
  * 
+ *  Then, each operation (Add, Sub, etc.) is given a unique table in binary_opcode_tables
+ *  the table indicates which operand pairs are supported with a BinOpType
+ *  variable, and has an array of opcodes (one for each type). 
+ * 
+ *  To calculate the index of an in the array, do as follows: 
+ *   1. Take the entry type, e.g. RM16_Imm8 = 0100
+ *   2. Take the supported types, e.g. 1101 = R16_Imm16 | R16_Imm8 | R8_Imm8
+ *   3. Consider all bits less than the value: 0100 - 1 = 0011
+ *   4. Binary And this with the supported types - 0011 & 1101 = 1
+ *   5. Count the bits in this number - index = 1
  * 
  */
 
