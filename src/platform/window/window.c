@@ -280,6 +280,7 @@ void destroy_window(Window *window) {
     xdg_surface_destroy(window->xdg_surface);
     wl_surface_destroy(window->surface);
 
+    sdelete_wm_array(window->messages);
     mem_free(window, wsa);
 
     // TOOD: check if we want to keep this here? possibly we need to wait on a
@@ -403,6 +404,7 @@ Window *create_window(String name, int width, int height) {
 void destroy_window(Window *window) {
     HWND impl = window->impl;
     mem_free(window, wsa);
+    sdelete_wm_array(window->messages);
     DestroyWindow(impl);
 }
 
