@@ -47,6 +47,12 @@ void add_list_module(Module *data, Allocator *a) {
         "    [.len len]\n"
         "    [.data (malloc (u64.* (size-of A) len))]))";
     compile_toplevel(mk_list_fn, module, &point, &pi_point, a);
+    
+    // TODO (BUG): use list allocator
+    const char *mk_free_fn = 
+        "(def free-list all [A] proc [(list (List A))]\n"
+        "  (free list.data))";
+    compile_toplevel(mk_free_fn, module, &point, &pi_point, a);
 
     const char *elt_fn =
         "(def elt all [A] proc [idx (arr (List A))]\n"

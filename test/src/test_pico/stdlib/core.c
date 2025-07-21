@@ -15,13 +15,18 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
 
     // -------------------------------------------------------------------------
     //
-    // Sequence testing
+    // Static control and binding - seq/let
     //
     // -------------------------------------------------------------------------
 
     if (test_start(log, mv_string("simple-let"))) {
         int64_t expected = 3;
         test_toplevel_eq("(let [x 3] x)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("simple-let"))) {
+        int32_t expected = -3;
+        test_toplevel_eq("(let [x (is -3 I32)] x)", &expected, module, log, a) ;
     }
 
     if (test_start(log, mv_string("simple-sequence"))) {
@@ -137,6 +142,19 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     } Point;
 
     typedef struct {
+        int32_t x;
+        int32_t y;
+        int32_t z;
+    } NestInner;
+    run_toplevel("(def NestInner Struct [.x I32] [.y I32] [.z I32])", module, log, a) ;
+
+    typedef struct {
+        NestInner n1;
+        NestInner n2;
+    } NestOuter;
+    run_toplevel("(def NestOuter Struct [.n1 NestInner] [.n2 NestInner])", module, log, a) ;
+
+    typedef struct {
         int8_t x;
         int16_t y;
         int32_t z;
@@ -161,13 +179,18 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
-    if (test_start(log, mv_string("struct-nested"))) {
+    if (test_start(log, mv_string("struct-nested-v1"))) {
         typedef struct {
             uint64_t val;
             Point p2;
         } Nest;
         Nest expected = (Nest) {.val = -8765, .p2.x = -57, .p2.y = 127};
         test_toplevel_eq("(struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])])", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("struct-nested-v2"))) {
+        NestOuter expected = (NestOuter) {.n1.x = -8765, .n1.y = -57, .n1.z = 127, .n2.x = 875, .n2.y = 52, .n2.z = -122};
+        test_toplevel_eq("(struct NestOuter [.n1 (struct [.x -8765] [.y -57] [.z 127])] [.n2 (struct [.x 875] [.y 52] [.z -122])])", &expected, module, log, a) ;
     }
 
     if (test_start(log, mv_string("struct-refersed"))) {

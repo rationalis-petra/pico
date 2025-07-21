@@ -106,21 +106,21 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
 
         generate_c_call(memmove, ass, a, point);
     } else  {
-        // Using 8-bit immediate is ok
+        // Note: we are justified here in using Using 8-bit immediate (rref8)
         size_t leftover = size % 8;
         if (leftover >= 4) {
-            build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(RSP, src_stack_offset + (size / 8), sz_32), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_32), reg(RAX, sz_32), a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(RSP, src_stack_offset + (size & ~7), sz_32), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size & ~7), sz_32), reg(RAX, sz_32), a, point);
             leftover -= 4;
         }
         if (leftover >= 2) {
-            build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(RSP, src_stack_offset + (size / 8), sz_16), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_16), reg(RAX, sz_16), a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(RSP, src_stack_offset + (size & ~3), sz_16), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size & ~3), sz_16), reg(RAX, sz_16), a, point);
             leftover -= 2;
         }
         if (leftover >= 1) {
-            build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(RSP, src_stack_offset + (size / 8), sz_8), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size / 8), sz_8), reg(RAX, sz_8), a, point);
+            build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(RSP, src_stack_offset + (size & ~1), sz_8), a, point);
+            build_binary_op(ass, Mov, rref8(RSP, dest_stack_offset + (size & ~1), sz_8), reg(RAX, sz_8), a, point);
             leftover -= 1;
         }
 
@@ -137,18 +137,18 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 
     size_t leftover = size % 8;
     if (leftover >= 4) {
-        build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, size / 8, sz_32), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_32), reg(RAX, sz_32), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~7), sz_32), reg(RAX, sz_32), a, point);
         leftover -= 4;
     }
     if (leftover >= 2) {
-        build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, size / 8, sz_16), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_16), reg(RAX, sz_16), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~3), sz_16), reg(RAX, sz_16), a, point);
         leftover -= 2;
     }
     if (leftover >= 1) {
-        build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, size / 8, sz_8), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_8), reg(RAX, sz_8), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~1), sz_8), reg(RAX, sz_8), a, point);
         leftover -= 1;
     }
 
@@ -190,17 +190,17 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
 
     size_t leftover = size % 8;
     if (leftover >= 4) {
-        build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, size / 8, sz_32), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), a, point);
         build_binary_op(ass, Mov, rref8(dest, size / 8, sz_32), reg(RAX, sz_32), a, point);
         leftover -= 4;
     }
     if (leftover >= 2) {
-        build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, size / 8, sz_16), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), a, point);
         build_binary_op(ass, Mov, rref8(dest, size / 8, sz_16), reg(RAX, sz_16), a, point);
         leftover -= 2;
     }
     if (leftover >= 1) {
-        build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, size / 8, sz_8), a, point);
+        build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), a, point);
         build_binary_op(ass, Mov, rref8(dest, size / 8, sz_8), reg(RAX, sz_8), a, point);
         leftover -= 1;
     }

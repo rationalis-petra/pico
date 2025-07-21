@@ -1002,13 +1002,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SLet: {
-        // TODO: check that the let handles stack alignment correctly
         size_t bsize = 0;
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
             Syntax* sy = syn.let_expr.bindings.data[i].val;
             generate(*sy, env, target, links, a, point);
             address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
-            bsize += pi_size_of(*sy->ptype);
+            bsize += pi_stack_size_of(*sy->ptype);
         }
         generate(*syn.let_expr.body, env, target, links, a, point);
         address_pop_n(syn.let_expr.bindings.len, env);
@@ -2003,7 +2002,7 @@ void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
 void add_tree_children(RawTreeArray trees, U8Array *arr) {
     for (size_t i = 0; i < trees.len; i++) {
         RawTree tree = trees.data[i];
-        // TODO (BUG FEAT): set self .data = NULL, .gpa = NULL
+        // TODO (BUG FEAT): set self .data = NULL, .gpa = NULL, as memory is now static/comptime
         if (tree.type == RawBranch) {
             add_tree_children(tree.branch.nodes, arr);
         }
