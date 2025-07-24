@@ -10,6 +10,7 @@
 #include "pretty/string_printer.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
+#include "pico/values/array.h"
 
 struct UVarGenerator {
     uint64_t counter;
@@ -34,6 +35,13 @@ void delete_enum_variant_p(PtrArray* t, Allocator* a) {
 
 void delete_pi_type(PiType t, Allocator* a) {
     switch(t.sort) {
+    case TArray: {
+        for (size_t i = 0; i < t.array.dimensions.len; i++) {
+            mem_free(t.array.dimensions.data[i], a);
+        }
+        sdelete_ptr_array(t.array.dimensions);
+        delete_pi_type_p(t.array.element_type, a);
+    }
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
         for (size_t i = 0; i < t.proc.implicits.len; i++)
@@ -167,6 +175,15 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     PiType out;
     out.sort = t.sort;
     switch(t.sort) {
+    case TArray: {
+        out.array.sort = t.array.sort;
+        out.array.dimensions = mk_ptr_array(t.array.dimensions.len * sizeof(void*), a);
+        for (size_t i = 0; i < t.array.dimensions.len; i++) {
+            ArrayDimType* ty = mem_alloc(sizeof(ArrayDimType), a);
+            push_ptr(ty, &out.array.dimensions);
+        }
+        out.array.element_type = copy_pi_type_p(t.array.element_type, a);
+    }
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
         out.proc.implicits = copy_ptr_array(t.proc.implicits,  (TyCopier)copy_pi_type_p, a);
@@ -252,6 +269,22 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     return out;
 }
 
+
+Document* recursive_array_doc(const size_t depth, const size_t elem_size, size_t* index, PiType* elem_type, Array arr, Allocator* a) {
+    if (depth == arr.shape.len) {
+        Document* out = pretty_pi_value(arr.data + (*index * elem_size), elem_type, a);
+        index++;
+        return out;
+    } else {
+        size_t len = arr.shape.data[depth];
+        PtrArray nodes = mk_ptr_array(len, a);
+        for (size_t i = 0; i < len; i++) {
+            push_ptr(recursive_array_doc(depth + 1, elem_size, index, elem_type, arr, a), &nodes);
+        }
+        return mk_paren_doc("⟨", "⟩", mv_group_doc(mv_sep_doc(nodes, a), a), a);
+    }
+}
+
 Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
@@ -277,7 +310,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         case Int_64: {
             int64_t* ival = (int64_t*) val;
-            out =  pretty_i64(*ival, a);
+            out = pretty_i64(*ival, a);
             break;
         }
         case Int_32: {
@@ -344,6 +377,12 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         }
         break;
+    case TArray: {
+        Array* array = (Array*) val;
+        size_t index_size = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
+        size_t index = 0;
+        return recursive_array_doc(0, index_size, &index, type->array.element_type, *array, a);
+    }
     case TProc: {
         void** addr = (void**) val;
         PtrArray nodes = mk_ptr_array(2, a);
@@ -1000,6 +1039,9 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             panic(mv_string("pi-maybe-size-of: unrecognized primitive."));
         }
         break;
+    case TArray: 
+        *out = 4 * ADDRESS_SIZE;
+        return Ok;
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
@@ -1132,8 +1174,12 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
             panic(mv_string("pi_maybe_align_of received invalid primitive"));
         }
         return sizeof(uint64_t);
+    case TArray:
+        *out = ADDRESS_SIZE;
+        return Ok;
     case TProc:
-        return sizeof(uint64_t);
+        *out = sizeof(uint64_t);
+        return Ok;
     case TStruct: {
         size_t align = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
@@ -1648,6 +1694,24 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         }
         }
         break;
+    case TArray: {
+        // Step 1: shape shape
+        Array* larray = (Array*)lhs;
+        Array* rarray = (Array*)rhs;
+        if (larray->shape.len != rarray->shape.len) return false;
+        size_t nelements = 1;
+        for (size_t i = 0; i < larray->shape.len; i++) {
+            if (larray->shape.data[i] != rarray->shape.data[i]) return false;
+            nelements *= larray->shape.data[i];
+        }
+        size_t index_mul = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
+        for (size_t i = 0; i < nelements; i++) {
+            void* laddr = larray->data + (i * index_mul);
+            void* raddr = larray->data + (i * index_mul);
+            if (!pi_value_eql(type->array.element_type, laddr, raddr)) return false;
+        }
+        return true;
+    }
     case TProc: {
         void** addrlhs = (void**) lhs;
         void** addrrhs = (void**) rhs;

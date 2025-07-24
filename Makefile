@@ -25,7 +25,7 @@ endif
 
 ## Platform specifics and configuration
 ##-------------------------------------
-RELEASE_FLAGS := -Ofast
+RELEASE_FLAGS := -Ofast -werror
 DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT
 
 # Sanitisers currently aren't supported by gcc on windows

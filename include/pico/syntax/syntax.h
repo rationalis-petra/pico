@@ -35,6 +35,7 @@ typedef enum {
     SLitString,
     SLitBool,
     SLitUnit,
+    SLitArray,
     SVariable,
     SAbsVariable,
 
@@ -122,6 +123,11 @@ typedef struct {
     double value;
     PrimType type;
 } SynFloatingLiteral;
+
+typedef struct {
+    U64Array shape;
+    PtrArray subterms;
+} SynArrayLiteral;
 
 typedef struct {
     Symbol symbol;
@@ -340,6 +346,7 @@ struct Syntax {
     union {
         SynIntegralLiteral integral;
         SynFloatingLiteral floating;
+        SynArrayLiteral array_lit;
         bool boolean;
         String string;
 

@@ -51,6 +51,10 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
             else if (point == '{') {
                 out = parse_list(is, '}', HImplicit, a);
             }
+            //  0x27E8 = ⟨, 0x27E9 = ⟩
+            else if (point == 0x27E8) {
+                out = parse_list(is, 0x27E9, HData, a);
+            }
             else if (point == ':') {
                 if (terms.len == 0) {
                     out = parse_prefix(':', is, a);
@@ -650,6 +654,8 @@ bool is_symchar(uint32_t codepoint) {
                                           || codepoint == ']'
                                           || codepoint == '{'
                                           || codepoint == '}'
+                                          || codepoint == 0x27E8
+                                          || codepoint == 0x27E9
                                           || codepoint == '.'
                                           || codepoint == ':');
 }

@@ -12,6 +12,7 @@
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
+#include "pico/values/array.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
@@ -81,6 +82,8 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
         if (callbacks.on_expr) {
             callbacks.on_expr(evres.val.type, evres.val.val, data, log);
         }
+        if (evres.val.type->sort == TArray)
+            dec_refcount(evres.val.val);
     } else {
         if (callbacks.on_top) {
             callbacks.on_top(data, log);

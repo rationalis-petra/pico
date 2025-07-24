@@ -43,6 +43,7 @@ typedef enum : uint64_t {
     HExpression,
     HSpecial,
     HImplicit,
+    HData,
 } SyntaxHint;
 
 typedef struct RawTree RawTree;

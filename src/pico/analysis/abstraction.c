@@ -31,6 +31,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 
 Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
+Syntax* mk_array_literal(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 ComptimeHead comptime_head(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
@@ -1974,6 +1975,62 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     panic(mv_string("Invalid term-former provided to mk_term."));
 }
 
+void get_array_shape(RawTree raw, U64Array* shape_out, Allocator *a, PiErrorPoint *point) {
+    if (raw.type == RawBranch && raw.branch.hint == HData) {
+        if (raw.branch.nodes.len == 0) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Array literal must have > 1 terms", a),
+            };
+            throw_pi_error(point, err);
+        }
+        push_u64(raw.branch.nodes.len, shape_out);
+        get_array_shape(raw.branch.nodes.data[0], shape_out, a, point);
+    }
+}
+
+void mk_array_inner(PtrArray* terms, uint64_t depth, U64Array expected_shape, RawTree raw, ShadowEnv *env, Allocator *a, PiErrorPoint *point) {
+    if (raw.type == RawBranch && raw.branch.hint == HData) {
+        if (expected_shape.len <= depth) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape - too deep.", a),
+            };
+            throw_pi_error(point, err);
+        }
+        if (raw.branch.nodes.len != expected_shape.data[depth]) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape.", a),
+            };
+            throw_pi_error(point, err);
+        }
+        for (size_t i = 0; i < raw.branch.nodes.len; i++) {
+            mk_array_inner(terms, depth + 1, expected_shape, raw.branch.nodes.data[i], env, a, point);
+        }
+    } else {
+        // just abstract and push
+        Syntax* term = abstract_expr_i(raw, env, a, point);
+        push_ptr(term, terms);
+    }
+}
+
+Syntax *mk_array_literal(RawTree raw, ShadowEnv *env, Allocator *a, PiErrorPoint *point) {
+    PtrArray terms = mk_ptr_array(8, a);
+    U64Array shape = mk_u64_array(8, a);
+    get_array_shape(raw, &shape, a, point);
+    mk_array_inner(&terms, 0, shape, raw, env, a, point);
+
+    Syntax* res = mem_alloc(sizeof(Syntax), a);
+    *res = (Syntax) {
+        .type = SLitArray,
+        .ptype = NULL,
+        .range = raw.range,
+        .array_lit.shape = shape,
+        .array_lit.subterms = terms,
+    };
+    return res;
+}
 
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point) {
     PicoError err;
@@ -2047,6 +2104,10 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
+        if (raw.branch.hint == HData) {
+            return mk_array_literal(raw, env, a, point);
+        }
+
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
             err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);

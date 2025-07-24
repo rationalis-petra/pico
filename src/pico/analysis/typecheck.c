@@ -167,6 +167,32 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
+    case SLitArray: {
+        PiType* element_type = mk_uvar(a);
+        for (size_t i = 0; i < untyped->array_lit.subterms.len; i++) {
+            type_check_i(untyped->array_lit.subterms.data[i], element_type, env, a, point);
+        }
+        PtrArray dimensions = mk_ptr_array(untyped->array_lit.shape.len, a);
+        for (size_t i = 0; i < untyped->array_lit.shape.len; i++) {
+            ArrayDimType* dim = mem_alloc(sizeof(ArrayDimType), a);
+            *dim = (ArrayDimType) {
+                .is_any = false,
+                .value = untyped->array_lit.shape.data[i],
+            };
+            push_ptr(dim, &dimensions);
+
+        }
+
+        PiType* array_type = mem_alloc(sizeof(PiType), a);
+        *array_type = (PiType) {
+            .sort = TArray,
+            .array.sort = Fixed,
+            .array.dimensions = dimensions,
+            .array.element_type = element_type,
+        };
+        untyped->ptype = array_type;
+        break;
+    }
     case SLitBool:
         untyped->ptype = mk_prim_type(a, Bool);
         break;
@@ -1489,6 +1515,12 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SVariable:
     case SAbsVariable:
         break;
+    case SLitArray: {
+        for (size_t i = 0; i < syn->array_lit.subterms.len; i++) {
+            post_unify(syn->array_lit.subterms.data[i], env, a, point);
+        }
+        break;
+    }
 
     // Terms & term formers
     case SProcedure: {
@@ -1882,6 +1914,12 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SVariable:
     case SAbsVariable:
         break;
+    case SLitArray: {
+        for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
+            squash_types(typed->array_lit.subterms.data[i], a, point);
+        }
+        break;
+    }
     case SProcedure: {
         // squash body
         // TODO (BUG): Need to squash types of annotated arguments!

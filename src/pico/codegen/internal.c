@@ -275,6 +275,27 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
     }
 }
 
+void* perm_malloc(uint64_t memsize) {
+    Allocator a = get_std_perm_allocator();
+    return mem_alloc(memsize, &a);
+}
+
+void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(ass, Mov, reg(RDI, sz_64), mem_size, a, point);
+#elif ABI == WIN_64
+    build_binary_op(ass, Mov, reg(RCX, sz_64), mem_size, a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    generate_c_call(perm_malloc, ass, a, point);
+
+    if (dest.type != Dest_Register && dest.reg != RAX) {
+        build_binary_op(ass, Mov, dest, reg(RAX, sz_64), a, point);
+    }
+}
+
 PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
     Allocator a = get_std_temp_allocator();
     // make args correct way round!

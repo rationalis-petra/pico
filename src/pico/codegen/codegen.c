@@ -191,15 +191,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
         break;
     }
-    case SLitBool: {
-        int8_t immediate = syn.boolean;
-        build_unary_op(ass, Push, imm8(immediate), a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        break;
-    }
-    case SLitUnit: {
-        break;
-    }
     case SLitString: {
         String immediate = syn.string; 
         if (immediate.memsize > UINT32_MAX) 
@@ -216,6 +207,52 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
 
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        break;
+    }
+    case SLitBool: {
+        int8_t immediate = syn.boolean;
+        build_unary_op(ass, Push, imm8(immediate), a, point);
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        break;
+    }
+    case SLitUnit: {
+        break;
+    }
+    case SLitArray: {
+        size_t element_size = pi_size_of(*syn.ptype->array.element_type);
+        size_t element_stack_size = pi_stack_align(element_size);
+        size_t index_mul = pi_size_align(element_size, pi_align_of(*syn.ptype->array.element_type));
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        // array - memory/data
+        generate_perm_malloc(reg(RAX, sz_64), imm32(index_mul * syn.array_lit.subterms.len), ass, a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+
+        for (size_t i = 0; i < syn.array_lit.subterms.len; i++) {
+            generate(*(Syntax*)syn.array_lit.subterms.data[i], env, target, links, a, point);
+
+            // Copy the element into the array-block
+            size_t offset = i * index_mul;
+            build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, element_stack_size, sz_64), a, point);
+            build_binary_op(ass, Add, reg(RDI, sz_64), imm32(offset), a, point);
+            generate_monomorphic_copy(RDI,RSP, element_size, ass, a, point);
+            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(element_stack_size), a, point);
+            
+            data_stack_shrink(env, element_stack_size);
+        }
+        // refcount
+        build_unary_op(ass, Push, imm8(1), a, point);
+
+        // Shape - len + data
+        generate_perm_malloc(reg(RAX, sz_64), imm32(ADDRESS_SIZE * syn.array_lit.shape.len), ass, a, point);
+        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        for (size_t i = 0; i < syn.array_lit.shape.len; i++) {
+            size_t dimension_len = syn.array_lit.shape.data[i];
+            build_binary_op(ass, Mov, rref32(RAX, i * ADDRESS_SIZE, sz_64), imm32(dimension_len), a, point);
+        }
+
+        build_unary_op(ass, Push, imm32(syn.array_lit.shape.len), a, point);
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype) - ADDRESS_SIZE);
         break;
     }
     case SVariable: 
@@ -1723,6 +1760,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Finally, generate function call to make type
         gen_mk_trait_ty(syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
 
         address_pop_n(syn.trait.vars.len, env);
         break;
