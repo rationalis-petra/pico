@@ -369,7 +369,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             untyped->type = SAllApplication;
             untyped->all_application = new_app;
             type_infer_i(untyped, env, a, point);
-        } else if (fn_type.sort == TKind) {
+        } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
                 err.message = mv_cstr_doc("Incorrect number of family arguments", a);
                 throw_pi_error(point, err);
@@ -1594,7 +1594,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
                     panic(mv_string("Invalid instance entry type!"));
                 }
             }
-        } else if (fn_type.sort != TKind) {
+        } else if (fn_type.sort != TKind && fn_type.sort != TConstraint ) {
             panic(mv_string("Invalid lhs in application in post_unify: not Proc or Kind"));
         } 
         break;

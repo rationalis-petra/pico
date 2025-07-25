@@ -8,7 +8,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         .clauses = mk_import_clause_array(4, a),
     };
     add_import_all(&imports.clauses, a, 1, "core");
-    /* add_import_all(&imports.clauses, a, 1, "num"); */
+    add_import_all(&imports.clauses, a, 1, "num");
     /* add_import_all(&imports.clauses, a, 1, "extra"); */
     /* add_import_all(&imports.clauses, a, 1, "meta"); */
 
@@ -35,11 +35,6 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         panic(point.error_message);
     }
 
-    // TODO (FEAT): add/implement the following:
-    //  - list-free or delete-list
-    //  - push/pop (using alter)
-
-    // TODO (BUG): the array should set the allocator
     const char* num_trait = 
         "(def Num Trait [A]"
         "  [.zero A]"
@@ -50,6 +45,42 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [./ Proc [A A] A])\n";
     compile_toplevel(num_trait, module, &point, &pi_point, a);
 
-    Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
+    const char* add_fn = 
+        "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)";
+    compile_toplevel(add_fn, module, &point, &pi_point, a);
+
+    const char* sub_fn = 
+        "(def - all [A] proc {(n (Num A))} [(x A) (y A)] n.- x y)";
+    compile_toplevel(sub_fn, module, &point, &pi_point, a);
+
+    const char* mul_fn = 
+        "(def * all [A] proc {(n (Num A))} [(x A) (y A)] n.* x y)";
+    compile_toplevel(mul_fn, module, &point, &pi_point, a);
+
+    const char* div_fn = 
+        "(def / all [A] proc {(n (Num A))} [(x A) (y A)] n./ x y)";
+    compile_toplevel(div_fn, module, &point, &pi_point, a);
+
+    const char* num_i64_trait = 
+        "(def i64-num instance (Num I64)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ i64.+]"
+        "  [.- i64.-]"
+        "  [.* i64.*]"
+        "  [./ i64./])\n";
+    compile_toplevel(num_i64_trait, module, &point, &pi_point, a);
+
+    /* const char* num_f64_trait =  */
+    /*     "(def f64-num instance (Num F64)" */
+    /*     "  [.zero 0]" */
+    /*     "  [.one 1]" */
+    /*     "  [.+ f64.+]" */
+    /*     "  [.- f64.-]" */
+    /*     "  [.* f64.*]" */
+    /*     "  [./ f64./])\n"; */
+    /* compile_toplevel(num_f64_trait, module, &point, &pi_point, a); */
+
+    Result r = add_module_def(data, string_to_symbol(mv_string("numeric")), module);
     if (r.type == Err) panic(r.error_message);
 }

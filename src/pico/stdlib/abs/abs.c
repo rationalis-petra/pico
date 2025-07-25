@@ -22,5 +22,5 @@ void add_abs_module(Package* base, Allocator* a) {
 
     add_numeric_module(module, base, a);
 
-    add_module(string_to_symbol(mv_string("data")), module, base);
+    add_module(string_to_symbol(mv_string("abs")), module, base);
 }
