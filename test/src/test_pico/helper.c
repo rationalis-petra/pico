@@ -83,7 +83,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
             callbacks.on_expr(evres.val.type, evres.val.val, data, log);
         }
         if (evres.val.type->sort == TArray)
-            dec_refcount(evres.val.val);
+            free_array(evres.val.val);
     } else {
         if (callbacks.on_top) {
             callbacks.on_top(data, log);

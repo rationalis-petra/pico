@@ -1040,7 +1040,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
         break;
     case TArray: 
-        *out = 4 * ADDRESS_SIZE;
+        *out = 3 * ADDRESS_SIZE;
         return Ok;
     case TProc:
         *out = ADDRESS_SIZE;

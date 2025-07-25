@@ -45,7 +45,6 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Allocator *a) {
         Array expected = (Array) {
             .shape.len = 1,
             .shape.data = expected_shape,
-            .refcount = 1,
             .data = expected_data,
         };// = mk_int_array(1, 5, {1, 2, 3, 4, 5});
         test_toplevel_eq("⟨1 2 3 4 5⟩", &expected, module, log, a) ;

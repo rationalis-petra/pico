@@ -10,11 +10,9 @@ typedef struct {
 
 typedef struct {
     Shape shape;
-    uint64_t refcount;
     void* data;
 } Array;
 
-void inc_refcount(Array* a);
-void dec_refcount(Array* a);
+void free_array(Array* a);
 
 #endif

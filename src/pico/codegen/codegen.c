@@ -240,8 +240,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             
             data_stack_shrink(env, element_stack_size);
         }
-        // refcount
-        build_unary_op(ass, Push, imm8(1), a, point);
 
         // Shape - len + data
         generate_perm_malloc(reg(RAX, sz_64), imm32(ADDRESS_SIZE * syn.array_lit.shape.len), ass, a, point);
