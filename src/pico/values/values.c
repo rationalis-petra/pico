@@ -279,6 +279,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);
         break;
+    case FGenArray:
+        out = mk_str_doc(mv_string("::gen-array"), a);
+        break;
+    case FWith:
+        out = mk_str_doc(mv_string("::with"), a);
+        break;
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
@@ -343,6 +349,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
 
         // Type formers
+    case FArrayType:
+        out = mk_str_doc(mv_string("::Array"), a);
+        break;
     case FStructType:
         out = mk_str_doc(mv_string("::Struct"), a);
         break;

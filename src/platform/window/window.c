@@ -106,7 +106,7 @@ void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int3
     // TODO: check that a resize actually happened.
     // TODO: check width, height >= 0
     Window* window = data;
-    if (window->width != width || window->height != height) {
+    if (window->width != (uint32_t)width || window->height != (uint32_t)height) {
         window->width = width;
         window->height = height;
 

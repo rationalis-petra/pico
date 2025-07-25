@@ -727,7 +727,7 @@ HedronPipeline *create_pipeline(BindingDescriptionArray bdesc, AttributeDescript
 
     VkVertexInputAttributeDescription attribute_descriptions[adesc.len];
     for (size_t i = 0; i < adesc.len; i++) {
-        uint32_t format;
+        uint32_t format = {};
         switch (adesc.data[i].format) {
         case Float_1:
             format = VK_FORMAT_R32_SFLOAT;

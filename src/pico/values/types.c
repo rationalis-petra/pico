@@ -41,6 +41,7 @@ void delete_pi_type(PiType t, Allocator* a) {
         }
         sdelete_ptr_array(t.array.dimensions);
         delete_pi_type_p(t.array.element_type, a);
+        break;
     }
     case TProc: {
         delete_pi_type_p(t.proc.ret, a);
@@ -183,6 +184,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
             push_ptr(ty, &out.array.dimensions);
         }
         out.array.element_type = copy_pi_type_p(t.array.element_type, a);
+        break;
     }
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, a);
@@ -643,6 +645,33 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         }
         out = mv_style_doc(pstyle, out, a);
         break;
+    case TArray: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
+
+        push_ptr(pretty_type_internal(type->array.element_type, ctx, a), &nodes);
+
+        if (type->array.sort == Any) {
+            push_ptr(mk_cstr_doc("⟨...⟩", a), &nodes);
+        } else {
+            if (type->array.dimensions.len != 0) {
+                PtrArray arg_nodes = mk_ptr_array(type->array.dimensions.len, a);
+                for (size_t i = 0; i < type->proc.implicits.len; i++) {
+                    ArrayDimType dim = *(ArrayDimType*)type->array.dimensions.data[i];
+                    if (dim.is_any) {
+                        push_ptr(mk_cstr_doc(".", a), &nodes);
+                    } else {
+                        push_ptr(pretty_u64(dim.value, a), &arg_nodes);
+                    }
+                }
+                push_ptr(mk_paren_doc("⟨", "⟩", mv_sep_doc(arg_nodes, a), a), &nodes);
+            }
+        }
+
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
     case TProc: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &nodes);
@@ -1971,4 +2000,3 @@ PiType* mk_string_type(Allocator* a) {
                                         "memsize", mk_prim_type(a, UInt_64),
                                         "bytes", mk_prim_type(a, Address)));
 }
-
