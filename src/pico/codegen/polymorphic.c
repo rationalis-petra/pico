@@ -1676,7 +1676,7 @@ U8Array free_registers(U8Array inputs, Allocator* a) {
         .data = vr_data,
         .len = 7,
         .size = 7,
-        .gpa = NULL,
+        .gpa = (Allocator){},
     };
 
     U8Array out_registers = mk_u8_array(7, a);

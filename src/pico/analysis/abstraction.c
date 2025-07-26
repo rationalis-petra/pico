@@ -832,6 +832,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FGenArray:
+        panic(mv_string("abstract for gen-array not implemented"));
+    case FWith:
+        panic(mv_string("abstract for with not implemented"));
     case FDynamic: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -1433,6 +1437,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .offset_of.body = term,
         };
         return res;
+    }
+    case FArrayType: {
+        panic(mv_string("Array type former not implemented."));
     }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {

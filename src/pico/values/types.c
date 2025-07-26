@@ -271,22 +271,6 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     return out;
 }
 
-
-Document* recursive_array_doc(const size_t depth, const size_t elem_size, size_t* index, PiType* elem_type, Array arr, Allocator* a) {
-    if (depth == arr.shape.len) {
-        Document* out = pretty_pi_value(arr.data + (*index * elem_size), elem_type, a);
-        index++;
-        return out;
-    } else {
-        size_t len = arr.shape.data[depth];
-        PtrArray nodes = mk_ptr_array(len, a);
-        for (size_t i = 0; i < len; i++) {
-            push_ptr(recursive_array_doc(depth + 1, elem_size, index, elem_type, arr, a), &nodes);
-        }
-        return mk_paren_doc("⟨", "⟩", mv_group_doc(mv_sep_doc(nodes, a), a), a);
-    }
-}
-
 Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
@@ -380,10 +364,13 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         break;
     case TArray: {
+        PrettyElem pelem = (PrettyElem) {
+            .print_elem = (print_element)pretty_pi_value,
+            .context = type->array.element_type,
+        };
         Array* array = (Array*) val;
         size_t index_size = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
-        size_t index = 0;
-        return recursive_array_doc(0, index_size, &index, type->array.element_type, *array, a);
+        return pretty_array(*array, index_size, pelem, a);
     }
     case TProc: {
         void** addr = (void**) val;

@@ -388,7 +388,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
     // loop-check 
     push_rawtree((RawTree){}, &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
-    PtrArray loop_gfors = mk_ptr_array(2, &a);
+    //PtrArray loop_gfors = mk_ptr_array(2, &a);
     PtrArray loop_whiles = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];

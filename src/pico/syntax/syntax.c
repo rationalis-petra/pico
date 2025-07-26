@@ -2,6 +2,7 @@
 #include "platform/signals.h"
 #include "pretty/standard_types.h"
 
+#include "pico/values/array.h"
 #include "pico/syntax/syntax.h"
 
 typedef struct SyntaxCall {
@@ -28,6 +29,11 @@ Syntax* mk_lit_typed_int_syn(const int64_t value, PrimType prim, Allocator* a) {
         .integral.type = prim,
     };
     return out;
+}
+
+Document* pretty_syntax_internal(Syntax* syntax, Allocator* a);
+Document* pretty_syntax_callback(Syntax* syntax, void* ctx, Allocator* a) {
+    return pretty_syntax_internal(syntax, a);
 }
 
 Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
@@ -58,6 +64,20 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     }
     case SLitUnit: {
         out = mk_str_doc(mv_string(":unit"), a);
+        break;
+    }
+    case SLitArray: {
+        PrettyElem pelem = (PrettyElem) {
+            .print_elem = (print_element)pretty_syntax_callback,
+            .context = NULL,
+        };
+        Array array = (Array) {
+            .shape.len = syntax->array_lit.shape.len,
+            .shape.data = syntax->array_lit.shape.data,
+            .data = syntax->array_lit.subterms.data,
+        };
+        size_t index_size = sizeof(void*);
+        return pretty_array(array, index_size, pelem, a);
         break;
     }
     case SLitString: {
@@ -727,6 +747,21 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     case SQuote: {
         Document* raw = pretty_rawtree(syntax->quoted, a);
         out = mk_paren_doc("(quote ", ")", mv_nest_doc(2, raw, a), a);
+        break;
+    }
+    case SCapture: {
+        RawTree raw = (RawTree) {
+          .type = RawAtom,
+          .atom = (Atom) {
+              .type = ACapture,
+              .capture = (Capture) {
+                  .type = syntax->capture.type,
+                  .value = syntax->capture.value,
+              }
+          },
+        };
+        Document* raw_doc = pretty_rawtree(raw, a);
+        out = mk_paren_doc("(capture ", ")", mv_nest_doc(2, raw_doc, a), a);
         break;
     }
     }
