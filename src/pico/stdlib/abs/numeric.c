@@ -71,6 +71,76 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [./ i64./])\n";
     compile_toplevel(num_i64_trait, module, &point, &pi_point, a);
 
+    const char* num_u64_trait = 
+        "(def u64-num instance (Num U64)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ u64.+]"
+        "  [.- u64.-]"
+        "  [.* u64.*]"
+        "  [./ u64./])\n";
+    compile_toplevel(num_u64_trait, module, &point, &pi_point, a);
+
+    const char* num_i32_trait = 
+        "(def i32-num instance (Num I32)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ i32.+]"
+        "  [.- i32.-]"
+        "  [.* i32.*]"
+        "  [./ i32./])\n";
+    compile_toplevel(num_i32_trait, module, &point, &pi_point, a);
+
+    const char* num_u32_trait = 
+        "(def u32-num instance (Num U32)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ u32.+]"
+        "  [.- u32.-]"
+        "  [.* u32.*]"
+        "  [./ u32./])\n";
+    compile_toplevel(num_u32_trait, module, &point, &pi_point, a);
+
+    const char* num_i16_trait = 
+        "(def i16-num instance (Num I16)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ i16.+]"
+        "  [.- i16.-]"
+        "  [.* i16.*]"
+        "  [./ i16./])\n";
+    compile_toplevel(num_i16_trait, module, &point, &pi_point, a);
+
+    const char* num_u16_trait = 
+        "(def u16-num instance (Num U16)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ u16.+]"
+        "  [.- u16.-]"
+        "  [.* u16.*]"
+        "  [./ u16./])\n";
+    compile_toplevel(num_u16_trait, module, &point, &pi_point, a);
+
+    const char* num_i8_trait = 
+        "(def i8-num instance (Num I8)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ i8.+]"
+        "  [.- i8.-]"
+        "  [.* i8.*]"
+        "  [./ i8./])\n";
+    compile_toplevel(num_i8_trait, module, &point, &pi_point, a);
+
+    const char* num_u8_trait = 
+        "(def u8-num instance (Num U8)"
+        "  [.zero 0]"
+        "  [.one 1]"
+        "  [.+ u8.+]"
+        "  [.- u8.-]"
+        "  [.* u8.*]"
+        "  [./ u8./])\n";
+    compile_toplevel(num_u8_trait, module, &point, &pi_point, a);
+
     const char* num_f64_trait =
         "(def f64-num instance (Num F64)"
         "  [.zero 0.0]"
@@ -80,6 +150,16 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.* f64.*]"
         "  [./ f64./])\n";
     compile_toplevel(num_f64_trait, module, &point, &pi_point, a);
+
+    const char* num_f32_trait =
+        "(def f32-num instance (Num F32)"
+        "  [.zero 0.0]"
+        "  [.one 1.0]"
+        "  [.+ f32.+]"
+        "  [.- f32.-]"
+        "  [.* f32.*]"
+        "  [./ f32./])\n";
+    compile_toplevel(num_f32_trait, module, &point, &pi_point, a);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("numeric")), module);
     if (r.type == Err) panic(r.error_message);

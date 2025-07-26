@@ -86,27 +86,30 @@ Environment* env_from_module(Module* module, Allocator* a) {
             // Find the package
             Module* importee = path_all(clause.path, root_module);
             SymbolArray syms = get_exported_symbols(importee, a);
-            for (size_t i = 0; i < syms.len; i++ ) {
-                name_ptr_insert(syms.data[i].name, importee, &env->symbol_origins);
+            for (size_t j = 0; j < syms.len; j++ ) {
+                name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
             }
             sdelete_symbol_array(syms);
 
             // Get all implicits
             PtrArray instances = get_exported_instances(importee, a);
-            for (size_t i = 0; i < instances.len; i++ ) {
-                InstanceSrc* instance = instances.data[i];
+            for (size_t j = 0; j < instances.len; j++ ) {
+                InstanceSrc* instance = instances.data[j];
 
-                PtrArray* p = (PtrArray*)name_ptr_lookup(instance->id, env->instances);
-                if (!p) {
-                    p = mem_alloc(sizeof(PtrArray), a);
-                    *p = mk_ptr_array(8, a);
+                PtrArray* arr = NULL;
+                PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+                if (p == NULL) {
+                    arr = mem_alloc(sizeof(PtrArray), a);
+                    *arr = mk_ptr_array(8, a);
                     // TODO: we know this isn't in the instances; could perhaps
                     // speed up the process?
-                    name_ptr_insert(instance->id, p, &env->instances);
+                    name_ptr_insert(instance->id, arr, &env->instances);
+                } else {
+                    arr = *p;
                 }
 
                 // Add this instance to the array
-                push_ptr(instance, p);
+                push_ptr(instance, arr);
             }
 
             // We do not delete instance entries are they are now in
