@@ -71,15 +71,15 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [./ i64./])\n";
     compile_toplevel(num_i64_trait, module, &point, &pi_point, a);
 
-    /* const char* num_f64_trait =  */
-    /*     "(def f64-num instance (Num F64)" */
-    /*     "  [.zero 0]" */
-    /*     "  [.one 1]" */
-    /*     "  [.+ f64.+]" */
-    /*     "  [.- f64.-]" */
-    /*     "  [.* f64.*]" */
-    /*     "  [./ f64./])\n"; */
-    /* compile_toplevel(num_f64_trait, module, &point, &pi_point, a); */
+    const char* num_f64_trait =
+        "(def f64-num instance (Num F64)"
+        "  [.zero 0.0]"
+        "  [.one 1.0]"
+        "  [.+ f64.+]"
+        "  [.- f64.-]"
+        "  [.* f64.*]"
+        "  [./ f64./])\n";
+    compile_toplevel(num_f64_trait, module, &point, &pi_point, a);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("numeric")), module);
     if (r.type == Err) panic(r.error_message);

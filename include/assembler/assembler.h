@@ -32,7 +32,19 @@ typedef enum {
     // ------------------
     Add,
     Sub,
-    Cmp, // p289. Compare two operands
+    Cmp,
+
+    AddSS,
+    AddSD,
+
+    SubSS,
+    SubSD,
+
+    MulSS,
+    MulSD,
+
+    DivSS,
+    DivSD,
 
     // ------------------
     //  Logic

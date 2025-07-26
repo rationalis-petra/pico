@@ -678,6 +678,110 @@ void build_binary_opcode_tables() {
         };
     }
 
+    {   // AddSS Operation. Source - Intel Manual Vol 2. p152
+        static uint32_t sup = XMM32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[2];
+        add_op3(0xF3, 0x0f, 0x58, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0f, 0x58, XMM32_M32, sup, ops);
+
+        binary_opcode_tables[AddSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // AddSD Operation. Source - Intel Manual Vol 2. p150
+        static uint64_t sup = XMM64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[2];
+        add_op3(0xF2, 0x0f, 0x58, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0f, 0x58, XMM64_M64, sup, ops);
+
+        binary_opcode_tables[AddSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // SubSS Operation. Source - Intel Manual Vol 2. p1417
+        static uint32_t sup = XMM32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[2];
+        add_op3(0xF3, 0x0F, 0x5C, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x5C, XMM32_M32, sup, ops);
+
+        binary_opcode_tables[SubSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // SubSD Operation. Source - Intel Manual Vol 2. p1415
+        static uint64_t sup = XMM64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[2];
+        add_op3(0xF2, 0x0F, 0x5C, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x5C, XMM64_M64, sup, ops);
+
+        binary_opcode_tables[SubSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // MulSS Operation. Source - Intel Manual Vol 2. p890
+        static uint32_t sup = XMM32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[2];
+        add_op3(0xF3, 0x0F, 0x59, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0F, 0x59, XMM32_M32, sup, ops);
+
+        binary_opcode_tables[MulSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // MulSD Operation. Source - Intel Manual Vol 2. p888
+        static uint64_t sup = XMM64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[2];
+        add_op3(0xF2, 0x0F, 0x59, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x59, XMM64_M64, sup, ops);
+
+        binary_opcode_tables[MulSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // DivSS Operation. Source - Intel Manual Vol 2. p444
+        static uint32_t sup = XMM32_XMM32 | XMM32_M32;
+        static BinOpBytes ops[2];
+        add_op3(0xF3, 0x0f, 0x5E, XMM32_XMM32, sup, ops);
+        add_op3(0xF3, 0x0f, 0x5E, XMM32_M32, sup, ops);
+
+        binary_opcode_tables[DivSS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
+    {   // DivSD Operation. Source - Intel Manual Vol 2. p442
+        static uint64_t sup = XMM64_XMM64 | XMM64_M64;
+        static BinOpBytes ops[2];
+        add_op3(0xF2, 0x0f, 0x5E, XMM64_XMM64, sup, ops);
+        add_op3(0xF2, 0x0f, 0x5E, XMM64_M64, sup, ops);
+
+        binary_opcode_tables[DivSD] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE
+        };
+    }
+
     // ------------------
     //  Logic
     // ------------------
@@ -794,6 +898,7 @@ void build_binary_opcode_tables() {
         binary_opcode_tables[MovSS] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
+            .flags = SSE,
         };
     }
 
@@ -1649,6 +1754,10 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
         // Store the R/M location
         switch (loc.type) {
         case Dest_Register:
+            if (loc.reg & XMM0) {
+                throw_error(point, mv_string("Currently, no unary registers support the XMM family of registers: "));
+            }
+
             // simplest : mod = 11, rm = register 
             modrm_byte |= modrm_mod(0b11);
             modrm_byte |= modrm_rm(loc.reg);
@@ -1928,9 +2037,11 @@ Document* pretty_location(Location loc, Allocator* a) {
 }
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
-    char* names[Binary_Op_Count] = {
-        "Add", "Sub", "Cmp", "And", "Or", "Xor", "SHL", "SHR",
-        "Mov", "MovSS", "MovSD", "LEA", "CMovE", "CMovL", "CMovG",
+  char *names[Binary_Op_Count] = {
+      "Add", "Sub", "Cmp", "AddSS", "AddSD", "SubSS", "SubSD",
+      "MulSS", "MulSD", "DivSS", "DivSD",
+      "And", "Or", "Xor", "SHL", "SHR",
+      "Mov", "MovSS", "MovSD", "LEA", "CMovE", "CMovL", "CMovG",
     };
     // TODO BUG bounds check here.
     return mk_str_doc(mv_string(names[op]), a);
