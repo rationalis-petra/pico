@@ -17,7 +17,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("list")),
+        .name = string_to_symbol(mv_string("numeric")),
         .imports = imports,
         .exports = exports,
     };
@@ -27,7 +27,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
         //panic(doc_to_str(pi_point.error.message, 120, a));
-        panic(mv_string("pico error in abs.c"));
+        panic(mv_string("pico error in numeric.c"));
     }
 
     ErrorPoint point;

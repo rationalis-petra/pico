@@ -530,6 +530,10 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 
     generate_c_call(mk_type_var, ass, a, point);
 
+#if ABI == WIN_64
+    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(2*ADDRESS_SIZE), a, point);
+#endif
+
     build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
 }
 
