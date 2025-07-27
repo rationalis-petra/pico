@@ -265,6 +265,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t size = pi_stack_size_of(*syn.ptype);
             build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
 
+            // The size | 7 "rounds up" size to the nearet multiple of eight. 
+            // All local variables on the stack are stored with size rounded up
+            // to nearest eight, so this allows objects with size, e.g. 5, 12,
+            // etc. to have all their data copied  
+            size = size | 7;
             if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
