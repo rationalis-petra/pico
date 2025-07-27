@@ -219,8 +219,29 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     }
 
     if (test_start(log, mv_string("project-struct-small"))) {
-        int8_t expected = 3;
-        test_toplevel_eq("(seq [let! st (struct SML [.x 3] [.y -8])] st.x)", &expected, module, log, a) ;
+        int8_t expected = -8;
+        test_toplevel_eq("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("project-struct-small"))) {
+        int8_t expected = -8;
+        test_toplevel_eq("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)", &expected, module, log, a) ;
+    }
+
+    run_toplevel("(def thrice struct NestInner [.x -12] [.y 3] [.z 1])", module, log, a) ;
+    if (test_start(log, mv_string("project-point3-x"))) {
+        int32_t expected = -12;
+        test_toplevel_eq("(seq thrice.x)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("project-point3-y"))) {
+        int32_t expected = 3;
+        test_toplevel_eq("(seq thrice.y)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("project-point3-z"))) {
+        int32_t expected = 1;
+        test_toplevel_eq("(seq thrice.z)", &expected, module, log, a) ;
     }
 
     // -----------------------------------------------------

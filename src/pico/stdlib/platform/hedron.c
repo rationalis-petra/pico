@@ -11,6 +11,7 @@ static PiType* surface_ty;
 static PiType* shader_module_ty;
 static PiType* pipeline_ty;
 
+static PiType* index_format_ty;
 static PiType* input_rate_ty;
 static PiType* input_format_ty;
 static PiType* binder_desc_ty;
@@ -188,15 +189,22 @@ void build_command_bind_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, 
     delete_c_type(fn_ctype, a);
 }
 
-void build_command_bind_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_command_bind_vertex_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 2, "command_buffer", mk_voidptr_ctype(a),
                                  "buffer", mk_voidptr_ctype(a),
                                  (CType){.sort = CSVoid});
-    convert_c_fn(command_bind_buffer, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(command_bind_vertex_buffer, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
 
-// void command_bind_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
+void build_command_bind_index_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 3, "command_buffer", mk_voidptr_ctype(a),
+                                 "buffer", mk_voidptr_ctype(a),
+                                 "datatype", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(command_bind_vertex_buffer, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
 
 void build_command_set_surface_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(a, 2, "buffer", mk_voidptr_ctype(a),
@@ -208,12 +216,24 @@ void build_command_set_surface_fn(PiType* type, Assembler* ass, Allocator* a, Er
 
 void build_command_draw_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
   CType fn_ctype = mk_fn_ctype(a, 5, "buffer", mk_voidptr_ctype(a),
-                               "nvertices", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-                               "ninstances", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-                               "vertex0", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
-                               "instance0", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "vertex-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "instance-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "first-vertex", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "first-instance", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
                                (CType){.sort = CSVoid});
     convert_c_fn(command_draw, &fn_ctype, type, ass, a, point); 
+    delete_c_type(fn_ctype, a);
+}
+
+void build_command_draw_indexed_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(a, 6, "buffer", mk_voidptr_ctype(a),
+                               "index-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "instance-count", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "first-index", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               "vertex-offset", mk_primint_ctype((CPrimInt){.is_signed = Signed, .prim = CInt}),
+                               "first-instance", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
+                               (CType){.sort = CSVoid});
+    convert_c_fn(command_draw_indexed, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
 
@@ -355,6 +375,17 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     e = get_def(sym, module);
     binder_desc_ty = e->value;
+    delete_pi_type_p(typep, a);
+
+    typep = mk_enum_type(a, 2,
+                         "u16", 0,
+                         "u32", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("IndexFormat"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    index_format_ty = e->value;
     delete_pi_type_p(typep, a);
 
     typep = mk_enum_type(a, 3,
@@ -642,8 +673,17 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     delete_pi_type_p(typep, a);
 
     typep = mk_proc_type(a, 2, copy_pi_type_p(command_buffer_ty, a), copy_pi_type_p(buffer_ty, a), mk_prim_type(a, Unit));
-    build_command_bind_buffer_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("command-bind-buffer"));
+    build_command_bind_vertex_buffer_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("command-bind-vertex-buffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 3, copy_pi_type_p(command_buffer_ty, a), copy_pi_type_p(buffer_ty, a), copy_pi_type_p(index_format_ty, a), mk_prim_type(a, Unit));
+    build_command_bind_index_buffer_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("command-bind-index-buffer"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -665,6 +705,18 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
                          mk_prim_type(a, Unit));
     build_command_draw_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("command-draw"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    typep = mk_proc_type(a, 6, copy_pi_type_p(command_buffer_ty, a),
+                         mk_prim_type(a, UInt_32), mk_prim_type(a, UInt_32),
+                         mk_prim_type(a, UInt_32), mk_prim_type(a, Int_32),
+                         mk_prim_type(a, UInt_32), mk_prim_type(a, Unit));
+    build_command_draw_indexed_fn(typep, ass, a, &point);
+    sym = string_to_symbol(mv_string("command-draw-indexed"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

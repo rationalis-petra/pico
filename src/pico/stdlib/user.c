@@ -8,6 +8,7 @@ void add_user_module(Package* base, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 2, "abs", "numeric");
+
     add_import(&imports.clauses, a, 1, "abs");
     add_import(&imports.clauses, a, 1, "data");
     add_import(&imports.clauses, a, 1, "platform");

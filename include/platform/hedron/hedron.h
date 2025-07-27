@@ -67,6 +67,12 @@ void destroy_pipeline(HedronPipeline* pipeline);
 // 
 // -------------------------------------------
 
+
+typedef enum {
+    IndexU16 = 0, // Matches Vulkan spec
+    IndexU32 = 1, // Matches Vulkan Spec
+} IndexFormat;
+
 typedef struct HedronBuffer HedronBuffer;
 
 HedronBuffer* create_buffer(uint64_t size);
@@ -129,12 +135,20 @@ void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surfa
 void command_end_render_pass(HedronCommandBuffer* commands);
 
 void command_bind_pipeline(HedronCommandBuffer* commands, HedronPipeline* pipeline);
-void command_bind_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer);
+void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer);
+void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format);
 
 void command_set_surface(HedronCommandBuffer *commands, HedronSurface *surface);
 void command_draw(HedronCommandBuffer *commands, uint32_t vertex_count,
-                  uint32_t instance_cont, uint32_t first_vertex,
+                  uint32_t instance_count, uint32_t first_vertex,
                   uint32_t first_instance);
+
+void command_draw_indexed(HedronCommandBuffer *commands,
+                          uint32_t index_count,
+                          uint32_t instance_count,
+                          uint32_t first_index,
+                          int32_t vertex_offset,
+                          uint32_t first_instance);
 
 
 #endif
