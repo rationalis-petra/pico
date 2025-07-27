@@ -183,27 +183,26 @@ user > (loop [for i from 1 upto 10]
   (print-ln (to-string i)))
 ```
 
-Inside `expr` or any of the label bodies, one can `go-to` any label. If the
-label takes any arguments (optional), these must also be provided to the label.
-In this way, `go-to` is like a function call which never returns. Below, you can 
-see labels being used 
+We can also add a `while` to our loop, if we so desire, which will cause an
+early termination.
 
 ```clojure
-;; A simple loop that counts from 1 to 10
-user > (def print-to proc [n]
-  (labels (go-to loop 1)
-    [loop [i] seq
-      (print (u64.to-string i))
-      (print " ")
-      (if (u64.>= i n) 
-          (go-to end)
-          (go-to loop (u64.+ i 1)))]
-    ;; end the line
-    [end (print-ln "")]))
-Define print-to : Proc [U64] Unti
-user > (print-to 10)
-1 2 3 4 5 6 7 8 9 10
-:unit
+user > (loop [for i from 1 upto 10]
+             [while (< i 8)]
+  (print-ln (to-string i)))
+```
+
+We can even add multiple loops in parallel. As with `while`, the loop will 
+terminate if any of the individual loops (termed 'drivers') terminate.
+
+```clojure
+user > (loop [for i from 1 upto 10]
+             [for j from 10 downto 1]
+  (seq 
+    (print "i, j: ")
+    (print (to-string i))
+    (print ", ")
+    (print-ln (to-string j))))
 ```
 
 ### Types
