@@ -1,6 +1,6 @@
 #include "platform/signals.h"
 #include "pico/stdlib/helpers.h"
-#include "pico/stdlib/data/pair.h"
+#include "pico/stdlib/data/submodules.h"
 
 void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
     Imports imports = (Imports) {

@@ -1209,8 +1209,7 @@ void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buf
 }
 
 void command_bind_index_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer, IndexFormat format) {
-    VkBuffer vertex_buffers[1] = {buffer->vulkan_buffer};
-    vkCmdBindIndexBuffer(commands->buffer, buffer->vulkan_buffer, 0, format);
+    vkCmdBindIndexBuffer(commands->buffer, buffer->vulkan_buffer, 0, (VkIndexType)format);
 }
 
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {

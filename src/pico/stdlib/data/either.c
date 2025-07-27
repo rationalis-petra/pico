@@ -1,5 +1,5 @@
 #include "platform/signals.h"
-#include "pico/stdlib/data/either.h"
+#include "pico/stdlib/data/submodules.h"
 
 void add_either_module(Assembler *ass, Module *data, Allocator *a) {
     Imports imports = (Imports) {
