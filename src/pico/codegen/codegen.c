@@ -821,7 +821,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
             }
 
-            generate_stack_move(src_sz + out_sz - 0x8, offset, out_sz, ass, a, point);
+            generate_stack_move(src_sz, offset, out_sz, ass, a, point);
             // Now, remove the original struct from the stack
             build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_sz), a, point);
 
