@@ -3,6 +3,22 @@
 
 #include <stdint.h>
 
-uint64_t query_performance_counter();
+typedef enum {
+    NanoSeconds,
+    MicroSeconds,
+    MilliSeconds,
+    Seconds,
+} TimeUnit;
+
+typedef struct {
+    uint64_t time_sec;
+    uint64_t time_ns;
+} PerfTime;
+
+double time_to_double(PerfTime time, TimeUnit unit);
+
+PerfTime time_diff(PerfTime start, PerfTime end);
+
+PerfTime query_performance_timer();
 
 #endif

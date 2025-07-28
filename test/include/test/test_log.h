@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "platform/memory/allocator.h"
+#include "platform/profiling/profiling.h"
 #include "platform/io/terminal.h"
 
 typedef struct {
@@ -17,7 +18,8 @@ typedef struct {
     FormattedOStream* stream;
     Verbosity verbosity;
 
-    clock_t start_time;
+    PerfTime start_time;
+    PerfTime setup_time;
 
     bool in_test;
     String current_test;
@@ -28,6 +30,7 @@ typedef struct {
 } TestLog;
 
 TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
+void finish_setup(TestLog* log);
 void delete_test_log(TestLog* log, Allocator* a);
 
 bool suite_start(TestLog* log, String name);

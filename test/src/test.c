@@ -32,11 +32,11 @@
 #include "test_pico/pico.h"
 #include "test_assembler/test_assembler.h"
 
-void all_suites(TestLog *log, Allocator *a);
+void all_suites(TestLog* log, Allocator* a);
+TestLog* setup_testlog(int argc, char** argv, FormattedOStream* cout, Allocator* a);
 
 int main(int argc, char** argv) {
     // Setup
-
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();
@@ -44,6 +44,9 @@ int main(int argc, char** argv) {
     // Init terminal first, as other initializers may panic (and therefore write
     // to stdout)
     init_terminal(stdalloc);
+
+    FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
+    TestLog* log = setup_testlog(argc, argv, cos, stdalloc);
 
     // Initialization order here is not important
     init_ctypes();
@@ -55,8 +58,24 @@ int main(int argc, char** argv) {
     set_std_istream(cin);
     set_std_ostream(cout);
 
+    finish_setup(log);
+    all_suites(log, stdalloc);
+    int out = summarize_tests(log, stdalloc);
+
+    delete_test_log(log, stdalloc);
+    delete_formatted_ostream(cos, stdalloc);
+
+    // Cleanup
+    clear_symbols();
+    thread_clear_dynamic_vars();
+    clear_dynamic_vars();
+
+    return out;
+}
+
+TestLog* setup_testlog(int argc, char **argv, FormattedOStream* cout, Allocator *a) {
     // Argument parsing
-    StringArray args = mk_string_array(argc - 1, stdalloc);
+    StringArray args = mk_string_array(argc - 1, a);
     for (int i = 1; i < argc; i++) {
         push_string(mv_string(argv[i]), &args);
     }
@@ -64,7 +83,6 @@ int main(int argc, char** argv) {
     sdelete_string_array(args);
 
     // TODO: setup_tests
-    FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
     Verbosity v = (Verbosity) {
         .show_passes = false,
         .show_fails = false,
@@ -89,46 +107,9 @@ int main(int argc, char** argv) {
         break;
     }
 
-    TestLog* log = mk_test_log(cos, v, stdalloc);
-
-    int out = 1;
-    switch (command.type) {
-    case CAll: {
-        all_suites(log, stdalloc);
-        out = summarize_tests(log, stdalloc);
-        break;
-    }
-    case COnly: {
-        write_string(mv_string("Test Only!"), cout);
-        write_string(mv_string("\n"), cout);
-        break;
-    }
-    case CExcept: {
-        write_string(mv_string("Test Except!"), cout);
-        write_string(mv_string("\n"), cout);
-        break;
-    }
-    case CInvalid:
-        write_string(command.error_message, cout);
-        write_string(mv_string("\n"), cout);
-        break;
-    default:
-        write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
-        write_string(mv_string("\n"), cout);
-        break;
-    }
-
-
-    delete_test_log(log, stdalloc);
-    delete_formatted_ostream(cos, stdalloc);
-
-    // Cleanup
-    clear_symbols();
-    thread_clear_dynamic_vars();
-    clear_dynamic_vars();
-
-    return out;
+    return mk_test_log(cout, v, a);
 }
+
 
 void all_suites(TestLog *log, Allocator *a) {
     if (suite_start(log, mv_string("pico"))) {
