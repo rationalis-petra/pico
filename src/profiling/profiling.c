@@ -48,18 +48,18 @@ PerfTime query_performance_timer() {
 
 #include <windows.h>
 
-uint64_t query_performance_timer() {
-    uint64_t perf;
-    uint64_t freq;
+PerfTime query_performance_timer() {
+    LARGE_INTEGER perf;
+    LARGE_INTEGER freq;
     QueryPerformanceCounter(&perf);
-    QueryPerformanceFrequency(&perf);
+    QueryPerformanceFrequency(&freq);
 
     // Then, nanoseconds per cycle = 10^9/freq 
     // Thus, time_ns = (perf % freq) * 10^9 / freq
     return (PerfTime) {
-        .time_ns = (perf % freq) * 10^9 / freq,
-        .time_sec = perf / freq,
-    }
+        .time_ns = (perf.QuadPart % freq.QuadPart) * 10^9 / freq.QuadPart,
+        .time_sec = perf.QuadPart / freq.QuadPart,
+    };
 }
 
 #endif
