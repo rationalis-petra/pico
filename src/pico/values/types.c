@@ -483,7 +483,14 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mk_str_doc(*symbol_to_string(type->var), a);
         break;
     }
-    case TAll:
+    case TAll: {
+        void** addr = (void**) val;
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("all"), a), &nodes);
+        push_ptr(pretty_ptr(*addr, a), &nodes);
+        out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case TExists:
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);

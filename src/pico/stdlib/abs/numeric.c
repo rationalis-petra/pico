@@ -1,5 +1,5 @@
 #include "platform/signals.h"
-#include "pico/stdlib/abs/numeric.h"
+#include "pico/stdlib/abs/submodules.h"
 
 #include "pico/stdlib/helpers.h"
 
@@ -27,7 +27,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
         //panic(doc_to_str(pi_point.error.message, 120, a));
-        panic(mv_string("pico error in numeric.c"));
+        panic(mv_string("pico error in abs/numeric.c"));
     }
 
     ErrorPoint point;

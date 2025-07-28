@@ -35,7 +35,7 @@ Document* pretty_cprim(CPrimInt prim, Allocator* a) {
         break;
     }
 
-    return mv_sep_doc(nodes, a);
+    return mv_group_doc(mv_sep_doc(nodes, a), a);
 }
 
 Document* pretty_ctype(CType* type, Allocator* a) {

@@ -191,17 +191,17 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
     size_t leftover = size % 8;
     if (leftover >= 4) {
         build_binary_op(ass, Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_32), reg(RAX, sz_32), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~7), sz_32), reg(RAX, sz_32), a, point);
         leftover -= 4;
     }
     if (leftover >= 2) {
         build_binary_op(ass, Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_16), reg(RAX, sz_16), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~3), sz_16), reg(RAX, sz_16), a, point);
         leftover -= 2;
     }
     if (leftover >= 1) {
         build_binary_op(ass, Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), a, point);
-        build_binary_op(ass, Mov, rref8(dest, size / 8, sz_8), reg(RAX, sz_8), a, point);
+        build_binary_op(ass, Mov, rref8(dest, (size & ~1), sz_8), reg(RAX, sz_8), a, point);
         leftover -= 1;
     }
 }
@@ -661,9 +661,11 @@ void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
     build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
 #elif ABI == WIN_64
     build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
     build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+    build_unary_op(ass, Pop, reg(R8, sz_64), a, point);
 #else 
     #error "Unknown calling convention"
 #endif

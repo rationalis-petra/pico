@@ -1202,10 +1202,14 @@ void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeli
     vkCmdBindPipeline(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 }
 
-void command_bind_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
+void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
     VkBuffer vertex_buffers[1] = {buffer->vulkan_buffer};
     VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
+}
+
+void command_bind_index_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer, IndexFormat format) {
+    vkCmdBindIndexBuffer(commands->buffer, buffer->vulkan_buffer, 0, (VkIndexType)format);
 }
 
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {
@@ -1226,10 +1230,17 @@ void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {
     vkCmdSetScissor(buffer->buffer, 0, 1, &scissor);
 }
 
-void command_draw(HedronCommandBuffer *buffer,
+void command_draw(HedronCommandBuffer *commands,
                   uint32_t vertex_count, uint32_t instance_count,
                   uint32_t first_vertex, uint32_t first_instance) {
-    vkCmdDraw(buffer->buffer, vertex_count, instance_count, first_vertex, first_instance);
+    vkCmdDraw(commands->buffer, vertex_count, instance_count, first_vertex, first_instance);
+}
+
+
+void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count,
+                          uint32_t instance_count, uint32_t first_index,
+                          int32_t vertex_offset, uint32_t first_instance) { 
+    vkCmdDrawIndexed(commands->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 #else

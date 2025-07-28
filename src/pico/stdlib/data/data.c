@@ -1,9 +1,4 @@
-#include "pico/stdlib/data/list.h"
-#include "pico/stdlib/data/either.h"
-#include "pico/stdlib/data/maybe.h"
-#include "pico/stdlib/data/pair.h"
-#include "pico/stdlib/data/ptr.h"
-
+#include "pico/stdlib/data/submodules.h"
 #include "pico/stdlib/data/data.h"
 
 void add_data_module(Assembler* ass, Package* base, Allocator* a) {
@@ -26,7 +21,9 @@ void add_data_module(Assembler* ass, Package* base, Allocator* a) {
     add_either_module(ass, module, a);
     add_maybe_module(ass, module, a);
     add_pair_module(ass, module, a);
-    add_ptr_module(module, a);
+    add_pointer_module(ass, module, a);
+
+    add_string_module(module, a);
 
     add_module(string_to_symbol(mv_string("data")), module, base);
 }

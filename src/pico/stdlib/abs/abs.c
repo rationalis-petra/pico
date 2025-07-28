@@ -1,5 +1,5 @@
 #include "pico/stdlib/helpers.h"
-#include "pico/stdlib/abs/numeric.h"
+#include "pico/stdlib/abs/submodules.h"
 
 #include "pico/stdlib/abs/abs.h"
 
@@ -21,6 +21,7 @@ void add_abs_module(Package* base, Allocator* a) {
     delete_module_header(header);
 
     add_numeric_module(module, base, a);
+    add_show_module(module, base, a);
 
     add_module(string_to_symbol(mv_string("abs")), module, base);
 }
