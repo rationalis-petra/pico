@@ -318,9 +318,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RECT windowArea;
         GetClientRect(hwnd, &windowArea);
-        window->width = windowArea.right - windowArea.left;
-        window->height = windowArea.bottom - windowArea.top;
+        *window = (Window) {
+            .should_close = false,
+            .impl = hwnd,
+            .messages = mk_wm_array(8, wsa),
 
+            .width = windowArea.right - windowArea.left,
+            .height = windowArea.bottom - windowArea.top,
+        };
     } else {
         window = (Window*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
@@ -391,10 +396,6 @@ Window *create_window(String name, int width, int height) {
                                 );
     if (window) {
         ShowWindow(window, SW_SHOWDEFAULT);
-        *win = (Window){
-            .should_close = false,
-            .impl = window,
-        };
         return win;
     } else {
         return NULL;
@@ -402,10 +403,9 @@ Window *create_window(String name, int width, int height) {
 }
 
 void destroy_window(Window *window) {
-    HWND impl = window->impl;
-    mem_free(window, wsa);
     sdelete_wm_array(window->messages);
-    DestroyWindow(impl);
+    DestroyWindow(window->impl);
+    mem_free(window, wsa);
 }
 
 bool window_should_close(Window *window) {
