@@ -386,7 +386,7 @@ Window *create_window(String name, int width, int height) {
     Window *win = mem_alloc(sizeof(Window), wsa);
     HWND window = CreateWindowEx(0, // styles (optional)
                                  wind_class_name,
-                                 name.bytes,
+                                 (char*)name.bytes,
                                  WS_OVERLAPPEDWINDOW, // window style/type
                                  CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,  // position/size
                                  NULL, // parent
