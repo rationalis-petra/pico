@@ -928,12 +928,21 @@ uint32_t find_memory_type(uint32_t filter, VkMemoryPropertyFlags properties) {
 }
 
 
-HedronBuffer *create_buffer(uint64_t size) {
-    VkBufferCreateInfo buffer_info = (VkBufferCreateInfo){};
-    buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_info.size = size;
-    buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+HedronBuffer *create_buffer(BufferType type, uint64_t size) {
+    uint32_t buffer_usage = 0;
+    switch (type) {
+    case VertexBuffer: buffer_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        break;
+    case IndexBuffer: buffer_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        break;
+    }
+
+    VkBufferCreateInfo buffer_info = (VkBufferCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = buffer_usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
 
     VkBuffer vertex_buffer;
     if (vkCreateBuffer(logical_device, &buffer_info, NULL, &vertex_buffer) != VK_SUCCESS) {
@@ -943,10 +952,11 @@ HedronBuffer *create_buffer(uint64_t size) {
     VkMemoryRequirements mem_requirements;
     vkGetBufferMemoryRequirements(logical_device, vertex_buffer, &mem_requirements);
 
-    VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {};
-    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_requirements.size;
-    alloc_info.memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mem_requirements.size,
+        .memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
 
     VkDeviceMemory vertex_buffer_memory;
     if (vkAllocateMemory(logical_device, &alloc_info, NULL, &vertex_buffer_memory) != VK_SUCCESS) {

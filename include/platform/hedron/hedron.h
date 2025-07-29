@@ -67,6 +67,10 @@ void destroy_pipeline(HedronPipeline* pipeline);
 // 
 // -------------------------------------------
 
+typedef enum {
+    VertexBuffer = 0,
+    IndexBuffer = 1,
+} BufferType;
 
 typedef enum {
     IndexU16 = 0, // Matches Vulkan spec
@@ -75,7 +79,7 @@ typedef enum {
 
 typedef struct HedronBuffer HedronBuffer;
 
-HedronBuffer* create_buffer(uint64_t size);
+HedronBuffer* create_buffer(BufferType type, uint64_t size);
 void destroy_buffer(HedronBuffer* buffer);
 
 void set_buffer_data(HedronBuffer* buffer, void* data);

@@ -16,7 +16,9 @@ static PiType* input_rate_ty;
 static PiType* input_format_ty;
 static PiType* binder_desc_ty;
 static PiType* attribute_desc_ty;
+
 static PiType* buffer_ty;
+static PiType* buffer_sort_ty;
 
 static PiType* command_pool_ty;
 static PiType* command_buffer_ty;
@@ -88,7 +90,10 @@ void build_destroy_pipeline_fn(PiType* type, Assembler* ass, Allocator* a, Error
 // ------------------------------------------------
 
 void build_create_buffer_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}), mk_voidptr_ctype(a));
+  CType fn_ctype = mk_fn_ctype(
+      a, 2, "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+            "size", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+      mk_voidptr_ctype(a));
     convert_c_fn(create_buffer, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
@@ -202,7 +207,7 @@ void build_command_bind_index_buffer_fn(PiType* type, Assembler* ass, Allocator*
                                  "buffer", mk_voidptr_ctype(a),
                                  "datatype", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                                  (CType){.sort = CSVoid});
-    convert_c_fn(command_bind_vertex_buffer, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(command_bind_index_buffer, &fn_ctype, type, ass, a, point); 
     delete_c_type(fn_ctype, a);
 }
 
@@ -413,6 +418,15 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     attribute_desc_ty = e->value;
     delete_pi_type_p(typep, a);
 
+    typep = mk_enum_type(a, 2, "vertex", 0, "index", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("BufferSort"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    buffer_sort_ty = e->value;
+    delete_pi_type_p(typep, a);
+
     typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Buffer"));
@@ -541,7 +555,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, a);
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), copy_pi_type_p(buffer_ty, a));
+    typep = mk_proc_type(a, 2, copy_pi_type_p(buffer_sort_ty, a), mk_prim_type(a, UInt_64), copy_pi_type_p(buffer_ty, a));
     build_create_buffer_fn(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("create-buffer"));
     fn_segments.code = get_instructions(ass);

@@ -218,6 +218,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(struct SML [.x 3] [.y -8])", &expected, module, log, a) ;
     }
 
+    // Projection
+    if (test_start(log, mv_string("project-sturct-misaligned"))) {
+        int32_t expected = 4;
+        test_toplevel_eq("(seq [let! st (struct MAS [.x 3] [.y -5] [.z 4])] st.z)", &expected, module, log, a) ;
+    }
+
     if (test_start(log, mv_string("project-struct-small"))) {
         int8_t expected = -8;
         test_toplevel_eq("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)", &expected, module, log, a) ;

@@ -816,6 +816,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // for this, we need the struct size + offset of field in the struct
             size_t offset = 0;
             for (size_t i = 0; i < source_type->structure.fields.len; i++) {
+                size_t align = pi_align_of(*(PiType*)source_type->structure.fields.data[i].val);
+                offset = pi_size_align(offset, align);
                 if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
                     break;
                 offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
