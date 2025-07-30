@@ -338,8 +338,19 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
             break;
         }
     }
+    if (result == StreamEnd) {
+        String str = string_from_UTF_32(arr, a);
+        RawTree val = (RawTree) {
+            .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(str),
+        };
+        push_rawtree(val, &terms);
+    }
 
-    if (result != StreamSuccess) {
+    if (result != StreamSuccess && result != StreamEnd) {
         out = (ParseResult) {
             .type = ParseFail,
             .error.message = mv_cstr_doc("Stream failure.", a),

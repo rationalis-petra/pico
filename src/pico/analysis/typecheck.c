@@ -22,6 +22,7 @@
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void type_infer_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void post_unify(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* point) {
@@ -30,11 +31,11 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
     switch (top->type) {
     case TLDef: {
         PiType* check_against;
-        EnvEntry e = env_lookup(top->def.bind, env);
+        PiType* ty = env_lookup_tydecl(top->def.bind, env);
         Syntax* term = top->def.value;
 
-        if (e.success == Ok) {
-            check_against = e.type;
+        if (ty != NULL) {
+            check_against = ty;
         } else {
             check_against = mk_uvar(a);
         }
@@ -42,6 +43,29 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         type_check_expr(term, *check_against, t_env, a, point);
         post_unify(term, t_env, a, point);
         pop_type(t_env);
+        break;
+    }
+    case TLDecl: {
+        PtrArray declarations = mk_ptr_array(2, a);
+        for (size_t i = 0; i < top->decl.properties.len; i++) {
+            SymPtrCell cell = top->decl.properties.data[i];
+            if (symbol_eq(cell.key, string_to_symbol(mv_string("type")))) {
+                PiType* ty = eval_type(cell.val, t_env, a, point);
+                ModuleDecl* decl = mem_alloc(sizeof(ModuleDecl), a);
+                *decl = (ModuleDecl) {
+                    .sort = DeclType,
+                    .type = ty,
+                };
+                push_ptr(decl, &declarations);
+            } else {
+                PicoError err = (PicoError) {
+                    .range = ((Syntax*)cell.val)->range,
+                    .message = mv_cstr_doc("unrecognized declaration", a),
+                };
+                throw_pi_error(point, err);
+            }
+        }
+        top->decl.decls = declarations;
         break;
     }
     case TLOpen: {
@@ -88,7 +112,6 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
 // Forward declarations for implementation (internal declarations)
 void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);

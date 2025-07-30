@@ -14,6 +14,7 @@
 typedef enum EvalResult_t  {
     ERValue,
     ERDef,
+    ERDecl,
     EROpen,
 } EvalResult_t;
 

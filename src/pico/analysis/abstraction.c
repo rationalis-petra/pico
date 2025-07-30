@@ -2289,6 +2289,65 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         break;
     }
+    case FDeclare: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Declarations expect at least 2 terms", a);
+            throw_pi_error(point, err);
+        }
+
+        if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("First argument to declaration should be a symbol", a);
+            throw_pi_error(point, err);
+        }
+
+        Symbol sym = raw.branch.nodes.data[1].atom.symbol;
+        
+        // Declaration bodies are a set of field, value pairs, e.g.
+        // [.type <Type>]
+        // [.optimise <level>]
+        // [.inline-hint <hint>]
+        RawTree* raw_term = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, a);
+
+        shadow_var(sym, env);
+        SymPtrAMap properties = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            RawTree fdesc = raw.branch.nodes.data[i];
+            if (fdesc.type != RawBranch) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to be compound terms.", a);
+                throw_pi_error(point, err);
+            }
+            
+            if (fdesc.branch.nodes.len < 2) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to have at least 2 elements.", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol field;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+                err.range = fdesc.branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Declaration has malformed property name.", a);
+                throw_pi_error(point, err);
+            }
+
+            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, a); 
+            Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
+
+            sym_ptr_insert(field, syn, &properties);
+        }
+        shadow_pop(1, env);
+
+        res = (TopLevel) {
+            .type = TLDecl,
+            .decl.bind = sym,
+            .decl.properties = properties,
+        };
+
+        break;
+    }
     case FOpen: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;

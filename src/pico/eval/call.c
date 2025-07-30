@@ -33,6 +33,14 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         }
         break;
     }
+    case TLDecl: {
+        res.type = ERDecl;
+        for (size_t i = 0; i < top.decl.decls.len; i++) {
+            ModuleDecl* decl = top.decl.decls.data[i];
+            add_decl(module, top.decl.bind, *decl); 
+        }
+        break;
+    }
     case TLDef: {
         // copy into module
         res = (EvalResult) {
