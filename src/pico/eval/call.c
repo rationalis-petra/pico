@@ -185,6 +185,9 @@ Document* pretty_res(EvalResult res, Allocator* a) {
     case ERValue:
         out = pretty_pi_value(res.val.val, res.val.type, a);
         break;
+    case ERDecl:
+        out = mk_str_doc(mv_string("Declared: "), a);
+        break;
     default:
         out = mk_str_doc(mv_string("Invalid Result!"), a);
     }

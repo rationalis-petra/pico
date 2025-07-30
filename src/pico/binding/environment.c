@@ -166,7 +166,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
         ModuleEntry* mentry = get_def(sym, *module); 
-        if (mentry != NULL) {
+        if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
             result.value = mentry->value;
