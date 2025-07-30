@@ -24,9 +24,11 @@ typedef struct {
     void* value;
     bool is_module;
     PiType type;
+    PtrArray* declarations;
 
     U8Array* code_segment;
     U8Array* data_segment;
+
     // TODO (UB) if a value (e.g. proc) from a module is evaluated, it will give
     // an address. If the original definition is then deleted, the address will
     // now be dangling. This is an issue if the address has been stored somewhere! 
@@ -132,6 +134,18 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
     return module;
 }
 
+void delete_decl(ModuleDecl decl, Allocator* a) {
+    switch (decl.sort) {
+    case DeclType:
+        delete_pi_type_p(decl.type, a);
+    }
+}
+
+void delete_decl_p(ModuleDecl* decl, Allocator* a) {
+    delete_decl(*decl, a);
+    mem_free(decl, a);
+}
+
 // Helper
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
@@ -146,6 +160,15 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
             mem_free(entry.value, module->allocator);
         }
         delete_pi_type(entry.type, module->allocator);
+    }
+
+    if (entry.declarations) {
+        for (size_t i = 0; i < entry.declarations->len; i++) {
+            delete_decl_p(entry.declarations->data[i], module->allocator);
+        }
+        sdelete_ptr_array(*entry.declarations);
+        mem_free(entry.declarations, module->allocator);
+        entry.declarations = NULL;
     }
 
     if (entry.backlinks) {
@@ -230,10 +253,17 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
 }
 
 Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links) {
-    ModuleEntryInternal entry;
+    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
+    
+    ModuleEntryInternal entry = (ModuleEntryInternal) {};
+    PtrArray* declarations = NULL;
+    if (old_entry) {
+        declarations = old_entry->declarations;
+        old_entry->declarations = NULL;
+        delete_module_entry(*old_entry, module);
+    }
+    entry.declarations = declarations;
     entry.is_module = false;
-    entry.data_segment = NULL;
-    entry.code_segment = NULL;
     size_t size = pi_size_of(type);
 
     if (type.sort == TKind || type.sort == TConstraint) {
@@ -285,9 +315,48 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
     entry.type = copy_pi_type(type, module->allocator);
 
     // Free a previous definition (if it exists!)
-    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
-    if (old_entry) delete_module_entry(*old_entry, module);
+    entry_insert(symbol, entry, &module->entries);
 
+    Result out;
+    out.type = Ok;
+    return out;
+}
+
+ModuleDecl copy_decl(ModuleDecl decl, Allocator *a) {
+    ModuleDecl out = (ModuleDecl) {.sort = decl.sort};
+    switch (decl.sort) {
+    case DeclType:
+        out.type = copy_pi_type_p(decl.type, a);
+        break;
+    }
+    return out;
+}
+
+Result add_decl(Module *module, Symbol symbol, ModuleDecl decl) {
+    ModuleEntryInternal entry = (ModuleEntryInternal) {};
+    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
+    if (old_entry) entry = *old_entry;
+    PtrArray* declarations = entry.declarations;
+    if (!declarations) {
+        declarations = mem_alloc(sizeof(PtrArray), module->allocator);
+        *declarations = mk_ptr_array( 1, module->allocator);
+    }
+
+    bool found_decl = false;
+    for (size_t i = 0; i < declarations->len; i++) {
+        if (((ModuleDecl*)declarations->data[i])->sort == decl.sort) {
+            *(ModuleDecl*)declarations->data[i] = copy_decl(decl, module->allocator);
+            found_decl = true;
+        }
+    }
+
+    if (!found_decl) {
+        ModuleDecl* declaration = mem_alloc(sizeof(ModuleDecl), module->allocator);
+        *declaration = copy_decl(decl, module->allocator);
+        push_ptr(declaration, declarations);
+    }
+
+    entry.declarations = declarations;
     entry_insert(symbol, entry, &module->entries);
 
     Result out;

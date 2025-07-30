@@ -61,6 +61,10 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
         delete_address_env(a_env, a);
         break;
     }
+    case TLDecl: {
+        // Do nothing; open only affects the environment
+        break;
+    }
     case TLOpen: {
         // Do nothing; open only affects the environment
         break;

@@ -740,6 +740,73 @@ void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* po
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
 
+MacroResult ann_macro(RawTreeArray nodes) {
+    if (nodes.len < 3) {
+        return (MacroResult) {
+            .result_type = Left,
+            .err.message = mv_string("Malformed annotation (ann): expected at least three terms"),
+            .err.range = nodes.data[0].range,
+        };
+    }
+
+    Allocator a = get_std_current_allocator();
+    RawTreeArray decl_nodes = mk_rawtree_array(3, &a);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("declare")),
+        }, &decl_nodes);
+
+    push_rawtree(nodes.data[1], &decl_nodes);
+
+    RawTreeArray field_nodes = mk_rawtree_array(2, &a);
+    RawTreeArray proj_nodes = mk_rawtree_array(2, &a);
+
+    // push '.type'
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string(".")),
+        }, &proj_nodes);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("type")),
+        }, &proj_nodes);
+
+    // push '.type'
+    push_rawtree((RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = proj_nodes,
+        }, &field_nodes);
+
+    // push <type>
+    RawTree* tree = (nodes.len == 3) ? &nodes.data[2]
+        : raw_slice(nodes.data, 2, &a);
+    push_rawtree(*tree, &field_nodes);
+
+    // push [.type <type>]
+    push_rawtree((RawTree) {
+            .type = RawBranch,
+            .branch.hint = HSpecial,
+            .branch.nodes = field_nodes,
+        }, &decl_nodes);
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term.type = RawBranch,
+        .term.branch.hint = HExpression,
+        .term.branch.nodes = decl_nodes,
+    };
+}
+
+void build_ann_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
+
+    convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
+}
+
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -889,6 +956,14 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     typep = mk_prim_type(a, TMacro);
     build_loop_macro(macro_proc, ass, a, &point);
     sym = string_to_symbol(mv_string("loop"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_prim_type(a, TMacro);
+    build_ann_macro(macro_proc, ass, a, &point);
+    sym = string_to_symbol(mv_string("ann"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

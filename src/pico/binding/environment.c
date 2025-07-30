@@ -166,7 +166,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
         ModuleEntry* mentry = get_def(sym, *module); 
-        if (mentry != NULL) {
+        if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
             result.value = mentry->value;
@@ -179,6 +179,28 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
         result.success = Err;
     }
     return result;
+}
+
+PiType* env_lookup_tydecl(Symbol sym, Environment* env) {
+    if (sym.did != 0) return NULL;
+
+    Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
+    if (module) {
+        ModuleEntry* mentry = get_def(sym, *module); 
+        if (mentry != NULL) {
+            if (mentry->declarations) {
+                PtrArray decls = *mentry->declarations;
+                for (size_t i = 0; i < decls.len; i++) {
+                    ModuleDecl* decl = decls.data[i];
+                    if (decl->sort == DeclType) {
+                        return decl->type;
+                    }
+                }
+            }
+        } 
+    } 
+
+    return NULL;
 }
 
 PtrArray* env_implicit_lookup(Name id, Environment* env) {

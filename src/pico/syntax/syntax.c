@@ -3,6 +3,7 @@
 #include "pretty/standard_types.h"
 
 #include "pico/values/array.h"
+#include "pico/values/modular.h"
 #include "pico/syntax/syntax.h"
 
 typedef struct SyntaxCall {
@@ -779,10 +780,28 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {
-    PtrArray nodes = mk_ptr_array(4, a);
+    PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mv_str_doc(mk_string("def", a), a), &nodes);
     push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_syntax(def->value, a), a), &nodes);
+    return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
+}
+
+Document* pretty_decl(Declaration* decl, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(3, a);
+    push_ptr(mv_str_doc(mk_string("declare", a), a), &nodes);
+    push_ptr(mk_str_doc(*symbol_to_string(decl->bind), a), &nodes);
+    for (size_t i = 0; i < decl->decls.len; i++) {
+        ModuleDecl* dec = decl->decls.data[i];
+        PtrArray prop_nodes = mk_ptr_array(2, a);
+        switch (dec->sort) {
+        case DeclType:
+            push_ptr(mv_cstr_doc("type", a), &prop_nodes);
+            push_ptr(pretty_type(dec->type, a), &prop_nodes);
+            break;
+        }
+        push_ptr(mk_paren_doc("[.", "]", mv_hsep_doc(nodes, a), a), &nodes);
+    }
     return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
 }
 
@@ -791,6 +810,9 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     switch (toplevel->type) {
     case TLDef:
         out = pretty_def(&toplevel->def, a);
+        break;
+    case TLDecl:
+        out = pretty_decl(&toplevel->decl, a);
         break;
     case TLOpen: {
         PtrArray docs = mk_ptr_array(toplevel->open.paths.len, a);
@@ -822,11 +844,14 @@ PiType* toplevel_type(TopLevel top) {
     case TLExpr:
         out = top.expr->ptype;
         break;
-    case TLOpen:
-        out = NULL;
-        break;
     case TLDef:
         out = top.def.value->ptype;
+        break;
+    case TLDecl:
+        out = NULL;
+        break;
+    case TLOpen:
+        out = NULL;
         break;
     }
     return out;

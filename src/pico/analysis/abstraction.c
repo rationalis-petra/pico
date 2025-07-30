@@ -30,6 +30,7 @@ typedef struct {
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 
+Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 Syntax* mk_array_literal(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 ComptimeHead comptime_head(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
@@ -2039,6 +2040,108 @@ Syntax *mk_array_literal(RawTree raw, ShadowEnv *env, Allocator *a, PiErrorPoint
     return res;
 }
 
+MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
+    // Call the function (uses Pico ABI)
+    MacroResult output;
+    RawTreeArray input = raw.branch.nodes;
+    void* dvars = get_dynamic_memory();
+    void* dynamic_memory_space = mem_alloc(4096, a);
+    void* offset_memory_space = mem_alloc(1024, a);
+
+    Allocator old_temp_alloc = set_std_temp_allocator(*a);
+    Allocator old_current_alloc = set_std_current_allocator(*a);
+
+    int64_t out;
+    __asm__ __volatile__(
+                         // save nonvolatile registers
+                         "push %%rbp       \n" // Nonvolatile on System V + Win64
+                         "push %%rbx       \n" // Nonvolatile on System V + Win64
+                         "push %%rdi       \n" // Nonvolatile on Win 64
+                         "push %%rsi       \n" // Nonvolatile on Win 64
+                         "push %%r15       \n" // for dynamic vars
+                         "push %%r14       \n" // for dynamic memory space
+                         "push %%r13       \n" // for control/indexing memory space
+                         "push %%r12       \n" // Nonvolatile on System V + Win64
+
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r14    \n"
+                         "mov %2, %%r15    \n"
+                         //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+
+                         // Push output ptr & sizeof (MacroResult), resp
+                         "push %6          \n" // output ptr
+                         "push %7          \n" // sizeof (MacroResult)
+
+                         // Push arg (array) onto stack
+                         "push 0x30(%5)       \n"
+                         "push 0x28(%5)       \n"
+                         "push 0x20(%5)       \n"
+                         "push 0x18(%5)       \n"
+                         "push 0x10(%5)       \n"
+                         "push 0x8(%5)        \n"
+                         "push (%5)         \n"
+
+                         "mov %%rsp, %%rbp \n"
+
+                         // Call function, this should consume 'Array' from the stack and push
+                         // 'Raw Syntax' onto the stack
+                         "call *%1         \n"
+
+                         // After calling the function, we
+                         // expect a RawTree to be atop the stack:
+#if ABI == SYSTEM_V_64
+                         // memcpy (dest = rdi, src = rsi, size = rdx)
+                         // retval = rax 
+                         // Note: 0x60 = sizeof(MacroResult)
+                         "mov 0x60(%%rsp), %%rdx   \n"
+                         "mov 0x68(%%rsp), %%rdi   \n"
+                         "mov %%rsp, %%rsi         \n"
+                         "call memcpy              \n"
+
+#elif ABI == WIN_64
+                         // memcpy (dest = rcx, src = rdx, size = r8)
+                         // retval = rax
+                         "mov 0x60(%%rsp), %%r8    \n"
+                         "mov 0x68(%%rsp), %%rcx   \n"
+                         "mov %%rsp, %%rdx         \n"
+                         "sub $0x20, %%rsp         \n"
+                         "call memcpy              \n"
+                         "add $0x20, %%rsp         \n"
+#else
+#error "Unknown calling convention"
+#endif
+                         // pop value from stack 
+                         // Note: 0x60 = sizeof(MacroResult)
+                         "mov 0x60(%%rsp), %%rax   \n"
+                         "add %%rax, %%rsp         \n"
+                         // pop stashed size & dest from stack
+                         "add $0x10, %%rsp          \n"
+
+                         "pop %%r12        \n"
+                         "pop %%r13        \n"
+                         "pop %%r14        \n"
+                         "pop %%r15        \n"
+                         "pop %%rsi        \n" 
+                         "pop %%rdi        \n" 
+                         "pop %%rbx        \n"
+                         "pop %%rbp        \n"
+                         : "=r" (out)
+
+                         : "r" (head.macro_addr)
+                           , "r" (dvars)
+                           , "r" (dynamic_memory_space)
+                           , "r" (offset_memory_space)
+                           , "r" (&input)
+                           , "r" (&output)
+                           , "c" (sizeof(MacroResult)) 
+                         : "r13", "r14", "r15");
+
+    set_std_temp_allocator(old_temp_alloc);
+    set_std_current_allocator(old_current_alloc);
+    mem_free(dynamic_memory_space, a);
+    return output;
+}
+
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -2136,103 +2239,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             return mk_term(head.former, raw, env, a, point);
         case HeadMacro: {
             // Call the function (uses Pico ABI)
-            MacroResult output;
-            RawTreeArray input = raw.branch.nodes;
-            void* dvars = get_dynamic_memory();
-            void* dynamic_memory_space = mem_alloc(4096, a);
-            void* offset_memory_space = mem_alloc(1024, a);
-
-            Allocator old_temp_alloc = set_std_temp_allocator(*a);
-            Allocator old_current_alloc = set_std_current_allocator(*a);
-
-            int64_t out;
-            __asm__ __volatile__(
-                                 // save nonvolatile registers
-                                 "push %%rbp       \n" // Nonvolatile on System V + Win64
-                                 "push %%rbx       \n" // Nonvolatile on System V + Win64
-                                 "push %%rdi       \n" // Nonvolatile on Win 64
-                                 "push %%rsi       \n" // Nonvolatile on Win 64
-                                 "push %%r15       \n" // for dynamic vars
-                                 "push %%r14       \n" // for dynamic memory space
-                                 "push %%r13       \n" // for control/indexing memory space
-                                 "push %%r12       \n" // Nonvolatile on System V + Win64
-
-                                 "mov %4, %%r13    \n"
-                                 "mov %3, %%r14    \n"
-                                 "mov %2, %%r15    \n"
-                                 //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
-
-                                 // Push output ptr & sizeof (MacroResult), resp
-                                 "push %6          \n" // output ptr
-                                 "push %7          \n" // sizeof (MacroResult)
-
-                                 // Push arg (array) onto stack
-                                 "push 0x30(%5)       \n"
-                                 "push 0x28(%5)       \n"
-                                 "push 0x20(%5)       \n"
-                                 "push 0x18(%5)       \n"
-                                 "push 0x10(%5)       \n"
-                                 "push 0x8(%5)        \n"
-                                 "push (%5)         \n"
-
-                                 "mov %%rsp, %%rbp \n"
-
-                                 // Call function, this should consume 'Array' from the stack and push
-                                 // 'Raw Syntax' onto the stack
-                                 "call *%1         \n"
-
-                                 // After calling the function, we
-                                 // expect a RawTree to be atop the stack:
-#if ABI == SYSTEM_V_64
-                                 // memcpy (dest = rdi, src = rsi, size = rdx)
-                                 // retval = rax 
-                                 // Note: 0x60 = sizeof(MacroResult)
-                                 "mov 0x60(%%rsp), %%rdx   \n"
-                                 "mov 0x68(%%rsp), %%rdi   \n"
-                                 "mov %%rsp, %%rsi         \n"
-                                 "call memcpy              \n"
-
-#elif ABI == WIN_64
-                                 // memcpy (dest = rcx, src = rdx, size = r8)
-                                 // retval = rax
-                                 "mov 0x60(%%rsp), %%r8    \n"
-                                 "mov 0x68(%%rsp), %%rcx   \n"
-                                 "mov %%rsp, %%rdx         \n"
-                                 "sub $0x20, %%rsp         \n"
-                                 "call memcpy              \n"
-                                 "add $0x20, %%rsp         \n"
-#else
-#error "Unknown calling convention"
-#endif
-                                 // pop value from stack 
-                                 // Note: 0x60 = sizeof(MacroResult)
-                                 "mov 0x60(%%rsp), %%rax   \n"
-                                 "add %%rax, %%rsp         \n"
-                                 // pop stashed size & dest from stack
-                                 "add $0x10, %%rsp          \n"
-
-                                 "pop %%r12        \n"
-                                 "pop %%r13        \n"
-                                 "pop %%r14        \n"
-                                 "pop %%r15        \n"
-                                 "pop %%rsi        \n" 
-                                 "pop %%rdi        \n" 
-                                 "pop %%rbx        \n"
-                                 "pop %%rbp        \n"
-                                 : "=r" (out)
-
-                                 : "r" (head.macro_addr)
-                                   , "r" (dvars)
-                                   , "r" (dynamic_memory_space)
-                                   , "r" (offset_memory_space)
-                                   , "r" (&input)
-                                   , "r" (&output)
-                                   , "c" (sizeof(MacroResult)) 
-                                 : "r13", "r14", "r15");
-
-            set_std_temp_allocator(old_temp_alloc);
-            set_std_current_allocator(old_current_alloc);
-            mem_free(dynamic_memory_space, a);
+            MacroResult output = eval_macro(head, raw, a);
             if (output.result_type == 1) {
                 return abstract_expr_i(output.term, env, a, point);
             } else {
@@ -2289,6 +2296,64 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         break;
     }
+    case FDeclare: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Declarations expect at least 2 terms", a);
+            throw_pi_error(point, err);
+        }
+
+        if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("First argument to declaration should be a symbol", a);
+            throw_pi_error(point, err);
+        }
+
+        Symbol sym = raw.branch.nodes.data[1].atom.symbol;
+        
+        // Declaration bodies are a set of field, value pairs, e.g.
+        // [.type <Type>]
+        // [.optimise <level>]
+        // [.inline-hint <hint>]
+
+        shadow_var(sym, env);
+        SymPtrAMap properties = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            RawTree fdesc = raw.branch.nodes.data[i];
+            if (fdesc.type != RawBranch) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to be compound terms.", a);
+                throw_pi_error(point, err);
+            }
+            
+            if (fdesc.branch.nodes.len < 2) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to have at least 2 elements.", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol field;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+                err.range = fdesc.branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Declaration has malformed property name.", a);
+                throw_pi_error(point, err);
+            }
+
+            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, a); 
+            Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
+
+            sym_ptr_insert(field, syn, &properties);
+        }
+        shadow_pop(1, env);
+
+        res = (TopLevel) {
+            .type = TLDecl,
+            .decl.bind = sym,
+            .decl.properties = properties,
+        };
+
+        break;
+    }
     case FOpen: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -2317,12 +2382,13 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
         };
         break;
     }
-    default:
+    default: {
         res = (TopLevel) {
             .type = TLExpr,
             .expr = mk_term(former, raw, env, a, point),
         };
         break;
+    }
     }
     return res;
 }
@@ -2332,20 +2398,34 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
     bool unique_toplevel = false;
 
     if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
-        if (is_symbol(raw.branch.nodes.data[0])) {
-            Symbol sym = raw.branch.nodes.data[0].atom.symbol;
-            ShadowEntry entry = shadow_env_lookup(sym, env);
-            switch (entry.type) {
-            case SGlobal: {
-                if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
-                    unique_toplevel = true;
-                    return mk_toplevel(*((TermFormer*)entry.value), raw, env, a, point);
-                }
-                break;
+        if (raw.branch.hint == HData) {
+            return (TopLevel) {
+                .type = TLExpr,
+                .expr = mk_array_literal(raw, env, a, point),
+            };
+        }
+
+        ComptimeHead head = comptime_head(raw.branch.nodes.data[0], env, a, point);
+        switch (head.type) {
+        case HeadSyntax:
+            return (TopLevel) {
+                .type = TLExpr,
+                .expr = mk_application_body(head.syn, raw, env, a, point),
+            };
+        case HeadFormer:
+            return mk_toplevel(head.former, raw, env, a, point);
+        case HeadMacro: {
+            MacroResult output = eval_macro(head, raw, a);
+            if (output.result_type == 1) {
+                return abstract_i(output.term, env, a, point);
+            } else {
+                PicoError err = (PicoError) {
+                    .message = mk_str_doc(output.err.message, a),
+                    .range = output.err.range,
+                };
+                throw_pi_error(point, err);
             }
-            default:
-                break;
-            }
+        }
         }
     } 
 
