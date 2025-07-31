@@ -951,14 +951,16 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     case TKind: {
         size_t nargs = type->kind.nargs;
         if (nargs == 0) {
-            out = mk_str_doc(mv_string("Type"), a);
+            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a);
         } else {
-            PtrArray nodes = mk_ptr_array(nargs + 2, a);
-            push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
+            PtrArray nodes = mk_ptr_array(2, a);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Kind"), a), a), &nodes);
+            PtrArray args = mk_ptr_array(nargs, a);
             for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
+                push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &args);
             }
-            push_ptr(mk_str_doc(mv_string("] Type"), a), &nodes);
+            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(args, a), a), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Type"), a), a), &nodes);
             out = mv_sep_doc(nodes, a);
         }
         break;
@@ -1631,7 +1633,7 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
 
         // Kinds (higher kinds not supported)
     case TKind:
-        panic(mv_string("pi_type_eql not implemented for kinds"));
+        return lhs->kind.nargs == rhs->kind.nargs;
     case TConstraint:
         panic(mv_string("pi_type_eql not implemented for constraints"));
     default:

@@ -38,6 +38,14 @@ void add_list_module(Module *data, Allocator *a) {
     //  - list-free or delete-list
     //  - push/pop (using alter)
 
+    const char *mk_list_type =
+        "(def List Named List Family [A] Struct\n"
+        "  [.data Address]\n"
+        "  [.len U64]\n"
+        "  [.capacity U64]\n"
+        "  [.gpa Allocator])\n";
+    compile_toplevel(mk_list_type, module, &point, &pi_point, a);
+
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
         "(def mk-list all [A] proc [len capacity]\n"

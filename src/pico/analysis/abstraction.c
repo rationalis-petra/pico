@@ -2534,45 +2534,64 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
             .name = raw->atom.symbol,
         };
     } else if (raw->type == RawBranch) {
-        // Export as
+        // If branch, there are two options
+        // (var1 :as var2)
+        // (:all)
         // looks like (<symbol/name> (<symbol/:> <symbol/as>) <symbol/name>)
 
-        if (raw->branch.nodes.len != 3) {
+        if (raw->branch.nodes.len == 2) {
+            Symbol all_sym;
+            if(!get_fieldname(raw, &all_sym)) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid export clause - couldn't get fieldname from expected 'all' ", a);
+                throw_pi_error(point, err);
+            }
+            if (!symbol_eq(all_sym, string_to_symbol(mv_string("all")))) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid export - expected 'all', but got something else", a);
+                throw_pi_error(point, err);
+            }
+
+            return (ExportClause) {
+                .type = ExportAll,
+            };
+        } else if (raw->branch.nodes.len == 3) {
+            Symbol middle;
+            if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
+                err.range = raw->branch.nodes.data[1].range;
+                err.message = mv_cstr_doc("Invalid export clause", a);
+                throw_pi_error(point, err);
+            }
+            if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
+                err.range = raw->branch.nodes.data[1].range;
+                err.message = mv_cstr_doc("Invalid export clause", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol name;
+            Symbol rename;
+            if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
+                err.range = raw->branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Invalid export-as name", a);
+                throw_pi_error(point, err);
+            }
+            if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
+                err.range = raw->branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Invalid export-as new name", a);
+                throw_pi_error(point, err);
+            }
+
+            return (ExportClause) {
+                .type = ExportNameAs,
+                .name = name,
+                .rename = rename,
+            };
+        } else {
             err.range = raw->range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
+            err.message = mv_cstr_doc("Invalid export clause - for branches, expect either 2 argument (: all) or 3 (sym1 :as sym2)", a);
             throw_pi_error(point, err);
         }
 
-        Symbol middle;
-        if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-            err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
-            throw_pi_error(point, err);
-        }
-        if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
-            err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
-            throw_pi_error(point, err);
-        }
-
-        Symbol name;
-        Symbol rename;
-        if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
-            err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Invalid export-as name", a);
-            throw_pi_error(point, err);
-        }
-        if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
-            err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Invalid export-as new name", a);
-            throw_pi_error(point, err);
-        }
-
-        return (ExportClause) {
-            .type = ExportNameAs,
-            .name = name,
-            .rename = rename,
-        };
     } else {
         err.range = raw->range;
         err.message = mv_cstr_doc("Invalid export clause", a);

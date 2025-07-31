@@ -97,6 +97,15 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("kinds-1"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType expected = (PiType){.sort = TKind, .kind.nargs = 1};
+        test_typecheck_eq("(Family [A] A)", &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
+
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

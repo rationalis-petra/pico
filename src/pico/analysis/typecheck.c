@@ -298,7 +298,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SAll: {
-        // Give each arg type kind.
+        // Give each arg type Type.
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
