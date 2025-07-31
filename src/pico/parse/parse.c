@@ -624,7 +624,6 @@ StreamResult consume_until(uint32_t stop, IStream* is) {
 
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (codepoint != stop) {
-            // TODO: Check if newline!
             result = next(is, &codepoint);
         }
         else {
@@ -639,7 +638,6 @@ StreamResult consume_whitespace(IStream* is) {
     StreamResult result;
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (is_whitespace(codepoint) ) {
-            // TODO: Check if newline!
             result = next(is, &codepoint);
         } else if (codepoint == ';') {
             result = consume_until('\n', is);
@@ -655,7 +653,11 @@ bool is_numchar(uint32_t codepoint) {
 }
 
 bool is_whitespace(uint32_t codepoint) {
-    return codepoint == 32 || (9 <= codepoint && codepoint <= 13);
+    // Take note of the (codepoint == 0). This is because we may encounter a
+    // NULL character in a file. If this happens, we treat it as whitespace (for now).
+    // We *may* want to change this to report an error instead. 
+    // (possibly for all control/non-displayable characters?)
+    return (codepoint == 32) | (9 <= codepoint && codepoint <= 13) | (codepoint == 0);
 }
 
 bool is_symchar(uint32_t codepoint) {

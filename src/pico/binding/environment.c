@@ -85,14 +85,14 @@ Environment* env_from_module(Module* module, Allocator* a) {
         case ImportAll: {
             // Find the package
             Module* importee = path_all(clause.path, root_module);
-            SymbolArray syms = get_exported_symbols(importee, a);
+            SymbolArray syms = get_defined_symbols(importee, a);
             for (size_t j = 0; j < syms.len; j++ ) {
                 name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
             }
             sdelete_symbol_array(syms);
 
             // Get all implicits
-            PtrArray instances = get_exported_instances(importee, a);
+            PtrArray instances = get_defined_instances(importee, a);
             for (size_t j = 0; j < instances.len; j++ ) {
                 InstanceSrc* instance = instances.data[j];
 
@@ -125,14 +125,14 @@ Environment* env_from_module(Module* module, Allocator* a) {
 
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_exported_symbols(module, a);
+    SymbolArray arr = get_defined_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
         name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
     }
     sdelete_symbol_array(arr);
 
     // Get all implicits
-    PtrArray instances = get_exported_instances(module, a);
+    PtrArray instances = get_defined_instances(module, a);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
         PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);

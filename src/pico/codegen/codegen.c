@@ -1813,7 +1813,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         if (entry.success == Ok) {
           if (entry.is_module) {
-              SymbolArray syms = get_exported_symbols(entry.value, a);
+              SymbolArray syms = get_defined_symbols(entry.value, a);
               PtrArray lines = mk_ptr_array(syms.len + 8, a);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);

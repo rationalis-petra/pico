@@ -60,6 +60,26 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* poi
 }
 
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
+    // Expected format:
+    // Note: postfix ?  = expression is optional
+    //       postfix *  = zero or more required
+    //       infix |    = choice
+    //       between <> = class
+    //       between ⦇⦈ = grouped, the ⦇⦈ are not literal
+    // 
+    // ( module <modulename>
+    //   ⦇ ( import <import-clause>* ) | ( export ⦇:all | <export-clause>*⦈ ) ⦈* )
+    // 
+    // Where
+    //  <modulename> is a symbol
+    // 
+    // <import-clause> has the format
+    //  ( <path> ⦇:all | :except <symbol-list> | :only <symbol-list>⦈? ) 
+    // 
+    // <export-clause> has the format
+    //  <symbol>
+    //
+
     // Prep an error that can then be filled out and thrown.
     PicoError err;
     if (raw.type != RawBranch) {
@@ -68,14 +88,9 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
 
-    // Expected format:
-    // (module <modulename>
-    //   (import import-clause*)?
-    //   (export import-clause*)?)
-    size_t idx = 0;
-    if (raw.branch.nodes.len <= idx) {
+    if (raw.branch.nodes.len <= 2) {
         err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting keyword 'module' in module header. Got nothing!", a);
+        err.message = mv_cstr_doc("Expecting keyword module header to have at least two elements - (module <modulename>). Got nothing!", a);
         throw_pi_error(point, err);
     }
     if (raw.branch.nodes.len > 4) {
@@ -87,13 +102,6 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string("module")))) {
         err.range = raw.branch.nodes.data[0].range;
         err.message = mv_cstr_doc("Expecting keyword 'module' in module header.", a);
-        throw_pi_error(point, err);
-    }
-
-    idx++;
-    if (raw.branch.nodes.len <= idx)  {
-        err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header. Got nothing!", a);
         throw_pi_error(point, err);
     }
 
@@ -109,90 +117,36 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     Exports exports;
     exports.export_all = false;
 
-    idx++;
-    if (raw.branch.nodes.len <= idx) {
-        imports.clauses = mk_import_clause_array(0, a);
-        exports.clauses = mk_export_clause_array(0, a);
-    } else if (raw.branch.nodes.len <= idx+1){
-        RawTree clauses_1 = raw.branch.nodes.data[2];
-        if (clauses_1.type != RawBranch) {
-            err.range = clauses_1.range;
+    imports.clauses = mk_import_clause_array(8, a);
+    exports.clauses = mk_export_clause_array(8, a);
+    for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+        RawTree clauses = raw.branch.nodes.data[i];
+        if (clauses.type != RawBranch) {
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Expecting import/export list.", a);
             throw_pi_error(point, err);
         }
-        if (clauses_1.branch.nodes.len < 1) {
-            err.range = clauses_1.range;
+        if (clauses.branch.nodes.len < 1) {
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Not enough elements in import/export list", a);
             throw_pi_error(point, err);
         }
 
-        if (eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
-            imports.clauses = mk_import_clause_array(clauses_1.branch.nodes.len - 1, a);
-            exports.clauses = mk_export_clause_array(0, a);
-
-            for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-                ImportClause clause = abstract_import_clause(&clauses_1.branch.nodes.data[i], a, point);
+        if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
+            for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
+                ImportClause clause = abstract_import_clause(&clauses.branch.nodes.data[i], a, point);
                 push_import_clause(clause, &imports.clauses);
             }
-        } else if (eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
-            imports.clauses = mk_import_clause_array(0, a);
-            exports.clauses = mk_export_clause_array(clauses_1.branch.nodes.len - 1, a);
-
-            for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-                ExportClause clause = abstract_export_clause(&clauses_1.branch.nodes.data[i], point, a);
+        } else if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
+            for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
+                ExportClause clause = abstract_export_clause(&clauses.branch.nodes.data[i], point, a);
                 push_export_clause(clause, &exports.clauses);
             }
         } else {
-            err.range = clauses_1.range;
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Expecting import/export list header.", a);
             throw_pi_error(point, err);
         }
-    } else {
-        RawTree clauses_1 = raw.branch.nodes.data[2];
-        if (clauses_1.type != RawBranch) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Expecting import list.", a);
-            throw_pi_error(point, err);
-        }
-        if (clauses_1.branch.nodes.len < 1) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Not enough elements in import list", a);
-            throw_pi_error(point, err);
-        }
-        if (!eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Expecting 'import' at head of import list", a);
-            throw_pi_error(point, err);
-        }
-
-        imports.clauses = mk_import_clause_array(clauses_1.branch.nodes.len - 1, a);
-
-        for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-            panic(mv_string("not implemented: import clauses ?!"));
-        }
-
-        RawTree clauses_2 = raw.branch.nodes.data[3];
-        if (clauses_2.type != RawBranch) {
-            err.range = clauses_2.range;
-            err.message = mv_cstr_doc("Expecting export list.", a);
-            throw_pi_error(point, err);
-        }
-        if (clauses_2.branch.nodes.len < 1) {
-            err.range = clauses_2.range;
-            err.message = mv_cstr_doc("Not enough elements in export list", a);
-            throw_pi_error(point, err);
-        }
-        if (!eq_symbol(&clauses_2.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
-            err.range = clauses_2.branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Expecting 'export' at head of export list", a);
-            throw_pi_error(point, err);
-        }
-
-        for (size_t i = 1; i < clauses_2.branch.nodes.len; i++) {
-            panic(mv_string("not implemented: import clauses 2 ?!"));
-        }
-
-        exports.clauses = mk_export_clause_array(clauses_2.branch.nodes.len - 1, a);
     }
 
     ModuleHeader* out = mem_alloc(sizeof(ModuleHeader), a);

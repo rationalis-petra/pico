@@ -391,7 +391,7 @@ String* get_name(Module* module) {
     return symbol_to_string(module->header.name);
 }
 
-SymbolArray get_exported_symbols(Module* module, Allocator* a) {
+SymbolArray get_defined_symbols(Module* module, Allocator* a) {
     SymbolArray symbols = mk_symbol_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
         push_symbol(module->entries.data[i].key, &symbols);
@@ -399,7 +399,7 @@ SymbolArray get_exported_symbols(Module* module, Allocator* a) {
     return symbols;
 }
 
-PtrArray get_exported_instances(Module* module, Allocator* a) {
+PtrArray get_defined_instances(Module* module, Allocator* a) {
     PtrArray instances = mk_ptr_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
         ModuleEntryInternal m_entry = module->entries.data[i].val;

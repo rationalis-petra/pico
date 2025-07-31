@@ -38,6 +38,7 @@ IStream* mv_string_istream(String contents, Allocator* a);
 // the capturing istream is NOT responsible for the cleanup of its inner stream
 IStream* mk_capturing_istream(IStream* stream, Allocator* a);
 String* get_captured_buffer(IStream* contents);
+void uncapture_istream(IStream* stream);
 
 OStream* get_stdout_stream();
 OStream* open_file_ostream(String filename, Allocator* a);

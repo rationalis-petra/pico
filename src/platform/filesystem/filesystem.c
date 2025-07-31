@@ -45,9 +45,29 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
     return file;
 }
 
+File *open_tempfile(Allocator *alloc) {
+    FILE* handle = tmpfile();
+    File* file = mem_alloc(sizeof(File), alloc);
+    *file = (File) {
+        .handle = handle,
+        .gpa = *alloc,
+    };
+    return file;
+}
+
 void close_file(File *file) {
     fclose(file->handle);
     mem_free(file, &file->gpa);
+}
+
+const char *get_tmpdir() {
+#if OS_FAMILY == UNIX
+    return "/tmp";
+#elif OS_FAMILY == WINDOWS
+    return "%TMP%"
+#else
+#error "get_tmpdir not supported for this os"
+#endif
 }
 
 // return true on failure

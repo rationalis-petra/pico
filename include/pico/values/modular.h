@@ -142,8 +142,8 @@ Result add_decl(Module* module, Symbol symbol, ModuleDecl decl);
 void add_import_clause(ImportClause clause, Module* module);
 
 ModuleEntry* get_def(Symbol symbol, Module* module);
-SymbolArray get_exported_symbols(Module* module, Allocator* a);
-PtrArray get_exported_instances(Module* module, Allocator* a);
+SymbolArray get_defined_symbols(Module* module, Allocator* a);
+PtrArray get_defined_instances(Module* module, Allocator* a);
 
 String* get_name(Module* module);
 Package* get_package(Module* module);
