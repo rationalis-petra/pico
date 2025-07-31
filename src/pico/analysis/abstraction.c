@@ -2393,6 +2393,36 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
     panic(mv_string("Logic error in abstract_i: reached unreachable area."));
 }
 
+SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
+    PicoError err = (PicoError) {.range = raw.range};
+    SymbolArray syms = mk_symbol_array(2, a); 
+    while (raw.type == RawBranch) {
+        if (raw.branch.nodes.len != 3) {
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+        if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+
+        if(!is_symbol(raw.branch.nodes.data[2])) {
+            err.range = raw.branch.nodes.data[2].range;
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+        push_symbol(raw.branch.nodes.data[2].atom.symbol, &syms);
+        raw = raw.branch.nodes.data[1];
+    }
+
+    if (!is_symbol(raw)) {
+        err.message = mv_cstr_doc("Invalid path component", a);
+        throw_pi_error(point, err);
+    }
+    push_symbol(raw.atom.symbol, &syms);
+    return syms;
+}
+
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     if (is_symbol(*raw)) {
@@ -2409,13 +2439,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         // (. name2 name1)
         // (. (list-of-names) name1)
         if (raw->branch.nodes.len == 2) {
-            if (!is_symbol(raw->branch.nodes.data[0])) {
-                err.range = raw->branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Invalid import clause: first element should be symbol", a);
-                throw_pi_error(point, err);
-            }
-            Symbol name = raw->branch.nodes.data[0].atom.symbol;
-
+            SymbolArray path = get_module_path(raw->branch.nodes.data[0], a, point);
             
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
@@ -2429,14 +2453,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 throw_pi_error(point, err);
             }
 
-            SymbolArray path = mk_symbol_array(1,a);
-            push_symbol(name, &path);
             return (ImportClause) {
                 .type = ImportAll,
                 .path = path,
             };
         } else if (raw->branch.nodes.len == 3) {
-
             if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2])) {
                 err.range = raw->range;
                 err.message = mv_cstr_doc("Invalid import clause", a);
@@ -2609,9 +2630,9 @@ ComptimeHead comptime_head(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoi
         ShadowEntry entry = shadow_env_lookup(sym, env);
         switch (entry.type) {
         case SGlobal:
-            if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
+            if (!entry.is_module && entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                 return (ComptimeHead){.type = HeadFormer, .former = *((TermFormer*)entry.value)};
-            } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
+            } else if (!entry.is_module && entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
                 return (ComptimeHead){.type = HeadMacro, .macro_addr = *((uint64_t*)entry.value)};
             }
             break;
