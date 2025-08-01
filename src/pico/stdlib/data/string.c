@@ -3,7 +3,7 @@
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/submodules.h"
 
-void add_string_module(Module *data, Allocator *a) {
+void add_string_module(Target target, Module *data, Allocator *a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(3, a),
     };
@@ -35,7 +35,7 @@ void add_string_module(Module *data, Allocator *a) {
     }
 
     const char* null_fn = "(def String Named String Struct [.memsize U64] [.bytes Address])";
-    compile_toplevel(null_fn, module, &point, &pi_point, a);
+    compile_toplevel(null_fn, module, target, &point, &pi_point, a);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("string")), module);
     if (r.type == Err) panic(r.error_message);

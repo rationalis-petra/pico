@@ -3,14 +3,12 @@
 
 #include "pico/stdlib/helpers.h"
 
-void add_numeric_module(Module *data, Package* base, Allocator *a) {
+void add_numeric_module(Target target, Module *abs, Allocator *a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
-    /* add_import_all(&imports.clauses, a, 1, "extra"); */
-    /* add_import_all(&imports.clauses, a, 1, "meta"); */
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -21,7 +19,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, a);
+    Module* module = mk_module(header, get_package(abs), NULL, a);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -43,23 +41,23 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- Proc [A A] A]"
         "  [.* Proc [A A] A]"
         "  [./ Proc [A A] A])\n";
-    compile_toplevel(num_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_trait, module, target, &point, &pi_point, a);
 
     const char* add_fn = 
         "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)";
-    compile_toplevel(add_fn, module, &point, &pi_point, a);
+    compile_toplevel(add_fn, module, target, &point, &pi_point, a);
 
     const char* sub_fn = 
         "(def - all [A] proc {(n (Num A))} [(x A) (y A)] n.- x y)";
-    compile_toplevel(sub_fn, module, &point, &pi_point, a);
+    compile_toplevel(sub_fn, module, target, &point, &pi_point, a);
 
     const char* mul_fn = 
         "(def * all [A] proc {(n (Num A))} [(x A) (y A)] n.* x y)";
-    compile_toplevel(mul_fn, module, &point, &pi_point, a);
+    compile_toplevel(mul_fn, module, target, &point, &pi_point, a);
 
     const char* div_fn = 
         "(def / all [A] proc {(n (Num A))} [(x A) (y A)] n./ x y)";
-    compile_toplevel(div_fn, module, &point, &pi_point, a);
+    compile_toplevel(div_fn, module, target, &point, &pi_point, a);
 
     const char* num_i64_trait = 
         "(def i64-num instance (Num I64)"
@@ -69,7 +67,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- i64.-]"
         "  [.* i64.*]"
         "  [./ i64./])\n";
-    compile_toplevel(num_i64_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_i64_trait, module, target, &point, &pi_point, a);
 
     const char* num_u64_trait = 
         "(def u64-num instance (Num U64)"
@@ -79,7 +77,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- u64.-]"
         "  [.* u64.*]"
         "  [./ u64./])\n";
-    compile_toplevel(num_u64_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_u64_trait, module, target, &point, &pi_point, a);
 
     const char* num_i32_trait = 
         "(def i32-num instance (Num I32)"
@@ -89,7 +87,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- i32.-]"
         "  [.* i32.*]"
         "  [./ i32./])\n";
-    compile_toplevel(num_i32_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_i32_trait, module, target, &point, &pi_point, a);
 
     const char* num_u32_trait = 
         "(def u32-num instance (Num U32)"
@@ -99,7 +97,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- u32.-]"
         "  [.* u32.*]"
         "  [./ u32./])\n";
-    compile_toplevel(num_u32_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_u32_trait, module, target, &point, &pi_point, a);
 
     const char* num_i16_trait = 
         "(def i16-num instance (Num I16)"
@@ -109,7 +107,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- i16.-]"
         "  [.* i16.*]"
         "  [./ i16./])\n";
-    compile_toplevel(num_i16_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_i16_trait, module, target, &point, &pi_point, a);
 
     const char* num_u16_trait = 
         "(def u16-num instance (Num U16)"
@@ -119,7 +117,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- u16.-]"
         "  [.* u16.*]"
         "  [./ u16./])\n";
-    compile_toplevel(num_u16_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_u16_trait, module, target, &point, &pi_point, a);
 
     const char* num_i8_trait = 
         "(def i8-num instance (Num I8)"
@@ -129,7 +127,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- i8.-]"
         "  [.* i8.*]"
         "  [./ i8./])\n";
-    compile_toplevel(num_i8_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_i8_trait, module, target, &point, &pi_point, a);
 
     const char* num_u8_trait = 
         "(def u8-num instance (Num U8)"
@@ -139,7 +137,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- u8.-]"
         "  [.* u8.*]"
         "  [./ u8./])\n";
-    compile_toplevel(num_u8_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_u8_trait, module, target, &point, &pi_point, a);
 
     const char* num_f64_trait =
         "(def f64-num instance (Num F64)"
@@ -149,7 +147,7 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- f64.-]"
         "  [.* f64.*]"
         "  [./ f64./])\n";
-    compile_toplevel(num_f64_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_f64_trait, module, target, &point, &pi_point, a);
 
     const char* num_f32_trait =
         "(def f32-num instance (Num F32)"
@@ -159,8 +157,8 @@ void add_numeric_module(Module *data, Package* base, Allocator *a) {
         "  [.- f32.-]"
         "  [.* f32.*]"
         "  [./ f32./])\n";
-    compile_toplevel(num_f32_trait, module, &point, &pi_point, a);
+    compile_toplevel(num_f32_trait, module, target, &point, &pi_point, a);
 
-    Result r = add_module_def(data, string_to_symbol(mv_string("numeric")), module);
+    Result r = add_module_def(abs, string_to_symbol(mv_string("numeric")), module);
     if (r.type == Err) panic(r.error_message);
 }
