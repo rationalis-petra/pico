@@ -70,10 +70,9 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
     }
 
     if (test_start(log, mv_string("run-script"))) {
-        String tempdir = mv_string(get_tmpdir());
-        File *file =
-            open_file(string_cat(tempdir, mv_string("/script.rl"), &arena),
-                      Read | Write, &arena);
+        String tempdir = get_tmpdir(&arena);
+        String filepath = string_cat(tempdir, mv_string("/module.rl"), &arena);
+        File *file = open_file(filepath, Read | Write, &arena);
         const char contents[] = " (print (u64.to-string 123456789)) ";
         U8Array data = (U8Array) {
             .len = sizeof(contents),
@@ -83,16 +82,19 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         close_file(file);
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        test_toplevel_stdout("(seq (run-script \"/tmp/script.rl\") :unit)", "123456789", module, log, a) ;
+        String runme = string_ncat(a, 3,
+             mv_string("(seq (run-script \")"),
+             filepath,
+             mv_string("\") :unit)"));
+        test_toplevel_stdout(runme.bytes, "123456789", module, log, a) ;
         set_std_current_allocator(current_old);
         reset_arena_allocator(arena);
     }
 
     if (test_start(log, mv_string("load-module"))) {
-        String tempdir = mv_string(get_tmpdir());
-        File *file =
-            open_file(string_cat(tempdir, mv_string("/module.rl"), &arena),
-                      Read | Write, &arena);
+        String tempdir = get_tmpdir(&arena);
+        String filepath = string_cat(tempdir, mv_string("/module.rl"), &arena);
+        File *file = open_file(filepath, Read | Write, &arena);
         const char contents[] = "(module test (import (core :all)) (export x)) (def x 3)";
         U8Array data = (U8Array) {
             .len = sizeof(contents),
