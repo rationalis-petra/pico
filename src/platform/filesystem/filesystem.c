@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "platform/machine_info.h"
 #include "platform/filesystem/filesystem.h"
@@ -60,11 +61,27 @@ void close_file(File *file) {
     mem_free(file, &file->gpa);
 }
 
-const char *get_tmpdir() {
+String get_tmpdir(Allocator* a) {
 #if OS_FAMILY == UNIX
-    return "/tmp";
+
+    const char str[] = "/tmp";
+    String out = (String) {
+        .memsize = sizeof(str),
+        .bytes = mem_alloc(sizeof(str), a),
+    };
+    memcpy(out.bytes, str, sizeof(str));
+    return out;
+
 #elif OS_FAMILY == WINDOWS
-    return "%TMP%"
+
+    uint64_t pathlen = GetTempPath(0, NULL);
+    String out = (String) {
+        .memsize = pathlen,
+        .bytes = mem_alloc(pathlen, a),
+    };
+    GetTempPath(out.memsize, out.bytes);
+    return out;
+
 #else
 #error "get_tmpdir not supported for this os"
 #endif
