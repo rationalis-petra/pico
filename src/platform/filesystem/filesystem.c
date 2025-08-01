@@ -6,6 +6,10 @@
 #include "platform/signals.h"
 #include "data/string.h"
 
+#if OS_FAMILY == WINDOWS
+#include <windows.h>
+#endif
+
 struct File {
     FILE* handle; 
     Allocator gpa;
@@ -79,7 +83,7 @@ String get_tmpdir(Allocator* a) {
         .memsize = pathlen,
         .bytes = mem_alloc(pathlen, a),
     };
-    GetTempPath(out.memsize, out.bytes);
+    GetTempPath(out.memsize, (char*) out.bytes);
     return out;
 
 #else
