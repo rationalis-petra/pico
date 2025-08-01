@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "platform/machine_info.h"
 #include "platform/filesystem/filesystem.h"
@@ -60,7 +61,7 @@ void close_file(File *file) {
     mem_free(file, &file->gpa);
 }
 
-const char *get_tmpdir() {
+String get_tmpdir(Allocator* a) {
 #if OS_FAMILY == UNIX
 
     const char str[] = "/tmp";
