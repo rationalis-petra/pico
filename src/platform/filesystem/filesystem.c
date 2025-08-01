@@ -5,6 +5,10 @@
 #include "platform/signals.h"
 #include "data/string.h"
 
+#if OS_FAMILY == WINDOWS
+#include <windows.h>
+#endif
+
 struct File {
     FILE* handle; 
     Allocator gpa;
@@ -60,11 +64,24 @@ void close_file(File *file) {
     mem_free(file, &file->gpa);
 }
 
-const char *get_tmpdir() {
+String get_tmpdir(Allocator* a) {
 #if OS_FAMILY == UNIX
-    return "/tmp";
+    const char dir[] = "/tmp";
+    String out = (String) {
+        .memsize = sizeof(dir),
+        .bytes = mem_alloc(sizeof(dir)),
+    };
+    memcpy(out.bytes, dir, sizeof(dir));
+    return out;
 #elif OS_FAMILY == WINDOWS
-    return "%TMP%"
+    uint64_t pathlen = GetTempPath(0, NULL);
+    // TODO: check for pathlen == 0 (failure)
+    String out = (String) {
+        .memsize = pathlen,
+        .bytes = mem_alloc(pathlen, a),
+    };
+    pathlen = GetTempPath(MAX_PATH, out.bytes);
+    return out;
 #else
 #error "get_tmpdir not supported for this os"
 #endif
