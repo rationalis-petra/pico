@@ -3,7 +3,7 @@
 
 #include "pico/values/modular.h"
 
-void add_abs_module(Package* base, Allocator* a);
+void add_abs_module(Target target, Package* base, Allocator* a);
 
 
 #endif
