@@ -1,5 +1,8 @@
+#include "pico/stdlib/core.h"
+
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
+
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     // -----------------------------------------------------
@@ -326,14 +329,25 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
     //      Type Constructors
     // 
     // -----------------------------------------------------
-    /* if (test_start(log, mv_string("I64"))) { */
-    /*     PiType* expected = mk_prim_type(a, Int_64); */
-    /*     test_toplevel_eq("I64", &expected, module, log, a) ; */
-    /* } */
+    if (test_start(log, mv_string("I64"))) {
+        PiType* expected = mk_prim_type(a, Int_64);
+        test_toplevel_eq("I64", &expected, module, log, a) ;
+        delete_pi_type_p(expected, a);
+    }
 
-    /* if (test_start(log, mv_string("proc-const"))) { */
-    /*     int64_t expected = -985; */
-    /*     test_toplevel_eq("(Proc [U64 U64] U64)", &expected, module, log, a) ; */
-    /*     run_toplevel("(Proc [U64 U64] U64)", module, log, a) ; */
-    /* } */
+    if (test_start(log, mv_string("proc-const"))) {
+        PiType* expected = mk_proc_type(a, 2, mk_prim_type(a, Int_64), mk_prim_type(a, Int_64), mk_prim_type(a, Int_64));
+        test_toplevel_eq("(Proc [I64 I64] I64)", &expected, module, log, a) ;
+        delete_pi_type_p(expected, a);
+    }
+
+    if (test_start(log, mv_string("recursive-named"))) {
+        PiType* vty = mk_var_type(a, "Element");
+        PiType* lty = mk_app_type(a, get_list_type(), vty);
+        PiType* expected = mk_named_type(a, "Element",
+                                         mk_struct_type(a, 1, "children", lty));
+        test_toplevel_eq("(Named Element Struct [.chidren (List Element)])", &expected, module, log, a) ;
+        delete_pi_type_p(expected, a);
+        delete_pi_type_p(vty, a);
+    }
 }

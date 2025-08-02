@@ -10,13 +10,17 @@ struct TypeEnv {
     Environment* env;
     SymLocalAssoc locals; // TODO: reset locals on new proc!
     SymPtrAssoc labels;
+    Allocator* gpa;
 };
 
 TypeEnv* mk_type_env(Environment* env, Allocator* a) {
     TypeEnv* t_env = (TypeEnv*)mem_alloc(sizeof(TypeEnv), a);
-    t_env->locals = mk_sym_local_assoc(32, a);
-    t_env->labels = mk_sym_ptr_assoc(32, a);
-    t_env->env = env;
+    *t_env = (TypeEnv){
+        .locals = mk_sym_local_assoc(32, a),
+        .labels = mk_sym_ptr_assoc(32, a),
+        .env = env,
+        .gpa = a,
+    };
     return t_env; 
 }
 
@@ -70,7 +74,7 @@ InstanceEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
         InstanceSrc* src = instances->data[i];
         bool eql = true;
         for (size_t i = 0 ; i < args.len; i++) {
-            eql &=  pi_type_eql(src->args.data[i], args.data[i]);
+            eql &=  pi_type_eql(src->args.data[i], args.data[i], env->gpa);
         }
         if (eql) {
             if (eql_count > 0) {

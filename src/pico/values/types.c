@@ -6,6 +6,7 @@
 #include "data/result.h"
 
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/data/rename_array.h"
 #include "pretty/standard_types.h"
 #include "pretty/string_printer.h"
 #include "pico/values/types.h"
@@ -1552,7 +1553,7 @@ PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a) {
     return new_type;
 }
 
-bool pi_type_eql(PiType* lhs, PiType* rhs) {
+bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     if (lhs->sort != rhs->sort) return false;
 
     switch (lhs->sort) {
@@ -1561,15 +1562,15 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
         break;
     case TProc:
         if (lhs->proc.implicits.len != rhs->proc.implicits.len) return false;
-        for (size_t i = 0; i < lhs->proc.args.len; i++) {
-            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+        for (size_t i = 0; i < lhs->proc.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->proc.implicits.data[i], rhs->proc.implicits.data[i], array)) return false;
         }
 
         if (lhs->proc.args.len != rhs->proc.args.len) return false;
         for (size_t i = 0; i < lhs->proc.args.len; i++) {
-            if (!pi_type_eql(lhs->proc.args.data[i], rhs->proc.args.data[i])) return false;
+            if (!pi_type_eql_i(lhs->proc.args.data[i], rhs->proc.args.data[i], array)) return false;
         }
-        return pi_type_eql(lhs->proc.ret, rhs->proc.ret);
+        return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
         break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
@@ -1578,7 +1579,7 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
             SymPtrCell lhcell = lhs->structure.fields.data[i];
             SymPtrCell rhcell = lhs->structure.fields.data[i];
             if (!symbol_eq(lhcell.key, rhcell.key) ||
-                !pi_type_eql(lhcell.val, rhcell.val)) 
+                !pi_type_eql_i(lhcell.val, rhcell.val, array)) 
                 return false;
         }
         return true;
@@ -1595,53 +1596,69 @@ bool pi_type_eql(PiType* lhs, PiType* rhs) {
             PtrArray* rhvars = rhcell.val;
             if (lhvars->len != rhvars->len) return false;
             for (size_t j = 0; j < lhvars->len; j++) {
-                if (!pi_type_eql(lhvars->data[j], rhvars->data[j])) return false;
+                if (!pi_type_eql_i(lhvars->data[j], rhvars->data[j], array)) return false;
             }
         }
         return true;
         break;
     case TReset:
-        panic(mv_string("pi_type_eql not implemented for resets"));
+        panic(mv_string("pi_type_eql_i not implemented for resets"));
     case TResumeMark:
-        panic(mv_string("pi_type_eql not implemented for resume marks"));
+        panic(mv_string("pi_type_eql_i not implemented for resume marks"));
     case TDynamic:
-        panic(mv_string("pi_type_eql not implemented for dynamics"));
+        panic(mv_string("pi_type_eql_i not implemented for dynamics"));
 
-    case TNamed:
-        panic(mv_string("pi_type_eql not implemented for named"));
+    case TNamed: {
+        Rename rn = (Rename) {
+            .l_name = lhs->named.name,
+            .r_name = rhs->named.name,
+        };
+        push_rename(rn, array);
+        bool out = pi_type_eql_i(lhs->named.type, rhs->named.type, array);
+        array->len--;
+        return out;
+        break;
+    }
         // 'Special'
     case TDistinct:
-        panic(mv_string("pi_type_eql not implemented for distinct types"));
+        panic(mv_string("pi_type_eql_i not implemented for distinct types"));
     case TTrait:
-        panic(mv_string("pi_type_eql not implemented for trait types"));
+        panic(mv_string("pi_type_eql_i not implemented for trait types"));
     case TTraitInstance: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql not implemented for trait instance types"));
+        panic(mv_string("pi_type_eql_i not implemented for trait instance types"));
 
         // Quantified Types
     case TVar: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql not implemented for type vars"));
+        panic(mv_string("pi_type_eql_i not implemented for type vars"));
     case TAll:
-        panic(mv_string("pi_type_eql not implemented for all types"));
+        panic(mv_string("pi_type_eql_i not implemented for all types"));
     case TExists:
-        panic(mv_string("pi_type_eql not implemented for existential types"));
+        panic(mv_string("pi_type_eql_i not implemented for existential types"));
 
         // Used by Sytem-Fω (type constructors)
     case TCApp:
-        panic(mv_string("pi_type_eql not implemented for type applications"));
+        panic(mv_string("pi_type_eql_i not implemented for type applications"));
     case TFam:
-        panic(mv_string("pi_type_eql not implemented for type families"));
+        panic(mv_string("pi_type_eql_i not implemented for type families"));
 
         // Kinds (higher kinds not supported)
     case TKind:
         return lhs->kind.nargs == rhs->kind.nargs;
     case TConstraint:
-        panic(mv_string("pi_type_eql not implemented for constraints"));
+        panic(mv_string("pi_type_eql_i not implemented for constraints"));
     default:
-        panic(mv_string("pi_type_eql provided invalid sort!"));
+        panic(mv_string("pi_type_eql_i provided invalid sort!"));
     }
 }
 
-bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
+bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a) {
+    RenameArray array = mk_rename_array(2, a);
+    bool out = pi_type_eql_i(lhs, rhs, &array);
+    sdelete_rename_array(array);
+    return out;
+}
+
+bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
     switch (type->sort) {
     case TPrim:
         switch (type->prim) {
@@ -1733,7 +1750,7 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         for (size_t i = 0; i < nelements; i++) {
             void* laddr = larray->data + (i * index_mul);
             void* raddr = larray->data + (i * index_mul);
-            if (!pi_value_eql(type->array.element_type, laddr, raddr)) return false;
+            if (!pi_value_eql(type->array.element_type, laddr, raddr, a)) return false;
         }
         return true;
     }
@@ -1749,7 +1766,7 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PiType* ty = type->structure.fields.data[i].val;
             offset = pi_size_align(offset, pi_align_of(*ty));
-            if (!pi_value_eql(ty, lhs + offset, rhs + offset)) {
+            if (!pi_value_eql(ty, lhs + offset, rhs + offset, a)) {
                 return false;
             }
             offset += pi_size_of(*ty);
@@ -1766,7 +1783,7 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         for (size_t i = 0; i < types->len; i++) {
             PiType* ty = types->data[i];
             offset = pi_size_align(offset, pi_align_of(*ty));
-            if (!pi_value_eql(ty, lhs + offset, rhs + offset)) {
+            if (!pi_value_eql(ty, lhs + offset, rhs + offset, a)) {
                 return false;
             }
             offset += pi_size_of(*ty);
@@ -1802,17 +1819,17 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs) {
         panic(mv_string("Not implemented: comparing values of type app"));
     }
     case TNamed: {
-        return pi_value_eql(type->named.type, lhs, rhs);
+        return pi_value_eql(type->named.type, lhs, rhs, a);
     }
     case TDistinct:  {
-        return pi_value_eql(type->distinct.type, lhs, rhs);
+        return pi_value_eql(type->distinct.type, lhs, rhs, a);
     }
     case TTrait:  {
         panic(mv_string("Not implemented: comparing values of type trait"));
     }
     case TKind:
     case TConstraint: {
-        return pi_type_eql(lhs, rhs);
+        return pi_type_eql(*(PiType**)lhs, *(PiType**)rhs, a);
     }
 
     }

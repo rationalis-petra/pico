@@ -187,8 +187,8 @@ Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
-bool pi_type_eql(PiType* lhs, PiType* rhs);
-bool pi_value_eql(PiType* type, void* lhs, void* rhs);
+bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
+bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);

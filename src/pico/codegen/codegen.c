@@ -56,7 +56,11 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
 
     switch(top.type) {
     case TLDef: {
-        AddressEnv* a_env = mk_address_env(env, &top.def.bind, a);
+        // Note: types can only be recursive via 'Name', so we do not recursively bind if
+        // generating a type.
+        Symbol* recsym = top.def.value->ptype->sort != TKind ? 
+            &top.def.bind : NULL;
+        AddressEnv* a_env = mk_address_env(env, recsym, a);
         generate(*top.def.value, a_env, target, &links, a, point);
         delete_address_env(a_env, a);
         break;
@@ -1713,11 +1717,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-
         data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.named_type.name, env);
         generate(*(Syntax*)syn.named_type.body, env, target, links, a, point);
-        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
+
         gen_mk_named_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
         address_pop(env);
         break;
     case SDistinctType:
