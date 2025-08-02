@@ -716,8 +716,18 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SStructure: {
-        if (untyped->structure.type) {
-            untyped->ptype = eval_type(untyped->structure.type, env, a, point);
+
+        if (untyped->structure.base) {
+            bool all_fields_required;
+            type_infer_i(untyped->structure.base, env, a, point);
+            if (untyped->structure.base->ptype->sort == TKind) {
+                untyped->ptype = eval_type(untyped->structure.base, env, a, point);
+                all_fields_required = true;
+            } else {
+                untyped->ptype = untyped->structure.base->ptype;
+                all_fields_required = false;
+            }
+
             PiType* struct_type = unwrap_type(untyped->ptype, a);
 
             if (struct_type->sort != TStruct) {
@@ -725,7 +735,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 throw_pi_error(point, err);
             }
 
-            if (untyped->structure.fields.len != struct_type->structure.fields.len) {
+            if (untyped->structure.fields.len != struct_type->structure.fields.len && all_fields_required) {
                 // Figure out which field(s) are missing, and print those in the
                 // error message:
                 PtrArray docs = mk_ptr_array(4, a);
@@ -752,7 +762,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 if (field_syn) {
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
                     type_check_i(*field_syn, field_ty, env, a, point);
-                } else {
+                } else if (all_fields_required) {
                     panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
                     throw_pi_error(point, err);
                 }
@@ -1730,8 +1740,8 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
-        if (syn->structure.type) {
-            post_unify(syn->structure.type, env, a, point);
+        if (syn->structure.base) {
+            post_unify(syn->structure.base, env, a, point);
         }
         for (size_t i = 0; i < syn->structure.fields.len; i++) {
             post_unify(syn->structure.fields.data[i].val, env, a, point);
@@ -2012,8 +2022,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
-        if (typed->structure.type) {
-            squash_types(typed->structure.type, a, point);
+        if (typed->structure.base) {
+            squash_types(typed->structure.base, a, point);
         }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;

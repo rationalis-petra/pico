@@ -744,10 +744,15 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // arguments are inserted into the structure.
         PiType* struct_type = strip_type(syn.ptype);
 
-        // Step 1: Make room on the stack for our struct
-        size_t struct_size = pi_stack_size_of(*struct_type);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
-        data_stack_grow(env, struct_size);
+        // Step 1: Make room on the stack for our struct (OR, just generate the
+        // base struct)
+        if (syn.structure.base && syn.structure.base->type != SCheckedType) {
+            generate(*syn.structure.base, env, target, links, a, point);
+        } else {
+            size_t struct_size = pi_stack_size_of(*struct_type);
+            build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
+            data_stack_grow(env, struct_size);
+        }
 
         // Step 2: evaluate each element/variable binding
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
@@ -767,11 +772,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Copy from the bottom (of the destination) to the top (also of the destination) 
         size_t source_region_size = 0;
-        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+        for (size_t i = 0; i < syn.structure.fields.len; i++) {
             source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
         }
         size_t dest_offset = 0;
-        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+        for (size_t i = 0; i < syn.structure.fields.len; i++) {
             dest_offset = pi_size_align(dest_offset, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
 
             // Find the field in the source & compute offset

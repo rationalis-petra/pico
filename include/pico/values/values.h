@@ -68,7 +68,6 @@ typedef enum TermFormer {
     FGenArray,
     FWith,
 
-    // FAlter,
     FDynamic,
     FDynamicUse,
 

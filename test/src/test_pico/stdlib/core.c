@@ -182,6 +182,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(struct [.x 3] [.y -5])", &expected, module, log, a) ;
     }
 
+    if (test_start(log, mv_string("struct-with-base"))) {
+        Point expected = (Point) {.x = 10, .y = -15};
+        test_toplevel_eq("(struct (struct [.x 3] [.y -15]) [.x 10])", &expected, module, log, a) ;
+    }
+
     if (test_start(log, mv_string("struct-nested-v1"))) {
         typedef struct {
             uint64_t val;

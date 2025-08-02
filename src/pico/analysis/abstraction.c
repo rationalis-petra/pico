@@ -633,14 +633,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             throw_pi_error(point, err);
         }
 
-        Syntax* stype;
+        Syntax* sbase;
         size_t start_idx = 1;
         // Get the type of the structure
         if (raw.branch.nodes.data[1].type != RawBranch || raw.branch.nodes.data[1].branch.hint != HSpecial) {
             start_idx = 2;
-            stype = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+            sbase = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
         } else {
-            stype = NULL;
+            sbase = NULL;
         }
 
         // Construct a structure
@@ -677,7 +677,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .type = SStructure,
             .ptype = NULL,
             .range = raw.range,
-            .structure.type = stype,
+            .structure.base = sbase,
             .structure.fields = fields,
         };
         return res;
