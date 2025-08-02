@@ -220,7 +220,7 @@ Define point : Struct [.x I64] [.y I64])
 The projection '.' operator is used to get the value from a struct, e.g.
 
 ```clojure
-user > (i64.+ point.x point.y)
+user > (+ point.x point.y)
 14
 ```
 
@@ -253,7 +253,7 @@ user > (def point struct Point [.x 3] [.y 5])
 Adding the missing field fixes the error.
 
 ```clojure
-user > (def point struct 3DPoint [.x 3] [.y 5] [.z 10])
+user > (def point struct Point [.x 3] [.y 5] [.z 10])
 (struct [.x 3] [.y 5] [.z 10])
 ```
 
@@ -315,8 +315,8 @@ user > (def Vehicle Enum :bike [:car Bool Bool] [:truck U8])
 Defined Vehicle : Type
 user > (def wheels proc [vehicle] match vehicle
   [:bike 2]
-  [[:car is_robin has_spare] (u8.+ (if is_robin 3 4)
-                                   (if has_spare 1 0))]
+  [[:car is_robin has_spare] (+ (if is_robin 3 4)
+                                (if has_spare 1 0))]
   [[:truck num_wheels] num_wheels])
 ```
 
@@ -324,11 +324,14 @@ user > (def wheels proc [vehicle] match vehicle
 Often, we encounter times when it is desirable to have very similar code for
 different types. A prime example is the `list` - we may want to have a list of
 integers, another of floats, and a list of strings. Below, you can see some code
-which does exactly that
+which does exactly that. 
 
 ```clojure
-user > (def slist (list "bannana" "apple" "orange"))
-Defined slist : List String
+;; Open is similar to 'import' in other languages, by "opening" the list module,
+;; we gain access to the functions inside
+user > (open data.list)
+user > (def str-list (list "bannana" "apple" "orange"))
+Defined str-list : List String
 user > (def ilist (data.list -10 5 6))
 Defined ilist : List I64 
 user > (def flist (list -10.5 5000.5 3.14))
@@ -368,6 +371,15 @@ in a value 'x' of type A, and returns x'.
 ```clojure
 user > (def id all [A] proc [(x A)] x)
 Defined id: All [A] (Proc [A] A)
+```
+
+The `id` can now be applied to values as you saw above - we can even apply id to itself!
+
+```clojure
+user > (id 3.14159)
+3.14159
+user > (id id)
+#<all 0x7ba21e80a000>
 ```
 
 Two foundational polymorphic functions in Relic are `load` and `store`. These
@@ -415,7 +427,31 @@ user > (load {U8} addr)
 ```
 
 #### Type Families
-TODO: document me!
+Polymorphic functions, as seen above, give us the ability to write functions
+that can work across multiple data-types. But, they do not allow us to write
+containers, such as lists or sets, that work with multiple data-types. This is
+the role of Type Families. Type families are introduced with the `Family`
+keyword, which functions similarly to the `All` keyword. The example below uses
+type families to create a basic `Pair` type, representing a pair of any two values: 
+
+```clojure
+user > (def Pair Family [A B] Struct [.first A] [.second B])
+defined Pair : Kind [Type Type] Type
+```
+
+Pairs can be constructed using the normal `struct` syntax, but type families
+more generally are most useful when paired with polymorphic functions:
+
+```
+user > (def my-pair struct (Pair I64 F32) [.x -12] [.y 3.1214])
+defined my-pair : Struct [.first I64] [.second F32]
+user > (def pair all [A B] proc [(x A) (y b)] 
+         struct (Pair A B) [.first I64] [.second F32])
+Defined pair : All [A B] (Proc [A B] (Struct [.first A] [.second B]))
+user > (pair 4.56 13)
+(struct [.first 4.56] [.second 13])
+```
+
 
 ### Named, Distinct and Opaque Types 
 TODO: document me!
@@ -427,6 +463,9 @@ TODO: document me!
 TODO: document me!
 
 ### Dynamic Unwind
+TODO: document me!
+
+### Small and Large Programs: Scripts and Modules
 TODO: document me!
 
 ### Standard Library
