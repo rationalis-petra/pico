@@ -1816,7 +1816,23 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
     }
     case SDescribe: {
         Environment* base = get_addr_base(env);
-        EnvEntry entry = env_lookup(syn.to_describe, base);
+        if (syn.to_describe.len == 0) panic(mv_string("unexepcted empty path provided to describe"));
+
+        EnvEntry entry = env_lookup(syn.to_describe.data[0], base);
+        for (size_t i = 1; i < syn.to_describe.len; i++) {
+            if (entry.is_module) {
+                ModuleEntry* mentry = get_def(syn.to_describe.data[i], entry.value);
+                if (mentry) {
+                    entry.is_module = mentry->is_module;
+                    entry.value = mentry->value;
+                    entry.type = &mentry->type;
+                } else {
+                    throw_error(point, mv_string("Unknown symbol in path to describe."));
+                }
+            } else {
+                throw_error(point, mv_string("Unknown symbol in path to describe."));
+            }
+        }
         String immediate;
 
         if (entry.success == Ok) {
@@ -1847,9 +1863,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                       } else {
                           push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
-                          push_ptr(pretty_type(&mentry->type, a), &desc);
+                          push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, a), a), &desc);
                       }
-                      push_ptr(mv_sep_doc(desc, a), &lines);
+                      push_ptr(mv_hsep_doc(desc, a), &lines);
                   } else {
                       // TODO: report error - exported symbol not in module?
                   }
@@ -1863,9 +1879,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
           } else {
               PtrArray lines = mk_ptr_array(8, a);
               {
-                  PtrArray header = mk_ptr_array(2, a);
-                  push_ptr(mk_str_doc(mv_string("Symbol: "), a), &header);
-                  push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe), a), &header);
+                  PtrArray header = mk_ptr_array(syn.to_describe.len + 1, a);
+                  push_ptr(mk_str_doc(mv_string("Path: "), a), &header);
+                  for (size_t i = 0; i < syn.to_describe.len; i++) {
+                      push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe.data[i]), a), &header);
+                  }
                   push_ptr(mv_sep_doc(header, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);

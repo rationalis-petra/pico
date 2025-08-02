@@ -1852,19 +1852,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             err.message = mk_cstr_doc("describe term former requires 1 argument!", a);
             throw_pi_error(point, err);
         }
-        RawTree term = raw.branch.nodes.data[1];
-        if (is_symbol(term)) {
+
+        Syntax* abs = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        SymbolArray* path = try_get_path(abs, a);
+
+        if (path) {
             Syntax* res = mem_alloc(sizeof(Syntax), a);
             *res = (Syntax) {
                 .type = SDescribe,
                 .ptype = NULL,
                 .range = raw.range,
-                .to_describe = term.atom.symbol,
+                .to_describe = *path,
             };
             return res;
         } else {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_cstr_doc("describe expects argument to be a symbol!", a);
+            err.message = mk_cstr_doc("describe expects argument to be a path!", a);
             throw_pi_error(point, err);
         }
         break;

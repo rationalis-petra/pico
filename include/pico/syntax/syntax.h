@@ -404,7 +404,7 @@ struct Syntax {
 
         // Metaprogramming
         Syntax* type_of;
-        Symbol to_describe;
+        SymbolArray to_describe;
         RawTree quoted;
         SynCapture capture;
     };
