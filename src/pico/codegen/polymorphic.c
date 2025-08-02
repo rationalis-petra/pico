@@ -889,7 +889,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
         size_t start_pos = get_pos(ass);
 
-        int32_t* jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
+        size_t jmp_loc = out.backlink;
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
@@ -905,8 +905,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         } 
 
         // backlink
-        set_unaligned_i32(jmp_loc, end_pos - start_pos);
-        jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
+        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
+        jmp_loc = out.backlink;
         start_pos = get_pos(ass);
 
 
@@ -919,7 +919,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
-        set_unaligned_i32(jmp_loc, end_pos - start_pos);
+        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
         break;
     }
     case SLabels: {
@@ -1015,9 +1015,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 int64_t amt = dest - origin;
                 if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
-                int32_t* loc = (int32_t*)loc_byte;
-                set_unaligned_i32(loc, amt);
+                set_i32_backlink(ass, backlink, amt);
             }
 
 
@@ -1032,9 +1030,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 int64_t amt = dest - origin;
                 if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
-                int32_t* loc = (int32_t*)loc_byte;
-                set_unaligned_i32(loc, amt);
+                set_i32_backlink(ass, backlink, amt);
             }
         }
 

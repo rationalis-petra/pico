@@ -214,7 +214,7 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         out.code = in_segments.code;
     }
 
-    // Overrite all links to data with new addresses
+    // Overwrite all links to data with new addresses
     if (in_segments.data.len != 0 && links) {
         U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ed_links.len; i++) {

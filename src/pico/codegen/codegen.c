@@ -675,7 +675,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // The 'body positions' and 'body_refs' store the inidices we need to
         // use to calculate jumps (and the bytes we need to update with those jumps)
         SizeArray body_positions = mk_size_array(syn.match.clauses.len, a);
-        PtrArray body_refs = mk_ptr_array(syn.match.clauses.len, a);
+        U64Array body_refs = mk_u64_array(syn.match.clauses.len, a);
 
         for (size_t i = 0; i < syn.match.clauses.len; i++) {
             // 1. Backpatch the jump so that it jumps to here
@@ -707,7 +707,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // Generate jump to end of match expression to be backlinked later
             AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
             push_size(get_pos(ass), &body_positions);
-            push_ptr(get_instructions(ass).data + out.backlink, &body_refs);
+            push_u64(out.backlink, &body_refs);
 
             address_unbind_enum_vars(env);
             data_stack_shrink(env, out_size);
@@ -717,13 +717,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t curr_pos = get_pos(ass);
         for (size_t i = 0; i < body_positions.len; i++) {
             size_t body_pos = body_positions.data[i];
-            int32_t* body_ref = body_refs.data[i];
+            size_t body_ref = body_refs.data[i];
 
             if (curr_pos - body_pos > INT32_MAX) {
                 throw_error(point, mk_string("Jump in match too large", a));
             } 
 
-            set_unaligned_i32(body_ref, (int32_t)(curr_pos - body_pos));
+            set_i32_backlink(ass, body_ref, (int32_t)(curr_pos - body_pos));
         }
 
         generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
@@ -1079,7 +1079,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
         size_t start_pos = get_pos(ass);
 
-        int32_t* jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
+        size_t jmp_loc = out.backlink;
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
@@ -1097,8 +1097,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         } 
 
         // backlink
-        set_unaligned_i32(jmp_loc, end_pos - start_pos);
-        jmp_loc = (int32_t*)(get_instructions(ass).data + out.backlink);
+        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
+        jmp_loc = out.backlink;
         start_pos = get_pos(ass);
 
 
@@ -1111,7 +1111,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         if (end_pos - start_pos > INT32_MAX) {
             throw_error(point, mk_string("Jump in conditional too large", a));
         } 
-        set_unaligned_i32(jmp_loc, end_pos - start_pos);
+        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
         break;
     }
     case SLabels: {
@@ -1192,9 +1192,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 int64_t amt = dest - origin;
                 if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
-                int32_t* loc = (int32_t*)loc_byte;
-                set_unaligned_i32(loc, (int32_t)amt);
+                set_i32_backlink(ass, backlink, amt);
             }
 
 
@@ -1209,9 +1207,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 int64_t amt = dest - origin;
                 if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
                 
-                int8_t* loc_byte = (int8_t*) get_instructions(ass).data + backlink;
-                int32_t* loc = (int32_t*)loc_byte;
-                set_unaligned_i32(loc, (int32_t)amt);
+                set_i32_backlink(ass, backlink, amt);
             }
         }
 

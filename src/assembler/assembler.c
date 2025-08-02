@@ -148,6 +148,30 @@ void set_pos(Assembler *assembler, size_t pos) {
     assembler->instructions.len = pos;
 }
 
+void set_ptr_backlink(Assembler *assembler, size_t backlink, void *val) {
+    char* cdest = (char*)assembler->instructions.data + backlink;
+    char* csrc = (char*)&val;
+    for (size_t i = 0; i < sizeof(void*); i++) {
+        cdest[i] = csrc[i];
+    }
+}
+
+void set_i32_backlink(Assembler *assembler, size_t backlink, int32_t val) {
+    char* cdest = (char*)assembler->instructions.data + backlink;
+    char* csrc = (char*)&val;
+    for (size_t i = 0; i < sizeof(int32_t); i++) {
+        cdest[i] = csrc[i];
+    }
+}
+
+void set_u32_backlink(Assembler *assembler, size_t backlink, uint32_t val) {
+    char* cdest = (char*)assembler->instructions.data + backlink;
+    char* csrc = (char*)&val;
+    for (size_t i = 0; i < sizeof(uint32_t); i++) {
+        cdest[i] = csrc[i];
+    }
+}
+
 void delete_assembler (Assembler* ass) {
     sdelete_u8_array(ass->instructions);
     mem_free(ass, ass->gpa);
