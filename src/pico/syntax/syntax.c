@@ -741,7 +741,13 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     case SDescribe: {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("describe"), a), &nodes);
-        push_ptr(mk_str_doc(*symbol_to_string(syntax->to_describe), a), &nodes);
+        PtrArray path_nodes = mk_ptr_array(syntax->to_describe.len, a);
+        for (size_t i = 0; i < syntax->to_describe.len; i++) {
+            push_ptr(mk_str_doc(*symbol_to_string(syntax->to_describe.data[i]), a), &path_nodes);
+            if (i + 1 != syntax->to_describe.len)
+                push_ptr(mk_str_doc(mv_string("."), a), &path_nodes);
+        }
+        push_ptr(mv_cat_doc(path_nodes, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
