@@ -1,4 +1,5 @@
 #include "platform/memory/arena.h"
+#include "platform/filesystem/filesystem.h"
 
 #include "pico/stdlib/extra.h"
 
@@ -16,6 +17,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         set_std_current_allocator(arena);
         test_toplevel_stdout("(loop [for i from 1 upto 10] (print (u64.to-string i)))", "12345678910", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
 
     if (test_start(log, mv_string("single-for-below"))) {
@@ -23,6 +25,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         set_std_current_allocator(arena);
         test_toplevel_stdout("(loop [for i from 1 below 10] (print (u64.to-string i)))", "123456789", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
 
     if (test_start(log, mv_string("single-for-downto"))) {
@@ -30,6 +33,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         set_std_current_allocator(arena);
         test_toplevel_stdout("(loop [for i from 10 downto 1] (print (u64.to-string i)))", "10987654321", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
 
     // TODO: this test currently fails (make him pass!)
@@ -45,6 +49,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         set_std_current_allocator(arena);
         test_toplevel_stdout("(loop [for i from 10 above 1] (print (u64.to-string i)))", "1098765432", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
 
     if (test_start(log, mv_string("double-for-loop"))) {
@@ -53,6 +58,7 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_stdout("(loop [for i from 9 downto 0] [for j from 0 below 10]\n"
                              "(print (u64.to-string i)) (print (u64.to-string j)))", "90817263544536271809", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
 
     if (test_start(log, mv_string("for-then-expr-loop"))) {
@@ -60,6 +66,51 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Allocator *a) {
         set_std_current_allocator(arena);
         test_toplevel_stdout("(loop [for i from 1 upto 10] [for j = 0 then (u64.mod (u64.+ 1 j) 2)] (print (u64.to-string j)))", "0101010101", module, log, a) ;
         set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
+    }
+
+    if (test_start(log, mv_string("run-script"))) {
+        String filename = string_cat(get_tmpdir(&arena), mv_string("/script.rl"), &arena);
+        File *file = open_file(filename, Read | Write, &arena);
+        const char contents[] = " (print (u64.to-string 123456789)) ";
+        U8Array data = (U8Array) {
+            .len = sizeof(contents),
+            .data = (uint8_t*)contents,
+        };
+        write_chunk(file, data);
+        close_file(file);
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        String to_run = string_ncat(&arena, 3,
+                                    mv_string("(seq (run-script \""),
+                                    filename,
+                                    mv_string("\") :unit)"));
+        test_toplevel_stdout((char*)to_run.bytes, "123456789", module, log, a) ;
+        set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
+    }
+
+    if (test_start(log, mv_string("load-module"))) {
+        String filename = string_cat(get_tmpdir(&arena), mv_string("/module.rl"), &arena);
+        File *file = open_file(filename, Read | Write, &arena);
+        const char contents[] = "(module test (import (core :all)) (export x)) (def x 3)";
+        U8Array data = (U8Array) {
+            .len = sizeof(contents),
+            .data = (uint8_t*)contents,
+        };
+        write_chunk(file, data);
+        close_file(file);
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        String to_run = string_ncat(&arena, 3,
+                                    mv_string("(seq (load-module \""),
+                                    filename,
+                                    mv_string("\") :unit)"));
+        run_toplevel((char*)to_run.bytes, module, log, a) ;
+        int64_t expected = 3;
+        test_toplevel_eq("test.x", &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+        reset_arena_allocator(arena);
     }
     release_arena_allocator(arena);
 }

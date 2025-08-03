@@ -35,6 +35,7 @@ typedef enum {
     SLitString,
     SLitBool,
     SLitUnit,
+    SLitArray,
     SVariable,
     SAbsVariable,
 
@@ -124,6 +125,11 @@ typedef struct {
 } SynFloatingLiteral;
 
 typedef struct {
+    U64Array shape;
+    PtrArray subterms;
+} SynArrayLiteral;
+
+typedef struct {
     Symbol symbol;
     size_t index;
     void* value;
@@ -180,7 +186,7 @@ typedef struct {
 } SynMatch;
 
 typedef struct {
-    Syntax* type;
+    Syntax* base;
     SymSynAMap fields;
 } SynStructure;
 
@@ -340,6 +346,7 @@ struct Syntax {
     union {
         SynIntegralLiteral integral;
         SynFloatingLiteral floating;
+        SynArrayLiteral array_lit;
         bool boolean;
         String string;
 
@@ -397,7 +404,7 @@ struct Syntax {
 
         // Metaprogramming
         Syntax* type_of;
-        Symbol to_describe;
+        SymbolArray to_describe;
         RawTree quoted;
         SynCapture capture;
     };
@@ -414,6 +421,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 typedef enum {
     TLDef,
+    TLDecl,
     TLOpen,
     TLExpr,
 } TopLevel_t;
@@ -424,6 +432,14 @@ typedef struct {
 } Definition;
 
 typedef struct {
+    Symbol bind;
+    union {
+        SymPtrAMap properties;
+        PtrArray decls;
+    };
+} Declaration;
+
+typedef struct {
     Range range;
     PtrArray paths;
 } OpenClause;
@@ -432,6 +448,7 @@ typedef struct {
     TopLevel_t type;
     union {
         Definition def;
+        Declaration decl;
         OpenClause open;
         Syntax* expr;
     };

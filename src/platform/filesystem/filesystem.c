@@ -1,9 +1,14 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "platform/machine_info.h"
 #include "platform/filesystem/filesystem.h"
 #include "platform/signals.h"
 #include "data/string.h"
+
+#if OS_FAMILY == WINDOWS
+#include <windows.h>
+#endif
 
 struct File {
     FILE* handle; 
@@ -45,9 +50,45 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
     return file;
 }
 
+File *open_tempfile(Allocator *alloc) {
+    FILE* handle = tmpfile();
+    File* file = mem_alloc(sizeof(File), alloc);
+    *file = (File) {
+        .handle = handle,
+        .gpa = *alloc,
+    };
+    return file;
+}
+
 void close_file(File *file) {
     fclose(file->handle);
     mem_free(file, &file->gpa);
+}
+
+String get_tmpdir(Allocator* a) {
+#if OS_FAMILY == UNIX
+
+    const char str[] = "/tmp";
+    String out = (String) {
+        .memsize = sizeof(str),
+        .bytes = mem_alloc(sizeof(str), a),
+    };
+    memcpy(out.bytes, str, sizeof(str));
+    return out;
+
+#elif OS_FAMILY == WINDOWS
+
+    uint64_t pathlen = GetTempPath(0, NULL);
+    String out = (String) {
+        .memsize = pathlen,
+        .bytes = mem_alloc(pathlen, a),
+    };
+    GetTempPath(out.memsize, (char*) out.bytes);
+    return out;
+
+#else
+#error "get_tmpdir not supported for this os"
+#endif
 }
 
 // return true on failure

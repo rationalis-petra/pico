@@ -22,6 +22,7 @@
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void type_infer_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void post_unify(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 
 // Check a toplevel expression
 void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* point) {
@@ -30,11 +31,11 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
     switch (top->type) {
     case TLDef: {
         PiType* check_against;
-        EnvEntry e = env_lookup(top->def.bind, env);
+        PiType* ty = env_lookup_tydecl(top->def.bind, env);
         Syntax* term = top->def.value;
 
-        if (e.success == Ok) {
-            check_against = e.type;
+        if (ty != NULL) {
+            check_against = ty;
         } else {
             check_against = mk_uvar(a);
         }
@@ -42,6 +43,29 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         type_check_expr(term, *check_against, t_env, a, point);
         post_unify(term, t_env, a, point);
         pop_type(t_env);
+        break;
+    }
+    case TLDecl: {
+        PtrArray declarations = mk_ptr_array(2, a);
+        for (size_t i = 0; i < top->decl.properties.len; i++) {
+            SymPtrCell cell = top->decl.properties.data[i];
+            if (symbol_eq(cell.key, string_to_symbol(mv_string("type")))) {
+                PiType* ty = eval_type(cell.val, t_env, a, point);
+                ModuleDecl* decl = mem_alloc(sizeof(ModuleDecl), a);
+                *decl = (ModuleDecl) {
+                    .sort = DeclType,
+                    .type = ty,
+                };
+                push_ptr(decl, &declarations);
+            } else {
+                PicoError err = (PicoError) {
+                    .range = ((Syntax*)cell.val)->range,
+                    .message = mv_cstr_doc("unrecognized declaration", a),
+                };
+                throw_pi_error(point, err);
+            }
+        }
+        top->decl.decls = declarations;
         break;
     }
     case TLOpen: {
@@ -88,7 +112,6 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
 // Forward declarations for implementation (internal declarations)
 void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point);
 void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);
@@ -167,6 +190,32 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
+    case SLitArray: {
+        PiType* element_type = mk_uvar(a);
+        for (size_t i = 0; i < untyped->array_lit.subterms.len; i++) {
+            type_check_i(untyped->array_lit.subterms.data[i], element_type, env, a, point);
+        }
+        PtrArray dimensions = mk_ptr_array(untyped->array_lit.shape.len, a);
+        for (size_t i = 0; i < untyped->array_lit.shape.len; i++) {
+            ArrayDimType* dim = mem_alloc(sizeof(ArrayDimType), a);
+            *dim = (ArrayDimType) {
+                .is_any = false,
+                .value = untyped->array_lit.shape.data[i],
+            };
+            push_ptr(dim, &dimensions);
+
+        }
+
+        PiType* array_type = mem_alloc(sizeof(PiType), a);
+        *array_type = (PiType) {
+            .sort = TArray,
+            .array.sort = Fixed,
+            .array.dimensions = dimensions,
+            .array.element_type = element_type,
+        };
+        untyped->ptype = array_type;
+        break;
+    }
     case SLitBool:
         untyped->ptype = mk_prim_type(a, Bool);
         break;
@@ -249,7 +298,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SAll: {
-        // Give each arg type kind.
+        // Give each arg type Type.
         PiType* all_ty = mem_alloc(sizeof(PiType), a);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
@@ -343,7 +392,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             untyped->type = SAllApplication;
             untyped->all_application = new_app;
             type_infer_i(untyped, env, a, point);
-        } else if (fn_type.sort == TKind) {
+        } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
                 err.message = mv_cstr_doc("Incorrect number of family arguments", a);
                 throw_pi_error(point, err);
@@ -667,8 +716,18 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SStructure: {
-        if (untyped->structure.type) {
-            untyped->ptype = eval_type(untyped->structure.type, env, a, point);
+
+        if (untyped->structure.base) {
+            bool all_fields_required;
+            type_infer_i(untyped->structure.base, env, a, point);
+            if (untyped->structure.base->ptype->sort == TKind) {
+                untyped->ptype = eval_type(untyped->structure.base, env, a, point);
+                all_fields_required = true;
+            } else {
+                untyped->ptype = untyped->structure.base->ptype;
+                all_fields_required = false;
+            }
+
             PiType* struct_type = unwrap_type(untyped->ptype, a);
 
             if (struct_type->sort != TStruct) {
@@ -676,7 +735,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 throw_pi_error(point, err);
             }
 
-            if (untyped->structure.fields.len != struct_type->structure.fields.len) {
+            if (untyped->structure.fields.len != struct_type->structure.fields.len && all_fields_required) {
                 // Figure out which field(s) are missing, and print those in the
                 // error message:
                 PtrArray docs = mk_ptr_array(4, a);
@@ -703,7 +762,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 if (field_syn) {
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
                     type_check_i(*field_syn, field_ty, env, a, point);
-                } else {
+                } else if (all_fields_required) {
                     panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
                     throw_pi_error(point, err);
                 }
@@ -1445,13 +1504,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SDescribe: {
-        TypeEntry te = type_env_lookup(untyped->to_describe, env);
-        if (te.type == TENotFound) {
-            String* sym = symbol_to_string(untyped->to_describe);
-            err.range = untyped->range;
-            err.message = mv_str_doc(string_cat(mv_string("Couldn't find value of variable to describe: "), *sym, a), a);
-            throw_pi_error(point, err);
-        }
+        /* TypeEntry te = type_env_lookup(untyped->to_describe, env); */
+        /* if (te.type == TENotFound) { */
+        /*     String* sym = symbol_to_string(untyped->to_describe); */
+        /*     err.range = untyped->range; */
+        /*     err.message = mv_str_doc(string_cat(mv_string("Couldn't find value of variable to describe: "), *sym, a), a); */
+        /*     throw_pi_error(point, err); */
+        /* } */
         untyped->ptype = mk_string_type(a);
         break;
     }
@@ -1489,6 +1548,12 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SVariable:
     case SAbsVariable:
         break;
+    case SLitArray: {
+        for (size_t i = 0; i < syn->array_lit.subterms.len; i++) {
+            post_unify(syn->array_lit.subterms.data[i], env, a, point);
+        }
+        break;
+    }
 
     // Terms & term formers
     case SProcedure: {
@@ -1562,7 +1627,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
                     panic(mv_string("Invalid instance entry type!"));
                 }
             }
-        } else if (fn_type.sort != TKind) {
+        } else if (fn_type.sort != TKind && fn_type.sort != TConstraint ) {
             panic(mv_string("Invalid lhs in application in post_unify: not Proc or Kind"));
         } 
         break;
@@ -1675,8 +1740,8 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
-        if (syn->structure.type) {
-            post_unify(syn->structure.type, env, a, point);
+        if (syn->structure.base) {
+            post_unify(syn->structure.base, env, a, point);
         }
         for (size_t i = 0; i < syn->structure.fields.len; i++) {
             post_unify(syn->structure.fields.data[i].val, env, a, point);
@@ -1882,6 +1947,12 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SVariable:
     case SAbsVariable:
         break;
+    case SLitArray: {
+        for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
+            squash_types(typed->array_lit.subterms.data[i], a, point);
+        }
+        break;
+    }
     case SProcedure: {
         // squash body
         // TODO (BUG): Need to squash types of annotated arguments!
@@ -1951,8 +2022,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SStructure: {
-        if (typed->structure.type) {
-            squash_types(typed->structure.type, a, point);
+        if (typed->structure.base) {
+            squash_types(typed->structure.base, a, point);
         }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;

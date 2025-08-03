@@ -38,6 +38,7 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
 // Wrappers around c functions
 void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 

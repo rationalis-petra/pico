@@ -84,6 +84,28 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("declaration"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType *expected = mk_proc_type(&arena, 1, mk_prim_type(&arena, UInt_64),
+                                        mk_prim_type(&arena, UInt_64));
+        run_toplevel("(declare id [.type Proc [U64] U64])", module, log, a);
+        run_toplevel("(def id proc [x] x)", module, log, a);
+        test_typecheck_eq("id",
+            expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("kinds-1"))) {
+        // TODO (BUG): this leaks - set current allocator?
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        PiType expected = (PiType){.sort = TKind, .kind.nargs = 1};
+        test_typecheck_eq("(Family [A] A)", &expected, module, log, a) ;
+        set_std_current_allocator(current_old);
+    }
+
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

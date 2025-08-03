@@ -106,7 +106,7 @@ void xdg_toplevel_conf(void *data, struct xdg_toplevel *top, int32_t width, int3
     // TODO: check that a resize actually happened.
     // TODO: check width, height >= 0
     Window* window = data;
-    if (window->width != width || window->height != height) {
+    if (window->width != (uint32_t)width || window->height != (uint32_t)height) {
         window->width = width;
         window->height = height;
 
@@ -280,6 +280,7 @@ void destroy_window(Window *window) {
     xdg_surface_destroy(window->xdg_surface);
     wl_surface_destroy(window->surface);
 
+    sdelete_wm_array(window->messages);
     mem_free(window, wsa);
 
     // TOOD: check if we want to keep this here? possibly we need to wait on a
@@ -317,9 +318,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RECT windowArea;
         GetClientRect(hwnd, &windowArea);
-        window->width = windowArea.right - windowArea.left;
-        window->height = windowArea.bottom - windowArea.top;
+        *window = (Window) {
+            .should_close = false,
+            .impl = hwnd,
+            .messages = mk_wm_array(8, wsa),
 
+            .width = windowArea.right - windowArea.left,
+            .height = windowArea.bottom - windowArea.top,
+        };
     } else {
         window = (Window*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
@@ -380,7 +386,7 @@ Window *create_window(String name, int width, int height) {
     Window *win = mem_alloc(sizeof(Window), wsa);
     HWND window = CreateWindowEx(0, // styles (optional)
                                  wind_class_name,
-                                 name.bytes,
+                                 (char*)name.bytes,
                                  WS_OVERLAPPEDWINDOW, // window style/type
                                  CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,  // position/size
                                  NULL, // parent
@@ -390,10 +396,6 @@ Window *create_window(String name, int width, int height) {
                                 );
     if (window) {
         ShowWindow(window, SW_SHOWDEFAULT);
-        *win = (Window){
-            .should_close = false,
-            .impl = window,
-        };
         return win;
     } else {
         return NULL;
@@ -401,9 +403,9 @@ Window *create_window(String name, int width, int height) {
 }
 
 void destroy_window(Window *window) {
-    HWND impl = window->impl;
+    sdelete_wm_array(window->messages);
+    DestroyWindow(window->impl);
     mem_free(window, wsa);
-    DestroyWindow(impl);
 }
 
 bool window_should_close(Window *window) {

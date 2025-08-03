@@ -2,6 +2,8 @@
 #include "platform/signals.h"
 #include "pretty/standard_types.h"
 
+#include "pico/values/array.h"
+#include "pico/values/modular.h"
 #include "pico/syntax/syntax.h"
 
 typedef struct SyntaxCall {
@@ -28,6 +30,11 @@ Syntax* mk_lit_typed_int_syn(const int64_t value, PrimType prim, Allocator* a) {
         .integral.type = prim,
     };
     return out;
+}
+
+Document* pretty_syntax_internal(Syntax* syntax, Allocator* a);
+Document* pretty_syntax_callback(Syntax* syntax, void* ctx, Allocator* a) {
+    return pretty_syntax_internal(syntax, a);
 }
 
 Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
@@ -58,6 +65,20 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     }
     case SLitUnit: {
         out = mk_str_doc(mv_string(":unit"), a);
+        break;
+    }
+    case SLitArray: {
+        PrettyElem pelem = (PrettyElem) {
+            .print_elem = (print_element)pretty_syntax_callback,
+            .context = NULL,
+        };
+        Array array = (Array) {
+            .shape.len = syntax->array_lit.shape.len,
+            .shape.data = syntax->array_lit.shape.data,
+            .data = syntax->array_lit.subterms.data,
+        };
+        size_t index_size = sizeof(void*);
+        return pretty_array(array, index_size, pelem, a);
         break;
     }
     case SLitString: {
@@ -729,6 +750,21 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(quote ", ")", mv_nest_doc(2, raw, a), a);
         break;
     }
+    case SCapture: {
+        RawTree raw = (RawTree) {
+          .type = RawAtom,
+          .atom = (Atom) {
+              .type = ACapture,
+              .capture = (Capture) {
+                  .type = syntax->capture.type,
+                  .value = syntax->capture.value,
+              }
+          },
+        };
+        Document* raw_doc = pretty_rawtree(raw, a);
+        out = mk_paren_doc("(capture ", ")", mv_nest_doc(2, raw_doc, a), a);
+        break;
+    }
     }
 
     if (out == NULL)  {
@@ -744,10 +780,28 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a) {
 }
 
 Document* pretty_def(Definition* def, Allocator* a) {
-    PtrArray nodes = mk_ptr_array(4, a);
+    PtrArray nodes = mk_ptr_array(3, a);
     push_ptr(mv_str_doc(mk_string("def", a), a), &nodes);
     push_ptr(mk_str_doc(*symbol_to_string(def->bind), a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_syntax(def->value, a), a), &nodes);
+    return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
+}
+
+Document* pretty_decl(Declaration* decl, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(3, a);
+    push_ptr(mv_str_doc(mk_string("declare", a), a), &nodes);
+    push_ptr(mk_str_doc(*symbol_to_string(decl->bind), a), &nodes);
+    for (size_t i = 0; i < decl->decls.len; i++) {
+        ModuleDecl* dec = decl->decls.data[i];
+        PtrArray prop_nodes = mk_ptr_array(2, a);
+        switch (dec->sort) {
+        case DeclType:
+            push_ptr(mv_cstr_doc("type", a), &prop_nodes);
+            push_ptr(pretty_type(dec->type, a), &prop_nodes);
+            break;
+        }
+        push_ptr(mk_paren_doc("[.", "]", mv_hsep_doc(nodes, a), a), &nodes);
+    }
     return mk_paren_doc("(", ")", mv_hsep_doc(nodes, a), a);
 }
 
@@ -756,6 +810,9 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     switch (toplevel->type) {
     case TLDef:
         out = pretty_def(&toplevel->def, a);
+        break;
+    case TLDecl:
+        out = pretty_decl(&toplevel->decl, a);
         break;
     case TLOpen: {
         PtrArray docs = mk_ptr_array(toplevel->open.paths.len, a);
@@ -787,11 +844,14 @@ PiType* toplevel_type(TopLevel top) {
     case TLExpr:
         out = top.expr->ptype;
         break;
-    case TLOpen:
-        out = NULL;
-        break;
     case TLDef:
         out = top.def.value->ptype;
+        break;
+    case TLDecl:
+        out = NULL;
+        break;
+    case TLOpen:
+        out = NULL;
         break;
     }
     return out;

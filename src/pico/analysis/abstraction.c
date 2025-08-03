@@ -30,7 +30,9 @@ typedef struct {
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 
+Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
+Syntax* mk_array_literal(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 ComptimeHead comptime_head(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, ShadowEnv* env, Allocator* a, PiErrorPoint* point);
@@ -58,6 +60,26 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* poi
 }
 
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
+    // Expected format:
+    // Note: postfix ?  = expression is optional
+    //       postfix *  = zero or more required
+    //       infix |    = choice
+    //       between <> = class
+    //       between ⦇⦈ = grouped, the ⦇⦈ are not literal
+    // 
+    // ( module <modulename>
+    //   ⦇ ( import <import-clause>* ) | ( export ⦇:all | <export-clause>*⦈ ) ⦈* )
+    // 
+    // Where
+    //  <modulename> is a symbol
+    // 
+    // <import-clause> has the format
+    //  ( <path> ⦇:all | :except <symbol-list> | :only <symbol-list>⦈? ) 
+    // 
+    // <export-clause> has the format
+    //  <symbol>
+    //
+
     // Prep an error that can then be filled out and thrown.
     PicoError err;
     if (raw.type != RawBranch) {
@@ -66,14 +88,9 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
 
-    // Expected format:
-    // (module <modulename>
-    //   (import import-clause*)?
-    //   (export import-clause*)?)
-    size_t idx = 0;
-    if (raw.branch.nodes.len <= idx) {
+    if (raw.branch.nodes.len <= 2) {
         err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting keyword 'module' in module header. Got nothing!", a);
+        err.message = mv_cstr_doc("Expecting keyword module header to have at least two elements - (module <modulename>). Got nothing!", a);
         throw_pi_error(point, err);
     }
     if (raw.branch.nodes.len > 4) {
@@ -85,13 +102,6 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string("module")))) {
         err.range = raw.branch.nodes.data[0].range;
         err.message = mv_cstr_doc("Expecting keyword 'module' in module header.", a);
-        throw_pi_error(point, err);
-    }
-
-    idx++;
-    if (raw.branch.nodes.len <= idx)  {
-        err.range = raw.range;
-        err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header. Got nothing!", a);
         throw_pi_error(point, err);
     }
 
@@ -107,90 +117,36 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     Exports exports;
     exports.export_all = false;
 
-    idx++;
-    if (raw.branch.nodes.len <= idx) {
-        imports.clauses = mk_import_clause_array(0, a);
-        exports.clauses = mk_export_clause_array(0, a);
-    } else if (raw.branch.nodes.len <= idx+1){
-        RawTree clauses_1 = raw.branch.nodes.data[2];
-        if (clauses_1.type != RawBranch) {
-            err.range = clauses_1.range;
+    imports.clauses = mk_import_clause_array(8, a);
+    exports.clauses = mk_export_clause_array(8, a);
+    for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+        RawTree clauses = raw.branch.nodes.data[i];
+        if (clauses.type != RawBranch) {
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Expecting import/export list.", a);
             throw_pi_error(point, err);
         }
-        if (clauses_1.branch.nodes.len < 1) {
-            err.range = clauses_1.range;
+        if (clauses.branch.nodes.len < 1) {
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Not enough elements in import/export list", a);
             throw_pi_error(point, err);
         }
 
-        if (eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
-            imports.clauses = mk_import_clause_array(clauses_1.branch.nodes.len - 1, a);
-            exports.clauses = mk_export_clause_array(0, a);
-
-            for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-                ImportClause clause = abstract_import_clause(&clauses_1.branch.nodes.data[i], a, point);
+        if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
+            for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
+                ImportClause clause = abstract_import_clause(&clauses.branch.nodes.data[i], a, point);
                 push_import_clause(clause, &imports.clauses);
             }
-        } else if (eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
-            imports.clauses = mk_import_clause_array(0, a);
-            exports.clauses = mk_export_clause_array(clauses_1.branch.nodes.len - 1, a);
-
-            for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-                ExportClause clause = abstract_export_clause(&clauses_1.branch.nodes.data[i], point, a);
+        } else if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
+            for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
+                ExportClause clause = abstract_export_clause(&clauses.branch.nodes.data[i], point, a);
                 push_export_clause(clause, &exports.clauses);
             }
         } else {
-            err.range = clauses_1.range;
+            err.range = clauses.range;
             err.message = mv_cstr_doc("Expecting import/export list header.", a);
             throw_pi_error(point, err);
         }
-    } else {
-        RawTree clauses_1 = raw.branch.nodes.data[2];
-        if (clauses_1.type != RawBranch) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Expecting import list.", a);
-            throw_pi_error(point, err);
-        }
-        if (clauses_1.branch.nodes.len < 1) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Not enough elements in import list", a);
-            throw_pi_error(point, err);
-        }
-        if (!eq_symbol(&clauses_1.branch.nodes.data[0], string_to_symbol(mv_string("import")))) {
-            err.range = clauses_1.range;
-            err.message = mv_cstr_doc("Expecting 'import' at head of import list", a);
-            throw_pi_error(point, err);
-        }
-
-        imports.clauses = mk_import_clause_array(clauses_1.branch.nodes.len - 1, a);
-
-        for (size_t i = 1; i < clauses_1.branch.nodes.len; i++) {
-            panic(mv_string("not implemented: import clauses ?!"));
-        }
-
-        RawTree clauses_2 = raw.branch.nodes.data[3];
-        if (clauses_2.type != RawBranch) {
-            err.range = clauses_2.range;
-            err.message = mv_cstr_doc("Expecting export list.", a);
-            throw_pi_error(point, err);
-        }
-        if (clauses_2.branch.nodes.len < 1) {
-            err.range = clauses_2.range;
-            err.message = mv_cstr_doc("Not enough elements in export list", a);
-            throw_pi_error(point, err);
-        }
-        if (!eq_symbol(&clauses_2.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
-            err.range = clauses_2.branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Expecting 'export' at head of export list", a);
-            throw_pi_error(point, err);
-        }
-
-        for (size_t i = 1; i < clauses_2.branch.nodes.len; i++) {
-            panic(mv_string("not implemented: import clauses 2 ?!"));
-        }
-
-        exports.clauses = mk_export_clause_array(clauses_2.branch.nodes.len - 1, a);
     }
 
     ModuleHeader* out = mem_alloc(sizeof(ModuleHeader), a);
@@ -677,14 +633,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             throw_pi_error(point, err);
         }
 
-        Syntax* stype;
+        Syntax* sbase;
         size_t start_idx = 1;
         // Get the type of the structure
         if (raw.branch.nodes.data[1].type != RawBranch || raw.branch.nodes.data[1].branch.hint != HSpecial) {
             start_idx = 2;
-            stype = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+            sbase = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
         } else {
-            stype = NULL;
+            sbase = NULL;
         }
 
         // Construct a structure
@@ -721,7 +677,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .type = SStructure,
             .ptype = NULL,
             .range = raw.range,
-            .structure.type = stype,
+            .structure.base = sbase,
             .structure.fields = fields,
         };
         return res;
@@ -831,6 +787,10 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FGenArray:
+        panic(mv_string("abstract for gen-array not implemented"));
+    case FWith:
+        panic(mv_string("abstract for with not implemented"));
     case FDynamic: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -1433,6 +1393,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FArrayType: {
+        panic(mv_string("Array type former not implemented."));
+    }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
@@ -1889,19 +1852,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             err.message = mk_cstr_doc("describe term former requires 1 argument!", a);
             throw_pi_error(point, err);
         }
-        RawTree term = raw.branch.nodes.data[1];
-        if (is_symbol(term)) {
+
+        Syntax* abs = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        SymbolArray* path = try_get_path(abs, a);
+
+        if (path) {
             Syntax* res = mem_alloc(sizeof(Syntax), a);
             *res = (Syntax) {
                 .type = SDescribe,
                 .ptype = NULL,
                 .range = raw.range,
-                .to_describe = term.atom.symbol,
+                .to_describe = *path,
             };
             return res;
         } else {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_cstr_doc("describe expects argument to be a symbol!", a);
+            err.message = mk_cstr_doc("describe expects argument to be a path!", a);
             throw_pi_error(point, err);
         }
         break;
@@ -1974,6 +1940,164 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     panic(mv_string("Invalid term-former provided to mk_term."));
 }
 
+void get_array_shape(RawTree raw, U64Array* shape_out, Allocator *a, PiErrorPoint *point) {
+    if (raw.type == RawBranch && raw.branch.hint == HData) {
+        if (raw.branch.nodes.len == 0) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Array literal must have > 1 terms", a),
+            };
+            throw_pi_error(point, err);
+        }
+        push_u64(raw.branch.nodes.len, shape_out);
+        get_array_shape(raw.branch.nodes.data[0], shape_out, a, point);
+    }
+}
+
+void mk_array_inner(PtrArray* terms, uint64_t depth, U64Array expected_shape, RawTree raw, ShadowEnv *env, Allocator *a, PiErrorPoint *point) {
+    if (raw.type == RawBranch && raw.branch.hint == HData) {
+        if (expected_shape.len <= depth) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape - too deep.", a),
+            };
+            throw_pi_error(point, err);
+        }
+        if (raw.branch.nodes.len != expected_shape.data[depth]) {
+            PicoError err = (PicoError) {
+                .range = raw.range,
+                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape.", a),
+            };
+            throw_pi_error(point, err);
+        }
+        for (size_t i = 0; i < raw.branch.nodes.len; i++) {
+            mk_array_inner(terms, depth + 1, expected_shape, raw.branch.nodes.data[i], env, a, point);
+        }
+    } else {
+        // just abstract and push
+        Syntax* term = abstract_expr_i(raw, env, a, point);
+        push_ptr(term, terms);
+    }
+}
+
+Syntax *mk_array_literal(RawTree raw, ShadowEnv *env, Allocator *a, PiErrorPoint *point) {
+    PtrArray terms = mk_ptr_array(8, a);
+    U64Array shape = mk_u64_array(8, a);
+    get_array_shape(raw, &shape, a, point);
+    mk_array_inner(&terms, 0, shape, raw, env, a, point);
+
+    Syntax* res = mem_alloc(sizeof(Syntax), a);
+    *res = (Syntax) {
+        .type = SLitArray,
+        .ptype = NULL,
+        .range = raw.range,
+        .array_lit.shape = shape,
+        .array_lit.subterms = terms,
+    };
+    return res;
+}
+
+MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
+    // Call the function (uses Pico ABI)
+    MacroResult output;
+    RawTreeArray input = raw.branch.nodes;
+    void* dvars = get_dynamic_memory();
+    void* dynamic_memory_space = mem_alloc(4096, a);
+    void* offset_memory_space = mem_alloc(1024, a);
+
+    Allocator old_temp_alloc = set_std_temp_allocator(*a);
+    Allocator old_current_alloc = set_std_current_allocator(*a);
+
+    int64_t out;
+    __asm__ __volatile__(
+                         // save nonvolatile registers
+                         "push %%rbp       \n" // Nonvolatile on System V + Win64
+                         "push %%rbx       \n" // Nonvolatile on System V + Win64
+                         "push %%rdi       \n" // Nonvolatile on Win 64
+                         "push %%rsi       \n" // Nonvolatile on Win 64
+                         "push %%r15       \n" // for dynamic vars
+                         "push %%r14       \n" // for dynamic memory space
+                         "push %%r13       \n" // for control/indexing memory space
+                         "push %%r12       \n" // Nonvolatile on System V + Win64
+
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r14    \n"
+                         "mov %2, %%r15    \n"
+                         //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
+
+                         // Push output ptr & sizeof (MacroResult), resp
+                         "push %6          \n" // output ptr
+                         "push %7          \n" // sizeof (MacroResult)
+
+                         // Push arg (array) onto stack
+                         "push 0x30(%5)       \n"
+                         "push 0x28(%5)       \n"
+                         "push 0x20(%5)       \n"
+                         "push 0x18(%5)       \n"
+                         "push 0x10(%5)       \n"
+                         "push 0x8(%5)        \n"
+                         "push (%5)         \n"
+
+                         "mov %%rsp, %%rbp \n"
+
+                         // Call function, this should consume 'Array' from the stack and push
+                         // 'Raw Syntax' onto the stack
+                         "call *%1         \n"
+
+                         // After calling the function, we
+                         // expect a RawTree to be atop the stack:
+#if ABI == SYSTEM_V_64
+                         // memcpy (dest = rdi, src = rsi, size = rdx)
+                         // retval = rax 
+                         // Note: 0x60 = sizeof(MacroResult)
+                         "mov 0x60(%%rsp), %%rdx   \n"
+                         "mov 0x68(%%rsp), %%rdi   \n"
+                         "mov %%rsp, %%rsi         \n"
+                         "call memcpy              \n"
+
+#elif ABI == WIN_64
+                         // memcpy (dest = rcx, src = rdx, size = r8)
+                         // retval = rax
+                         "mov 0x60(%%rsp), %%r8    \n"
+                         "mov 0x68(%%rsp), %%rcx   \n"
+                         "mov %%rsp, %%rdx         \n"
+                         "sub $0x20, %%rsp         \n"
+                         "call memcpy              \n"
+                         "add $0x20, %%rsp         \n"
+#else
+#error "Unknown calling convention"
+#endif
+                         // pop value from stack 
+                         // Note: 0x60 = sizeof(MacroResult)
+                         "mov 0x60(%%rsp), %%rax   \n"
+                         "add %%rax, %%rsp         \n"
+                         // pop stashed size & dest from stack
+                         "add $0x10, %%rsp          \n"
+
+                         "pop %%r12        \n"
+                         "pop %%r13        \n"
+                         "pop %%r14        \n"
+                         "pop %%r15        \n"
+                         "pop %%rsi        \n" 
+                         "pop %%rdi        \n" 
+                         "pop %%rbx        \n"
+                         "pop %%rbp        \n"
+                         : "=r" (out)
+
+                         : "r" (head.macro_addr)
+                           , "r" (dvars)
+                           , "r" (dynamic_memory_space)
+                           , "r" (offset_memory_space)
+                           , "r" (&input)
+                           , "r" (&output)
+                           , "c" (sizeof(MacroResult)) 
+                         : "r13", "r14", "r15");
+
+    set_std_temp_allocator(old_temp_alloc);
+    set_std_current_allocator(old_current_alloc);
+    mem_free(dynamic_memory_space, a);
+    return output;
+}
 
 Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* point) {
     PicoError err;
@@ -2047,6 +2171,10 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
+        if (raw.branch.hint == HData) {
+            return mk_array_literal(raw, env, a, point);
+        }
+
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
             err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);
@@ -2068,103 +2196,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
             return mk_term(head.former, raw, env, a, point);
         case HeadMacro: {
             // Call the function (uses Pico ABI)
-            MacroResult output;
-            RawTreeArray input = raw.branch.nodes;
-            void* dvars = get_dynamic_memory();
-            void* dynamic_memory_space = mem_alloc(4096, a);
-            void* offset_memory_space = mem_alloc(1024, a);
-
-            Allocator old_temp_alloc = set_std_temp_allocator(*a);
-            Allocator old_current_alloc = set_std_current_allocator(*a);
-
-            int64_t out;
-            __asm__ __volatile__(
-                                 // save nonvolatile registers
-                                 "push %%rbp       \n" // Nonvolatile on System V + Win64
-                                 "push %%rbx       \n" // Nonvolatile on System V + Win64
-                                 "push %%rdi       \n" // Nonvolatile on Win 64
-                                 "push %%rsi       \n" // Nonvolatile on Win 64
-                                 "push %%r15       \n" // for dynamic vars
-                                 "push %%r14       \n" // for dynamic memory space
-                                 "push %%r13       \n" // for control/indexing memory space
-                                 "push %%r12       \n" // Nonvolatile on System V + Win64
-
-                                 "mov %4, %%r13    \n"
-                                 "mov %3, %%r14    \n"
-                                 "mov %2, %%r15    \n"
-                                 //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
-
-                                 // Push output ptr & sizeof (MacroResult), resp
-                                 "push %6          \n" // output ptr
-                                 "push %7          \n" // sizeof (MacroResult)
-
-                                 // Push arg (array) onto stack
-                                 "push 0x30(%5)       \n"
-                                 "push 0x28(%5)       \n"
-                                 "push 0x20(%5)       \n"
-                                 "push 0x18(%5)       \n"
-                                 "push 0x10(%5)       \n"
-                                 "push 0x8(%5)        \n"
-                                 "push (%5)         \n"
-
-                                 "mov %%rsp, %%rbp \n"
-
-                                 // Call function, this should consume 'Array' from the stack and push
-                                 // 'Raw Syntax' onto the stack
-                                 "call *%1         \n"
-
-                                 // After calling the function, we
-                                 // expect a RawTree to be atop the stack:
-#if ABI == SYSTEM_V_64
-                                 // memcpy (dest = rdi, src = rsi, size = rdx)
-                                 // retval = rax 
-                                 // Note: 0x60 = sizeof(MacroResult)
-                                 "mov 0x60(%%rsp), %%rdx   \n"
-                                 "mov 0x68(%%rsp), %%rdi   \n"
-                                 "mov %%rsp, %%rsi         \n"
-                                 "call memcpy              \n"
-
-#elif ABI == WIN_64
-                                 // memcpy (dest = rcx, src = rdx, size = r8)
-                                 // retval = rax
-                                 "mov 0x60(%%rsp), %%r8    \n"
-                                 "mov 0x68(%%rsp), %%rcx   \n"
-                                 "mov %%rsp, %%rdx         \n"
-                                 "sub $0x20, %%rsp         \n"
-                                 "call memcpy              \n"
-                                 "add $0x20, %%rsp         \n"
-#else
-#error "Unknown calling convention"
-#endif
-                                 // pop value from stack 
-                                 // Note: 0x60 = sizeof(MacroResult)
-                                 "mov 0x60(%%rsp), %%rax   \n"
-                                 "add %%rax, %%rsp         \n"
-                                 // pop stashed size & dest from stack
-                                 "add $0x10, %%rsp          \n"
-
-                                 "pop %%r12        \n"
-                                 "pop %%r13        \n"
-                                 "pop %%r14        \n"
-                                 "pop %%r15        \n"
-                                 "pop %%rsi        \n" 
-                                 "pop %%rdi        \n" 
-                                 "pop %%rbx        \n"
-                                 "pop %%rbp        \n"
-                                 : "=r" (out)
-
-                                 : "r" (head.macro_addr)
-                                   , "r" (dvars)
-                                   , "r" (dynamic_memory_space)
-                                   , "r" (offset_memory_space)
-                                   , "r" (&input)
-                                   , "r" (&output)
-                                   , "c" (sizeof(MacroResult)) 
-                                 : "r13", "r14", "r15");
-
-            set_std_temp_allocator(old_temp_alloc);
-            set_std_current_allocator(old_current_alloc);
-            mem_free(dynamic_memory_space, a);
+            MacroResult output = eval_macro(head, raw, a);
             if (output.result_type == 1) {
                 return abstract_expr_i(output.term, env, a, point);
             } else {
@@ -2221,6 +2253,64 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         break;
     }
+    case FDeclare: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Declarations expect at least 2 terms", a);
+            throw_pi_error(point, err);
+        }
+
+        if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("First argument to declaration should be a symbol", a);
+            throw_pi_error(point, err);
+        }
+
+        Symbol sym = raw.branch.nodes.data[1].atom.symbol;
+        
+        // Declaration bodies are a set of field, value pairs, e.g.
+        // [.type <Type>]
+        // [.optimise <level>]
+        // [.inline-hint <hint>]
+
+        shadow_var(sym, env);
+        SymPtrAMap properties = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+            RawTree fdesc = raw.branch.nodes.data[i];
+            if (fdesc.type != RawBranch) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to be compound terms.", a);
+                throw_pi_error(point, err);
+            }
+            
+            if (fdesc.branch.nodes.len < 2) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Declaration expects all property descriptors to have at least 2 elements.", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol field;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+                err.range = fdesc.branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Declaration has malformed property name.", a);
+                throw_pi_error(point, err);
+            }
+
+            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, a); 
+            Syntax* syn = abstract_expr_i(*val_desc, env, a, point);
+
+            sym_ptr_insert(field, syn, &properties);
+        }
+        shadow_pop(1, env);
+
+        res = (TopLevel) {
+            .type = TLDecl,
+            .decl.bind = sym,
+            .decl.properties = properties,
+        };
+
+        break;
+    }
     case FOpen: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -2249,12 +2339,13 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
         };
         break;
     }
-    default:
+    default: {
         res = (TopLevel) {
             .type = TLExpr,
             .expr = mk_term(former, raw, env, a, point),
         };
         break;
+    }
     }
     return res;
 }
@@ -2264,20 +2355,34 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
     bool unique_toplevel = false;
 
     if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
-        if (is_symbol(raw.branch.nodes.data[0])) {
-            Symbol sym = raw.branch.nodes.data[0].atom.symbol;
-            ShadowEntry entry = shadow_env_lookup(sym, env);
-            switch (entry.type) {
-            case SGlobal: {
-                if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
-                    unique_toplevel = true;
-                    return mk_toplevel(*((TermFormer*)entry.value), raw, env, a, point);
-                }
-                break;
+        if (raw.branch.hint == HData) {
+            return (TopLevel) {
+                .type = TLExpr,
+                .expr = mk_array_literal(raw, env, a, point),
+            };
+        }
+
+        ComptimeHead head = comptime_head(raw.branch.nodes.data[0], env, a, point);
+        switch (head.type) {
+        case HeadSyntax:
+            return (TopLevel) {
+                .type = TLExpr,
+                .expr = mk_application_body(head.syn, raw, env, a, point),
+            };
+        case HeadFormer:
+            return mk_toplevel(head.former, raw, env, a, point);
+        case HeadMacro: {
+            MacroResult output = eval_macro(head, raw, a);
+            if (output.result_type == 1) {
+                return abstract_i(output.term, env, a, point);
+            } else {
+                PicoError err = (PicoError) {
+                    .message = mk_str_doc(output.err.message, a),
+                    .range = output.err.range,
+                };
+                throw_pi_error(point, err);
             }
-            default:
-                break;
-            }
+        }
         }
     } 
 
@@ -2289,6 +2394,36 @@ TopLevel abstract_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint* poi
     }
 
     panic(mv_string("Logic error in abstract_i: reached unreachable area."));
+}
+
+SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
+    PicoError err = (PicoError) {.range = raw.range};
+    SymbolArray syms = mk_symbol_array(2, a); 
+    while (raw.type == RawBranch) {
+        if (raw.branch.nodes.len != 3) {
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+        if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+
+        if(!is_symbol(raw.branch.nodes.data[2])) {
+            err.range = raw.branch.nodes.data[2].range;
+            err.message = mv_cstr_doc("Invalid path component", a);
+            throw_pi_error(point, err);
+        }
+        push_symbol(raw.branch.nodes.data[2].atom.symbol, &syms);
+        raw = raw.branch.nodes.data[1];
+    }
+
+    if (!is_symbol(raw)) {
+        err.message = mv_cstr_doc("Invalid path component", a);
+        throw_pi_error(point, err);
+    }
+    push_symbol(raw.atom.symbol, &syms);
+    return syms;
 }
 
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
@@ -2307,13 +2442,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         // (. name2 name1)
         // (. (list-of-names) name1)
         if (raw->branch.nodes.len == 2) {
-            if (!is_symbol(raw->branch.nodes.data[0])) {
-                err.range = raw->branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Invalid import clause: first element should be symbol", a);
-                throw_pi_error(point, err);
-            }
-            Symbol name = raw->branch.nodes.data[0].atom.symbol;
-
+            SymbolArray path = get_module_path(raw->branch.nodes.data[0], a, point);
             
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
@@ -2327,14 +2456,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 throw_pi_error(point, err);
             }
 
-            SymbolArray path = mk_symbol_array(1,a);
-            push_symbol(name, &path);
             return (ImportClause) {
                 .type = ImportAll,
                 .path = path,
             };
         } else if (raw->branch.nodes.len == 3) {
-
             if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2])) {
                 err.range = raw->range;
                 err.message = mv_cstr_doc("Invalid import clause", a);
@@ -2432,45 +2558,64 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
             .name = raw->atom.symbol,
         };
     } else if (raw->type == RawBranch) {
-        // Export as
+        // If branch, there are two options
+        // (var1 :as var2)
+        // (:all)
         // looks like (<symbol/name> (<symbol/:> <symbol/as>) <symbol/name>)
 
-        if (raw->branch.nodes.len != 3) {
+        if (raw->branch.nodes.len == 2) {
+            Symbol all_sym;
+            if(!get_fieldname(raw, &all_sym)) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid export clause - couldn't get fieldname from expected 'all' ", a);
+                throw_pi_error(point, err);
+            }
+            if (!symbol_eq(all_sym, string_to_symbol(mv_string("all")))) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid export - expected 'all', but got something else", a);
+                throw_pi_error(point, err);
+            }
+
+            return (ExportClause) {
+                .type = ExportAll,
+            };
+        } else if (raw->branch.nodes.len == 3) {
+            Symbol middle;
+            if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
+                err.range = raw->branch.nodes.data[1].range;
+                err.message = mv_cstr_doc("Invalid export clause", a);
+                throw_pi_error(point, err);
+            }
+            if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
+                err.range = raw->branch.nodes.data[1].range;
+                err.message = mv_cstr_doc("Invalid export clause", a);
+                throw_pi_error(point, err);
+            }
+
+            Symbol name;
+            Symbol rename;
+            if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
+                err.range = raw->branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Invalid export-as name", a);
+                throw_pi_error(point, err);
+            }
+            if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
+                err.range = raw->branch.nodes.data[0].range;
+                err.message = mv_cstr_doc("Invalid export-as new name", a);
+                throw_pi_error(point, err);
+            }
+
+            return (ExportClause) {
+                .type = ExportNameAs,
+                .name = name,
+                .rename = rename,
+            };
+        } else {
             err.range = raw->range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
+            err.message = mv_cstr_doc("Invalid export clause - for branches, expect either 2 argument (: all) or 3 (sym1 :as sym2)", a);
             throw_pi_error(point, err);
         }
 
-        Symbol middle;
-        if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-            err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
-            throw_pi_error(point, err);
-        }
-        if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
-            err.range = raw->branch.nodes.data[1].range;
-            err.message = mv_cstr_doc("Invalid export clause", a);
-            throw_pi_error(point, err);
-        }
-
-        Symbol name;
-        Symbol rename;
-        if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
-            err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Invalid export-as name", a);
-            throw_pi_error(point, err);
-        }
-        if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
-            err.range = raw->branch.nodes.data[0].range;
-            err.message = mv_cstr_doc("Invalid export-as new name", a);
-            throw_pi_error(point, err);
-        }
-
-        return (ExportClause) {
-            .type = ExportNameAs,
-            .name = name,
-            .rename = rename,
-        };
     } else {
         err.range = raw->range;
         err.message = mv_cstr_doc("Invalid export clause", a);
@@ -2488,9 +2633,9 @@ ComptimeHead comptime_head(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoi
         ShadowEntry entry = shadow_env_lookup(sym, env);
         switch (entry.type) {
         case SGlobal:
-            if (entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
+            if (!entry.is_module && entry.vtype->sort == TPrim && entry.vtype->prim == TFormer) {
                 return (ComptimeHead){.type = HeadFormer, .former = *((TermFormer*)entry.value)};
-            } else if (entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
+            } else if (!entry.is_module && entry.vtype->sort == TPrim && entry.vtype->prim == TMacro) {
                 return (ComptimeHead){.type = HeadMacro, .macro_addr = *((uint64_t*)entry.value)};
             }
             break;

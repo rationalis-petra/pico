@@ -85,28 +85,31 @@ Environment* env_from_module(Module* module, Allocator* a) {
         case ImportAll: {
             // Find the package
             Module* importee = path_all(clause.path, root_module);
-            SymbolArray syms = get_exported_symbols(importee, a);
-            for (size_t i = 0; i < syms.len; i++ ) {
-                name_ptr_insert(syms.data[i].name, importee, &env->symbol_origins);
+            SymbolArray syms = get_defined_symbols(importee, a);
+            for (size_t j = 0; j < syms.len; j++ ) {
+                name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
             }
             sdelete_symbol_array(syms);
 
             // Get all implicits
-            PtrArray instances = get_exported_instances(importee, a);
-            for (size_t i = 0; i < instances.len; i++ ) {
-                InstanceSrc* instance = instances.data[i];
+            PtrArray instances = get_defined_instances(importee, a);
+            for (size_t j = 0; j < instances.len; j++ ) {
+                InstanceSrc* instance = instances.data[j];
 
-                PtrArray* p = (PtrArray*)name_ptr_lookup(instance->id, env->instances);
-                if (!p) {
-                    p = mem_alloc(sizeof(PtrArray), a);
-                    *p = mk_ptr_array(8, a);
+                PtrArray* arr = NULL;
+                PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+                if (p == NULL) {
+                    arr = mem_alloc(sizeof(PtrArray), a);
+                    *arr = mk_ptr_array(8, a);
                     // TODO: we know this isn't in the instances; could perhaps
                     // speed up the process?
-                    name_ptr_insert(instance->id, p, &env->instances);
+                    name_ptr_insert(instance->id, arr, &env->instances);
+                } else {
+                    arr = *p;
                 }
 
                 // Add this instance to the array
-                push_ptr(instance, p);
+                push_ptr(instance, arr);
             }
 
             // We do not delete instance entries are they are now in
@@ -122,14 +125,14 @@ Environment* env_from_module(Module* module, Allocator* a) {
 
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_exported_symbols(module, a);
+    SymbolArray arr = get_defined_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
         name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
     }
     sdelete_symbol_array(arr);
 
     // Get all implicits
-    PtrArray instances = get_exported_instances(module, a);
+    PtrArray instances = get_defined_instances(module, a);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
         PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
@@ -163,7 +166,7 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
         ModuleEntry* mentry = get_def(sym, *module); 
-        if (mentry != NULL) {
+        if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
             result.value = mentry->value;
@@ -176,6 +179,28 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
         result.success = Err;
     }
     return result;
+}
+
+PiType* env_lookup_tydecl(Symbol sym, Environment* env) {
+    if (sym.did != 0) return NULL;
+
+    Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
+    if (module) {
+        ModuleEntry* mentry = get_def(sym, *module); 
+        if (mentry != NULL) {
+            if (mentry->declarations) {
+                PtrArray decls = *mentry->declarations;
+                for (size_t i = 0; i < decls.len; i++) {
+                    ModuleDecl* decl = decls.data[i];
+                    if (decl->sort == DeclType) {
+                        return decl->type;
+                    }
+                }
+            }
+        } 
+    } 
+
+    return NULL;
 }
 
 PtrArray* env_implicit_lookup(Name id, Environment* env) {

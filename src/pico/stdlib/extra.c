@@ -233,52 +233,34 @@ void build_println_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* po
 }
 
 // C implementation (called from pico!)
-void load_module_c_fun(String filename) {
+Result load_module_c_fun(String filename) {
     // (ann load-module String → Unit) : load the module/code located in file! 
     
     Allocator* a = get_std_allocator();
     IStream* sfile = open_file_istream(filename, a);
-    load_module_from_istream(sfile, mk_formatted_ostream(current_ostream, a), current_package, NULL, a);
+    if (!sfile) {
+      return (Result) {
+        .type = Err, .error_message = mv_string("failed to open file!"),
+      };
+    }
+    FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
+
+    Module* parent = get_std_current_module();
+    load_module_from_istream(sfile, os, current_package, parent, a);
     delete_istream(sfile, a);
+    delete_formatted_ostream(os, a);
+    return (Result) {.type = Ok};
 }
 
-void build_load_module_fun(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // (ann load-module String → Unit) : load the module/code located in file! 
+void build_load_module_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType result_ctype = mk_struct_ctype(a, 2,
+                                         "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                         "error_message", copy_c_type(mk_string_ctype(a), a));
 
-#if ABI == SYSTEM_V_64
-    // load_module_c_fun (struct on stack)
-    // pass in platform/memory/on stack(?)
-    build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
-    // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
 
-#elif ABI == WIN_64
-    // load_module_c_fun: push struct
-    // pass in platform/memory/on stack(?)
-    build_unary_op (ass, Push, imm32(0), a, point);
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
-    // note: use 24 twice as RSP grows with push! 
-    build_unary_op (ass, Push, rref8(RSP, 24, sz_64), a, point);
+    CType fn_ctype = mk_fn_ctype(a, 1, "filename", mk_string_ctype(a), result_ctype);
 
-    // store ptr to struct in rcx
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-#else
-#error "Unknown calling convention"
-#endif
-
-    generate_c_call(load_module_c_fun, ass, a, point);
-
-    // To return:
-    // + pop argument we pushed onto stack
-    // + stash ret addr
-    // + pop argument we were called with
-    // + push ret addr & return
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(24), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(16), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    convert_c_fn(load_module_c_fun, &fn_ctype, type, ass, a, point); 
 }
 
 Result run_script_c_fun(String filename) {
@@ -388,7 +370,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
     // loop-check 
     push_rawtree((RawTree){}, &loop_body_nodes);
     PtrArray loop_fors = mk_ptr_array(2, &a);
-    PtrArray loop_gfors = mk_ptr_array(2, &a);
+    //PtrArray loop_gfors = mk_ptr_array(2, &a);
     PtrArray loop_whiles = mk_ptr_array(2, &a);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
@@ -740,6 +722,73 @@ void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* po
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
 
+MacroResult ann_macro(RawTreeArray nodes) {
+    if (nodes.len < 3) {
+        return (MacroResult) {
+            .result_type = Left,
+            .err.message = mv_string("Malformed annotation (ann): expected at least three terms"),
+            .err.range = nodes.data[0].range,
+        };
+    }
+
+    Allocator a = get_std_current_allocator();
+    RawTreeArray decl_nodes = mk_rawtree_array(3, &a);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("declare")),
+        }, &decl_nodes);
+
+    push_rawtree(nodes.data[1], &decl_nodes);
+
+    RawTreeArray field_nodes = mk_rawtree_array(2, &a);
+    RawTreeArray proj_nodes = mk_rawtree_array(2, &a);
+
+    // push '.type'
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string(".")),
+        }, &proj_nodes);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("type")),
+        }, &proj_nodes);
+
+    // push '.type'
+    push_rawtree((RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = proj_nodes,
+        }, &field_nodes);
+
+    // push <type>
+    RawTree* tree = (nodes.len == 3) ? &nodes.data[2]
+        : raw_slice(nodes.data, 2, &a);
+    push_rawtree(*tree, &field_nodes);
+
+    // push [.type <type>]
+    push_rawtree((RawTree) {
+            .type = RawBranch,
+            .branch.hint = HSpecial,
+            .branch.nodes = field_nodes,
+        }, &decl_nodes);
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term.type = RawBranch,
+        .term.branch.hint = HExpression,
+        .term.branch.nodes = decl_nodes,
+    };
+}
+
+void build_ann_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
+
+    convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
+}
+
 void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
@@ -865,15 +914,15 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     clear_assembler(ass);
 
     // load-module : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_load_module_fun(ass, a, &point);
+    typep = mk_proc_type(a, 1, mk_string_type(a), mk_enum_type(a, 2, "Ok", 0, "Err", 1, mk_string_type(a)));
+    build_load_module_fun(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("load-module"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // run-script : Proc [String] Unit
+    // run-script : Proc [String] Result
     typep = mk_proc_type(a, 1, mk_string_type(a), mk_enum_type(a, 2, "Ok", 0, "Err", 1, mk_string_type(a)));
     build_run_script_fun(typep, ass, a, &point);
     sym = string_to_symbol(mv_string("run-script"));
@@ -889,6 +938,14 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     typep = mk_prim_type(a, TMacro);
     build_loop_macro(macro_proc, ass, a, &point);
     sym = string_to_symbol(mv_string("loop"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_prim_type(a, TMacro);
+    build_ann_macro(macro_proc, ass, a, &point);
+    sym = string_to_symbol(mv_string("ann"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

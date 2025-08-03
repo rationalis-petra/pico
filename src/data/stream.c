@@ -80,6 +80,12 @@ String* get_captured_buffer(IStream* stream) {
     return &stream->impl.capturing_istream.buffer;
 }
 
+void uncapture_istream(IStream *stream) {
+    Allocator* gpa = stream->impl.capturing_istream.gpa;
+    mem_free(stream->impl.capturing_istream.buffer.bytes, gpa);
+    mem_free(stream, gpa);
+}
+
 // Constructors
 IStream* get_stdin_stream(void) {
     static bool initialized = false;

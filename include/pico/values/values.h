@@ -64,6 +64,10 @@ typedef enum TermFormer {
     FStructure,
     FProjector,
     FInstance,
+    // Arrays
+    FGenArray,
+    FWith,
+
     FDynamic,
     FDynamicUse,
 
@@ -93,6 +97,7 @@ typedef enum TermFormer {
     FOffsetOf,
 
     // Type formers
+    FArrayType,
     FProcType,
     FStructType,
     FEnumType,

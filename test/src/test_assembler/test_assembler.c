@@ -81,7 +81,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
-    if (test_start(log, mv_string("movss-xmm32-m32"))) { // MovSS XMM0, XMM1
+    if (test_start(log, mv_string("movss-m32-xmm32"))) { // MovSS XMM0, XMM1
         ASM_TEST() {
             uint8_t expected[] = { 0xF3, 0x0F, 0x11, 0x6F, 0x08, 0x90 };
             build_binary_op(ass, MovSS, rref8(RDI, 8, sz_32), reg(XMM5, sz_32), &arena, &point);

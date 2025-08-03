@@ -35,6 +35,18 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
     build_nullary_op (ass, Ret, a, point);
 }
 
+void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
+    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
+    build_binary_op (ass, mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), a, point);
+    build_binary_op (ass, mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), a, point);
+    build_binary_op (ass, op, reg(XMM0, sz), reg(XMM1, sz), a, point);
+    build_binary_op (ass, Add, reg(RSP, sz_64), imm8(8), a, point);
+    build_binary_op (ass, mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), a, point);
+    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
+    build_nullary_op (ass, Ret, a, point);
+}
+
 void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
     build_unary_op (ass, Pop, reg(RDI, sz_64), a, point);
@@ -390,6 +402,7 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
+    LocationSize sz = prim == Float_64 ? sz_64 : sz_32;
 
     typep = mk_proc_type(a, 1, mk_prim_type(a, prim), mk_string_type(a));
     build_to_string_fn(typep, prim, ass, a, &point);
@@ -398,6 +411,43 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+    delete_pi_type_p(typep, a);
+
+    BinaryOp add_op = prim == Float_64 ? AddSD : AddSS;
+    BinaryOp sub_op = prim == Float_64 ? SubSD : SubSS;
+    BinaryOp mul_op = prim == Float_64 ? MulSD : MulSS;
+    BinaryOp div_op = prim == Float_64 ? DivSD : DivSS;
+
+    typep = mk_binop_type(a, prim, prim, prim);
+
+    build_binary_float_fn(ass, add_op, sz, a, &point);
+    sym = string_to_symbol(mv_string("+"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_float_fn(ass, sub_op, sz, a, &point);
+    sym = string_to_symbol(mv_string("-"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_float_fn(ass, mul_op, sz, a, &point);
+    sym = string_to_symbol(mv_string("*"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_float_fn(ass, div_op, sz, a, &point);
+    sym = string_to_symbol(mv_string("/"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
     delete_pi_type_p(typep, a);
 
     sdelete_u8_array(fn_segments.data);

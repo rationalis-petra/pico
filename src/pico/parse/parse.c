@@ -51,6 +51,10 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
             else if (point == '{') {
                 out = parse_list(is, '}', HImplicit, a);
             }
+            //  0x27E8 = ⟨, 0x27E9 = ⟩
+            else if (point == 0x27E8) {
+                out = parse_list(is, 0x27E9, HData, a);
+            }
             else if (point == ':') {
                 if (terms.len == 0) {
                     out = parse_prefix(':', is, a);
@@ -334,8 +338,19 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
             break;
         }
     }
+    if (result == StreamEnd) {
+        String str = string_from_UTF_32(arr, a);
+        RawTree val = (RawTree) {
+            .type = RawAtom,
+            .range.start = start,
+            .range.end = bytecount(is),
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(str),
+        };
+        push_rawtree(val, &terms);
+    }
 
-    if (result != StreamSuccess) {
+    if (result != StreamSuccess && result != StreamEnd) {
         out = (ParseResult) {
             .type = ParseFail,
             .error.message = mv_cstr_doc("Stream failure.", a),
@@ -609,7 +624,6 @@ StreamResult consume_until(uint32_t stop, IStream* is) {
 
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (codepoint != stop) {
-            // TODO: Check if newline!
             result = next(is, &codepoint);
         }
         else {
@@ -624,7 +638,6 @@ StreamResult consume_whitespace(IStream* is) {
     StreamResult result;
     while ((result = peek(is, &codepoint)) == StreamSuccess) {
         if (is_whitespace(codepoint) ) {
-            // TODO: Check if newline!
             result = next(is, &codepoint);
         } else if (codepoint == ';') {
             result = consume_until('\n', is);
@@ -640,7 +653,11 @@ bool is_numchar(uint32_t codepoint) {
 }
 
 bool is_whitespace(uint32_t codepoint) {
-    return codepoint == 32 || (9 <= codepoint && codepoint <= 13);
+    // Take note of the (codepoint == 0). This is because we may encounter a
+    // NULL character in a file. If this happens, we treat it as whitespace (for now).
+    // We *may* want to change this to report an error instead. 
+    // (possibly for all control/non-displayable characters?)
+    return (codepoint == 32) | (9 <= codepoint && codepoint <= 13) | (codepoint == 0);
 }
 
 bool is_symchar(uint32_t codepoint) {
@@ -650,6 +667,8 @@ bool is_symchar(uint32_t codepoint) {
                                           || codepoint == ']'
                                           || codepoint == '{'
                                           || codepoint == '}'
+                                          || codepoint == 0x27E8
+                                          || codepoint == 0x27E9
                                           || codepoint == '.'
                                           || codepoint == ':');
 }

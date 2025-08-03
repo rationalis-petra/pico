@@ -63,6 +63,7 @@ struct HedronPipeline {
 
 struct HedronCommandPool {
     VkCommandPool pool;
+    PtrArray buffers;
 };
 
 struct HedronCommandBuffer {
@@ -563,9 +564,11 @@ void cleanup_swap_chain(HedronSurface *surface) {
     for (size_t i = 0; i < surface->num_buffers; i++) {
         vkDestroyFramebuffer(logical_device, surface->buffers[i], NULL);
     }
+    mem_free(surface->buffers, hd_alloc);
     for (size_t i = 0; i < surface->num_images; i++) {
         vkDestroyImageView(logical_device, surface->image_views[i], NULL);
     }
+    mem_free(surface->image_views, hd_alloc);
     vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
 }
 
@@ -640,6 +643,8 @@ void resize_window_surface(HedronSurface* surface, Extent extent) {
     vkDeviceWaitIdle(logical_device);
 
     cleanup_swap_chain(surface);
+    mem_free(surface->swapchain_images, hd_alloc);
+
     uint32_t width = extent.width;
     uint32_t height = extent.height;
 
@@ -652,8 +657,8 @@ void resize_window_surface(HedronSurface* surface, Extent extent) {
 void destroy_window_surface(HedronSurface *surface) {
     cleanup_swap_chain(surface);
     vkDestroySurfaceKHR(rl_vk_instance, surface->surface, NULL);
-
     vkDestroyRenderPass(logical_device, surface->renderpass, NULL);
+    mem_free(surface->swapchain_images, hd_alloc);
     mem_free(surface, hd_alloc);
 }
 
@@ -722,7 +727,7 @@ HedronPipeline *create_pipeline(BindingDescriptionArray bdesc, AttributeDescript
 
     VkVertexInputAttributeDescription attribute_descriptions[adesc.len];
     for (size_t i = 0; i < adesc.len; i++) {
-        uint32_t format;
+        uint32_t format = {};
         switch (adesc.data[i].format) {
         case Float_1:
             format = VK_FORMAT_R32_SFLOAT;
@@ -923,12 +928,21 @@ uint32_t find_memory_type(uint32_t filter, VkMemoryPropertyFlags properties) {
 }
 
 
-HedronBuffer *create_buffer(uint64_t size) {
-    VkBufferCreateInfo buffer_info = (VkBufferCreateInfo){};
-    buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    buffer_info.size = size;
-    buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+HedronBuffer *create_buffer(BufferType type, uint64_t size) {
+    uint32_t buffer_usage = 0;
+    switch (type) {
+    case VertexBuffer: buffer_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        break;
+    case IndexBuffer: buffer_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        break;
+    }
+
+    VkBufferCreateInfo buffer_info = (VkBufferCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = buffer_usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
 
     VkBuffer vertex_buffer;
     if (vkCreateBuffer(logical_device, &buffer_info, NULL, &vertex_buffer) != VK_SUCCESS) {
@@ -938,10 +952,11 @@ HedronBuffer *create_buffer(uint64_t size) {
     VkMemoryRequirements mem_requirements;
     vkGetBufferMemoryRequirements(logical_device, vertex_buffer, &mem_requirements);
 
-    VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {};
-    alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_requirements.size;
-    alloc_info.memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mem_requirements.size,
+        .memoryTypeIndex = find_memory_type(mem_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
 
     VkDeviceMemory vertex_buffer_memory;
     if (vkAllocateMemory(logical_device, &alloc_info, NULL, &vertex_buffer_memory) != VK_SUCCESS) {
@@ -963,6 +978,7 @@ HedronBuffer *create_buffer(uint64_t size) {
 void destroy_buffer(HedronBuffer *buffer) {
     vkFreeMemory(logical_device, buffer->device_memory, NULL);
     vkDestroyBuffer(logical_device, buffer->vulkan_buffer, NULL);
+    mem_free(buffer, hd_alloc);
 }
 
 void set_buffer_data(HedronBuffer* buffer, void* source) {
@@ -1061,13 +1077,22 @@ HedronCommandPool *create_command_pool() {
         panic(mv_string("failed to create command pool!"));
     }
     
+    PtrArray command_buffers = mk_ptr_array(8, hd_alloc);
+
     HedronCommandPool* hd_pool = mem_alloc(sizeof(HedronCommandPool), hd_alloc);
-    hd_pool->pool = pool;
+    *hd_pool = (HedronCommandPool) {
+        .pool = pool,
+        .buffers = command_buffers,
+    };
     return hd_pool;
 }
 
 void destroy_command_pool(HedronCommandPool* pool) {
     vkDestroyCommandPool(logical_device, pool->pool, NULL);
+    for (size_t i = 0; i < pool->buffers.len; i++) {
+        mem_free(pool->buffers.data[i], hd_alloc);
+    }
+    sdelete_ptr_array(pool->buffers);
     mem_free(pool, hd_alloc);
 }
 
@@ -1083,8 +1108,13 @@ HedronCommandBuffer *create_command_buffer(HedronCommandPool* pool) {
     if (vkAllocateCommandBuffers(logical_device, &cba_info, &buffer) != VK_SUCCESS) {
         panic(mv_string("failed to allocate command buffer!"));
     }
+
+
     HedronCommandBuffer* hd_buffer = mem_alloc(sizeof(HedronCommandBuffer), hd_alloc);
-    hd_buffer->buffer = buffer;
+    *hd_buffer = (HedronCommandBuffer) {
+        .buffer = buffer,
+    };
+    push_ptr(hd_buffer, &pool->buffers);
     return hd_buffer; 
 }
 
@@ -1182,10 +1212,14 @@ void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeli
     vkCmdBindPipeline(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 }
 
-void command_bind_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
+void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
     VkBuffer vertex_buffers[1] = {buffer->vulkan_buffer};
     VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
+}
+
+void command_bind_index_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer, IndexFormat format) {
+    vkCmdBindIndexBuffer(commands->buffer, buffer->vulkan_buffer, 0, (VkIndexType)format);
 }
 
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {
@@ -1206,10 +1240,17 @@ void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {
     vkCmdSetScissor(buffer->buffer, 0, 1, &scissor);
 }
 
-void command_draw(HedronCommandBuffer *buffer,
+void command_draw(HedronCommandBuffer *commands,
                   uint32_t vertex_count, uint32_t instance_count,
                   uint32_t first_vertex, uint32_t first_instance) {
-    vkCmdDraw(buffer->buffer, vertex_count, instance_count, first_vertex, first_instance);
+    vkCmdDraw(commands->buffer, vertex_count, instance_count, first_vertex, first_instance);
+}
+
+
+void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count,
+                          uint32_t instance_count, uint32_t first_index,
+                          int32_t vertex_offset, uint32_t first_instance) { 
+    vkCmdDrawIndexed(commands->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
 
 #else

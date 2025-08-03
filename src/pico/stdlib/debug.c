@@ -3,7 +3,7 @@
 #include "pico/stdlib/debug.h"
 
 
-void add_debug_module(Assembler* ass, Package* base, Allocator* a) {
+void add_debug_module(Target target, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };

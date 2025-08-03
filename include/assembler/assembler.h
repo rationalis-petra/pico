@@ -20,8 +20,16 @@ void delete_assembler(Assembler* assembler);
 void clear_assembler(Assembler* assembler);
 
 U8Array get_instructions(Assembler* assembler);
+
+// 
 size_t get_pos(Assembler* assembler);
 void set_pos(Assembler* assembler, size_t pos);
+
+// Backlink setting: 
+void set_ptr_backlink(Assembler* assembler, size_t backlink, void* val);
+void set_i32_backlink(Assembler* assembler, size_t backlink, int32_t val);
+void set_u32_backlink(Assembler* assembler, size_t backlink, uint32_t val);
+
 
 Document* pretty_assembler(Assembler* assembler, Allocator* a);
 
@@ -32,7 +40,19 @@ typedef enum {
     // ------------------
     Add,
     Sub,
-    Cmp, // p289. Compare two operands
+    Cmp,
+
+    AddSS,
+    AddSD,
+
+    SubSS,
+    SubSD,
+
+    MulSS,
+    MulSD,
+
+    DivSS,
+    DivSD,
 
     // ------------------
     //  Logic

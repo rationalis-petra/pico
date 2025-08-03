@@ -1,8 +1,8 @@
 #include "platform/signals.h"
 #include "pico/stdlib/helpers.h"
-#include "pico/stdlib/data/pair.h"
+#include "pico/stdlib/data/submodules.h"
 
-void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
+void add_pair_module(Target target, Module *data, Allocator *a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
@@ -41,7 +41,7 @@ void add_pair_module(Assembler *ass, Module *data, Allocator *a) {
 
     const char *mk_pair_fn =
         "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])";
-    compile_toplevel(mk_pair_fn, module, &point, &pi_point, a);
+    compile_toplevel(mk_pair_fn, module, target, &point, &pi_point, a);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("pair")), module);
     if (r.type == Err) panic(r.error_message);

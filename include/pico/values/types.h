@@ -41,6 +41,7 @@ typedef enum {
 
 typedef enum {
   TPrim,
+  TArray,
   TProc,
   TStruct,
   TEnum,
@@ -72,6 +73,19 @@ typedef enum {
   // Used only during unification
   TUVar,
 } PiType_t;
+
+typedef enum { Any, FixedDimension, Fixed } ArraySort;
+
+typedef struct {
+    bool is_any;
+    uint64_t value;
+} ArrayDimType;
+
+typedef struct {
+    ArraySort sort; 
+    PtrArray dimensions;
+    PiType* element_type; 
+} ArrayType;
 
 typedef struct {
     PtrArray args;
@@ -140,6 +154,7 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
+        ArrayType array;
         ProcType proc;
         StructType structure;
         EnumType enumeration;
@@ -172,8 +187,8 @@ Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 Document* pretty_type(PiType* type, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
-bool pi_type_eql(PiType* lhs, PiType* rhs);
-bool pi_value_eql(PiType* type, void* lhs, void* rhs);
+bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
+bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);

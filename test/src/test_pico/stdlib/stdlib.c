@@ -34,6 +34,8 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    Module* old_current = get_std_current_module();
+    set_std_current_module(module);
     delete_module_header(header);
 
     if (suite_start(log, mv_string("core"))) {
@@ -61,6 +63,7 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
         suite_end(log);
     }
 
+    set_std_current_module(old_current);
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

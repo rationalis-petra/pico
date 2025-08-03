@@ -29,87 +29,107 @@ following commands:
 
 ## Language Quickstart Guide
 
-This is intended to be a very brief introduction to the syntax and semantic of the Relic language.
-It is based upon the assumption that the reader is already familiar with at least one prgramming 
-language, ideally from the C-family, i.e. C, C++, Java and so on. 
+This is intended to be a very brief introduction to the syntax and semantics of
+the Relic language. It is based upon the assumption that the reader is already
+familiar with at least one prgramming language, ideally from the C-family, i.e.
+C, C++, Java and so on.
 
-The Code snippets are written as expressions that one may type into the repl mode of pico.
+The Code snippets are written as expressions that one may type into the repl
+mode of pico. Recall above, it can be seen that this can be run with `pico repl`. 
 
-One of the more distinctive features of the syntax is that Relic uses lisp-style function calls, 
-meaning that arguments are separated with spaces (not commas) and the the function and its arguments 
-are surrounded by parentheses, e.g.
+When reading a Relic program, the most immediately apparent difference with
+other languages is the syntax, or appearance of the language. To translate from
+a 'normal' language to Relic, we follow a thre-step process - consider the
+following "python-style" code:
+
+```python
+print-ln(to-string(2 + 3))
+```
+
+### Step 1: Convert Operators
+
+In Relic, arithemetic operators such as '+', '-' and '*' are actually just
+regular functions. They therefore use the same syntax as a reular function call
 
 ```clojure
-user > (print-ln "Hello, World!")
-Hello, World!
+print-ln(to-string(+ (2, 3))
+```
+
+### Step 2: Move Parentheses
+
+Another difference between Relic and other languages is that the function is included
+in the parentheses of a function-call, so the expression now becomes
+
+```clojure
+(print-ln, (to-string, (+, 2, 3))
+```
+
+
+### Step 3: Remove Commas
+
+The final difference is that Relic does not use commas to separate function
+arguments, only whitespace, so we can safely remove them:
+
+```clojure
+(print-ln (to-string (+ 2 3))
+```
+
+Indeed, if you run `pico repl` and type the above into the input, you should see
+'5' printed to the console.
+
+```clojure
+user > (print-ln (to-string (+ 2 3))
+5
 :unit
-user > 
 ```
 
-As you will note above, we see not only 'Hello, World!' printed, but also the return value of the
-print function, which is `:unit`. This is analagous to the `void` type of other programming languages, 
-as the Unit type has only one value, `:unit`, meaning that it can be used when a function wishes to
-return no useful information.
-
-Another feature of the syntax is that all operators, i.e. +, -, *, /, etc. are treated as normal
-functions. Hence, `2 + 3 * 4` is written `(+ 2 (* 3 4))`. For the time being, there are separate 
-operators for each of the different integral types, so 8-bit signed addidition is `i8.+`, 16-bit
-unsigned addition is `u16.+`, and so on.
-
-```clojure
-user > (i64.* 10 20)
-200
-```
+The reason that the text ':unit' appears below '5' will become apparent in later sections.
 
 ### Definitions and Functions
-Some code in a programming language will be neither function or operator calls, but instead will 
-be one of a various set of terms, which define things like control flow, such as `if` or `seq`, 
-create values as with `struct` or `proc` or introduce new definitions, as with `def`. In Relic,
-these generally have a similar structure to function calls, although there is more variation. To
-introduce a new definition, for example, we write a 'function call' with `def` as the 'function',
-so, to define a new value 'three', write:
-
+A program is, of course, not enturely made of function calls, as we also will
+need conditionals like `if`, ways of looping such as `for` and `while`, and ways
+of *defining* new values. Definitions are the focus of this section. To
+introduce a new definition, write `(def <name> <value>)` 
 
 ```clojure
-user > (def three 3)
-Defined three : I64
-user > three
-3
+user > (def pi 3.14159)
+Defined pi : F64
+user > pi
+3.14159
 ```
 
-You can see that when three was defined, relic printed the type of the value
-(I64). All values in Relic have a type, which is determined ahead of time -
-Relic is a statically typed language. The type 'I64' is a (signed) 64-bit
-integer, while an (unsigned) 64-bit integer is U64. Relic also has other numeric
-types, including U8, U16, U32, I8, I16, I32 and F32, F64 as the two
-floating-point types. You will encounter more types as we explore the language
-further.
+You can see that when pi was defined, relic printed the type of the value, which
+was F64, meaning a 64-bit floating point number. Relic also has other numeric
+types, including unsigned integers (U8, U16, U32, U64), signed integers (I8,
+I16, I32, I64) and floating point numbers F32, F64. You will encounter more
+types as we explore the language further.
 
-Proceudres (a.k.a functions) follow a similar pattern - start a new procedure
-with `proc` and follow it with an argument list, written using square brackets,
+Proceudres (a.k.a functions) follow a similar pattern to the definitions - to start a new procedure,
+use `proc` and follow it with an argument list, written using square brackets,
 and finally follow it with the function body. Note that unlike with languages
 like C, Java or Python, no `return` keyword is needed. Instead, the body of the
 function is automatically returned. 
 
 ```clojure
-user > (def square (proc [x] (u64.* x x)))
+user > (def square (proc [x] (f64.* x x)))
 Defined square : Proc [I64] I64
-user> (square 10)
-100 
+user> (square pi)
+9.869588 
 ```
 
-When writing a definition, you can emit the top-level of parenteses of the value
-being deifined. The same is true for the body of a procedure, meaning the square
+When writing a definition, you can omit the parenteses of the value being
+deifined. The same is true for the body of a procedure, meaning the square 
 square function can be written more cleanly with many fewer parentheses:
 
 ```clojure
-user > (def square proc [x] u64.* x x)
+user > (def square proc [x] f64.* x x)
 ```
 
 ### Control Flow
 Relic has several facilities available for controlling the evaluation of an expression.
-The most familiar will be the `if`, which will evaluate to it's second argument
-if the first argument is true, and the third argument otherwise. This can be
+The most familiar will be the `if`, although it works slightly differently to
+the usual `if/else` of c-style programming languages. Instead, the `if` is
+structure as `(if <condition> <run-if-true> <run-if-false>)`. This can be
 used, for example, to write a concise implementation of `min`: 
 
 ```clojure
@@ -129,7 +149,7 @@ user > (def greet proc [name] seq
          (print "Hello, ")
          (print-ln name)
          10)
-Define greet : Proc [String] Unit
+Defined greet : Proc [String] Unit
 user > (greet "Bob")
 Hello, Bob
 10
@@ -143,6 +163,7 @@ function that gives a name to greet, as below.
 
 ```clojure
 user > (def get-name proc [] "Robert")
+Defined get-name : Proc [] String
 user > (def greet proc [] seq
   [let! name (get-name)]
   (print "Hello, ")
@@ -150,37 +171,38 @@ user > (def greet proc [] seq
 Define greet : Proc [] Unit
 user > (greet)
 Hello, Robert
+:unit
 ```
 
 The final control-flow construct that many languages have is an ability to loop. 
-While `loop` is not (yet) part of the standard library, Relic has a more general 
-construct - `labels`. Labels are an evolution of the C `goto`, and has the form:
+Usually, there is a `for` loop and a `while` loop. In Relic, these are joined
+into a single looping construct, called `loop`. A simple for-loop is below:
 
 ```clojure
-(labels expr [label-1 args body] [label-2 args body] ..)
+user > (loop [for i from 1 upto 10]
+  (print-ln (to-string i)))
 ```
 
-Inside `expr` or any of the label bodies, one can `go-to` any label. If the
-label takes any arguments (optional), these must also be provided to the label.
-In this way, `go-to` is like a function call which never returns. Below, you can 
-see labels being used 
+We can also add a `while` to our loop, if we so desire, which will cause an
+early termination.
 
 ```clojure
-;; A simple loop that counts from 1 to 10
-user > (def print-to proc [n]
-  (labels (go-to loop 1)
-    [loop [i] seq
-      (print (u64.to-string i))
-      (print " ")
-      (if (u64.>= i n) 
-          (go-to end)
-          (go-to loop (u64.+ i 1)))]
-    ;; end the line
-    [end (print-ln "")]))
-Define print-to : Proc [U64] Unti
-user > (print-to 10)
-1 2 3 4 5 6 7 8 9 10
-:unit
+user > (loop [for i from 1 upto 10]
+             [while (< i 8)]
+  (print-ln (to-string i)))
+```
+
+We can even add multiple loops in parallel. As with `while`, the loop will 
+terminate if any of the individual loops (termed 'drivers') terminate.
+
+```clojure
+user > (loop [for i from 1 upto 10]
+             [for j from 10 downto 1]
+  (seq 
+    (print "i, j: ")
+    (print (to-string i))
+    (print ", ")
+    (print-ln (to-string j))))
 ```
 
 ### Types
@@ -198,7 +220,7 @@ Define point : Struct [.x I64] [.y I64])
 The projection '.' operator is used to get the value from a struct, e.g.
 
 ```clojure
-user > (i64.+ point.x point.y)
+user > (+ point.x point.y)
 14
 ```
 
@@ -231,7 +253,7 @@ user > (def point struct Point [.x 3] [.y 5])
 Adding the missing field fixes the error.
 
 ```clojure
-user > (def point struct 3DPoint [.x 3] [.y 5] [.z 10])
+user > (def point struct Point [.x 3] [.y 5] [.z 10])
 (struct [.x 3] [.y 5] [.z 10])
 ```
 
@@ -293,8 +315,8 @@ user > (def Vehicle Enum :bike [:car Bool Bool] [:truck U8])
 Defined Vehicle : Type
 user > (def wheels proc [vehicle] match vehicle
   [:bike 2]
-  [[:car is_robin has_spare] (u8.+ (if is_robin 3 4)
-                                   (if has_spare 1 0))]
+  [[:car is_robin has_spare] (+ (if is_robin 3 4)
+                                (if has_spare 1 0))]
   [[:truck num_wheels] num_wheels])
 ```
 
@@ -302,11 +324,14 @@ user > (def wheels proc [vehicle] match vehicle
 Often, we encounter times when it is desirable to have very similar code for
 different types. A prime example is the `list` - we may want to have a list of
 integers, another of floats, and a list of strings. Below, you can see some code
-which does exactly that
+which does exactly that. 
 
 ```clojure
-user > (def slist (list "bannana" "apple" "orange"))
-Defined slist : List String
+;; Open is similar to 'import' in other languages, by "opening" the list module,
+;; we gain access to the functions inside
+user > (open data.list)
+user > (def str-list (list "bannana" "apple" "orange"))
+Defined str-list : List String
 user > (def ilist (data.list -10 5 6))
 Defined ilist : List I64 
 user > (def flist (list -10.5 5000.5 3.14))
@@ -346,6 +371,15 @@ in a value 'x' of type A, and returns x'.
 ```clojure
 user > (def id all [A] proc [(x A)] x)
 Defined id: All [A] (Proc [A] A)
+```
+
+The `id` can now be applied to values as you saw above - we can even apply id to itself!
+
+```clojure
+user > (id 3.14159)
+3.14159
+user > (id id)
+#<all 0x7ba21e80a000>
 ```
 
 Two foundational polymorphic functions in Relic are `load` and `store`. These
@@ -393,7 +427,31 @@ user > (load {U8} addr)
 ```
 
 #### Type Families
-TODO: document me!
+Polymorphic functions, as seen above, give us the ability to write functions
+that can work across multiple data-types. But, they do not allow us to write
+containers, such as lists or sets, that work with multiple data-types. This is
+the role of Type Families. Type families are introduced with the `Family`
+keyword, which functions similarly to the `All` keyword. The example below uses
+type families to create a basic `Pair` type, representing a pair of any two values: 
+
+```clojure
+user > (def Pair Family [A B] Struct [.first A] [.second B])
+defined Pair : Kind [Type Type] Type
+```
+
+Pairs can be constructed using the normal `struct` syntax, but type families
+more generally are most useful when paired with polymorphic functions:
+
+```
+user > (def my-pair struct (Pair I64 F32) [.x -12] [.y 3.1214])
+defined my-pair : Struct [.first I64] [.second F32]
+user > (def pair all [A B] proc [(x A) (y b)] 
+         struct (Pair A B) [.first I64] [.second F32])
+Defined pair : All [A B] (Proc [A B] (Struct [.first A] [.second B]))
+user > (pair 4.56 13)
+(struct [.first 4.56] [.second 13])
+```
+
 
 ### Named, Distinct and Opaque Types 
 TODO: document me!
@@ -405,6 +463,9 @@ TODO: document me!
 TODO: document me!
 
 ### Dynamic Unwind
+TODO: document me!
+
+### Small and Large Programs: Scripts and Modules
 TODO: document me!
 
 ### Standard Library

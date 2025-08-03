@@ -66,6 +66,38 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Allocator *a) {
         test_toplevel_eq("(i64.* 4 6)", &expected, module, log, a) ;
     }
 
+    // -------------------------------------------------------------------------
+    //
+    //      Floating point numbers
+    //
+    // -------------------------------------------------------------------------
+
+    if (test_start(log, mv_string("f32-add"))) {
+        float expected = 51.5 + 2.45;
+        test_toplevel_eq("(f32.+ 51.5 2.45)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("f32-sub"))) {
+        float expected = 51.5 - 2.45;
+        test_toplevel_eq("(f32.- 51.5 2.45)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("f64-add"))) {
+        double expected = 51.5 + 2.45;
+        test_toplevel_eq("(f64.+ 51.5 2.45)", &expected, module, log, a) ;
+    }
+
+    if (test_start(log, mv_string("f64-sub"))) {
+        double expected = 51.5 - 2.45;
+        test_toplevel_eq("(f64.- 51.5 2.45)", &expected, module, log, a) ;
+    }
+
+    // -------------------------------------------------------------------------
+    //
+    //      Booleans - not, and, or, etc.
+    //
+    // -------------------------------------------------------------------------
+
     if (test_start(log, mv_string("and-ff"))) {
         uint8_t expected = 0;
         test_toplevel_eq("(bool.and :false :true)", &expected, module, log, a) ;

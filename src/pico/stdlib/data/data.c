@@ -1,12 +1,7 @@
-#include "pico/stdlib/data/list.h"
-#include "pico/stdlib/data/either.h"
-#include "pico/stdlib/data/maybe.h"
-#include "pico/stdlib/data/pair.h"
-#include "pico/stdlib/data/ptr.h"
-
+#include "pico/stdlib/data/submodules.h"
 #include "pico/stdlib/data/data.h"
 
-void add_data_module(Assembler* ass, Package* base, Allocator* a) {
+void add_data_module(Target target, Package* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -22,11 +17,13 @@ void add_data_module(Assembler* ass, Package* base, Allocator* a) {
     Module* module = mk_module(header, base, NULL, a);
     delete_module_header(header);
 
-    add_list_module(module, a);
-    add_either_module(ass, module, a);
-    add_maybe_module(ass, module, a);
-    add_pair_module(ass, module, a);
-    add_ptr_module(module, a);
+    add_list_module(target, module, a);
+    add_either_module(target, module, a);
+    add_maybe_module(target, module, a);
+    add_pair_module(target, module, a);
+    add_pointer_module(target, module, a);
+
+    add_string_module(target, module, a);
 
     add_module(string_to_symbol(mv_string("data")), module, base);
 }

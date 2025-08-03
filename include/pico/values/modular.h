@@ -22,6 +22,7 @@ typedef struct {
     void* value;
     bool is_module;
     PiType type;
+    PtrArray* declarations;
 } ModuleEntry;
 
 typedef struct {
@@ -30,6 +31,22 @@ typedef struct {
     Symbol src_sym;
     Module* src;
 } InstanceSrc;
+
+/* Declarations and modules 
+ * A 
+ *
+ */
+
+typedef enum {
+    DeclType,
+} DeclSort;
+
+typedef struct {
+    DeclSort sort;
+    union {
+        PiType* type;
+    };
+} ModuleDecl;
 
 /* Definitions and codegen. 
  * Codegen is relatively simple: given an expression e.g. (+ 2 3) and an
@@ -115,14 +132,18 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
 // Add a module definition in to the module's namespace. 
 Result add_module_def(Module* module, Symbol symbol, Module* child);
 
+// Add a declaration into the module's namespace. New declarations will override
+// old ones.
+Result add_decl(Module* module, Symbol symbol, ModuleDecl decl); 
+
 // Add an import clause into a module's namespace
 // Note: The import clause will be copied, so the caller is still responsible
 //       for cleaning up its copy of the clause.
 void add_import_clause(ImportClause clause, Module* module);
 
 ModuleEntry* get_def(Symbol symbol, Module* module);
-SymbolArray get_exported_symbols(Module* module, Allocator* a);
-PtrArray get_exported_instances(Module* module, Allocator* a);
+SymbolArray get_defined_symbols(Module* module, Allocator* a);
+PtrArray get_defined_instances(Module* module, Allocator* a);
 
 String* get_name(Module* module);
 Package* get_package(Module* module);

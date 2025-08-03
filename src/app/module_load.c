@@ -14,6 +14,7 @@
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
+    Allocator iter_arena = mk_arena_allocator(4096, a);
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
@@ -69,10 +70,10 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
         clear_assembler(target.target);
         clear_assembler(target.target);
         target.data_aux->len = 0;
-        reset_arena_allocator(arena);
-        Environment* env = env_from_module(module, &arena);
+        reset_arena_allocator(iter_arena);
+        Environment* env = env_from_module(module, &iter_arena);
 
-        ParseResult res = parse_rawtree(in, &arena);
+        ParseResult res = parse_rawtree(in, &iter_arena);
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
@@ -81,12 +82,12 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
                 .error = ph_res.error,
             };
             display_error(multi, in, serr, a);
-            release_arena_allocator(arena);
+            goto on_error_generic;
             return;
         }
         if (res.type != ParseSuccess) {
             write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
-            release_arena_allocator(arena);
+            goto on_error_generic;
             return;
         }
 
@@ -94,7 +95,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &arena, &pi_point);
+        TopLevel abs = abstract(res.result, env, &iter_arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -102,28 +103,37 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        type_check(&abs, env, &arena, &pi_point);
+        type_check(&abs, env, &iter_arena, &pi_point);
 
         // -------------------------------------------------------------------------
         // Code Generation
         // -------------------------------------------------------------------------
 
-        LinkData links = generate_toplevel(abs, env, target, &arena, &point);
+        LinkData links = generate_toplevel(abs, env, target, &iter_arena, &point);
 
         // -------------------------------------------------------------------------
         // Evaluation
         // -------------------------------------------------------------------------
 
-        pico_run_toplevel(abs, target, links, module, &arena, &point);
+        pico_run_toplevel(abs, target, links, module, &iter_arena, &point);
     }
-
     return;
 
  on_exit:
-    add_module(header->name, module, package);
+    if (parent) {
+        add_module_def(parent, header->name, module);
+    } else {
+        add_module(header->name, module, package);
+    }
+    goto cleanup;
+
  on_noparse:
+ cleanup:
     release_arena_allocator(arena);
+    release_arena_allocator(iter_arena);
     release_executable_allocator(exec);
+    sdelete_u8_array(*target.data_aux);
+    mem_free(target.data_aux, a);
     return;
 
  on_pi_error:
@@ -137,9 +147,11 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     
  on_error_generic:
     if (module) delete_module(module);
-    delete_istream(in, a);
     release_arena_allocator(arena);
+    release_arena_allocator(iter_arena);
     release_executable_allocator(exec);
+    sdelete_u8_array(*target.data_aux);
+    mem_free(target.data_aux, a);
     return;
 }
 
@@ -222,8 +234,8 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
     delete_assembler(target.target);
     delete_assembler(target.code_aux);
     sdelete_u8_array(*target.data_aux);
-    delete_istream(in, a);
     mem_free(target.data_aux, a);
+    uncapture_istream(in);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
@@ -240,9 +252,9 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
  on_error_generic:
     delete_assembler(target.target);
     delete_assembler(target.code_aux);
-    delete_istream(in, a);
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
+    uncapture_istream(in);
     release_arena_allocator(arena);
     release_executable_allocator(exec);
     return;

@@ -12,6 +12,7 @@
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
+#include "pico/values/array.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
@@ -81,6 +82,8 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
         if (callbacks.on_expr) {
             callbacks.on_expr(evres.val.type, evres.val.val, data, log);
         }
+        if (evres.val.type->sort == TArray)
+            free_array(evres.val.val);
     } else {
         if (callbacks.on_top) {
             callbacks.on_top(data, log);
@@ -148,8 +151,9 @@ void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
 }
 
 void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
-    if (!pi_value_eql(type, val, data)) {
-        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+    Allocator* std = get_std_allocator();
+    if (!pi_value_eql(type, val, data, std)) {
+        Allocator arena = mk_arena_allocator(4096, std);
         Allocator* a = &arena;
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
@@ -375,8 +379,9 @@ void test_typecheck_internal(const char *string, Module *module, TypeCallbacks c
 }
 
 void type_eql(PiType* type, void* data, TestLog* log) {
-    if (!pi_type_eql(type, data)) {
-        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+    Allocator* std = get_std_allocator();
+    if (!pi_type_eql(type, data, std)) {
+        Allocator arena = mk_arena_allocator(4096, std);
         Allocator* a = &arena;
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);

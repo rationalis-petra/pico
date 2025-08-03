@@ -243,7 +243,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("def"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FDefine;
+    former = FDeclare;
     sym = string_to_symbol(mv_string("declare"));
     add_def(module, sym, type, &former, null_segments, NULL);
 

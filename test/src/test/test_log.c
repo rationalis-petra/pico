@@ -13,12 +13,16 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
   *out = (TestLog) {
       .stream = stream,
       .verbosity = v,
-      .start_time = clock(),
+      .start_time = query_performance_timer(),
       .test_count = 0,
       .passed_tests = 0,
       .failed_tests = 0,
   };
   return out;
+}
+
+void finish_setup(TestLog *log) {
+    log->setup_time = query_performance_timer();
 }
 
 bool suite_start(TestLog *log, String name) {
@@ -98,8 +102,10 @@ FormattedOStream *get_fstream(TestLog *log) {
 
 int summarize_tests(TestLog *log, Allocator* a) {
     int err_code = 0;
-    clock_t end_time = clock();
-    double cpu_time_used = ((double) (end_time - log->start_time)) / CLOCKS_PER_SEC;
+    PerfTime end_time = query_performance_timer();
+    double cpu_time_used = time_to_double(time_diff(log->start_time, end_time), Seconds);
+    double setup_time_used = time_to_double(time_diff(log->start_time, log->setup_time), Seconds);
+    double test_time_used = time_to_double(time_diff(log->setup_time, end_time), Seconds);
 
     write_fstring(mv_string("──────────────────────────────────────────────────────────\n\n"), log->stream);
     if (log->passed_tests + log->failed_tests != log->test_count) {
@@ -137,9 +143,22 @@ int summarize_tests(TestLog *log, Allocator* a) {
     write_fstring(mv_string("\n                 Time Taken: "), log->stream);
     String time = string_double(cpu_time_used, a) ;
     write_fstring(time, log->stream);
+    write_fstring(mv_string("s"), log->stream);
     delete_string(time, a);
-    write_fstring(mv_string("s\n"), log->stream);
-    write_fstring(mv_string("\n──────────────────────────────────────────────────────────\n"), log->stream);
+
+    write_fstring(mv_string("\n                 Setup Time: "), log->stream);
+    time = string_double(setup_time_used, a) ;
+    write_fstring(time, log->stream);
+    write_fstring(mv_string("s"), log->stream);
+    delete_string(time, a);
+
+    write_fstring(mv_string("\n                  Test Time: "), log->stream);
+    time = string_double(test_time_used, a) ;
+    write_fstring(time, log->stream);
+    write_fstring(mv_string("s"), log->stream);
+    delete_string(time, a);
+
+    write_fstring(mv_string("\n\n──────────────────────────────────────────────────────────\n"), log->stream);
 
     if (log->failed_tests != 0) err_code = 2;
     return err_code; 
