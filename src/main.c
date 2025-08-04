@@ -29,7 +29,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.0.8";
+static const char* version = "0.1.0";
 
 typedef struct {
     bool debug_print;
