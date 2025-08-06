@@ -4,7 +4,7 @@
 #include "platform/memory/allocator.h"
 #include "data/result.h"
 
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 
 #include "pico/data/sym_sarr_amap.h"
 #include "pico/syntax/header.h"

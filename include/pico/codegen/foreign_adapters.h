@@ -1,7 +1,7 @@
 #ifndef __PICO_CODEGEN_FOREIGN_ADAPTERS_H
 #define __PICO_CODEGEN_FOREIGN_ADAPTERS_H
 
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 #include "pico/values/types.h"
 #include "pico/values/ctypes.h"
 

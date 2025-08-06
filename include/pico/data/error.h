@@ -3,7 +3,7 @@
 
 #include "platform/jump.h"
 #include "data/stream.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 #include "pico/data/range.h"
 

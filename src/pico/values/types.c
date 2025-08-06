@@ -7,8 +7,8 @@
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/rename_array.h"
-#include "pretty/standard_types.h"
-#include "pretty/string_printer.h"
+#include "components/pretty/standard_types.h"
+#include "components/pretty/string_printer.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 #include "pico/values/array.h"

@@ -3,7 +3,7 @@
 
 #include "platform/memory/allocator.h"
 #include "data/string.h"
-#include "encodings/utf8.h"
+#include "components/encodings/utf8.h"
 
 String mk_string(const char* str, Allocator* a) {
     // TODO (FEATURE): panic if str == NULL and in debug

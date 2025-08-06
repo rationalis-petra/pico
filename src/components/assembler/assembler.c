@@ -5,10 +5,10 @@
 #include "data/array.h"
 #include "platform/signals.h"
 
-#include "assembler/assembler.h"
-#include "pretty/document.h"
-#include "pretty/standard_types.h"
-#include "pretty/string_printer.h"
+#include "components/assembler/assembler.h"
+#include "components/pretty/document.h"
+#include "components/pretty/standard_types.h"
+#include "components/pretty/string_printer.h"
 
 /* Personal Notes/hints
  * 

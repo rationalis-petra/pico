@@ -4,8 +4,8 @@
 #include "platform/signals.h"
 #include "data/stream.h"
 
-#include "encodings/types.h"
-#include "encodings/utf8.h"
+#include "components/encodings/types.h"
+#include "components/encodings/utf8.h"
 
 //--------------------------- istream definitions ---------------------------//
 

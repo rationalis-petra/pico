@@ -2,7 +2,7 @@
 
 #include "platform/memory/arena.h"
 #include "platform/memory/executable.h"
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"

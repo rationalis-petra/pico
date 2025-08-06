@@ -1,7 +1,7 @@
-#include "platform/signals.h"
-#include "pretty/string_printer.h"
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
+#include "platform/signals.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/analysis/unify.h"
 

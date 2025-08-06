@@ -8,7 +8,7 @@
 
 #include "data/stream.h"
 
-#include "pretty/stream_printer.h"
+#include "components/pretty/stream_printer.h"
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"

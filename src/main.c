@@ -1,4 +1,7 @@
-﻿#include "platform/error.h"
+﻿#include "data/string.h"
+#include "data/stream.h"
+
+#include "platform/error.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
@@ -7,12 +10,9 @@
 #include "platform/window/window.h"
 #include "platform/hedron/hedron.h"
 
-#include "data/string.h"
-#include "data/stream.h"
-
-#include "assembler/assembler.h"
-#include "pretty/stream_printer.h"
-#include "pretty/document.h"
+#include "components/assembler/assembler.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/document.h"
 
 #include "pico/syntax/concrete.h"
 #include "pico/parse/parse.h"

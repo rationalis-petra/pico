@@ -5,7 +5,7 @@
 
 #include "data/array.h"
 #include "data/string.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 typedef uint64_t Name;
 typedef U64Array NameArray;

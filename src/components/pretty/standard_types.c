@@ -1,4 +1,4 @@
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 #include "data/stringify.h"
 
 Document* pretty_i64(int64_t val, Allocator* a) {

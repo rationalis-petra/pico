@@ -1,9 +1,9 @@
 #include <stdarg.h>
+#include "data/meta/assoc_impl.h"
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "pretty/document.h"
-#include "pretty/standard_types.h"
-#include "data/meta/assoc_impl.h"
+#include "components/pretty/document.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/values/ctypes.h"
 

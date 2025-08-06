@@ -1,10 +1,10 @@
 #include "data/stream.h"
 #include "data/stringify.h"
 #include "platform/io/terminal.h"
+#include "components/pretty/document.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/standard_types.h"
 
-#include "pretty/document.h"
-#include "pretty/stream_printer.h"
-#include "pretty/standard_types.h"
 #include "pico/data/error.h"
 
 _Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err) {

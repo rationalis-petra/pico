@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"

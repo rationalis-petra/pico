@@ -1,6 +1,6 @@
 #include "data/string.h"
 #include "platform/signals.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/values/array.h"
 #include "pico/values/modular.h"

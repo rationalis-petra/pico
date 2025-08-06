@@ -1,8 +1,8 @@
-#include "platform/signals.h"
 #include "data/meta/array_impl.h"
+#include "platform/signals.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/syntax/concrete.h"
-#include "pretty/standard_types.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"

@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 #include "data/string.h"
 #include "data/array.h" 
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 int requirement_leq(const DocRequirement lhs, const DocRequirement rhs) {
     switch (lhs.fin) {

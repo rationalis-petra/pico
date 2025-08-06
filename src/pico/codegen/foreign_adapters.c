@@ -1,6 +1,6 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/codegen/internal.h"
 #include "pico/codegen/foreign_adapters.h"

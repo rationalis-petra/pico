@@ -3,7 +3,7 @@
 
 #include "data/float.h"
 #include "platform/memory/allocator.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 Document* pretty_i64(int64_t  val, Allocator* a);
 Document* pretty_i32(int32_t  val, Allocator* a);

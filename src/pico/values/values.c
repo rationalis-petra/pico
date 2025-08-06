@@ -5,7 +5,7 @@
 #include "platform/threads.h"
 #include "data/amap.h"
 #include "data/array.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/values/values.h"
 

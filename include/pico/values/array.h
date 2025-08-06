@@ -2,7 +2,7 @@
 #define __PICO_VALUES_ARRAY_H
 
 #include <stdint.h>
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 typedef struct {
     uint64_t len;

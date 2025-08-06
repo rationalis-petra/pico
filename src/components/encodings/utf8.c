@@ -1,4 +1,4 @@
-#include "encodings/utf8.h"
+#include "components/encodings/utf8.h"
 
 void encode_point_utf8(uint8_t* dest, uint8_t* size, uint32_t codepoint) {
     // Encode with 1 byte (7 bits)

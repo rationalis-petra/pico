@@ -4,7 +4,7 @@
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
 
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"

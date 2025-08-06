@@ -1,5 +1,5 @@
-#include "pretty/stream_printer.h"
-#include "pretty/document.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/document.h"
 #include "data/stream.h"
 
 // See: https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.34.2200

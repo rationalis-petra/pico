@@ -4,7 +4,7 @@
 #include "platform/error.h"
 
 #include "data/array.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 /* The assembler writes encoded instructions directly to a byte-array. */
 

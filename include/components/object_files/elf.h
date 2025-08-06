@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 
-
-/* Step1: Representation of ELF file in memory:
+/* Step 1: Representation of ELF file in memory:
  *  For now, we assume a 64-bit ELF file format
  */
 
@@ -69,6 +68,10 @@ typedef struct {
     // Which section header table entry contains section names?
     uint16_t section_names;
 } Elf64_Header;
+
+typedef struct {
+    
+} Elf64ProgramHeader;
 
 
 #endif

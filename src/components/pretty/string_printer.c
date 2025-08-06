@@ -1,6 +1,6 @@
-#include "pretty/string_printer.h"
-#include "pretty/stream_printer.h"
-#include "pretty/document.h"
+#include "components/pretty/string_printer.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/document.h"
 
 String doc_to_str(Document* doc, uint16_t width, Allocator* a) {
     OStream* os = mk_string_ostream(a); 

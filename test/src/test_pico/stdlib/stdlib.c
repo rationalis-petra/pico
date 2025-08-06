@@ -1,7 +1,7 @@
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
 

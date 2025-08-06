@@ -3,7 +3,7 @@
 
 #include "data/array.h"
 #include "data/result.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/sym_ptr_assoc.h"

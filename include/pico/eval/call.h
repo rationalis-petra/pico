@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "platform/memory/allocator.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h" // TOOD (ORGANISATION): Move link data out of codegen.h  

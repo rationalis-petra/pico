@@ -3,8 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
-#include "data/num.h"
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/codegen/polymorphic.h"
 #include "pico/codegen/internal.h"
