@@ -457,7 +457,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                 if (!found_field) {
                     PtrArray nodes = mk_ptr_array(4, a);
                     push_ptr(mv_cstr_doc("Does not satisfy field constraint - field not found:", a), &nodes);
-                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_str_doc(symbol_to_string(uvar->constraints.data[i].has_field.name, a), a), &nodes);
                     push_ptr(mv_cstr_doc("in type:", a), &nodes);
                     push_ptr(pretty_type(type, a), &nodes);
                                   
@@ -493,7 +493,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                 if (!found_variant) {
                     PtrArray nodes = mk_ptr_array(5, a);
                     push_ptr(mv_cstr_doc("Does not satisfy variant constraint - variant not found:", a), &nodes);
-                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_str_doc(symbol_to_string(uvar->constraints.data[i].has_field.name, a), a), &nodes);
                     {
                         PtrArray types = *uvar->constraints.data[i].has_variant.types;
                         PtrArray ptypes = mk_ptr_array(types.len, a);

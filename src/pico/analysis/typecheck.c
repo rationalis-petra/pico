@@ -75,7 +75,7 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
             EnvEntry entry = env_lookup(arr->data[0], env);
             Module* current;
             if (entry.type != Ok || !entry.is_module) {
-                String msg = string_cat(mv_string("Module does not exist: "), *symbol_to_string(arr->data[0]), a);
+                String msg = string_cat(mv_string("Module does not exist: "), symbol_to_string(arr->data[0], a), a);
                 PicoError err = (PicoError) {
                     .range = top->open.range,
                     .message = mv_str_doc(msg, a),
@@ -89,7 +89,7 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
                     current = entry->value;
                 }
                 else {
-                    String msg = string_cat(mv_string("Module does not exist: "), *symbol_to_string(arr->data[j]), a);
+                    String msg = string_cat(mv_string("Module does not exist: "), symbol_to_string(arr->data[j], a), a);
                     PicoError err = (PicoError) {
                         .range = top->open.range,
                         .message = mv_str_doc(msg, a),
@@ -241,8 +241,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 untyped->type_val = te.value;
             }
         } else {
-            String* sym = symbol_to_string(untyped->variable);
-            err.message = mv_str_doc(string_cat(mv_string("Couldn't find type of variable: "), *sym, a), a);
+            String sym = symbol_to_string(untyped->variable, a);
+            err.message = mv_str_doc(string_cat(mv_string("Couldn't find type of variable: "), sym, a), a);
             throw_pi_error(point, err);
         }
         break;
@@ -548,7 +548,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             if (!found_variant) {
                 String msg_origin = mv_string("Could not find variant tag: ");
-                String data = *symbol_to_string(untyped->variant.tagname);
+                String data = symbol_to_string(untyped->variant.tagname, a);
                 err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
                 throw_pi_error(point, err);
             }
@@ -599,7 +599,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             if (!found_variant) {
                 String msg_origin = mv_string("Could not find variant tag: ");
-                String data = *symbol_to_string(untyped->variant.tagname);
+                String data = symbol_to_string(untyped->variant.tagname, a);
                 err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
                 throw_pi_error(point, err);
             }
@@ -748,7 +748,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                             has_field = true;
                     }
                     if (!has_field) {
-                        push_ptr(mk_str_doc(*symbol_to_string(field), a), &docs);
+                        push_ptr(mk_str_doc(symbol_to_string(field, a), a), &docs);
                     }
                 }
                 
@@ -972,7 +972,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("Error in go-to: label not found:", a), &nodes);
-            push_ptr(mk_str_doc(*symbol_to_string(untyped->go_to.label), a), &nodes);
+            push_ptr(mk_str_doc(symbol_to_string(untyped->go_to.label, a), a), &nodes);
             err.message = mv_sep_doc(nodes, a);
             throw_pi_error(point, err);
         }

@@ -44,14 +44,6 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         reset_arena_allocator(arena);
     }
 
-    // TODO: this test currently fails (make him pass!)
-    /* if (test_start(log, mv_string("single-for-downto-0"))) { */
-    /*     Allocator current_old = get_std_current_allocator(); */
-    /*     set_std_current_allocator(arena); */
-    /*     TEST_STDOUT("(loop [for i from 10 downto 1] (print (u64.to-string i)))", "10987654321");
-    /*     set_std_current_allocator(current_old); */
-    /* } */
-
     if (test_start(log, mv_string("single-for-above"))) {
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);

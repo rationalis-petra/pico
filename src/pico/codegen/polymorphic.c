@@ -252,15 +252,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 throw_error(point,
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
-                                        *symbol_to_string(syn.variable),
+                                        symbol_to_string(syn.variable,a ),
                                         mv_string("' has unsupported sort")));
             }
             break;
         }
         case ANotFound: {
-            String* sym = symbol_to_string(syn.variable);
+            String sym = symbol_to_string(syn.variable, a);
             String msg = mv_string("Couldn't find variable during codegen: ");
-            throw_error(point, string_cat(msg, *sym, a));
+            throw_error(point, string_cat(msg, sym, a));
             break;
         }
         case ATooManyLocals:

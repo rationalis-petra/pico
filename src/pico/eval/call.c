@@ -158,7 +158,7 @@ Document* pretty_res(EvalResult res, Allocator* a) {
     case ERDef: {
         PtrArray docs = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
-        push_ptr(mk_str_doc(*symbol_to_string(res.def.name), a), &docs);
+        push_ptr(mk_str_doc(symbol_to_string(res.def.name, a), a), &docs);
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
         push_ptr(pretty_type(res.def.type, a), &docs);
         out = mv_cat_doc(docs, a);
@@ -171,7 +171,7 @@ Document* pretty_res(EvalResult res, Allocator* a) {
             SymbolArray* syms = res.opened.data[i];
             PtrArray elts = mk_ptr_array(2 * syms->len, a);
             for (size_t j = 0; j < syms->len; j++) {
-                push_ptr(mk_str_doc(*symbol_to_string(syms->data[j]), a), &elts);
+                push_ptr(mk_str_doc(symbol_to_string(syms->data[j], a), a), &elts);
                 if (j + 1 != syms->len) {
                     push_ptr(mk_str_doc(mv_string("."), a), &elts);
                 }

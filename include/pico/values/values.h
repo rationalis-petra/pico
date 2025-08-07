@@ -19,11 +19,13 @@ typedef struct {
 typedef struct env_capture env_capture;
 
 // Symbol table
-String* symbol_to_string(Symbol symbol);
+String symbol_to_string(Symbol symbol, Allocator* a);
 Symbol string_to_symbol(String string);
 Symbol string_to_unique_symbol(String string);
+
 Name string_to_name(String string);
-String* name_to_string(Name name);
+String name_to_string(Name name, Allocator* a);
+
 void init_symbols(Allocator* a);
 void clear_symbols();
 

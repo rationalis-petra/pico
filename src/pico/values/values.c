@@ -8,18 +8,15 @@
 #include "components/pretty/standard_types.h"
 
 #include "pico/values/values.h"
+#include "pico/data/symbol_table.h"
 
 // The global symbol table
-static StrU64AMap symbol_table;
-static PtrArray symbol_names;
-static Allocator* symbol_allocator;
-static uint64_t distinct_counter;
+static SymbolTable symbol_table;
+size_t distinct_counter = 0;
 
 // Helper functions
 void init_symbols(Allocator* a) {
-    symbol_allocator = a;
-    symbol_table = mk_str_u64_amap(1024, a);
-    symbol_names = mk_ptr_array(1024, a);
+    init_symbol_table(&symbol_table, a);
     distinct_counter = 0;
 }
 
@@ -28,8 +25,8 @@ void delete_string_pointer(String* ptr, Allocator* a) {
     mem_free(ptr, a);
 }
 
-String* symbol_to_string(Symbol symbol) {
-    return symbol_names.data[symbol.name];
+String symbol_to_string(Symbol symbol, Allocator* a) {
+    return get_table_string(symbol.name, &symbol_table, a);
 }
 
 Symbol string_to_symbol(String string) {
@@ -41,29 +38,14 @@ Symbol string_to_unique_symbol(String string) {
 }
 
 Name string_to_name(String string) {
-    Name new_name_id = symbol_names.len;
-    Name* name = str_u64_lookup(string, symbol_table);
-    if (!name) {
-        String* map_str = mem_alloc(sizeof(String), symbol_allocator);
-        *map_str = copy_string(string, symbol_allocator);
-        push_ptr(map_str, &symbol_names);
-        str_u64_insert(*map_str, new_name_id, &symbol_table);
-        name = &new_name_id;
-    }
-    return *name;
+    return get_table_name(string, &symbol_table);
 }
-String* name_to_string(Name name) {
-    return symbol_names.data[name];
+String name_to_string(Name name, Allocator* a) {
+    return get_table_string(name, &symbol_table, a);
 }
 
 void clear_symbols() {
-    Allocator* a = get_std_allocator();
-    for (size_t i = 0; i < symbol_names.len; i++) {
-        delete_string_pointer(symbol_names.data[i], a);
-    }
-    // The strings have already been deleted from the above array, so we use a shallow 
-    // delete to avoid double-free
-    sdelete_str_u64_amap(symbol_table);
+    delete_table(&symbol_table);
 }
 
 bool symbol_eq(Symbol lhs, Symbol rhs) {

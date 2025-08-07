@@ -346,7 +346,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 throw_error(point,
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
-                                        *symbol_to_string(syn.variable),
+                                        symbol_to_string(syn.variable, a),
                                         mv_string("' has unsupported sort")));
             }
             break;
@@ -355,9 +355,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             gen_mk_type_var(syn.variable, ass, a, point);
             break;
         case ANotFound: {
-            String* sym = symbol_to_string(syn.variable);
+            String sym = symbol_to_string(syn.variable, a);
             String msg = mv_string("Couldn't find variable during codegen: ");
-            throw_error(point, string_cat(msg, *sym, a));
+            throw_error(point, string_cat(msg, sym, a));
             break;
         }
         case ATooManyLocals: {
@@ -1841,13 +1841,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
               PtrArray lines = mk_ptr_array(syms.len + 8, a);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String* module_name = get_name(entry.value);
-                  if (module_name) {
-                      push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
-                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
-                  } else {
-                      push_ptr(mk_str_doc(mv_string("Anonymous Module"), a), &moduledesc);
-                  }
+                  String module_name = get_name(entry.value, a);
+                  push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
+                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
@@ -1859,9 +1855,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                       PtrArray desc = mk_ptr_array(3, a);
                       if (mentry->is_module) {
                           push_ptr(mk_str_doc(mv_string("Module"), a), &desc);
-                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                       } else {
-                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
                           push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, a), a), &desc);
                       }
@@ -1882,20 +1878,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                   PtrArray header = mk_ptr_array(syn.to_describe.len + 1, a);
                   push_ptr(mk_str_doc(mv_string("Path: "), a), &header);
                   for (size_t i = 0; i < syn.to_describe.len; i++) {
-                      push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe.data[i]), a), &header);
+                      push_ptr(mk_str_doc(symbol_to_string(syn.to_describe.data[i], a), a), &header);
                   }
                   push_ptr(mv_sep_doc(header, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String* module_name = get_name(entry.source);
-                  if (module_name) {
-                      push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
-                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
-                  } else {
-                      push_ptr(mk_str_doc(mv_string("Source Module is Nameless"), a), &moduledesc);
-                  }
+                  String module_name = get_name(entry.source, a);
+                  push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
+                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               {

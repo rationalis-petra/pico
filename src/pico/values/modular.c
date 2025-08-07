@@ -387,8 +387,8 @@ ModuleEntry* get_def(Symbol symbol, Module* module) {
     return (ModuleEntry*)entry_lookup(symbol, module->entries);
 }
 
-String* get_name(Module* module) {
-    return symbol_to_string(module->header.name);
+String get_name(Module* module, Allocator* a) {
+    return symbol_to_string(module->header.name, a);
 }
 
 SymbolArray get_defined_symbols(Module* module, Allocator* a) {

@@ -2736,7 +2736,7 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Sha
             PicoError err = (PicoError) {
                 .range = msym->range,
                 .message = mv_str_doc(string_cat(mv_string("Field not found in module: "),
-                                                 *symbol_to_string(msym->atom.symbol), a), a)
+                                                 symbol_to_string(msym->atom.symbol, a), a), a)
             };
             throw_pi_error(point, err);
         }

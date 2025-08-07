@@ -86,11 +86,8 @@ Document* pretty_atom(Atom atom, Allocator* a) {
         break;
     }
     case ASymbol: {
-        String* str = symbol_to_string(atom.symbol);
-        if (!str) {
-            panic(mv_string("Error in pretty_atom: can't find symbol in symbol table!"));
-        }
-        out = mk_str_doc(*str, a);
+        String str = symbol_to_string(atom.symbol, a);
+        out = mk_str_doc(str, a);
         break;
     }
     case AString: {
