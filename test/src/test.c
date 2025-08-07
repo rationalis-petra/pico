@@ -59,9 +59,7 @@ int main(int argc, char** argv) {
     set_std_ostream(cout);
 
     finish_setup(log);
-    //for (size_t i = 0; i < 1000; i++)  {
-        all_suites(log, stdalloc);
-    //}
+    all_suites(log, stdalloc);
     int out = summarize_tests(log, stdalloc);
 
     delete_test_log(log, stdalloc);

@@ -3,6 +3,7 @@
 #include "pico/data/symbol_table.h"
 
 #define STR_CAPACITY 1048576
+#define CELL_CAPACITY 2048
 
 void init_symbol_table(SymbolTable* table, Allocator* a) {
     *table = (SymbolTable) {
@@ -11,11 +12,11 @@ void init_symbol_table(SymbolTable* table, Allocator* a) {
         .string_len = 8, // 8, so we can use 0 as a null value :)
         .string_capacity = 1048576,
 
-        .capacity = 1024,
-        .cells = mem_alloc(sizeof(Cell) * 1024, a),
+        .capacity = CELL_CAPACITY,
+        .cells = mem_alloc(sizeof(Cell) * CELL_CAPACITY, a),
         .gpa = *a,
     };
-    memset(table->cells, 0, sizeof(Cell) * 1024);
+    memset(table->cells, 0, sizeof(Cell) * CELL_CAPACITY);
 }
 
 Name get_table_name(String name, SymbolTable* table) {
