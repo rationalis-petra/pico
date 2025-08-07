@@ -1,5 +1,5 @@
-#ifndef __PRETTY_DOCUMENT_H
-#define __PRETTY_DOCUMENT_H
+#ifndef __COMPONENTS_PRETTY_DOCUMENT_H
+#define __COMPONENTS_PRETTY_DOCUMENT_H
 
 #include "data/array.h"
 #include "data/string.h"

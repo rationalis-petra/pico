@@ -36,7 +36,9 @@ bool examine_struct(Struct4Words st) {
     return out;
 }
 
-void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator *a) {
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a);
+
+void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Allocator *a) {
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
     Segments prepped;
     Segments fn_segments = {.data = mk_u8_array(0, a),};
@@ -66,8 +68,9 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         int64_t expected = -90;
-        test_toplevel_eq("(foreign-add-10 -100)\n", &expected, module, log, a) ;
+        TEST_EQ("(foreign-add-10 -100)\n");
     }
         
     if (test_start(log, mv_string("4word-struct"))) {
@@ -101,9 +104,9 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         bool expected = true;
-        test_toplevel_eq("(examine-4word-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]) )\n",
-                        &expected, module, log, a) ;
+        TEST_EQ("(examine-4word-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]) )\n") ;
     }
 
     if (test_start(log, mv_string("2-4word-structs"))) {
@@ -137,10 +140,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         bool expected = true;
-        test_toplevel_eq("(examine-two-4word-structs \n"
-                         "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n",
-                        &expected, module, log, a) ;
+        TEST_EQ("(examine-two-4word-structs \n"
+                         "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n") ;
     }
 
     

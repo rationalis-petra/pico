@@ -1,5 +1,5 @@
-#ifndef __PRETTY_STRING_PRINTER_H
-#define __PRETTY_STRING_PRINTER_H
+#ifndef __COMPONENTS_PRETTY_STRING_PRINTER_H
+#define __COMPONENTS_PRETTY_STRING_PRINTER_H
 
 #include "components/pretty/document.h"
 

@@ -27,6 +27,7 @@ typedef struct EnvEntry {
 } EnvEntry;
 
 Environment* env_from_module(Module* module, Allocator* a);
+void refresh_env(Environment* env, Allocator* a);
 void delete_env(Environment* env, Allocator* a);
 
 EnvEntry env_lookup(Symbol sym, Environment* env);

@@ -1,5 +1,5 @@
-#ifndef __OBJECT_FILES_ELF_H
-#define __OBJECT_FILES_ELF_H
+#ifndef __COMPONENTS_OBJECT_FILES_ELF_H
+#define __COMPONENTS_OBJECT_FILES_ELF_H
 
 #include <stdint.h>
 

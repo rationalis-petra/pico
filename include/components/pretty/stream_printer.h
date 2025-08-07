@@ -1,5 +1,5 @@
-#ifndef __PRETTY_STREAM_PRINTER_H
-#define __PRETTY_STREAM_PRINTER_H
+#ifndef __COMPONENTS_PRETTY_STREAM_PRINTER_H
+#define __COMPONENTS_PRETTY_STREAM_PRINTER_H
 
 #include "data/stream.h"
 #include "platform/io/terminal.h"

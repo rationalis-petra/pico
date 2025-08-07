@@ -1,5 +1,5 @@
-#ifndef __OBJECT_FILES_DWARF_H
-#define __OBJECT_FILES_DWARF_H
+#ifndef __COMPONENTS_OBJECT_FILES_DWARF_H
+#define __COMPONENTS_OBJECT_FILES_DWARF_H
 
 /* DWARF File Format Handling
  * ----------------------------

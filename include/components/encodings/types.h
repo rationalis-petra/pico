@@ -1,5 +1,5 @@
-#ifndef __ENCODINGS_TYPES_H
-#define __ENCODINGS_TYPES_H
+#ifndef __COMPONENTS_ENCODINGS_TYPES_H
+#define __COMPONENTS_ENCODINGS_TYPES_H
 
 typedef enum Encoding {
     UTF_8

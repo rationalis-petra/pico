@@ -1,5 +1,5 @@
-#ifndef __ENCODINGS_UTF8_H
-#define __ENCODINGS_UTF8_H
+#ifndef __COMPONENTS_ENCODINGS_UTF8_H
+#define __COMPONENTS_ENCODINGS_UTF8_H
 
 #include <stdbool.h> 
 #include <stdint.h> 

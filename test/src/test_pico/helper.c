@@ -13,6 +13,7 @@
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
 #include "pico/values/array.h"
+#include "pico/binding/environment.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
@@ -28,7 +29,7 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } Callbacks;
 
-void run_toplevel_internal(const char *string, Module *module, Callbacks callbacks, void* data, TestLog* log, Allocator *a) {
+void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -44,8 +45,6 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
-
-    Environment* env = env_from_module(module, &arena);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -178,7 +177,7 @@ void top_eql(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
+void test_toplevel_eq(const char *string, void *expected_val, Module *module, Environment* env, TestLog* log, Allocator *a) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
         .on_top = top_eql,
@@ -186,7 +185,7 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    run_toplevel_internal(string, module, callbacks, expected_val, log, a);
+    run_toplevel_internal(string, module, env, callbacks, expected_val, log, a);
 }
 
 typedef struct {
@@ -224,7 +223,7 @@ void top_stdout(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestLog* log, Allocator *a) {
+void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, Environment* env, TestLog* log, Allocator *a) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_stdout,
         .on_top = top_stdout,
@@ -239,7 +238,7 @@ void test_toplevel_stdout(const char *string, const char *expected_stdout, Modul
     };
 
     OStream* old = set_std_ostream(out);
-    run_toplevel_internal(string, module, callbacks, &data, log, a);
+    run_toplevel_internal(string, module, env, callbacks, &data, log, a);
     set_std_ostream(old);
 
     delete_ostream(out, a);
@@ -261,13 +260,13 @@ void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
     release_arena_allocator(arena);
 }
 
-void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a) {
+void run_toplevel(const char *string, Module *module, Environment* env, TestLog* log, Allocator *a) {
     Callbacks callbacks = (Callbacks) {
         .on_pi_error = log_pi_error,
         .on_error = log_error,
         .on_exit = log_exit,
     };
-    run_toplevel_internal(string, module, callbacks, NULL, log, a);
+    run_toplevel_internal(string, module, env, callbacks, NULL, log, a);
 }
 
 typedef struct {
@@ -278,7 +277,7 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } TypeCallbacks;
 
-void test_typecheck_internal(const char *string, Module *module, TypeCallbacks callbacks, void* data, TestLog* log, Allocator* a) {
+void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks callbacks, void* data, TestLog* log, Allocator* a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -294,8 +293,6 @@ void test_typecheck_internal(const char *string, Module *module, TypeCallbacks c
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
-
-    Environment* env = env_from_module(module, &arena);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -406,7 +403,7 @@ void top_type(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_typecheck_eq(const char *string, PiType* expected, Module *module, TestLog* log, Allocator* a) {
+void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestLog* log, Allocator* a) {
     TypeCallbacks callbacks = (TypeCallbacks) {
         .on_expr = type_eql,
         .on_top = top_type,
@@ -414,5 +411,5 @@ void test_typecheck_eq(const char *string, PiType* expected, Module *module, Tes
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    test_typecheck_internal(string, module, callbacks, expected, log, a);
+    test_typecheck_internal(string, env, callbacks, expected, log, a);
 }

@@ -1,5 +1,5 @@
-#ifndef __PRETTY_STANDARD_TYPES_H
-#define __PRETTY_STANDARD_TYPES_H
+#ifndef __COMPONENTS_PRETTY_STANDARD_TYPES_H
+#define __COMPONENTS_PRETTY_STANDARD_TYPES_H
 
 #include "data/float.h"
 #include "platform/memory/allocator.h"

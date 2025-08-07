@@ -65,13 +65,14 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
+    Environment* env = env_from_module(module, &arena);
     while (next_iter) {
         // Prep the arena for another round
         clear_assembler(target.target);
         clear_assembler(target.target);
         target.data_aux->len = 0;
         reset_arena_allocator(iter_arena);
-        Environment* env = env_from_module(module, &iter_arena);
+        refresh_env(env, &iter_arena);
 
         ParseResult res = parse_rawtree(in, &iter_arena);
         if (res.type == ParseNone) goto on_exit;

@@ -34,36 +34,38 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    Environment* env = env_from_module(module, a);
     Module* old_current = get_std_current_module();
     set_std_current_module(module);
     delete_module_header(header);
 
     if (suite_start(log, mv_string("core"))) {
-        run_pico_stdlib_core_tests(log, module, a);
+        run_pico_stdlib_core_tests(log, module, env, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("num"))) {
-        run_pico_stdlib_num_tests(log, module, a);
+        run_pico_stdlib_num_tests(log, module, env, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("extra"))) {
-        run_pico_stdlib_extra_tests(log, module, a);
+        run_pico_stdlib_extra_tests(log, module, env, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("data"))) {
         if (suite_start(log, mv_string("pair"))) {
-            run_pico_stdlib_data_pair_tests(log, module, a);
+            run_pico_stdlib_data_pair_tests(log, module, env, a);
         }
         if (suite_start(log, mv_string("list"))) {
-            run_pico_stdlib_data_list_tests(log, module, a);
+            run_pico_stdlib_data_list_tests(log, module, env, a);
         }
         suite_end(log);
     }
 
     set_std_current_module(old_current);
+    delete_env(env, a);
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

@@ -1714,7 +1714,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
 
-        data_stack_shrink(env, cts);
+        data_stack_shrink(env, cts - ADDRESS_SIZE);
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);

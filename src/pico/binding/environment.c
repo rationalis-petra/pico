@@ -12,6 +12,7 @@ struct Environment {
     // Map ids to arrays of implementations - each element of the  
     //  'implementation set' points to the relevant module.
     NamePtrAMap instances;
+    Module* base;
 };
 
 // Helper function:
@@ -53,10 +54,45 @@ Module* path_all(SymbolArray path, Module* root) {
     return current;
 }
 
+void refresh_env(Environment* env, Allocator* a) {
+    Module* module = env->base;
+    // The local (module) definitions have the highest priority, so they  
+    // get loaded first
+    SymbolArray arr = get_defined_symbols(module, a);
+    for (size_t i = 0; i < arr.len; i++ ) {
+        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+    }
+    sdelete_symbol_array(arr);
+
+    // Get all implicits
+    PtrArray instances = get_defined_instances(module, a);
+    for (size_t i = 0; i < instances.len; i++ ) {
+        InstanceSrc* instance = instances.data[i];
+        PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+        PtrArray* p;
+        if (res) {
+            p = *res;
+        } else {
+            p = mem_alloc(sizeof(PtrArray), a);
+            *p = mk_ptr_array(8, a);
+            // TODO: we know this isn't in the instances; could perhaps
+            // speed up the process?
+            name_ptr_insert(instance->id, p, &env->instances);
+        }
+
+        // Add this instance to the array
+        push_ptr(instance, p);
+    }
+    sdelete_ptr_array(instances);
+}
+
 Environment* env_from_module(Module* module, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
-    env->symbol_origins = mk_name_ptr_amap(128, a);
-    env->instances = mk_name_ptr_amap(128, a);
+    *env = (Environment) {
+        .symbol_origins = mk_name_ptr_amap(128, a),
+        .instances = mk_name_ptr_amap(128, a),
+        .base = module,
+    };
 
     // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 
     // cache results?
@@ -150,12 +186,17 @@ Environment* env_from_module(Module* module, Allocator* a) {
         // Add this instance to the array
         push_ptr(instance, p);
     }
+    sdelete_ptr_array(instances);
 
     return env;
 }
 
 void delete_env(Environment* env, Allocator* a) {
     sdelete_name_ptr_amap(env->symbol_origins);
+    for (size_t i = 0; i < env->instances.len; i++) {
+        mem_free(env->instances.data[i].val, &env->instances.gpa);
+    };
+    sdelete_name_ptr_amap(env->instances);
     mem_free(env, a);
 }
 

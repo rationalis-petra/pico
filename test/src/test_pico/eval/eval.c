@@ -33,18 +33,20 @@ void run_pico_eval_tests(TestLog* log, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+    Environment* env = env_from_module(module, a);
     delete_module_header(header);
 
     if (suite_start(log, mv_string("literals"))) {
-        run_pico_eval_literals_tests(log, module, a);
+        run_pico_eval_literals_tests(log, module, env, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("foreign-adapter"))) {
-        run_pico_eval_foreign_adapter_tests(log, module, a);
+        run_pico_eval_foreign_adapter_tests(log, module, env, a);
         suite_end(log);
     }
 
+    delete_env(env, a);
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

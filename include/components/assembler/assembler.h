@@ -1,5 +1,5 @@
-#ifndef __ASSEMBLER_ASSEMBLER_H
-#define __ASSEMBLER_ASSEMBLER_H
+#ifndef __COMPONENTS_ASSEMBLER_ASSEMBLER_H
+#define __COMPONENTS_ASSEMBLER_ASSEMBLER_H
 
 #include "platform/error.h"
 
