@@ -57,7 +57,7 @@ PerfTime query_performance_timer() {
     // Then, nanoseconds per cycle = 10^9/freq 
     // Thus, time_ns = (perf % freq) * 10^9 / freq
     return (PerfTime) {
-        .time_ns = (perf.QuadPart % freq.QuadPart) * 10^9 / freq.QuadPart,
+        .time_ns = (perf.QuadPart % freq.QuadPart) * 1E9UL / freq.QuadPart,
         .time_sec = perf.QuadPart / freq.QuadPart,
     };
 }
