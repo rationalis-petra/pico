@@ -6,6 +6,7 @@
 #include "pico/values/modular.h"
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
+#include "pico/stdlib/meta/submodules.h"
 
 static PiType* symbol_type;
 PiType* get_symbol_type() {
@@ -139,7 +140,7 @@ void build_get_range_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* 
     convert_c_fn(get_range, &fn_ctype, type, ass, a, point); 
 }
 
-void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
+void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -148,11 +149,11 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("meta")),
+        .name = string_to_symbol(mv_string("gen")),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, a);
+    Module* module = mk_module(header, get_package(base), NULL, a);
     delete_module_header(header);
     Symbol sym;
 
@@ -331,7 +332,7 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    add_module(string_to_symbol(mv_string("meta")), module, base);
+    add_module_def(base, string_to_symbol(mv_string("gen")), module);
 
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);
@@ -340,4 +341,3 @@ void add_meta_module(Assembler* ass, Package* base, Allocator* a) {
     sdelete_u8_array(fn_segments.data);
     release_arena_allocator(arena);
 }
-

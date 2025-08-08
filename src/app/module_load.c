@@ -11,6 +11,8 @@
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
+#include "pico/stdlib/extra.h"
+
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(4096, a);
@@ -26,6 +28,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
 
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
+    Module* volatile old_module = NULL;
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
@@ -56,16 +59,24 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
     module = mk_module(*header, package, parent, a);
+    if (parent) {
+        add_module_def(parent, header->name, module);
+    } else {
+        add_module(header->name, module, package);
+    }
 
     // Step 4:
     // Setup error reporting
     in = mk_capturing_istream(in, &arena);
     reset_bytecount(in);
 
+    old_module = get_std_current_module();
+    set_std_current_module(module);
+
     // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
-    Environment* env = env_from_module(module, &arena);
+    Environment* env = env_from_module(module, &point, &arena);
     while (next_iter) {
         // Prep the arena for another round
         clear_assembler(target.target);
@@ -121,15 +132,11 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     return;
 
  on_exit:
-    if (parent) {
-        add_module_def(parent, header->name, module);
-    } else {
-        add_module(header->name, module, package);
-    }
     goto cleanup;
 
  on_noparse:
  cleanup:
+    if (old_module) set_std_current_module(old_module);
     release_arena_allocator(arena);
     release_arena_allocator(iter_arena);
     release_executable_allocator(exec);
@@ -147,7 +154,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     goto on_error_generic;
     
  on_error_generic:
-    if (module) delete_module(module);
+    if (old_module) set_std_current_module(old_module);
+    //if (module) delete_module(module);
     release_arena_allocator(arena);
     release_arena_allocator(iter_arena);
     release_executable_allocator(exec);
@@ -184,7 +192,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
         target.data_aux->len = 0;
 
         reset_arena_allocator(arena);
-        Environment* env = env_from_module(current, &arena);
+        Environment* env = env_from_module(current, &point, &arena);
 
         ParseResult res = parse_rawtree(in, &arena);
         if (res.type == ParseNone) goto on_exit;

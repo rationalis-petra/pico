@@ -1,5 +1,5 @@
-#ifndef __PICO_STDLIB_META_H
-#define __PICO_STDLIB_META_H
+#ifndef __PICO_STDLIB_META_META_H
+#define __PICO_STDLIB_META_META_H
 
 #include "pico/values/modular.h"
 

@@ -52,8 +52,6 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
 
-    Environment* env = env_from_module(module, &arena);
-
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
@@ -64,9 +62,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
+    Environment* env = env_from_module(module, &point, &arena);
+
     if (opts.interactive) {
-        String* name = get_name(module);
-        if (name) write_fstring(*name, cout);
+        String name = get_name(module, &arena);
+        write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }
 

@@ -239,6 +239,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)");
     }
 
+    /* if (test_start(log, mv_string("project-nested"))) { */
+    /*     uint64_t expected = -57; */
+    /*     TEST_EQ("(struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])]).p2.x"); */
+    /* } */
+
     RUN("(def thrice struct NestInner [.x -12] [.y 3] [.z 1])") ;
     if (test_start(log, mv_string("project-point3-x"))) {
         int32_t expected = -12;

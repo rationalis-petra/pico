@@ -9,7 +9,7 @@ void add_list_module(Target target, Module *data, Allocator *a) {
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
-    add_import_all(&imports.clauses, a, 1, "meta");
+    add_import_all(&imports.clauses, a, 2, "meta", "gen");
 
     Exports exports = (Exports) {
         .export_all = true,

@@ -16,7 +16,7 @@ struct Environment {
 };
 
 // Helper function:
-Module* path_parent(SymbolArray path, Module* root) {
+Module* path_parent(SymbolArray path, Module* root, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -26,16 +26,22 @@ Module* path_parent(SymbolArray path, Module* root) {
           if (e->is_module) {
               current = e->value;
           } else {
-              panic(mv_string("error in environment.c: module not found"));
+              String message = string_cat(mv_string("Module not found: "),
+                                          symbol_to_string(path.data[i], ea),
+                                          ea);
+              throw_error(point, message);
           }
         } else {
-            panic(mv_string("error in environment.c: module not found"));
+              String message = string_cat(mv_string("Module not found: "),
+                                          symbol_to_string(path.data[i], ea),
+                                          ea);
+              throw_error(point, message);
         }
     }
     return current;
 }
 
-Module* path_all(SymbolArray path, Module* root) {
+Module* path_all(SymbolArray path, Module* root, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -45,10 +51,16 @@ Module* path_all(SymbolArray path, Module* root) {
           if (e->is_module) {
               current = e->value;
           } else {
-              panic(mv_string("error in environment.c: module not found"));
+              String message = string_cat(mv_string("Module not found: "),
+                                          symbol_to_string(path.data[i], ea),
+                                          ea);
+              throw_error(point, message);
           }
         } else {
-            panic(mv_string("error in environment.c: module not found"));
+            String message = string_cat(mv_string("Module not found: "),
+                                        symbol_to_string(path.data[i], ea),
+                                        ea);
+            throw_error(point, message);
         }
     }
     return current;
@@ -86,7 +98,7 @@ void refresh_env(Environment* env, Allocator* a) {
     sdelete_ptr_array(instances);
 }
 
-Environment* env_from_module(Module* module, Allocator* a) {
+Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     *env = (Environment) {
         .symbol_origins = mk_name_ptr_amap(128, a),
@@ -108,7 +120,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
         switch (clause.type) {
         case Import: {
             Symbol last_symbol = clause.path.data[clause.path.len - 1];
-            Module* parent = path_parent(clause.path, root_module);
+            Module* parent = path_parent(clause.path, root_module, point, a);
             name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
             break;
         }
@@ -120,7 +132,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
             break;
         case ImportAll: {
             // Find the package
-            Module* importee = path_all(clause.path, root_module);
+            Module* importee = path_all(clause.path, root_module, point, a);
             SymbolArray syms = get_defined_symbols(importee, a);
             for (size_t j = 0; j < syms.len; j++ ) {
                 name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
