@@ -14,7 +14,7 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/meta.h"
+#include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/foreign.h"
 

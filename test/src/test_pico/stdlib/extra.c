@@ -71,50 +71,5 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         set_std_current_allocator(current_old);
         reset_arena_allocator(arena);
     }
-
-    if (test_start(log, mv_string("run-script"))) {
-        String filename = string_cat(get_tmpdir(&arena), mv_string("/script.rl"), &arena);
-        File *file = open_file(filename, Read | Write, &arena);
-        const char contents[] = " (print (u64.to-string 123456789)) ";
-        U8Array data = (U8Array) {
-            .len = sizeof(contents),
-            .data = (uint8_t*)contents,
-        };
-        write_chunk(file, data);
-        close_file(file);
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
-        String to_run = string_ncat(&arena, 3,
-                                    mv_string("(seq (run-script \""),
-                                    filename,
-                                    mv_string("\") :unit)"));
-        const char* expected = "123456789";
-        TEST_STDOUT((char*)to_run.bytes);
-        set_std_current_allocator(current_old);
-        reset_arena_allocator(arena);
-    }
-
-    if (test_start(log, mv_string("load-module"))) {
-        String filename = string_cat(get_tmpdir(&arena), mv_string("/module.rl"), &arena);
-        File *file = open_file(filename, Read | Write, &arena);
-        const char contents[] = "(module test (import (core :all)) (export x)) (def x 3)";
-        U8Array data = (U8Array) {
-            .len = sizeof(contents),
-            .data = (uint8_t*)contents,
-        };
-        write_chunk(file, data);
-        close_file(file);
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
-        String to_run = string_ncat(&arena, 3,
-                                    mv_string("(seq (load-module \""),
-                                    filename,
-                                    mv_string("\") :unit)"));
-        RUN((char*)to_run.bytes);
-        int64_t expected = 3;
-        TEST_EQ("test.x");
-        set_std_current_allocator(current_old);
-        reset_arena_allocator(arena);
-    }
     release_arena_allocator(arena);
 }

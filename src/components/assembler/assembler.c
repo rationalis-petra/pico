@@ -122,7 +122,7 @@ void clear_assembler(Assembler* assembler) {
                                             
 Assembler* mk_assembler(CPUFeatureFlags flags, Allocator* a) {
     Assembler* out = (Assembler*)mem_alloc(sizeof(Assembler), a);
-    const size_t initial_capacity = 4096;
+    const size_t initial_capacity = 16384;
 
     *out = (Assembler) {
         .instructions = mk_u8_array(initial_capacity, a),

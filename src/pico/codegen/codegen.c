@@ -1065,7 +1065,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             bsize += pi_stack_size_of(*sy->ptype);
         }
         generate(*syn.let_expr.body, env, target, links, a, point);
-        address_pop_n(syn.let_expr.bindings.len, env);
 
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(bsize), a, point);

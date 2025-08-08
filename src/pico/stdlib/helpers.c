@@ -25,10 +25,8 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     IStream* cin = mk_capturing_istream(sin, &arena);
-
-    Environment* env = env_from_module(module, &arena);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -39,6 +37,8 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
+
+    Environment* env = env_from_module(module, &point, &arena);
 
     ParseResult res = parse_rawtree(cin, &arena);
     if (res.type == ParseNone) {

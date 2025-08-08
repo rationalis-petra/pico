@@ -1,3 +1,4 @@
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
@@ -14,7 +15,7 @@
 void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
@@ -36,7 +37,12 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
-    Environment* env = env_from_module(module, a);
+
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(mv_string("Error in tests: test_pico/typecheck.c"));
+    }
+    Environment* env = env_from_module(module, &point, a);
     delete_module_header(header);
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {

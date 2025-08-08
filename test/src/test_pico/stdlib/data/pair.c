@@ -9,7 +9,7 @@
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a)
 
 void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
 
     typedef struct {
         int64_t x;

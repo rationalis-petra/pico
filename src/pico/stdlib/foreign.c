@@ -145,7 +145,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     };
 
     // Now that we have setup appropriately, override the allocator
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};

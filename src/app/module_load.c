@@ -15,8 +15,8 @@
 
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
-    Allocator arena = mk_arena_allocator(4096, a);
-    Allocator iter_arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
+    Allocator iter_arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
@@ -165,7 +165,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
 }
 
 void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* current, Allocator* a) {
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {

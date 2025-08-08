@@ -3,6 +3,14 @@
 
 #include <string.h>
 
+#ifdef DEBUG
+#include "platform/signals.h"
+#include "data/string.h"
+#define POP_CHECK(arr) if (arr -> len == 0) panic(mv_string("popped past end!"));
+#else
+#define POP_CHECK(arr)
+#endif
+
 #define ARRAY_COMMON_IMPL(type, fprefix, tprefix)                       \
     tprefix##Array mk_ ## fprefix ## _array(const size_t size, Allocator* a) { \
         return (tprefix##Array){                                        \
@@ -68,6 +76,7 @@
         }                                                               \
     }                                                                   \
     type pop_ ## fprefix(tprefix ## Array* arr) {                       \
+        POP_CHECK(arr)                                                  \
         arr->len--;                                                     \
         return arr->data[arr->len];                                     \
     }

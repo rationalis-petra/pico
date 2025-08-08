@@ -9,6 +9,9 @@ void run_pico_stdlib_core_tests(TestLog* log, Module* module, Environment* env, 
 void run_pico_stdlib_num_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
 void run_pico_stdlib_extra_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
 
+void run_pico_stdlib_meta_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
+void run_pico_stdlib_meta_refl_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
+
 void run_pico_stdlib_data_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
 void run_pico_stdlib_data_list_tests(TestLog* log, Module* module, Environment* env, Allocator* a);
 void run_pico_stdlib_data_pair_tests(TestLog* log, Module* module, Environment* env, Allocator* a);

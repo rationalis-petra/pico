@@ -1,3 +1,4 @@
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
@@ -12,7 +13,7 @@
 void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
@@ -23,6 +24,7 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 1, "meta");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -33,8 +35,13 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
         .imports = imports,
         .exports = exports,
     };
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(mv_string("Error in tests: test_pico/stdlib/stdlib.c"));
+    }
+
     Module* module = mk_module(header, base, NULL, a);
-    Environment* env = env_from_module(module, a);
+    Environment* env = env_from_module(module, &point, a);
     Module* old_current = get_std_current_module();
     set_std_current_module(module);
     delete_module_header(header);
@@ -46,6 +53,13 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
 
     if (suite_start(log, mv_string("num"))) {
         run_pico_stdlib_num_tests(log, module, env, a);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("meta"))) {
+        if (suite_start(log, mv_string("refl"))) {
+            run_pico_stdlib_meta_refl_tests(log, module, env, a);
+        }
         suite_end(log);
     }
 

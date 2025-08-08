@@ -36,7 +36,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     Target gen_target = {
