@@ -24,15 +24,6 @@ static uint64_t std_perm_allocator;
 //static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
 
-static Package* current_package;
-Package* set_current_package(Package* current) {
-    Package* old = current_package;
-    current_package = current;
-    return old;
-}
-
-Package* get_current_package() { return current_package; }
-
 static IStream* current_istream;
 void set_std_istream(IStream* current) { current_istream = current; }
 
@@ -86,21 +77,6 @@ Allocator set_std_temp_allocator(Allocator al) {
     Allocator* dyn = data[std_temp_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
-    return old;
-}
-
-static uint64_t std_current_module;
-Module* get_std_current_module() {
-    void** data = get_dynamic_memory();
-    Module** dyn = data[std_current_module]; 
-    return *dyn;
-}
-
-Module* set_std_current_module(Module* md) {
-    void** data = get_dynamic_memory();
-    Module** mdle = data[std_current_module]; 
-    Module* old = *mdle;
-    *mdle = md;
     return old;
 }
 
@@ -783,10 +759,8 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sym = string_to_symbol(mv_string("current-allocator"));
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
-    void* nul = NULL;
     Allocator nul_alloc = (Allocator){.malloc = NULL, .realloc = NULL, .free= NULL};
     std_temp_allocator = mk_dynamic_var(sizeof(Allocator), &nul_alloc); 
-    std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     typep = mk_dynamic_type(a, mk_prim_type(a, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));

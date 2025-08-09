@@ -11,6 +11,38 @@
 
 #include "app/module_load.h"
 
+static uint64_t std_current_package;
+Package* set_current_package(Package* new) {
+    void** data = get_dynamic_memory();
+    Package** pkg = data[std_current_package]; 
+    Package* old = *pkg;
+    *pkg = new;
+    return old;
+}
+
+Package *get_current_package() {
+    void** data = get_dynamic_memory();
+    Package** dyn = data[std_current_package]; 
+    return *dyn;
+}
+
+static uint64_t std_current_module;
+Module* get_std_current_module() {
+    void** data = get_dynamic_memory();
+    Module** dyn = data[std_current_module]; 
+    return *dyn;
+}
+
+Module* set_std_current_module(Module* md) {
+    void** data = get_dynamic_memory();
+    Module** mdle = data[std_current_module]; 
+    Module* old = *mdle;
+    *mdle = md;
+    return old;
+}
+
+
+
 // C implementation (called from pico!)
 Result load_module_c_fun(String filename) {
     // (ann load-module String → Unit) : load the module/code located in file! 
@@ -102,13 +134,6 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
         panic(point.error_message);
     }
 
-    // TODO: we use int64_t as it has the requisite size (8 bytes)
-    // for pico values: currently don't support non-64 bit values 
-    TermFormer former;
-    // TermFormer former;
-    type.sort = TPrim;
-    type.prim = TFormer;
-
     Segments null_segments = (Segments) {
         .code = mk_u8_array(0, a),
         .data = mk_u8_array(0, a),
@@ -119,21 +144,37 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
     a = &arena;
 
     // ------------------------------------------------------------------------
-    // Term Formers
-    // ------------------------------------------------------------------------
-
-    // ------------------------------------------------------------------------
     // Types 
     // ------------------------------------------------------------------------
+    type = (PiType) {
+        .sort = TKind,
+        .kind.nargs = 0,
+    };
+
+    typep = mk_opaque_type(a, module, mk_named_type(a, "Module", mk_prim_type(a, Address)));
+    sym = string_to_symbol(mv_string("Module"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    PiType* module_type = typep;
+
+    typep = mk_opaque_type(a, module, mk_named_type(a, "Package", mk_prim_type(a, Address)));
+    sym = string_to_symbol(mv_string("Package"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    PiType* package_type = typep;
 
     // ------------------------------------------------------------------------
     // Values 
     // ------------------------------------------------------------------------
 
-    type = (PiType) {
-        .sort = TKind,
-        .kind.nargs = 0,
-    };
+    void* nul = NULL;
+    std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
+    typep = mk_dynamic_type(a, module_type);
+    sym = string_to_symbol(mv_string("current-module"));
+    add_def(module, sym, *typep, &std_current_module, null_segments, NULL);
+
+    std_current_package = mk_dynamic_var(sizeof(Package*), &nul); 
+    typep = mk_dynamic_type(a, package_type);
+    sym = string_to_symbol(mv_string("current-package"));
+    add_def(module, sym, *typep, &std_current_module, null_segments, NULL);
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
     Segments prepped;    // load-module : Proc [String] Unit

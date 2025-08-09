@@ -765,7 +765,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TDynamic: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("Dynamic "), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Dynamic"), a), a), &nodes);
         ctx.should_wrap = false;
         push_ptr(pretty_type_internal(type->dynamic, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
