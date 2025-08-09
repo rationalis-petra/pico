@@ -11,7 +11,7 @@
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/meta/meta.h"
 
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
@@ -36,7 +36,12 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    // Step 1: Parse Module header, get the result (ph_res)
+    // Step 1:
+    // Setup error reporting
+    in = mk_capturing_istream(in, &arena);
+    reset_bytecount(in);
+
+    // Step 2: Parse Module header, get the result (ph_res)
     ParseResult ph_res = parse_rawtree(in, &arena);
     if (ph_res.type == ParseNone) goto on_noparse;
 
@@ -49,12 +54,12 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
         goto on_noparse;
     }
 
-    // Step 2: check / abstract module header
+    // Step 3: check / abstract module header
     // • module_header header = parse_module_header
     // Note: volatile is to protect from clobbering by longjmp
     header = abstract_header(ph_res.result, &arena, &pi_point);
 
-    // Step 3:
+    // Step 4:
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
@@ -64,11 +69,6 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     } else {
         add_module(header->name, module, package);
     }
-
-    // Step 4:
-    // Setup error reporting
-    in = mk_capturing_istream(in, &arena);
-    reset_bytecount(in);
 
     old_module = get_std_current_module();
     set_std_current_module(module);

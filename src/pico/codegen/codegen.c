@@ -69,7 +69,7 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
         // Do nothing; open only affects the environment
         break;
     }
-    case TLOpen: {
+    case TLImport: {
         // Do nothing; open only affects the environment
         break;
     }

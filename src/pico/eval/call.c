@@ -21,12 +21,12 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         res.val.val = pico_run_expr(target, sz, a, point);
         break;
     }
-    case TLOpen: {
+    case TLImport: {
         res.type = EROpen;
         res.opened = top.open.paths;
         for (size_t i = 0; i < top.open.paths.len; i++) {
             ImportClause clause = (ImportClause) {
-                .type = ImportAll,
+                .type = Import,
                 .path = *(SymbolArray*)top.open.paths.data[i],
             };
             add_import_clause(clause, module);

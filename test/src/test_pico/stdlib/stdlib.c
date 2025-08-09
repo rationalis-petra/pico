@@ -4,7 +4,7 @@
 
 #include "components/assembler/assembler.h"
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/meta/meta.h"
 
 #include "test_pico/helper.h"
 #include "test_pico/stdlib/stdlib.h"

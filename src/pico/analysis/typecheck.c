@@ -15,7 +15,6 @@
 #include "pico/eval/call.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/meta/meta.h"
-#include "pico/stdlib/extra.h"
 #include "pico/stdlib/foreign.h"
 
 // forward declarations
@@ -68,7 +67,7 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         top->decl.decls = declarations;
         break;
     }
-    case TLOpen: {
+    case TLImport: {
         for (size_t i = 0; i < top->open.paths.len; i++) {
             SymbolArray* arr = top->open.paths.data[i];
             // TODO (SAFETY): assert arr->len > 0

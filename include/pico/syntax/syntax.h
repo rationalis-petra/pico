@@ -422,7 +422,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a);
 typedef enum {
     TLDef,
     TLDecl,
-    TLOpen,
+    TLImport,
     TLExpr,
 } TopLevel_t;
 
@@ -442,14 +442,14 @@ typedef struct {
 typedef struct {
     Range range;
     PtrArray paths;
-} OpenClause;
+} TLImportClause;
 
 typedef struct {
     TopLevel_t type;
     union {
         Definition def;
         Declaration decl;
-        OpenClause open;
+        TLImportClause open;
         Syntax* expr;
     };
 } TopLevel;

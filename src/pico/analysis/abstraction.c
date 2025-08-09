@@ -333,9 +333,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         err.range = raw.branch.nodes.data[0].range;
         err.message = mv_cstr_doc("'Declare' not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
-    case FOpen:
+    case FImport:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_cstr_doc("'Open' (open) not supported as inner-expression term former.", a);
+        err.message = mv_cstr_doc("'Import' (open) not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FProcedure: {
         if (raw.branch.nodes.len < 3) {
@@ -2311,10 +2311,10 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         break;
     }
-    case FOpen: {
+    case FImport: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Open expect at least 2 terms", a);
+            err.message = mv_cstr_doc("Import expect at least 2 terms", a);
             throw_pi_error(point, err);
         }
 
@@ -2326,14 +2326,14 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
                 push_ptr(arr, &paths);
             } else {
                 err.range = raw.branch.nodes.data[i].range;
-                err.message = mv_cstr_doc("Open expects all arguments to be modules", a);
+                err.message = mv_cstr_doc("Import expects all arguments to be modules", a);
                 throw_pi_error(point, err);
             }
 
         }
 
         res = (TopLevel) {
-            .type = TLOpen,
+            .type = TLImport,
             .open.range = raw.range,
             .open.paths = paths,
         };
@@ -2401,21 +2401,21 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
     SymbolArray syms = mk_symbol_array(2, a); 
     while (raw.type == RawBranch) {
         if (raw.branch.nodes.len != 3) {
-            err.message = mv_cstr_doc("Invalid path component", a);
+            err.message = mv_cstr_doc("Invalid path component - expected 3 elements", a);
             throw_pi_error(point, err);
         }
         if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
-            err.message = mv_cstr_doc("Invalid path component", a);
+            err.message = mv_cstr_doc("Invalid path component - projector not '.'", a);
             throw_pi_error(point, err);
         }
 
-        if(!is_symbol(raw.branch.nodes.data[2])) {
-            err.range = raw.branch.nodes.data[2].range;
-            err.message = mv_cstr_doc("Invalid path component", a);
+        if(!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("Invalid path component - field not symbol", a);
             throw_pi_error(point, err);
         }
-        push_symbol(raw.branch.nodes.data[2].atom.symbol, &syms);
-        raw = raw.branch.nodes.data[1];
+        push_symbol(raw.branch.nodes.data[1].atom.symbol, &syms);
+        raw = raw.branch.nodes.data[2];
     }
 
     if (!is_symbol(raw)) {
@@ -2423,6 +2423,14 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
     push_symbol(raw.atom.symbol, &syms);
+
+    // Finally, reverse the path, as
+    // foo.bar.baz => (. baz (. bar foo)) => [baz bar foo] => [foo bar baz]
+    for (size_t i = 0; i < syms.len / 2; i++) {
+        Symbol tmp = syms.data[i];
+        syms.data[i] = syms.data[syms.len - (i + 1)];
+        syms.data[syms.len - (i + 1)] = tmp;
+    }
     return syms;
 }
 
@@ -2437,11 +2445,25 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         };
     } else if (raw->type == RawBranch) {
         // Possibilities:
+        // (name1 )
         // (name1 :all)
         // (name1 :as name2)
         // (. name2 name1)
         // (. (list-of-names) name1)
-        if (raw->branch.nodes.len == 2) {
+        if (raw->branch.nodes.len == 1) {
+            if (!is_symbol(raw->branch.nodes.data[0])) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid import clause - expected symbol", a);
+                throw_pi_error(point, err);
+            }
+
+            SymbolArray path = mk_symbol_array(1, a);
+            push_symbol(raw->atom.symbol, &path);
+            return (ImportClause) {
+                .type = Import,
+                .path = path,
+            };
+        } else if (raw->branch.nodes.len == 2) {
             SymbolArray path = get_module_path(raw->branch.nodes.data[0], a, point);
             
             Symbol middle;
@@ -2540,7 +2562,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             }
         } else {
             err.range = raw->range;
-            err.message = mv_cstr_doc("Invalid import clause - incorrect number of itesm", a);
+            err.message = mv_cstr_doc("Invalid import clause - incorrect number of items", a);
             throw_pi_error(point, err);
         }
     } else {

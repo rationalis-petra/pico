@@ -3,6 +3,7 @@
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
+#include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/extra.h"
 
 int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {

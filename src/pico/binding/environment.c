@@ -26,15 +26,17 @@ Module* path_parent(SymbolArray path, Module* root, ErrorPoint* point, Allocator
           if (e->is_module) {
               current = e->value;
           } else {
-              String message = string_cat(mv_string("Module not found: "),
-                                          symbol_to_string(path.data[i], ea),
-                                          ea);
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(root, ea));
               throw_error(point, message);
           }
         } else {
-              String message = string_cat(mv_string("Module not found: "),
-                                          symbol_to_string(path.data[i], ea),
-                                          ea);
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(root, ea));
               throw_error(point, message);
         }
     }
@@ -51,15 +53,17 @@ Module* path_all(SymbolArray path, Module* root, ErrorPoint* point, Allocator* e
           if (e->is_module) {
               current = e->value;
           } else {
-              String message = string_cat(mv_string("Module not found: "),
-                                          symbol_to_string(path.data[i], ea),
-                                          ea);
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(root, ea));
               throw_error(point, message);
           }
         } else {
-            String message = string_cat(mv_string("Module not found: "),
-                                        symbol_to_string(path.data[i], ea),
-                                        ea);
+            String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                         symbol_to_string(path.data[i], ea),
+                                         mv_string(" while constructing environment for "),
+                                         get_name(root, ea));
             throw_error(point, message);
         }
     }

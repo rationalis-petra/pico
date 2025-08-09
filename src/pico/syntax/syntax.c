@@ -820,7 +820,7 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
     case TLDecl:
         out = pretty_decl(&toplevel->decl, a);
         break;
-    case TLOpen: {
+    case TLImport: {
         PtrArray docs = mk_ptr_array(toplevel->open.paths.len, a);
         for (size_t i = 0; i < toplevel->open.paths.len; i++) {
             SymbolArray* syms = toplevel->open.paths.data[i];
@@ -856,7 +856,7 @@ PiType* toplevel_type(TopLevel top) {
     case TLDecl:
         out = NULL;
         break;
-    case TLOpen:
+    case TLImport:
         out = NULL;
         break;
     }
