@@ -14,6 +14,7 @@
 
 void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
     Allocator arena = mk_arena_allocator(16384, a);
+
     // -----------------------------------------------------
     // 
     //      Struct
@@ -36,7 +37,7 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
         String to_run = string_ncat(&arena, 3,
                                     mv_string("(seq (refl.run-script \""),
                                     filename,
-                                    mv_string("\") :unit)"));
+                                    mv_string("\" :none) :unit)"));
         const char* expected = "123456789";
         TEST_STDOUT((char*)to_run.bytes);
         set_std_current_allocator(current_old);
@@ -58,7 +59,7 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
         String to_run = string_ncat(&arena, 3,
                                     mv_string("(seq (refl.load-module \""),
                                     filename,
-                                    mv_string("\") :unit)"));
+                                    mv_string("\" (:some (use refl.current-module))) :unit)"));
         RUN((char*)to_run.bytes);
         int64_t expected = 3;
         TEST_EQ("test.x");
