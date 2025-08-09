@@ -49,6 +49,24 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(seq [let! x 2 y 3] (u32.+ x y))");
     }
 
+    // -------------------------------------------------------------------------
+    //
+    // Dynamic binding - dynamic/use/bind/set
+    //
+    // -------------------------------------------------------------------------
+
+    RUN("(def dvar dynamic -10)");
+    if (test_start(log, mv_string("dynamic-use"))) {
+        int64_t expected = -10;
+        TEST_EQ("(use dvar)");
+    }
+
+    if (test_start(log, mv_string("dynamic-set"))) {
+        int64_t expected = 3;
+        RUN("(set dvar 3)");
+        TEST_EQ("(use dvar)");
+    }
+
 
     // -----------------------------------------------------
     // 

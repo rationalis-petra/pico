@@ -48,6 +48,7 @@ void thread_clear_dynamic_vars();
 uint64_t mk_dynamic_var(size_t size, void* default_val);
 void delete_dynamic_var(uint64_t var);
 void* get_dynamic_val(uint64_t dvar);
+void set_dynamic_val(uint64_t dvar, void* new_val, size_t size);
 void* get_dynamic_memory();
 
 typedef enum TermFormer {
@@ -70,11 +71,13 @@ typedef enum TermFormer {
     FGenArray,
     FWith,
 
+    // Dynamic Binding
     FDynamic,
     FDynamicUse,
+    FDynamicLet,
+    FDynamicSet,
 
     // Term Formers: Control flow + binding
-    FDynamicLet,
     FLet,
     FIf,
     FLabels,

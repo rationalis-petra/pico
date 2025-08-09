@@ -890,6 +890,17 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = dyn_type->dynamic;
         break;
     }
+    case SDynamicSet: {
+        type_infer_i(untyped->dynamic_set.dynamic, env, a, point);
+        PiType* dyn_type = untyped->dynamic_set.dynamic->ptype; 
+        if (dyn_type->sort != TDynamic) {
+            err.message = mv_cstr_doc("set on non-dynamic type!", a);
+            throw_pi_error(point, err);
+        }
+        type_check_i(untyped->dynamic_set.new_val, dyn_type->dynamic, env, a, point);
+        untyped->ptype = mk_prim_type(a, Unit);
+        break;
+    }
     case SDynamicLet: {
         for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
@@ -1771,6 +1782,10 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SDynamicUse:
         post_unify(syn->use, env, a, point);
         break;
+    case SDynamicSet:
+        post_unify(syn->dynamic_set.dynamic, env, a, point);
+        post_unify(syn->dynamic_set.new_val, env, a, point);
+        break;
 
     // Control Flow & Binding
     case SDynamicLet:
@@ -2038,6 +2053,10 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     case SDynamicUse:
         squash_types(typed->use, a, point);
+        break;
+    case SDynamicSet:
+        squash_types(typed->dynamic_set.dynamic, a, point);
+        squash_types(typed->dynamic_set.new_val, a, point);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {

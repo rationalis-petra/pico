@@ -53,9 +53,10 @@ typedef enum {
     SInstance,
     SDynamic,
     SDynamicUse,
+    SDynamicSet,
+    SDynamicLet,
 
     // Control Flow & Binding
-    SDynamicLet,
     SLet,
     SIf,
     SLabels,
@@ -194,6 +195,11 @@ typedef struct {
     Symbol field;
     Syntax* val;
 } SynProjector;
+
+typedef struct {
+    Syntax* dynamic;
+    Syntax* new_val;
+} SynDynSet;
 
 typedef struct {
     SymbolArray params;
@@ -363,11 +369,13 @@ struct Syntax {
         SynMatch match;
         SynStructure structure;
         SynProjector projector;
-        Syntax* dynamic;
-        Syntax* use;
         SynInstance instance;
 
+        Syntax* dynamic;
+        SynDynSet dynamic_set;
+        Syntax* use;
         SynDynLet dyn_let_expr;
+
         SynLet let_expr;
         SynIf if_expr;
         SynLabels labels;

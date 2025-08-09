@@ -831,6 +831,76 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FDynamicSet: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed set expression: expects 2 args.", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* dynamic = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        Syntax* val = abstract_expr_i(*(raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, a)), env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynamicSet,
+            .ptype = NULL,
+            .range = raw.range,
+            .dynamic_set.dynamic = dynamic,
+            .dynamic_set.new_val = val,
+        };
+        return res;
+    }
+    case FDynamicLet: {
+        PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special && index < raw.branch.nodes.len) {
+            RawTree bind = raw.branch.nodes.data[index];
+            // bind [x₁ e₁]
+            //      [x₂ e₂]
+            //  body
+            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
+            if (is_special) {
+                index++;
+                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
+                if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
+                    err.range = bind.range;
+                    err.message = mv_cstr_doc("Malformed symbol binding in bind-expression", a);
+                    throw_pi_error(point, err);
+                }
+
+                dbind->var = abstract_expr_i(bind.branch.nodes.data[0], env, a, point);
+                dbind->expr = abstract_expr_i(bind.branch.nodes.data[1], env, a, point);
+                push_ptr(dbind, &bindings);
+            }
+        }
+
+        if (index > raw.branch.nodes.len - 1) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Bind expression has no body!", a);
+            throw_pi_error(point, err);
+        }
+
+        if (index < raw.branch.nodes.len - 1) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
+            throw_pi_error(point, err);
+        }
+
+        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynamicLet,
+            .ptype = NULL,
+            .range = raw.range,
+            .dyn_let_expr.bindings = bindings,
+            .dyn_let_expr.body = body,
+        };
+        return res;
+    }
     case FLet: {
         SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
@@ -887,57 +957,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .range = raw.range,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
-        };
-        return res;
-    }
-    case FDynamicLet: {
-        PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
-        size_t index = 1;
-
-        bool is_special = true;
-        while (is_special && index < raw.branch.nodes.len) {
-            RawTree bind = raw.branch.nodes.data[index];
-            // bind [x₁ e₁]
-            //      [x₂ e₂]
-            //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
-                index++;
-                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
-                if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
-                    err.range = bind.range;
-                    err.message = mv_cstr_doc("Malformed symbol binding in bind-expression", a);
-                    throw_pi_error(point, err);
-                }
-
-                dbind->var = abstract_expr_i(bind.branch.nodes.data[0], env, a, point);
-                dbind->expr = abstract_expr_i(bind.branch.nodes.data[1], env, a, point);
-                push_ptr(dbind, &bindings);
-            }
-        }
-
-        if (index > raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression has no body!", a);
-            throw_pi_error(point, err);
-        }
-
-        if (index < raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
-            throw_pi_error(point, err);
-        }
-
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], env, a, point);
-        shadow_pop(bindings.len, env);
-
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
-            .type = SDynamicLet,
-            .ptype = NULL,
-            .range = raw.range,
-            .dyn_let_expr.bindings = bindings,
-            .dyn_let_expr.body = body,
         };
         return res;
     }

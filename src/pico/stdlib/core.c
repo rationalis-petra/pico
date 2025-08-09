@@ -277,6 +277,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("use"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FDynamicSet;
+    sym = string_to_symbol(mv_string("set"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FDynamicLet;
+    sym = string_to_symbol(mv_string("bind"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FInstance;
     sym = string_to_symbol(mv_string("instance"));
     add_def(module, sym, type, &former, null_segments, NULL);
@@ -319,10 +327,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FLet;
     sym = string_to_symbol(mv_string("let"));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
-    former = FDynamicLet;
-    sym = string_to_symbol(mv_string("bind"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FIs;

@@ -995,6 +995,32 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_grow(env, val_size);
         break;
     }
+    case SDynamicSet: {
+        // TODO: check that dynamic set handles stack alignment correctly
+        size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
+        generate(*syn.dynamic_set.dynamic, env, target, links, a, point);
+        generate(*syn.dynamic_set.new_val, env, target, links, a, point);
+
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi, arg2 = rsi
+        build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(val_size), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx, arg2 = rdx
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(R8, sz_64), imm32(val_size), a, point);
+#else
+#error "unknown ABI"
+#endif
+        // call function
+        generate_c_call(set_dynamic_val, ass, a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), a, point);
+        data_stack_shrink(env, ADDRESS_SIZE + val_size);
+        break;
+    }
     case SDynamicLet: {
         // TODO: check that the dynamic let handles stack alignment correctly
 

@@ -200,6 +200,11 @@ void* get_dynamic_val(uint64_t dvar) {
     return thread_dynamic_vars.data[dvar];
 }
 
+void set_dynamic_val(uint64_t dvar, void* data, size_t size) {
+    void* ptr = thread_dynamic_vars.data[dvar];
+    memcpy(ptr, data, size);
+}
+
 void delete_dynamic_var(uint64_t var) {
     DVarMetadata* data = dynamic_var_metadata.data[var];
     mem_free(data->default_value, dynamic_var_allocator);
@@ -258,6 +263,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynamicUse:
         out = mk_str_doc(mv_string("::use"), a);
         break;
+    case FDynamicLet:
+        out = mk_str_doc(mv_string("::bind"), a);
+        break;
+    case FDynamicSet:
+        out = mk_str_doc(mv_string("::set"), a);
+        break;
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);
         break;
@@ -270,9 +281,6 @@ Document* pretty_former(TermFormer op, Allocator* a) {
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
-        break;
-    case FDynamicLet:
-        out = mk_str_doc(mv_string("::bind"), a);
         break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
