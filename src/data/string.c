@@ -120,7 +120,7 @@ String string_ncat(Allocator* a, size_t n, ...) {
 }
 
 String substring(size_t start, size_t end, const String source, Allocator *a) {
-#ifdef DEBUG
+#ifdef VALIDATE_INPUTS
   if (start > end) {
       panic(mv_string("substring: start > end"));
   }

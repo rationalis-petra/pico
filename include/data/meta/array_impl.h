@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#ifdef DEBUG
+#ifdef VALIDATE_INPUTS
 #include "platform/signals.h"
 #include "data/string.h"
 #define POP_CHECK(arr) if (arr -> len == 0) panic(mv_string("popped past end!"));
