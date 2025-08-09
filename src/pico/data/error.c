@@ -23,11 +23,16 @@ const Colour message_colour = (Colour){.r = 200, .g = 20, .b = 20};
 const Colour regular_code_colour = (Colour){.r = 150, .g = 150, .b = 150};
 const Colour bad_code_colour = (Colour){.r = 208, .g = 105, .b = 30};
 
-void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocator* a) {
+void display_error(MultiError multi, IStream *is, FormattedOStream* fos, const char* filename, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
     String* buffer = get_captured_buffer(is);
+
+    if (filename) {
+        write_fstring(mv_string(filename), fos);
+        write_fstring(mv_string(": \n\n"), fos);
+    }
 
     if (multi.has_many) {
         for (size_t i = 0; i < multi.errors.len; i++) {

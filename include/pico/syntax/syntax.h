@@ -449,7 +449,7 @@ typedef struct {
     union {
         Definition def;
         Declaration decl;
-        TLImportClause open;
+        TLImportClause import;
         Syntax* expr;
     };
 } TopLevel;

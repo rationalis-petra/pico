@@ -28,7 +28,7 @@ typedef struct {
 _Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err); 
 _Noreturn void throw_pi_errors(PiErrorPoint* point, PtrArray errors); 
 
-void display_error(MultiError error, IStream *is, FormattedOStream* cout, Allocator* a);
+void display_error(MultiError error, IStream *is, FormattedOStream* cout, const char* filename, Allocator* a);
 void display_code_region(String buffer, Range range, const size_t lines_prior, FormattedOStream* os, Allocator* a);
 
 #endif

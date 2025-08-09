@@ -69,7 +69,7 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     Package* current_package = get_current_package();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
     Module* parent = module.is_none ? NULL : module.module;
-    load_module_from_istream(sfile, os, current_package, parent, a);
+    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, a);
     delete_istream(sfile, a);
     delete_formatted_ostream(os, a);
     return (Result) {.type = Ok};
@@ -102,7 +102,7 @@ Result run_script_c_fun(String filename, MaybeModule mmodule) {
         : mmodule.module;
     OStream* current_ostream = get_std_ostream();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
-    run_script_from_istream(sfile, os, module, a);
+    run_script_from_istream(sfile, os, (const char*)filename.bytes, module, a);
     delete_istream(sfile, a);
     delete_formatted_ostream(os, a);
     return (Result) {.type = Ok};

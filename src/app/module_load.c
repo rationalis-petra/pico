@@ -14,7 +14,7 @@
 #include "pico/stdlib/meta/meta.h"
 
 
-void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* package, Module* parent, Allocator* a) {
+void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Package* package, Module* parent, Allocator* a) {
     Allocator arena = mk_arena_allocator(16384, a);
     Allocator iter_arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
@@ -50,7 +50,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
             .has_many = false,
             .error = ph_res.error,
         };
-        display_error(multi, in, serr, a);
+        display_error(multi, in, serr, filename, a);
         goto on_noparse;
     }
 
@@ -93,7 +93,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
                 .has_many = false,
                 .error = ph_res.error,
             };
-            display_error(multi, in, serr, a);
+            display_error(multi, in, serr, filename, a);
             goto on_error_generic;
             return;
         }
@@ -145,7 +145,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, in, serr, a);
+    display_error(pi_point.multi, in, serr, filename, a);
     goto on_error_generic;
 
  on_error:
@@ -164,7 +164,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, Package* pack
     return;
 }
 
-void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* current, Allocator* a) {
+void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, Allocator* a) {
     Allocator arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
 
@@ -202,7 +202,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
                 .has_many = false,
                 .error = res.error,
             };
-            display_error(multi, in, serr, a);
+            display_error(multi, in, serr, filename, a);
             release_arena_allocator(arena);
             return;
         }
@@ -250,7 +250,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, Module* curren
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, in, serr, &arena);
+    display_error(pi_point.multi, in, serr, filename, &arena);
     goto on_error_generic;
 
  on_error:

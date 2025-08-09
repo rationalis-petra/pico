@@ -82,7 +82,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, cin, get_formatted_stdout(), a);
+        display_error(multi, cin, get_formatted_stdout(), NULL, a);
         release_arena_allocator(arena);
         return true;
     }
@@ -182,7 +182,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, cout, &arena);
+    display_error(pi_point.multi, cin, cout, NULL, &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
@@ -265,7 +265,7 @@ int main(int argc, char** argv) {
     case CScript: {
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
-            run_script_from_istream(fin, get_formatted_stdout(), module, stdalloc);
+            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, stdalloc);
             delete_istream(fin, stdalloc);
         } else {
             write_string(mv_string("Failed to open file: "), cout);

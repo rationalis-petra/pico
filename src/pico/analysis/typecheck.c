@@ -68,33 +68,20 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case TLImport: {
-        for (size_t i = 0; i < top->open.paths.len; i++) {
-            SymbolArray* arr = top->open.paths.data[i];
-            // TODO (SAFETY): assert arr->len > 0
-            EnvEntry entry = env_lookup(arr->data[0], env);
-            Module* current;
-            if (entry.type != Ok || !entry.is_module) {
-                String msg = string_cat(mv_string("Module does not exist: "), symbol_to_string(arr->data[0], a), a);
+        for (size_t i = 0; i < top->import.paths.len; i++) {
+            SymbolArray* arr = top->import.paths.data[i];
+            if (!import_path_valid(env, *arr)) {
+                PtrArray nodes = mk_ptr_array(1 + arr->len, a);
+                push_ptr(mv_cstr_doc("Invalid import path: ", a), &nodes);
+                for (size_t i = 0; i < arr->len; i++) {
+                    push_ptr(mv_str_doc(symbol_to_string(arr->data[i], a), a), &nodes);
+                }
+
                 PicoError err = (PicoError) {
-                    .range = top->open.range,
-                    .message = mv_str_doc(msg, a),
+                    .range = top->import.range,
+                    .message = mv_sep_doc(nodes, a),
                 };
                 throw_pi_error(point, err);
-            } 
-            current = entry.value;
-            for (size_t j = 1; j < arr->len; j++) {
-                ModuleEntry* entry = get_def(arr->data[j], current);
-                if (entry && entry->is_module) {
-                    current = entry->value;
-                }
-                else {
-                    String msg = string_cat(mv_string("Module does not exist: "), symbol_to_string(arr->data[j], a), a);
-                    PicoError err = (PicoError) {
-                        .range = top->open.range,
-                        .message = mv_str_doc(msg, a),
-                    };
-                    throw_pi_error(point, err);
-                }
             }
         }
         break;

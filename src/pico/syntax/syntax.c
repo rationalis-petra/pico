@@ -821,9 +821,9 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
         out = pretty_decl(&toplevel->decl, a);
         break;
     case TLImport: {
-        PtrArray docs = mk_ptr_array(toplevel->open.paths.len, a);
-        for (size_t i = 0; i < toplevel->open.paths.len; i++) {
-            SymbolArray* syms = toplevel->open.paths.data[i];
+        PtrArray docs = mk_ptr_array(toplevel->import.paths.len, a);
+        for (size_t i = 0; i < toplevel->import.paths.len; i++) {
+            SymbolArray* syms = toplevel->import.paths.data[i];
             PtrArray elts = mk_ptr_array(2 * syms->len, a);
             for (size_t j = 0; j < syms->len; j++) {
                 push_ptr(mk_str_doc(symbol_to_string(syms->data[j], a), a), &elts);

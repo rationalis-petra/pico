@@ -2334,8 +2334,8 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         res = (TopLevel) {
             .type = TLImport,
-            .open.range = raw.range,
-            .open.paths = paths,
+            .import.range = raw.range,
+            .import.paths = paths,
         };
         break;
     }

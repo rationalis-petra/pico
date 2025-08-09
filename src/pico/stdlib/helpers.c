@@ -66,7 +66,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, get_formatted_stdout(), &arena);
+    display_error(pi_point.multi, cin, get_formatted_stdout(), NULL, &arena);
     release_arena_allocator(arena);
     delete_istream(sin, a);
     throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));

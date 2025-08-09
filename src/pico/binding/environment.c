@@ -16,7 +16,7 @@ struct Environment {
 };
 
 // Helper function:
-Module* path_parent(SymbolArray path, Module* root, ErrorPoint* point, Allocator* ea) {
+Module* path_parent(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -29,21 +29,21 @@ Module* path_parent(SymbolArray path, Module* root, ErrorPoint* point, Allocator
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for "),
-                                           get_name(root, ea));
+                                           get_name(mfor, ea));
               throw_error(point, message);
           }
         } else {
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for "),
-                                           get_name(root, ea));
+                                           get_name(mfor, ea));
               throw_error(point, message);
         }
     }
     return current;
 }
 
-Module* path_all(SymbolArray path, Module* root, ErrorPoint* point, Allocator* ea) {
+Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -56,18 +56,36 @@ Module* path_all(SymbolArray path, Module* root, ErrorPoint* point, Allocator* e
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for "),
-                                           get_name(root, ea));
+                                           get_name(mfor, ea));
               throw_error(point, message);
           }
         } else {
             String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                          symbol_to_string(path.data[i], ea),
                                          mv_string(" while constructing environment for "),
-                                         get_name(root, ea));
+                                         get_name(mfor, ea));
             throw_error(point, message);
         }
     }
     return current;
+}
+
+bool import_path_valid(Environment *env, SymbolArray path) {
+    Module* current = get_root_module(get_package(env->base));
+
+    for (size_t i = 0; i < path.len; i++) {
+        ModuleEntry* e = get_def(path.data[i], current);
+        if (e) {
+          if (e->is_module) {
+              current = e->value;
+          } else {
+              return false;
+          }
+        } else {
+            return false;
+        }
+    }
+    return true;
 }
 
 void refresh_env(Environment* env, Allocator* a) {
@@ -124,7 +142,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         switch (clause.type) {
         case Import: {
             Symbol last_symbol = clause.path.data[clause.path.len - 1];
-            Module* parent = path_parent(clause.path, root_module, point, a);
+            Module* parent = path_parent(clause.path, root_module, module, point, a);
             name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
             break;
         }
@@ -136,7 +154,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
             break;
         case ImportAll: {
             // Find the package
-            Module* importee = path_all(clause.path, root_module, point, a);
+            Module* importee = path_all(clause.path, root_module, module, point, a);
             SymbolArray syms = get_defined_symbols(importee, a);
             for (size_t j = 0; j < syms.len; j++ ) {
                 name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
