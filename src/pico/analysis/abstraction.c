@@ -174,6 +174,11 @@ bool is_symbol(RawTree raw) {
 }
 
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
+#ifdef DEBUG
+  if (drop > raw->branch.nodes.len) {
+      panic(mv_string("Dropping more nodes than there are!"));
+  }
+#endif
     RawTree* out = mem_alloc(sizeof(RawTree), a);
     *out = (RawTree) {
         .type = RawBranch,

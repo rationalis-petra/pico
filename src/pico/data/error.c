@@ -168,6 +168,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                     start_coloured_text(colour(208, 105, 30), fos);
                 }
                 write_fstring(bad_line, fos);
+                delete_string(bad_line, a);
                 start_idx = i + 1;
             }
         }

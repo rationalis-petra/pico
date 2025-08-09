@@ -113,9 +113,9 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Alloc
         out = uvar_subst(rhs->uvar, lhs, a);
         if (out.type != UOk) return out;
     }
-    else if (rhs->sort == lhs->sort)
+    else if (rhs->sort == lhs->sort) {
         out = unify_eq(lhs, rhs, rename, a);
-    else {
+    } else {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), a), &nodes);
         push_ptr(pretty_type(lhs, a), &nodes);

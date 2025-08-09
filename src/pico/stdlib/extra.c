@@ -687,8 +687,23 @@ MacroResult ann_macro(RawTreeArray nodes) {
         }, &field_nodes);
 
     // push <type>
-    RawTree* tree = (nodes.len == 3) ? &nodes.data[2]
-        : raw_slice(nodes.data, 2, &a);
+    RawTree *tree;
+    if (nodes.len == 3) {
+        tree = &nodes.data[2];
+    } else {
+        const size_t drop = 2;
+        tree = mem_alloc(sizeof(RawTree), &a);
+        *tree = (RawTree) {
+            .type = RawBranch,
+            .range.start = nodes.data[drop].range.start,
+            .range.end = nodes.data[nodes.len - 1].range.end,
+            .branch.hint = HExpression,
+            .branch.nodes.len = nodes.len - drop,
+            .branch.nodes.size = nodes.size - drop,
+            .branch.nodes.data = nodes.data + drop,
+            .branch.nodes.gpa = nodes.gpa,
+        };
+    }
     push_rawtree(*tree, &field_nodes);
 
     // push [.type <type>]
