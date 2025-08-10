@@ -2342,24 +2342,16 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
             throw_pi_error(point, err);
         }
 
-        PtrArray paths = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        ImportClauseArray clauses = mk_import_clause_array(raw.branch.nodes.len - 1, a);
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            Syntax* syn = abstract_expr_i(raw.branch.nodes.data[i], env, a, point);
-            SymbolArray* arr = try_get_path(syn, a);
-            if (arr) {
-                push_ptr(arr, &paths);
-            } else {
-                err.range = raw.branch.nodes.data[i].range;
-                err.message = mv_cstr_doc("Import expects all arguments to be modules", a);
-                throw_pi_error(point, err);
-            }
-
+            ImportClause clause = abstract_import_clause(&raw.branch.nodes.data[i], a, point);
+            push_import_clause(clause, &clauses);
         }
 
         res = (TopLevel) {
             .type = TLImport,
             .import.range = raw.range,
-            .import.paths = paths,
+            .import.clauses = clauses,
         };
         break;
     }

@@ -382,7 +382,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         break;
     }
     case TUVar:
-        out = mk_str_doc(mv_string("No Print UVar!"), a);
+        out = mk_str_doc(mv_string("'U"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;

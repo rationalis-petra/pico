@@ -68,14 +68,12 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case TLImport: {
-        for (size_t i = 0; i < top->import.paths.len; i++) {
-            SymbolArray* arr = top->import.paths.data[i];
-            if (!import_path_valid(env, *arr)) {
-                PtrArray nodes = mk_ptr_array(1 + arr->len, a);
+        for (size_t i = 0; i < top->import.clauses.len; i++) {
+            ImportClause clause = top->import.clauses.data[i];
+            if (!import_clause_valid(env, clause)) {
+                PtrArray nodes = mk_ptr_array(2, a);
                 push_ptr(mv_cstr_doc("Invalid import path: ", a), &nodes);
-                for (size_t i = 0; i < arr->len; i++) {
-                    push_ptr(mv_str_doc(symbol_to_string(arr->data[i], a), a), &nodes);
-                }
+                push_ptr(pretty_import_clause(clause, a), &nodes);
 
                 PicoError err = (PicoError) {
                     .range = top->import.range,

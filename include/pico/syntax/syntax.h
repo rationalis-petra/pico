@@ -8,6 +8,7 @@
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/symbol_array.h"
 #include "pico/syntax/concrete.h"
+#include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -449,7 +450,7 @@ typedef struct {
 
 typedef struct {
     Range range;
-    PtrArray paths;
+    ImportClauseArray clauses;
 } TLImportClause;
 
 typedef struct {

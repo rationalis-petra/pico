@@ -70,11 +70,11 @@ Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point
     return current;
 }
 
-bool import_path_valid(Environment *env, SymbolArray path) {
+bool import_clause_valid(Environment *env, ImportClause clause) {
     Module* current = get_root_module(get_package(env->base));
 
-    for (size_t i = 0; i < path.len; i++) {
-        ModuleEntry* e = get_def(path.data[i], current);
+    for (size_t i = 0; i < clause.path.len; i++) {
+        ModuleEntry* e = get_def(clause.path.data[i], current);
         if (e) {
           if (e->is_module) {
               current = e->value;

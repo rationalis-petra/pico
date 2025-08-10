@@ -67,6 +67,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(use dvar)");
     }
 
+    RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
+    if (test_start(log, mv_string("large-dynamic-use"))) {
+        int64_t expected[2] = {-10, 10};
+        TEST_EQ("(use ldvar)");
+    }
 
     // -----------------------------------------------------
     // 

@@ -939,7 +939,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         generate(*syn.dynamic, env, target, links, a, point);
 
         // currently RSP = default_val
-        size_t val_size = pi_size_of(*syn.ptype);
+        size_t val_size = pi_size_of(*syn.dynamic->ptype);
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
@@ -960,8 +960,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         
-        data_stack_shrink(env, ADDRESS_SIZE);
-        data_stack_grow(env, val_size);
+        data_stack_grow(env, ADDRESS_SIZE);
+        data_stack_shrink(env, val_size);
         break;
     }
     case SDynamicUse: {
