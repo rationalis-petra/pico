@@ -933,7 +933,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamic: {
-        // TODO: check that the dynamic handles stack alignment correctly
         // Create a new dynamic variable, i.e. call the C function 
         // mk_dynamic_var(size_t size, void* default_val)
         generate(*syn.dynamic, env, target, links, a, point);
@@ -965,11 +964,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamicUse: {
-        // TODO: check that the dynamic use handles stack alignment correctly
         generate(*syn.use, env, target, links, a, point);
 
         // We now have a dynamic variable: get its' value as ptr
-
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi
         build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
@@ -996,7 +993,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamicSet: {
-        // TODO: check that dynamic set handles stack alignment correctly
         size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
         generate(*syn.dynamic_set.dynamic, env, target, links, a, point);
         generate(*syn.dynamic_set.new_val, env, target, links, a, point);

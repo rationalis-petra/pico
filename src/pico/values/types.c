@@ -9,6 +9,7 @@
 #include "pico/data/rename_array.h"
 #include "components/pretty/standard_types.h"
 #include "components/pretty/string_printer.h"
+#include "pico/analysis/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 #include "pico/values/array.h"
@@ -256,7 +257,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-        panic(mv_string("UVars should not be copied, but rather freed via region or similar allocators"));
+        panic(mv_string("Cannot copy raw UVar (only pointer thereto)"));
         break;
     case TPrim:
         out.prim = t.prim;
@@ -382,7 +383,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         break;
     }
     case TUVar:
-        out = mk_str_doc(mv_string("'U"), a);
+        out = mk_str_doc(mv_string("Can't print value of type ? (unification variable)"), a);
         break;
     case TStruct: {
         size_t current_offset = 0;
@@ -690,7 +691,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TUVar:
-        out = mv_str_doc(mk_string("No Print UVar!", a), a);
+        out = mv_str_doc(mk_string("?", a), a);
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(2, a);

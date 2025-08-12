@@ -52,7 +52,7 @@ void add_list_module(Target target, Module *data, Allocator *a) {
         "    [.gpa (use current-allocator)]\n"
         "    [.capacity capacity]\n"
         "    [.len len]\n"
-        "    [.data (malloc (u64.* (size-of A) len))]))";
+        "    [.data (malloc (u64.* (size-of A) capacity))]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, a);
     
     // TODO (BUG): use list allocator

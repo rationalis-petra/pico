@@ -715,7 +715,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             PiType* struct_type = unwrap_type(untyped->ptype, a);
 
             if (struct_type->sort != TStruct) {
-                err.message = mv_cstr_doc("Structure type invalid", a);
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
+                push_ptr(pretty_type(struct_type, a), &nodes);
+                err.message = mv_sep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 
@@ -921,11 +924,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
             Symbol arg = untyped->let_expr.bindings.data[i].key;
             Syntax* val = untyped->let_expr.bindings.data[i].val;
-            PiType* ty = mk_uvar(a);
 
-            type_check_i(val, ty, env, a, point);
+            type_infer_i(val, env, a, point);
+
             // TODO (FEAT): add support for recursive bindings (e.g. procedures)
-            type_var(arg, ty, env);
+            type_var(arg, val->ptype, env);
         }
         type_infer_i(untyped->let_expr.body, env, a, point);
         untyped->ptype = untyped->let_expr.body->ptype;

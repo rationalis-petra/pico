@@ -20,7 +20,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -------------------------------------------------------------------------
     //
-    // Static control and binding - seq/let
+    //     Static control and binding - seq/let
     //
     // -------------------------------------------------------------------------
 
@@ -51,7 +51,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -------------------------------------------------------------------------
     //
-    // Dynamic binding - dynamic/use/bind/set
+    //     Dynamic binding - dynamic/use/bind/set
     //
     // -------------------------------------------------------------------------
 
