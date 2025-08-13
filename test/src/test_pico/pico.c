@@ -57,5 +57,7 @@ void run_pico_tests(TestLog* log, Allocator* a) {
         suite_end(log);
     }
 
+    sdelete_u8_array(*target.data_aux);
+    mem_free(target.data_aux, a);
     release_executable_allocator(exec);
 }

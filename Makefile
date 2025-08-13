@@ -103,11 +103,10 @@ TEST_INC_DIR := ./test/include
 TEST_SRC_DIRS := ./test/src
 TARGET_TEST := pico_test
 
-TEST_FLAGS := $(RELEASE_FLAGS) -pg 
-#TEST_FLAGS := $(DEBUG_FLAGS)
+TEST_FLAGS := $(DEBUG_FLAGS)
 
 TEST_SRCS := $(shell find $(TEST_SRC_DIRS) -name '*.c')
-TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o) $(RELEASE_OBJS)
+TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o) $(DEBUG_OBJS)
 
 # Final build step for tests 
 $(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS)

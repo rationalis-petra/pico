@@ -159,4 +159,5 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
     delete_assembler(ass);
+    release_executable_allocator(exec);
 }
