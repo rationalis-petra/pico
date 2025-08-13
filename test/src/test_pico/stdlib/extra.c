@@ -6,12 +6,19 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, env, log, a); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a)
-#define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, env, log, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 
-void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
-    Allocator arena = mk_arena_allocator(4096, a);
+void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+    Allocator arena = mk_arena_allocator(16384, a);
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = &arena,
+        .log = log,
+        .target = target,
+    };
+
     if (test_start(log, mv_string("print"))) {
         const char* expected = "test";
         TEST_STDOUT("(print \"test\")");

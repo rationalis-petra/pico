@@ -9,10 +9,10 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
-#define RUN(str) run_toplevel(str, module, env, log, a); refresh_env(env, a); refresh_env(env, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_TYPE(str) test_typecheck_eq(str, expected, env, log, a)
 
-void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
+void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(16384, a);
@@ -44,6 +44,14 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
     }
     Environment* env = env_from_module(module, &point, a);
     delete_module_header(header);
+
+
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         // TODO (BUG): this leaks - set current allocator?

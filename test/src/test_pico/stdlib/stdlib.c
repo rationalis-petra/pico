@@ -10,11 +10,9 @@
 #include "test_pico/stdlib/stdlib.h"
 #include "test_pico/stdlib/components.h"
 
-void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
+void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
-    Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(16384, a);
-    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
@@ -47,33 +45,33 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     delete_module_header(header);
 
     if (suite_start(log, mv_string("core"))) {
-        run_pico_stdlib_core_tests(log, module, env, a);
+        run_pico_stdlib_core_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("num"))) {
-        run_pico_stdlib_num_tests(log, module, env, a);
+        run_pico_stdlib_num_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("meta"))) {
         if (suite_start(log, mv_string("refl"))) {
-            run_pico_stdlib_meta_refl_tests(log, module, env, a);
+            run_pico_stdlib_meta_refl_tests(log, module, env, target, a);
         }
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("extra"))) {
-        run_pico_stdlib_extra_tests(log, module, env, a);
+        run_pico_stdlib_extra_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("data"))) {
         if (suite_start(log, mv_string("pair"))) {
-            run_pico_stdlib_data_pair_tests(log, module, env, a);
+            run_pico_stdlib_data_pair_tests(log, module, env, target, a);
         }
         if (suite_start(log, mv_string("list"))) {
-            run_pico_stdlib_data_list_tests(log, module, env, a);
+            run_pico_stdlib_data_list_tests(log, module, env, target, a);
         }
         suite_end(log);
     }
@@ -81,7 +79,5 @@ void run_pico_stdlib_tests(TestLog* log, Allocator* a) {
     set_std_current_module(old_current);
     delete_env(env, a);
     delete_module(module);
-    delete_assembler(ass);
-    release_executable_allocator(exalloc);
     release_arena_allocator(arena);
 }

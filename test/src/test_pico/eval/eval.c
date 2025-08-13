@@ -9,11 +9,9 @@
 #include "test_pico/eval/eval.h"
 #include "test_pico/eval/components.h"
 
-void run_pico_eval_tests(TestLog* log, Allocator* a) {
+void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
-    Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(4096, a);
-    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
@@ -43,23 +41,21 @@ void run_pico_eval_tests(TestLog* log, Allocator* a) {
     delete_module_header(header);
 
     if (suite_start(log, mv_string("literals"))) {
-        run_pico_eval_literals_tests(log, module, env, a);
+        run_pico_eval_literals_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("polymorphic"))) {
-        run_pico_eval_polymorphic_tests(log, module, env, a);
+        run_pico_eval_polymorphic_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("foreign-adapter"))) {
-        run_pico_eval_foreign_adapter_tests(log, module, env, a);
+        run_pico_eval_foreign_adapter_tests(log, module, env, target, a);
         suite_end(log);
     }
 
     delete_env(env, a);
     delete_module(module);
-    delete_assembler(ass);
-    release_executable_allocator(exalloc);
     release_arena_allocator(arena);
 }

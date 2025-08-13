@@ -3,6 +3,6 @@
 
 #include "test/test_log.h"
 
-void run_pico_typecheck_tests(TestLog* log, Allocator* a);
+void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a);
 
 #endif

@@ -3,9 +3,16 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a);
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
+void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
+
     if (test_start(log, mv_string("positive-int-literal"))) {
         int64_t expected = 10;
         TEST_EQ("10");

@@ -1,16 +1,24 @@
 #ifndef __TEST_PICO_HELPER_H
 #define __TEST_PICO_HELPER_H
 
+#include "pico/codegen/codegen.h"
 #include "pico/values/modular.h"
 #include "pico/binding/environment.h"
 
 #include "test/test_log.h"
 
-void test_toplevel_eq(const char *string, void *expected_val, Module *module, Environment* env, TestLog* log, Allocator *a);
-void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, Environment* env, TestLog* log, Allocator *a);
+typedef struct {
+    Environment *env;
+    TestLog *log;
+    Allocator *a;
+    Target target;
+} TestContext;
 
-void test_typecheck_eq(const char *string, void *expected_val, Environment* env, TestLog* log, Allocator *a);
-void run_toplevel(const char *string, Module *module, Environment* env, TestLog* log, Allocator *a);
+void test_toplevel_eq(const char *string, void *expected, Module *module, TestContext context);
+void test_toplevel_stdout(const char *string, const char *expected, Module *module, TestContext context);
+
+void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestLog* log, Allocator* a);
+void run_toplevel(const char *string, Module *module, TestContext context);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);

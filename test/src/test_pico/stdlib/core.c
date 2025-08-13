@@ -3,10 +3,17 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, env, log, a); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
+void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
+
     // -----------------------------------------------------
     // 
     //  Widen/Narrow

@@ -329,6 +329,14 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case SDynamicSet: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("set "), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->dynamic_set.dynamic, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->dynamic_set.new_val, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case SLet: {
         PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
         push_ptr(mk_str_doc(mv_string("(let"), a), &nodes);
@@ -821,20 +829,11 @@ Document* pretty_toplevel(TopLevel* toplevel, Allocator* a) {
         out = pretty_decl(&toplevel->decl, a);
         break;
     case TLImport: {
-        PtrArray docs = mk_ptr_array(toplevel->import.paths.len, a);
-        for (size_t i = 0; i < toplevel->import.paths.len; i++) {
-            SymbolArray* syms = toplevel->import.paths.data[i];
-            PtrArray elts = mk_ptr_array(2 * syms->len, a);
-            for (size_t j = 0; j < syms->len; j++) {
-                push_ptr(mk_str_doc(symbol_to_string(syms->data[j], a), a), &elts);
-                if (j + 1 != syms->len) {
-                    push_ptr(mk_str_doc(mv_string("."), a), &elts);
-                }
-            }
-              
-            push_ptr(mv_cat_doc(elts, a), &docs);
+        PtrArray docs = mk_ptr_array(toplevel->import.clauses.len, a);
+        for (size_t i = 0; i < toplevel->import.clauses.len; i++) {
+            push_ptr(pretty_import_clause(toplevel->import.clauses.data[i], a), &docs);
         }
-        out = mk_paren_doc("(open ", ")", mv_sep_doc(docs, a), a);
+        out = mk_paren_doc("(import ", ")", mv_sep_doc(docs, a), a);
         break;
     }
     case TLExpr:

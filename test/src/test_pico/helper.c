@@ -20,6 +20,7 @@
 #include "pico/eval/call.h"
 
 #include "test/test_log.h"
+#include "test_pico/helper.h"
 
 typedef struct {
     void (* on_expr)(PiType* type, void* val, void* data, TestLog* log);
@@ -29,22 +30,17 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } Callbacks;
 
-void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Allocator *a) {
+void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Target target, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
-    Allocator exalloc = mk_executable_allocator(a);
-    Allocator* exec = &exalloc;
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(16384, a);
     IStream* cin = mk_capturing_istream(sin, &arena);
 
-    Target gen_target = {
-        .target = mk_assembler(current_cpu_feature_flags(), exec),
-        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
-        .data_aux = mem_alloc(sizeof(U8Array), &arena)
-    };
-    *gen_target.data_aux = mk_u8_array(128, &arena);
+    clear_assembler(target.target);
+    clear_assembler(target.code_aux);
+    target.data_aux->len = 0;
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -74,8 +70,8 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     type_check(&abs, env, &arena, &pi_point);
-    LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
-    EvalResult evres = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    LinkData links = generate_toplevel(abs, env, target, &arena, &point);
+    EvalResult evres = pico_run_toplevel(abs, target, links, module, &arena, &point);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
@@ -90,10 +86,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     }
     // TODO: check evres == expected_val 
 
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -101,10 +94,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     if (callbacks.on_pi_error) {
         callbacks.on_pi_error(pi_point.multi, cin, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -112,10 +102,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     if (callbacks.on_error) {
         callbacks.on_error(point.error_message, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -123,10 +110,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     if (callbacks.on_exit) {
         callbacks.on_exit(data, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     return;
 }
 
@@ -177,7 +161,7 @@ void top_eql(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_eq(const char *string, void *expected_val, Module *module, Environment* env, TestLog* log, Allocator *a) {
+void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
         .on_top = top_eql,
@@ -185,7 +169,8 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, En
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    run_toplevel_internal(string, module, env, callbacks, expected_val, log, a);
+    run_toplevel_internal(string, module, context.env, callbacks, expected_val,
+                          context.log, context.target, context.a);
 }
 
 typedef struct {
@@ -223,7 +208,7 @@ void top_stdout(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, Environment* env, TestLog* log, Allocator *a) {
+void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_stdout,
         .on_top = top_stdout,
@@ -231,17 +216,17 @@ void test_toplevel_stdout(const char *string, const char *expected_stdout, Modul
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    OStream* out = mk_string_ostream(a);
+    OStream* out = mk_string_ostream(context.a);
     StdoutData data = (StdoutData) {
         .stream = out,
         .expected = mv_string(expected_stdout),
     };
 
     OStream* old = set_std_ostream(out);
-    run_toplevel_internal(string, module, env, callbacks, &data, log, a);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
     set_std_ostream(old);
 
-    delete_ostream(out, a);
+    delete_ostream(out, context.a);
 }
 
 void log_exit(void* data, TestLog* log) {
@@ -260,13 +245,14 @@ void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
     release_arena_allocator(arena);
 }
 
-void run_toplevel(const char *string, Module *module, Environment* env, TestLog* log, Allocator *a) {
+void run_toplevel(const char *string, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_pi_error = log_pi_error,
         .on_error = log_error,
         .on_exit = log_exit,
     };
-    run_toplevel_internal(string, module, env, callbacks, NULL, log, a);
+    run_toplevel_internal(string, module, context.env, callbacks, NULL,
+                          context.log, context.target, context.a);
 }
 
 typedef struct {

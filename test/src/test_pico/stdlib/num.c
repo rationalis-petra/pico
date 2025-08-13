@@ -1,10 +1,16 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, env, log, a); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, Allocator *a) {
+void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
+
     // Unsigned Int 64
     if (test_start(log, mv_string("unsigned-add"))) {
         uint64_t expected = 4294967294;

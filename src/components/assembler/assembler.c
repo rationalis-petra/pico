@@ -115,9 +115,11 @@ CPUFeatureFlags current_cpu_feature_flags() {
 
 void clear_assembler(Assembler* assembler) {
     assembler->instructions.len = 0;
+#ifdef DEBUG
     for (size_t i = 0; i < assembler->instructions.len; i++) {
         assembler->instructions.data[i] = 0x90;
     }
+#endif
 }
                                             
 Assembler* mk_assembler(CPUFeatureFlags flags, Allocator* a) {
@@ -130,9 +132,11 @@ Assembler* mk_assembler(CPUFeatureFlags flags, Allocator* a) {
         .gpa = a,
     };
 
+#ifdef DEBUG
     for (size_t i = 0; i < initial_capacity; i++) {
         out->instructions.data[i] = 0x90;
     }
+#endif
     return out;
 }
 

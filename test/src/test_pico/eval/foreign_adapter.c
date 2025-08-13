@@ -1,4 +1,5 @@
 #include "platform/memory/arena.h"
+#include "platform/memory/executable.h"
 
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/values/ctypes.h"
@@ -36,10 +37,17 @@ bool examine_struct(Struct4Words st) {
     return out;
 }
 
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, env, log, a);
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Allocator *a) {
-    Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
+void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Target target, Allocator *a) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
+    Allocator exec = mk_executable_allocator(a);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exec);
     Segments prepped;
     Segments fn_segments = {.data = mk_u8_array(0, a),};
     Segments null_segments = (Segments) {
