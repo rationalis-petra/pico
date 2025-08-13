@@ -63,7 +63,6 @@ MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
 MAKE_DEPS := $(SRCS:%=$(BUILD_DIR)/%.d) $(MAIN_SRC:%=$(BUILD_DIR)/%.d)
 
 # Every folder in ./src will need to be passed to GCC so that it can find header files
-#INC_DIRS := $(shell find $(SRC_DIRS) -type d)
 INC_DIRS := include
 # Add a prefix to INC_DIRS. So moduleA would become -ImoduleA. GCC understands this -I flag
 INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
@@ -89,10 +88,11 @@ $(RELEASE_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
 
-# Build step for C source (release)
+# Build step for C source (debug)
 $(DEBUG_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(DEBUG_FLAGS)
+
 
 # Test stuff
 # ---------------------------------------------
@@ -116,6 +116,10 @@ $(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS)
 $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(TEST_FLAGS) 
+
+
+#  Phony targets
+# ---------------
 
 .PHONY: clean
 clean:

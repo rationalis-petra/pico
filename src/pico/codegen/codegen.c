@@ -775,34 +775,31 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
             source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
         }
-        size_t dest_offset = 0;
+        size_t src_offset = 0;
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            dest_offset = pi_size_align(dest_offset, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
-
             // Find the field in the source & compute offset
-            size_t src_offset = 0;
-            for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType* t = ((Syntax*)syn.structure.fields.data[j].val)->ptype;
-                src_offset += pi_stack_size_of(*t); 
+            size_t dest_offset = 0;
+            for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+                PiType* t = struct_type->structure.fields.data[j].val;
+                dest_offset = pi_size_align(dest_offset, pi_align_of(*t)); 
 
-                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
+                if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
                     break; // offset is correct, end the loop
                 }
+                dest_offset += pi_size_of(*t); 
             }
 
             // We now both the source_offset and dest_offset. These are both
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
+            size_t field_size = pi_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype);
+            src_offset += pi_stack_align(field_size);
             size_t src_stack_offset = source_region_size - src_offset;
             size_t dest_stack_offset = source_region_size + dest_offset;
-            size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-
-            // Compute dest_offset for next loop
-            dest_offset += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
         }
 
         // Remove the space occupied by the temporary values 

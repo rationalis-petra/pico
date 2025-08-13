@@ -233,7 +233,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(struct NestOuter [.n1 (struct [.x -8765] [.y -57] [.z 127])] [.n2 (struct [.x 875] [.y 52] [.z -122])])");
     }
 
-    if (test_start(log, mv_string("struct-refersed"))) {
+    if (test_start(log, mv_string("struct-reversed"))) {
         Point expected = (Point) {.x = 3, .y = -5};
         TEST_EQ("(struct (Struct [.x I64] [.y I64]) [.y -5] [.x 3])");
     }
@@ -258,7 +258,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(struct SML [.x 3] [.y -8])");
     }
 
+    if (test_start(log, mv_string("struct-alter"))) {
+        SmallStruct expected = (SmallStruct) {.x = 3, .y = 12};
+        TEST_EQ("(struct (struct SML [.x 3] [.y -8]) [.y 12])");
+    }
+
     // Projection
+    // ----------
+
     if (test_start(log, mv_string("project-sturct-misaligned"))) {
         int32_t expected = 4;
         TEST_EQ("(seq [let! st (struct MAS [.x 3] [.y -5] [.z 4])] st.z)");
@@ -268,11 +275,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int8_t expected = -8;
         TEST_EQ("(seq [let! st (struct SML [.x 3] [.y -8])] st.y)");
     }
-
-    /* if (test_start(log, mv_string("project-nested"))) { */
-    /*     uint64_t expected = -57; */
-    /*     TEST_EQ("(struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])]).p2.x"); */
-    /* } */
 
     RUN("(def thrice struct NestInner [.x -12] [.y 3] [.z 1])") ;
     if (test_start(log, mv_string("project-point3-x"))) {
@@ -325,6 +327,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(match (:some (struct [.x (is 1100 I32)] [.y (is -200 I32)]))\n"
                  "  [[:some pr] (i32.+ pr.x pr.y)])");
     }
+
     // -----------------------------------------------------
     // 
     //      Type Metadata (size, align, offset)

@@ -13,15 +13,21 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         .target = target,
 
     };
+
     // -------------------------------------------------------------------------
     //
-    //     Static control and binding - seq/let
+    //     Static control and binding - seq/let/if/
     //
     // -------------------------------------------------------------------------
 
-    if (test_start(log, mv_string("simple-let"))) {
-        int64_t expected = 3;
-        TEST_EQ("((all [A] (let [x (is 3 I64)] x)) {Unit})");
+    if (test_start(log, mv_string("seq-simple"))) {
+        int64_t expected = 17;
+        TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
+    }
+
+    if (test_start(log, mv_string("seq-fvar"))) {
+        int64_t expected = -10;
+        TEST_EQ("((all [A] proc [(x A)] (seq x 3 10 x)) -10)");
     }
 
     if (test_start(log, mv_string("simple-let"))) {
@@ -33,6 +39,17 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("large-let"))) {
         int64_t expected[2] = {3, -10};
         TEST_EQ("((all [A] (let [x (struct Point [.x 3] [.y -10])] x)) {Unit})");
+    }
+
+    RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
+    if (test_start(log, mv_string("simple-if-true"))) {
+        int64_t expected = 3;
+        TEST_EQ("(choose :true 3 4)");
+    }
+
+    if (test_start(log, mv_string("simple-if-false"))) {
+        int64_t expected = 4;
+        TEST_EQ("(choose :false 3 4)");
     }
 
     // -------------------------------------------------------------------------
