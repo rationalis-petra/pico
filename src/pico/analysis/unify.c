@@ -1,7 +1,7 @@
-#include "platform/signals.h"
-#include "pretty/string_printer.h"
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
+#include "platform/signals.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/analysis/unify.h"
 
@@ -113,9 +113,9 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Alloc
         out = uvar_subst(rhs->uvar, lhs, a);
         if (out.type != UOk) return out;
     }
-    else if (rhs->sort == lhs->sort)
+    else if (rhs->sort == lhs->sort) {
         out = unify_eq(lhs, rhs, rename, a);
-    else {
+    } else {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), a), &nodes);
         push_ptr(pretty_type(lhs, a), &nodes);
@@ -457,7 +457,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                 if (!found_field) {
                     PtrArray nodes = mk_ptr_array(4, a);
                     push_ptr(mv_cstr_doc("Does not satisfy field constraint - field not found:", a), &nodes);
-                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_str_doc(symbol_to_string(uvar->constraints.data[i].has_field.name, a), a), &nodes);
                     push_ptr(mv_cstr_doc("in type:", a), &nodes);
                     push_ptr(pretty_type(type, a), &nodes);
                                   
@@ -493,7 +493,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
                 if (!found_variant) {
                     PtrArray nodes = mk_ptr_array(5, a);
                     push_ptr(mv_cstr_doc("Does not satisfy variant constraint - variant not found:", a), &nodes);
-                    push_ptr(mv_str_doc(*symbol_to_string(uvar->constraints.data[i].has_field.name), a), &nodes);
+                    push_ptr(mv_str_doc(symbol_to_string(uvar->constraints.data[i].has_field.name, a), a), &nodes);
                     {
                         PtrArray types = *uvar->constraints.data[i].has_variant.types;
                         PtrArray ptypes = mk_ptr_array(types.len, a);

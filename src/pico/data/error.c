@@ -1,10 +1,10 @@
 #include "data/stream.h"
 #include "data/stringify.h"
 #include "platform/io/terminal.h"
+#include "components/pretty/document.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/standard_types.h"
 
-#include "pretty/document.h"
-#include "pretty/stream_printer.h"
-#include "pretty/standard_types.h"
 #include "pico/data/error.h"
 
 _Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err) {
@@ -23,11 +23,16 @@ const Colour message_colour = (Colour){.r = 200, .g = 20, .b = 20};
 const Colour regular_code_colour = (Colour){.r = 150, .g = 150, .b = 150};
 const Colour bad_code_colour = (Colour){.r = 208, .g = 105, .b = 30};
 
-void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocator* a) {
+void display_error(MultiError multi, IStream *is, FormattedOStream* fos, const char* filename, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
     String* buffer = get_captured_buffer(is);
+
+    if (filename) {
+        write_fstring(mv_string(filename), fos);
+        write_fstring(mv_string(": \n\n"), fos);
+    }
 
     if (multi.has_many) {
         for (size_t i = 0; i < multi.errors.len; i++) {
@@ -163,6 +168,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                     start_coloured_text(colour(208, 105, 30), fos);
                 }
                 write_fstring(bad_line, fos);
+                delete_string(bad_line, a);
                 start_idx = i + 1;
             }
         }

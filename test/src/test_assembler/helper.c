@@ -1,7 +1,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 #include "test_assembler/helper.h"
 
 Document* pretty_expected(uint8_t* expected, Allocator* a) { 

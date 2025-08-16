@@ -3,8 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
-#include "data/num.h"
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/codegen/polymorphic.h"
 #include "pico/codegen/internal.h"
@@ -236,10 +235,32 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Use RAX as a temp
             // Note: casting void* to uint64_t only works for 64-bit systems...
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
-                || indistinct_type.sort == TPrim || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
+                || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(ass, Mov, reg(R8, sz_64), imm64(*(uint64_t*)e.value), a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
                 build_unary_op(ass, Push, reg(R8, sz_64), a, point);
+
+            } else if (indistinct_type.sort == TPrim) {
+                size_t prim_size = pi_size_of(indistinct_type);
+                AsmResult out;
+                /* if (prim_size == 0) { */
+                /*     // Do nothing, unit value */
+                /* } else */
+                if (prim_size == 1) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), a, point);
+                } else if (prim_size == 2) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint16_t*)e.value), a, point);
+                } else if (prim_size == 4) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint32_t*)e.value), a, point);
+                } else if (prim_size == 8) {
+                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
+                } else {
+                    panic(mv_string("Codegen expects globals bound to primitives to have size 1, 2, 4 or 8."));
+                }
+                backlink_global(syn.variable, out.backlink, links, a);
+                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+
+            // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(*syn.ptype);
                 AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
@@ -253,15 +274,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 throw_error(point,
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
-                                        *symbol_to_string(syn.variable),
+                                        symbol_to_string(syn.variable,a ),
                                         mv_string("' has unsupported sort")));
             }
             break;
         }
         case ANotFound: {
-            String* sym = symbol_to_string(syn.variable);
+            String sym = symbol_to_string(syn.variable, a);
             String msg = mv_string("Couldn't find variable during codegen: ");
-            throw_error(point, string_cat(msg, *sym, a));
+            throw_error(point, string_cat(msg, sym, a));
             break;
         }
         case ATooManyLocals:
@@ -827,8 +848,31 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
         build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
 
-        // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
+        break;
+    }
+    case SDynamicSet: {
+        // TODO: convert this to 'true' polymorphic code
+        size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
+        generate_polymorphic_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
+        generate_polymorphic_i(*syn.dynamic_set.new_val, env, target, links, a, point);
+
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi, arg2 = rsi, arg3 = RDX
+        build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(val_size), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx, arg2 = rdx, arg3 = R8
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(R8, sz_64), imm32(val_size), a, point);
+#else
+#error "unknown ABI"
+#endif
+        generate_c_call(set_dynamic_val, ass, a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), a, point);
         break;
     }
     case SLet: {

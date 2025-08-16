@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
@@ -14,8 +14,7 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/meta.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/foreign.h"
 
 // forward declarations
@@ -68,34 +67,19 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         top->decl.decls = declarations;
         break;
     }
-    case TLOpen: {
-        for (size_t i = 0; i < top->open.paths.len; i++) {
-            SymbolArray* arr = top->open.paths.data[i];
-            // TODO (SAFETY): assert arr->len > 0
-            EnvEntry entry = env_lookup(arr->data[0], env);
-            Module* current;
-            if (entry.type != Ok || !entry.is_module) {
-                String msg = string_cat(mv_string("Module does not exist: "), *symbol_to_string(arr->data[0]), a);
+    case TLImport: {
+        for (size_t i = 0; i < top->import.clauses.len; i++) {
+            ImportClause clause = top->import.clauses.data[i];
+            if (!import_clause_valid(env, clause)) {
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_cstr_doc("Invalid import path: ", a), &nodes);
+                push_ptr(pretty_import_clause(clause, a), &nodes);
+
                 PicoError err = (PicoError) {
-                    .range = top->open.range,
-                    .message = mv_str_doc(msg, a),
+                    .range = top->import.range,
+                    .message = mv_sep_doc(nodes, a),
                 };
                 throw_pi_error(point, err);
-            } 
-            current = entry.value;
-            for (size_t j = 1; j < arr->len; j++) {
-                ModuleEntry* entry = get_def(arr->data[j], current);
-                if (entry && entry->is_module) {
-                    current = entry->value;
-                }
-                else {
-                    String msg = string_cat(mv_string("Module does not exist: "), *symbol_to_string(arr->data[j]), a);
-                    PicoError err = (PicoError) {
-                        .range = top->open.range,
-                        .message = mv_str_doc(msg, a),
-                    };
-                    throw_pi_error(point, err);
-                }
             }
         }
         break;
@@ -241,8 +225,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 untyped->type_val = te.value;
             }
         } else {
-            String* sym = symbol_to_string(untyped->variable);
-            err.message = mv_str_doc(string_cat(mv_string("Couldn't find type of variable: "), *sym, a), a);
+            String sym = symbol_to_string(untyped->variable, a);
+            err.message = mv_str_doc(string_cat(mv_string("Couldn't find type of variable: "), sym, a), a);
             throw_pi_error(point, err);
         }
         break;
@@ -548,7 +532,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             if (!found_variant) {
                 String msg_origin = mv_string("Could not find variant tag: ");
-                String data = *symbol_to_string(untyped->variant.tagname);
+                String data = symbol_to_string(untyped->variant.tagname, a);
                 err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
                 throw_pi_error(point, err);
             }
@@ -599,7 +583,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             if (!found_variant) {
                 String msg_origin = mv_string("Could not find variant tag: ");
-                String data = *symbol_to_string(untyped->variant.tagname);
+                String data = symbol_to_string(untyped->variant.tagname, a);
                 err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
                 throw_pi_error(point, err);
             }
@@ -731,7 +715,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             PiType* struct_type = unwrap_type(untyped->ptype, a);
 
             if (struct_type->sort != TStruct) {
-                err.message = mv_cstr_doc("Structure type invalid", a);
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
+                push_ptr(pretty_type(struct_type, a), &nodes);
+                err.message = mv_sep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 
@@ -748,7 +735,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                             has_field = true;
                     }
                     if (!has_field) {
-                        push_ptr(mk_str_doc(*symbol_to_string(field), a), &docs);
+                        push_ptr(mk_str_doc(symbol_to_string(field, a), a), &docs);
                     }
                 }
                 
@@ -904,6 +891,17 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         untyped->ptype = dyn_type->dynamic;
         break;
     }
+    case SDynamicSet: {
+        type_infer_i(untyped->dynamic_set.dynamic, env, a, point);
+        PiType* dyn_type = untyped->dynamic_set.dynamic->ptype; 
+        if (dyn_type->sort != TDynamic) {
+            err.message = mv_cstr_doc("set on non-dynamic type!", a);
+            throw_pi_error(point, err);
+        }
+        type_check_i(untyped->dynamic_set.new_val, dyn_type->dynamic, env, a, point);
+        untyped->ptype = mk_prim_type(a, Unit);
+        break;
+    }
     case SDynamicLet: {
         for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
@@ -926,11 +924,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         for (size_t i = 0; i < untyped->let_expr.bindings.len; i++) {
             Symbol arg = untyped->let_expr.bindings.data[i].key;
             Syntax* val = untyped->let_expr.bindings.data[i].val;
-            PiType* ty = mk_uvar(a);
 
-            type_check_i(val, ty, env, a, point);
+            type_infer_i(val, env, a, point);
+
             // TODO (FEAT): add support for recursive bindings (e.g. procedures)
-            type_var(arg, ty, env);
+            type_var(arg, val->ptype, env);
         }
         type_infer_i(untyped->let_expr.body, env, a, point);
         untyped->ptype = untyped->let_expr.body->ptype;
@@ -972,7 +970,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("Error in go-to: label not found:", a), &nodes);
-            push_ptr(mk_str_doc(*symbol_to_string(untyped->go_to.label), a), &nodes);
+            push_ptr(mk_str_doc(symbol_to_string(untyped->go_to.label, a), a), &nodes);
             err.message = mv_sep_doc(nodes, a);
             throw_pi_error(point, err);
         }
@@ -1785,6 +1783,10 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SDynamicUse:
         post_unify(syn->use, env, a, point);
         break;
+    case SDynamicSet:
+        post_unify(syn->dynamic_set.dynamic, env, a, point);
+        post_unify(syn->dynamic_set.new_val, env, a, point);
+        break;
 
     // Control Flow & Binding
     case SDynamicLet:
@@ -2052,6 +2054,10 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     case SDynamicUse:
         squash_types(typed->use, a, point);
+        break;
+    case SDynamicSet:
+        squash_types(typed->dynamic_set.dynamic, a, point);
+        squash_types(typed->dynamic_set.new_val, a, point);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {

@@ -21,15 +21,11 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         res.val.val = pico_run_expr(target, sz, a, point);
         break;
     }
-    case TLOpen: {
-        res.type = EROpen;
-        res.opened = top.open.paths;
-        for (size_t i = 0; i < top.open.paths.len; i++) {
-            ImportClause clause = (ImportClause) {
-                .type = ImportAll,
-                .path = *(SymbolArray*)top.open.paths.data[i],
-            };
-            add_import_clause(clause, module);
+    case TLImport: {
+        res.type = ERImport;
+        res.imported = top.import.clauses;
+        for (size_t i = 0; i < top.import.clauses.len; i++) {
+            add_import_clause(top.import.clauses.data[i], module);
         }
         break;
     }
@@ -158,26 +154,18 @@ Document* pretty_res(EvalResult res, Allocator* a) {
     case ERDef: {
         PtrArray docs = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
-        push_ptr(mk_str_doc(*symbol_to_string(res.def.name), a), &docs);
+        push_ptr(mk_str_doc(symbol_to_string(res.def.name, a), a), &docs);
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
         push_ptr(pretty_type(res.def.type, a), &docs);
         out = mv_cat_doc(docs, a);
         break;
     }
-    case EROpen: {
-        PtrArray docs = mk_ptr_array(res.opened.len + 1, a);
+    case ERImport: {
+        PtrArray docs = mk_ptr_array(res.imported.len + 1, a);
         push_ptr(mk_str_doc(mv_string("Opened:"), a), &docs);
-        for (size_t i = 0; i < res.opened.len; i++) {
-            SymbolArray* syms = res.opened.data[i];
-            PtrArray elts = mk_ptr_array(2 * syms->len, a);
-            for (size_t j = 0; j < syms->len; j++) {
-                push_ptr(mk_str_doc(*symbol_to_string(syms->data[j]), a), &elts);
-                if (j + 1 != syms->len) {
-                    push_ptr(mk_str_doc(mv_string("."), a), &elts);
-                }
-            }
-              
-            push_ptr(mv_cat_doc(elts, a), &docs);
+        for (size_t i = 0; i < res.imported.len; i++) {
+            ImportClause clause = res.imported.data[i];
+            push_ptr(pretty_import_clause(clause, a), &docs);
         }
         out = mv_sep_doc(docs, a);
         break;

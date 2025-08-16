@@ -125,12 +125,14 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links);
 
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a) {
     Module* module = (Module*) mem_alloc(sizeof(Module), a);
-    module->entries = mk_entry_amap(32, a);
-    module->header = copy_module_header(header, a);
-    module->lexical_parent_package = pkg_parent;
-    module->lexical_parent_module = parent;
-    module->allocator = a;
-    module->executable_allocator = mk_executable_allocator(a);
+    *module = (Module) {
+        .entries = mk_entry_amap(32, a),
+        .header = copy_module_header(header, a),
+        .lexical_parent_package = pkg_parent,
+        .lexical_parent_module = parent,
+        .allocator = a,
+        .executable_allocator = mk_executable_allocator(a),
+    };
     return module;
 }
 
@@ -387,8 +389,8 @@ ModuleEntry* get_def(Symbol symbol, Module* module) {
     return (ModuleEntry*)entry_lookup(symbol, module->entries);
 }
 
-String* get_name(Module* module) {
-    return symbol_to_string(module->header.name);
+String get_name(Module* module, Allocator* a) {
+    return symbol_to_string(module->header.name, a);
 }
 
 SymbolArray get_defined_symbols(Module* module, Allocator* a) {

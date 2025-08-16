@@ -4,7 +4,7 @@
 #include "platform/memory/allocator.h"
 #include "data/result.h"
 
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 
 #include "pico/data/sym_sarr_amap.h"
 #include "pico/syntax/header.h"
@@ -145,7 +145,7 @@ ModuleEntry* get_def(Symbol symbol, Module* module);
 SymbolArray get_defined_symbols(Module* module, Allocator* a);
 PtrArray get_defined_instances(Module* module, Allocator* a);
 
-String* get_name(Module* module);
+String get_name(Module* module, Allocator* a);
 Package* get_package(Module* module);
 Module* get_parent(Module* module);
 Imports get_imports(Module* module);

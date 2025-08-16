@@ -11,12 +11,10 @@ void set_exit_callback(jump_buf* buf);
 
 Allocator* get_std_allocator();
 
-Module* get_std_current_module();
-Module* set_std_current_module(Module* al);
-
-void set_current_package(Package* current);
 void set_std_istream(IStream* current);
+
 OStream* set_std_ostream(OStream* current);
+OStream *get_std_ostream();
 
 Allocator get_std_current_allocator();
 Allocator set_std_current_allocator(Allocator al);
