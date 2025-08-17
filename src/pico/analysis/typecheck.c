@@ -1,5 +1,4 @@
 #include "platform/error.h"
-#include "platform/memory/executable.h"
 #include "platform/signals.h"
 
 #include "data/string.h"
@@ -18,15 +17,15 @@
 #include "pico/stdlib/foreign.h"
 
 // forward declarations
-void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-void type_infer_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx);
+void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void post_unify(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+PiType* eval_type(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 
 // Check a toplevel expression
-void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* point) {
+void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     // If this is a definition, lookup the type to check against 
-    TypeEnv *t_env = mk_type_env(env, a);
+    TypeEnv *t_env = mk_type_env(env, ctx.a);
     switch (top->type) {
     case TLDef: {
         PiType* check_against;
@@ -36,21 +35,21 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         if (ty != NULL) {
             check_against = ty;
         } else {
-            check_against = mk_uvar(a);
+            check_against = mk_uvar(ctx.a);
         }
         type_var(top->def.bind, check_against, t_env);
-        type_check_expr(term, *check_against, t_env, a, point);
-        post_unify(term, t_env, a, point);
+        type_check_expr(term, *check_against, t_env, ctx);
+        post_unify(term, t_env, ctx.a, ctx.point);
         pop_type(t_env);
         break;
     }
     case TLDecl: {
-        PtrArray declarations = mk_ptr_array(2, a);
+        PtrArray declarations = mk_ptr_array(2, ctx.a);
         for (size_t i = 0; i < top->decl.properties.len; i++) {
             SymPtrCell cell = top->decl.properties.data[i];
             if (symbol_eq(cell.key, string_to_symbol(mv_string("type")))) {
-                PiType* ty = eval_type(cell.val, t_env, a, point);
-                ModuleDecl* decl = mem_alloc(sizeof(ModuleDecl), a);
+                PiType* ty = eval_type(cell.val, t_env, ctx);
+                ModuleDecl* decl = mem_alloc(sizeof(ModuleDecl), ctx.a);
                 *decl = (ModuleDecl) {
                     .sort = DeclType,
                     .type = ty,
@@ -59,9 +58,9 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
             } else {
                 PicoError err = (PicoError) {
                     .range = ((Syntax*)cell.val)->range,
-                    .message = mv_cstr_doc("unrecognized declaration", a),
+                    .message = mv_cstr_doc("unrecognized declaration", ctx.a),
                 };
-                throw_pi_error(point, err);
+                throw_pi_error(ctx.point, err);
             }
         }
         top->decl.decls = declarations;
@@ -71,33 +70,33 @@ void type_check(TopLevel* top, Environment* env, Allocator* a, PiErrorPoint* poi
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
             if (!import_clause_valid(env, clause)) {
-                PtrArray nodes = mk_ptr_array(2, a);
-                push_ptr(mv_cstr_doc("Invalid import path: ", a), &nodes);
-                push_ptr(pretty_import_clause(clause, a), &nodes);
+                PtrArray nodes = mk_ptr_array(2, ctx.a);
+                push_ptr(mv_cstr_doc("Invalid import path: ", ctx.a), &nodes);
+                push_ptr(pretty_import_clause(clause, ctx.a), &nodes);
 
                 PicoError err = (PicoError) {
                     .range = top->import.range,
-                    .message = mv_sep_doc(nodes, a),
+                    .message = mv_sep_doc(nodes, ctx.a),
                 };
-                throw_pi_error(point, err);
+                throw_pi_error(ctx.point, err);
             }
         }
         break;
     }
     case TLExpr: {
         Syntax* term = top->expr;
-        type_infer_expr(term, t_env, a, point);
-        post_unify(term, t_env, a, point);
+        type_infer_expr(term, t_env, ctx);
+        post_unify(term, t_env, ctx.a, ctx.point);
         break;
     }
     }
 }
 
 // Forward declarations for implementation (internal declarations)
-void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
-void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
+void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx);
+void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
+void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx);
 void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
@@ -106,14 +105,14 @@ void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* 
 // -----------------------------------------------------------------------------
 // Interface
 // -----------------------------------------------------------------------------
-void type_infer_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
-    type_infer_i (untyped, env, a, point);
-    squash_types(untyped, a, point);
+void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
+    type_infer_i (untyped, env, ctx);
+    squash_types(untyped, ctx.a, ctx.point);
 }
 
-void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
-    type_check_i (untyped, &type, env, a, point);
-    squash_types(untyped, a, point);
+void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx) {
+    type_check_i (untyped, &type, env, ctx);
+    squash_types(untyped, ctx.a, ctx.point);
 }
 
 // -----------------------------------------------------------------------------
@@ -145,14 +144,16 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, Allocator* a, P
 //
 // -----------------------------------------------------------------------------
 
-void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
-    type_infer_i(untyped, env, a, point);
-    UnifyResult out = unify(type, untyped->ptype, a);
-    check_result_out(out, untyped->range, a, point);
+void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx) {
+    type_infer_i(untyped, env, ctx);
+    UnifyResult out = unify(type, untyped->ptype, ctx.a);
+    check_result_out(out, untyped->range, ctx.a, ctx.point);
 }
 
 // "internal" type inference. Destructively mutates types.
-void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PiErrorPoint* point = ctx.point;
     PicoError err;
     err.range = untyped->range;
     // Sometimes we go back and typecheck a term again, e.g. checking an
@@ -177,7 +178,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SLitArray: {
         PiType* element_type = mk_uvar(a);
         for (size_t i = 0; i < untyped->array_lit.subterms.len; i++) {
-            type_check_i(untyped->array_lit.subterms.data[i], element_type, env, a, point);
+            type_check_i(untyped->array_lit.subterms.data[i], element_type, env, ctx);
         }
         PtrArray dimensions = mk_ptr_array(untyped->array_lit.shape.len, a);
         for (size_t i = 0; i < untyped->array_lit.shape.len; i++) {
@@ -252,7 +253,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SymPtrACell arg = untyped->procedure.implicits.data[i];
             PiType* aty;
             if (arg.val) {
-                aty = eval_type(arg.val, env, a, point);
+                aty = eval_type(arg.val, env, ctx);
                 if (aty->sort != TTraitInstance) {
                     err.message = mv_cstr_doc("Instance procedure argument does not have instance type.", a);
                     throw_pi_error(point, err);
@@ -268,7 +269,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SymPtrACell arg = untyped->procedure.args.data[i];
             PiType* aty;
             if (arg.val) {
-                aty = eval_type(arg.val, env, a, point);
+                aty = eval_type(arg.val, env, ctx);
             } else  {
                 aty = mk_uvar(a);
             }
@@ -276,7 +277,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             push_ptr(aty, &proc_ty->proc.args);
         }
 
-        type_infer_i(untyped->procedure.body, env, a, point); 
+        type_infer_i(untyped->procedure.body, env, ctx); 
         pop_types(env, untyped->procedure.args.len + untyped->procedure.implicits.len);
         proc_ty->proc.ret = untyped->procedure.body->ptype;
         break;
@@ -298,7 +299,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             push_symbol(arg, &all_ty->binder.vars);
         }
 
-        type_infer_i(untyped->all.body, env, a, point); 
+        type_infer_i(untyped->all.body, env, ctx); 
         pop_types(env, untyped->all.args.len);
         all_ty->binder.body = untyped->all.body->ptype;
         break;
@@ -310,7 +311,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
         PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
 
-        type_check_i(untyped->transformer, transformer_proc, env, a, point);
+        type_check_i(untyped->transformer, transformer_proc, env, ctx);
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {
             .sort = TPrim,
@@ -320,7 +321,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SApplication: {
-        type_infer_i(untyped->application.function, env, a, point);
+        type_infer_i(untyped->application.function, env, ctx);
         PiType fn_type = *untyped->application.function->ptype;
         if (fn_type.sort == TUVar) {
             // fill in structure 
@@ -349,7 +350,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             for (size_t i = 0; i < fn_type.proc.args.len; i++) {
                 type_check_i(untyped->application.args.data[i],
                              (PiType*)fn_type.proc.args.data[i],
-                             env, a, point);
+                             env, ctx);
             }
 
             untyped->ptype = fn_type.proc.ret;
@@ -375,7 +376,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             untyped->type = SAllApplication;
             untyped->all_application = new_app;
-            type_infer_i(untyped, env, a, point);
+            type_infer_i(untyped, env, ctx);
         } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
                 err.message = mv_cstr_doc("Incorrect number of family arguments", a);
@@ -386,7 +387,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             *kind = (PiType) {.sort = TKind, .kind.nargs = 0};
             for (size_t i = 0; i < fn_type.kind.nargs; i++) {
                 type_check_i(untyped->application.args.data[i],
-                             kind, env, a, point);
+                             kind, env, ctx);
             }
             untyped->ptype = kind;
         } else {
@@ -400,7 +401,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SAllApplication: {
-        type_infer_i(untyped->all_application.function, env, a, point);
+        type_infer_i(untyped->all_application.function, env, ctx);
 
         PiType all_type = *untyped->all_application.function->ptype;
         if (all_type.sort == TUVar) {
@@ -427,7 +428,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
             for (size_t i = 0; i < all_type.binder.vars.len; i++) {
                 Syntax* type = untyped->all_application.types.data[i];
-                eval_type(type, env, a, point);
+                eval_type(type, env, ctx);
                 sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
             }
 
@@ -472,7 +473,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
             for (size_t i = 0; i < all_type.binder.vars.len; i++) {
                 Syntax* type = untyped->all_application.types.data[i];
-                eval_type(type, env, a, point);
+                eval_type(type, env, ctx);
                 sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
             }
         
@@ -491,7 +492,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             for (size_t i = 0; i < proc_type->proc.args.len; i++) {
                 type_check_i(untyped->all_application.args.data[i],
                              (PiType*)proc_type->proc.args.data[i],
-                             env, a, point);
+                             env, ctx);
             }
 
             untyped->ptype = proc_type->proc.ret;
@@ -501,7 +502,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SConstructor: {
         // Typecheck variant
         if (untyped->variant.enum_type) {
-            untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
+            untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
             PiType* enum_type = unwrap_type(untyped->ptype, a);
 
             if (enum_type->sort != TEnum) {
@@ -548,7 +549,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SVariant: {
         // Typecheck variant
         if (untyped->variant.enum_type) {
-            untyped->ptype = eval_type(untyped->variant.enum_type, env, a, point);
+            untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
             PiType* enum_type = unwrap_type(untyped->ptype, a);
 
             if (enum_type->sort != TEnum) {
@@ -575,7 +576,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                     }
 
                     for (size_t i = 0; i < args->len; i++) {
-                        type_check_i(untyped->variant.args.data[i], args->data[i], env, a, point);
+                        type_check_i(untyped->variant.args.data[i], args->data[i], env, ctx);
                     }
                     break;
                 }
@@ -592,7 +593,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             PtrArray types = mk_ptr_array(untyped->variant.args.len, a);
 
             for (size_t i = 0; i < untyped->variant.args.len; i++) {
-                type_infer_i(untyped->variant.args.data[i], env, a, point);
+                type_infer_i(untyped->variant.args.data[i], env, ctx);
                 push_ptr(((Syntax*)untyped->variant.args.data[i])->ptype, &types);
             }
             UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, a);
@@ -602,7 +603,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     }
     case SMatch: {
         // Typecheck the input 
-        type_infer_i(untyped->match.val, env, a, point);
+        type_infer_i(untyped->match.val, env, ctx);
 
         PiType* enum_type = unwrap_type(untyped->match.val->ptype, a); 
         if (enum_type->sort == TEnum) {
@@ -646,7 +647,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                     type_var(arg, aty, env);
                 }
 
-                type_check_i(clause->body, out_ty, env, a, point);
+                type_check_i(clause->body, out_ty, env, ctx);
                 pop_types(env, types_to_bind->len);
             }
 
@@ -681,14 +682,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                     type_var(arg, aty, env);
                 }
 
-                type_check_i(clause->body, out_ty, env, a, point);
+                type_check_i(clause->body, out_ty, env, ctx);
                 pop_types(env, types.len);
 
                 PtrArray* to_insert = mem_alloc(sizeof(PtrArray), a);
                 *to_insert = types;
                 sym_ptr_insert(clause->tagname, to_insert, &enum_type->enumeration.variants);
             }
-            type_check_i(untyped->match.val, enum_type, env, a, point);
+            type_check_i(untyped->match.val, enum_type, env, ctx);
         } else {
             err.range = untyped->match.val->range;
             PtrArray nodes;
@@ -703,9 +704,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         if (untyped->structure.base) {
             bool all_fields_required;
-            type_infer_i(untyped->structure.base, env, a, point);
+            type_infer_i(untyped->structure.base, env, ctx);
             if (untyped->structure.base->ptype->sort == TKind) {
-                untyped->ptype = eval_type(untyped->structure.base, env, a, point);
+                untyped->ptype = eval_type(untyped->structure.base, env, ctx);
                 all_fields_required = true;
             } else {
                 untyped->ptype = untyped->structure.base->ptype;
@@ -748,7 +749,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
                 if (field_syn) {
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
-                    type_check_i(*field_syn, field_ty, env, a, point);
+                    type_check_i(*field_syn, field_ty, env, ctx);
                 } else if (all_fields_required) {
                     panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
                     throw_pi_error(point, err);
@@ -764,7 +765,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 //                 reorder the fields!
                 // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
-                type_infer_i(cell.val, env, a, point);
+                type_infer_i(cell.val, env, ctx);
                 sym_ptr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
             }
             untyped->ptype = mem_alloc(sizeof(PiType), a);
@@ -773,7 +774,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SProjector: {
-        type_infer_i(untyped->projector.val, env, a, point);
+        type_infer_i(untyped->projector.val, env, ctx);
         PiType source_type = *unwrap_type(untyped->projector.val->ptype, a);
 
         if (source_type.sort == TStruct) {
@@ -837,14 +838,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SymPtrACell arg = untyped->instance.implicits.data[i];
             PiType* aty;
             if (arg.val) {
-                aty = eval_type(arg.val, env, a, point);
+                aty = eval_type(arg.val, env, ctx);
             } else  {
                 aty = mk_uvar(a);
             }
             type_var(arg.key, aty, env);
         }
 
-        *ty = *eval_type(untyped->instance.constraint, env, a, point);
+        *ty = *eval_type(untyped->instance.constraint, env, ctx);
 
         if (ty->sort != TTraitInstance) {
             err.message = mv_cstr_doc("Instance type invalid", a);
@@ -860,7 +861,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             Syntax** field_syn = (Syntax**)sym_ptr_lookup(ty->instance.fields.data[i].key, untyped->instance.fields);
             if (field_syn) {
                 PiType* field_ty = ty->instance.fields.data[i].val;
-                type_check_i(*field_syn, field_ty, env, a, point);
+                type_check_i(*field_syn, field_ty, env, ctx);
             } else {
                 err.message = mv_cstr_doc("Trait instance is missing a field", a);
                 throw_pi_error(point, err);
@@ -871,7 +872,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SDynamic: {
-        type_infer_i(untyped->dynamic, env, a, point);
+        type_infer_i(untyped->dynamic, env, ctx);
         PiType* inner_type = untyped->dynamic->ptype; 
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {
@@ -882,7 +883,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SDynamicUse: {
-        type_infer_i(untyped->dynamic, env, a, point);
+        type_infer_i(untyped->dynamic, env, ctx);
         PiType* dyn_type = untyped->dynamic->ptype; 
         if (dyn_type->sort != TDynamic) {
             err.message = mv_cstr_doc("use on non-dynamic type!", a);
@@ -892,13 +893,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SDynamicSet: {
-        type_infer_i(untyped->dynamic_set.dynamic, env, a, point);
+        type_infer_i(untyped->dynamic_set.dynamic, env, ctx);
         PiType* dyn_type = untyped->dynamic_set.dynamic->ptype; 
         if (dyn_type->sort != TDynamic) {
             err.message = mv_cstr_doc("set on non-dynamic type!", a);
             throw_pi_error(point, err);
         }
-        type_check_i(untyped->dynamic_set.new_val, dyn_type->dynamic, env, a, point);
+        type_check_i(untyped->dynamic_set.new_val, dyn_type->dynamic, env, ctx);
         untyped->ptype = mk_prim_type(a, Unit);
         break;
     }
@@ -913,10 +914,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 .dynamic = val_ty,
             };
 
-            type_check_i(dbind->var, dyn_ty, env, a, point);
-            type_check_i(dbind->expr, val_ty, env, a, point);
+            type_check_i(dbind->var, dyn_ty, env, ctx);
+            type_check_i(dbind->expr, val_ty, env, ctx);
         }
-        type_infer_i(untyped->dyn_let_expr.body, env, a, point);
+        type_infer_i(untyped->dyn_let_expr.body, env, ctx);
         untyped->ptype = untyped->dyn_let_expr.body->ptype;
         break;
     }
@@ -925,12 +926,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             Symbol arg = untyped->let_expr.bindings.data[i].key;
             Syntax* val = untyped->let_expr.bindings.data[i].val;
 
-            type_infer_i(val, env, a, point);
+            type_infer_i(val, env, ctx);
 
             // TODO (FEAT): add support for recursive bindings (e.g. procedures)
             type_var(arg, val->ptype, env);
         }
-        type_infer_i(untyped->let_expr.body, env, a, point);
+        type_infer_i(untyped->let_expr.body, env, ctx);
         untyped->ptype = untyped->let_expr.body->ptype;
         pop_types(env, untyped->let_expr.bindings.len);
         break;
@@ -938,17 +939,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     case SIf: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType) {.sort = TPrim,.prim = Bool};
-        type_check_i(untyped->if_expr.condition,
-                     t, env, a, point);
+        type_check_i(untyped->if_expr.condition, t, env, ctx);
 
         PiType* out_type = mk_uvar(a);
-        type_check_i(untyped->if_expr.true_branch,
-                     out_type,
-                     env, a, point);
+        type_check_i(untyped->if_expr.true_branch, out_type, env, ctx);
 
-        type_check_i(untyped->if_expr.false_branch,
-                     out_type,
-                     env, a, point);
+        type_check_i(untyped->if_expr.false_branch, out_type, env, ctx);
         untyped->ptype = out_type;
         break;
     }
@@ -961,7 +957,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             for (size_t i = 0; i < args->len; i++) {
-                type_check_i(untyped->go_to.args.data[i], args->data[i], env, a, point);
+                type_check_i(untyped->go_to.args.data[i], args->data[i], env, ctx);
             }
 
             // TODO (FEATURE): another type of defaulted uvar - unit!
@@ -992,7 +988,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
 
         type_var(untyped->with_reset.point_sym, reset_ty, env);
-        type_check_i(untyped->with_reset.expr, tya, env, a, point);
+        type_check_i(untyped->with_reset.expr, tya, env, ctx);
         pop_type(env);
 
         PiType* mark_ty = mem_alloc(sizeof(PiType), a);
@@ -1001,7 +997,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         // continuation 
         type_var(untyped->with_reset.in_sym, tyin, env);
         type_var(untyped->with_reset.cont_sym, mark_ty, env);
-        type_check_i(untyped->with_reset.handler, tya, env, a, point);
+        type_check_i(untyped->with_reset.handler, tya, env, ctx);
         pop_types(env, 2);
         break;
     }
@@ -1013,8 +1009,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         PiType* reset_ty = mem_alloc(sizeof(PiType), a);
         *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
 
-        type_check_i(untyped->reset_to.point, reset_ty, env, a, point);
-        type_check_i(untyped->reset_to.arg, tyin, env, a, point);
+        type_check_i(untyped->reset_to.point, reset_ty, env, ctx);
+        type_check_i(untyped->reset_to.arg, tyin, env, ctx);
         break;
     }
     case SLabels: {
@@ -1039,7 +1035,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 SymPtrACell arg = branch->args.data[i];
                 PiType* aty;
                 if (arg.val) {
-                    aty = eval_type(arg.val, env, a, point);
+                    aty = eval_type(arg.val, env, ctx);
                 } else  {
                     aty = mk_uvar(a);
                     branch->args.data[i].val = aty;
@@ -1051,7 +1047,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         add_labels(labels, env);
 
         // Now that the environment is setup, we typecheck the expression
-        type_check_i(untyped->labels.entry, ty, env, a, point);
+        type_check_i(untyped->labels.entry, ty, env, ctx);
 
         // Then typecheck all label bodies, with arguments appropriately bound in the environment
         for (size_t i = 0 ; i < untyped->labels.terms.len; i++) {
@@ -1060,7 +1056,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
                 SymPtrACell arg = branch->args.data[i];
                 type_var(arg.key, arg.val, env);
             }
-            type_check_i(branch->body, ty, env, a, point);
+            type_check_i(branch->body, ty, env, ctx);
             pop_types(env, branch->args.len);
         }
         pop_labels(env, labels.len);
@@ -1073,11 +1069,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             SeqElt* elt = untyped->sequence.elements.data[i];
             if (elt->is_binding) {
                 //PiType* type = mk_uvar(a);
-                type_infer_i(elt->expr, env, a, point);
+                type_infer_i(elt->expr, env, ctx);
                 type_var (elt->symbol, elt->expr->ptype, env);
                 num_binds++;
             } else {
-                type_infer_i(elt->expr, env, a, point);
+                type_infer_i(elt->expr, env, ctx);
             }
         }
 
@@ -1093,13 +1089,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SIs: {
-        PiType* should_be = eval_type(untyped->is.type, env, a, point);
-        type_check_i(untyped->is.val, should_be, env, a, point);
+        PiType* should_be = eval_type(untyped->is.type, env, ctx);
+        type_check_i(untyped->is.val, should_be, env, ctx);
         untyped->ptype = untyped->is.type->type_val; 
         break;
     }
     case SInTo: {
-        PiType* distinct_type = eval_type(untyped->is.type, env, a, point);
+        PiType* distinct_type = eval_type(untyped->is.type, env, ctx);
         if (distinct_type->sort != TDistinct) {
             err.message = mv_cstr_doc("into must move a value into a distinct type!", a);
             throw_pi_error(point, err);
@@ -1110,14 +1106,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             throw_pi_error(point, err);
         }
 
-        type_check_i(untyped->into.val,
-                     distinct_type->distinct.type,
-                     env, a, point);
+        type_check_i(untyped->into.val, distinct_type->distinct.type, env, ctx);
         untyped->ptype = distinct_type; 
         break;
     }
     case SOutOf: {
-        PiType* distinct_type = eval_type(untyped->out_of.type, env, a, point);
+        PiType* distinct_type = eval_type(untyped->out_of.type, env, ctx);
         if (distinct_type->sort != TDistinct) {
             err.message = mv_cstr_doc("out-of must move a value out of a distinct type!", a);
             throw_pi_error(point, err);
@@ -1128,27 +1122,23 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             throw_pi_error(point, err);
         }
 
-        type_check_i(untyped->is.val,
-                     distinct_type,
-                     env, a, point);
+        type_check_i(untyped->is.val, distinct_type, env, ctx);
         untyped->ptype = distinct_type->distinct.type; 
         break;
     }
     case SName: {
-        PiType* named_type = eval_type(untyped->name.type, env, a, point);
+        PiType* named_type = eval_type(untyped->name.type, env, ctx);
         if (named_type->sort != TNamed) {
             err.message = mv_cstr_doc("name must name a value with a named type!", a);
             throw_pi_error(point, err);
         }
 
-        type_check_i(untyped->name.val,
-                     named_type->named.type,
-                     env, a, point);
+        type_check_i(untyped->name.val, named_type->named.type, env, ctx);
         untyped->ptype = named_type; 
         break;
     }
     case SUnName: {
-        type_infer_i(untyped->unname, env, a, point);
+        type_infer_i(untyped->unname, env, ctx);
 
         if (untyped->unname->ptype->sort != TNamed) {
             err.message = mv_cstr_doc("Unname expects inner term to be named.", a);
@@ -1158,21 +1148,21 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SWiden: {
-        PiType* wide_type = eval_type(untyped->widen.type, env, a, point);
-        type_infer_i(untyped->widen.val, env, a, point);
+        PiType* wide_type = eval_type(untyped->widen.type, env, ctx);
+        type_infer_i(untyped->widen.val, env, ctx);
         untyped->ptype = wide_type; 
         break;
     }
     case SNarrow: {
-        PiType* narrow_type = eval_type(untyped->narrow.type, env, a, point);
-        type_infer_i(untyped->narrow.val, env, a, point);
+        PiType* narrow_type = eval_type(untyped->narrow.type, env, ctx);
+        type_infer_i(untyped->narrow.val, env, ctx);
         untyped->ptype = narrow_type; 
         break;
     }
     case SDynAlloc: {
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TPrim, .prim = UInt_64};
-        type_check_i(untyped->size, t, env, a, point);
+        type_check_i(untyped->size, t, env, ctx);
 
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = Address};
@@ -1181,21 +1171,21 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
     }
     case SSizeOf: {
         // TODO: this is sus. 
-        eval_type(untyped->size, env, a, point);
+        eval_type(untyped->size, env, ctx);
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
         untyped->ptype = out; 
         break;
     }
     case SAlignOf: {
-        eval_type(untyped->size, env, a, point);
+        eval_type(untyped->size, env, ctx);
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
         untyped->ptype = out; 
         break;
     }
     case SOffsetOf: {
-        eval_type(untyped->offset_of.body, env, a, point);
+        eval_type(untyped->offset_of.body, env, ctx);
         PiType* out = mem_alloc(sizeof(PiType), a);
 
         PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, a);
@@ -1231,11 +1221,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         for (size_t i = 0; i < untyped->proc_type.args.len; i++) {
             Syntax* syn = untyped->proc_type.args.data[i];
-            type_check_i(syn, t, env, a, point);
+            type_check_i(syn, t, env, ctx);
         }
 
         Syntax* ret = untyped->proc_type.return_type;
-        type_check_i(ret, t, env, a, point);
+        type_check_i(ret, t, env, ctx);
         break;
     }
     case SStructType: {
@@ -1245,7 +1235,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         for (size_t i = 0; i < untyped->struct_type.fields.len; i++) {
             Syntax* syn = untyped->struct_type.fields.data[i].val;
-            type_check_i(syn, t, env, a, point);
+            type_check_i(syn, t, env, ctx);
         }
         break;
     }
@@ -1259,7 +1249,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
             for (size_t j = 0; j < args->len; j++) {
                 Syntax* syn = args->data[j];
-                type_check_i(syn, t, env, a, point);
+                type_check_i(syn, t, env, ctx);
             }
         }
         break;
@@ -1269,8 +1259,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
-        type_check_i(untyped->reset_type.in, t, env, a, point);
-        type_check_i(untyped->reset_type.out, t, env, a, point);
+        type_check_i(untyped->reset_type.in, t, env, ctx);
+        type_check_i(untyped->reset_type.out, t, env, ctx);
         break;
     }
     case SDynamicType: {
@@ -1278,7 +1268,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
-        type_check_i(untyped->dynamic_type, t, env, a, point);
+        type_check_i(untyped->dynamic_type, t, env, ctx);
         break;
     }
     case SAllType: {
@@ -1292,7 +1282,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             type_var(arg, ty, env);
         }
 
-        type_check_i(untyped->bind_type.body, ty, env, a, point);
+        type_check_i(untyped->bind_type.body, ty, env, ctx);
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
@@ -1312,14 +1302,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             type_var(arg, aty, env);
         }
 
-        type_check_i(untyped->bind_type.body, aty, env, a, point);
+        type_check_i(untyped->bind_type.body, aty, env, ctx);
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
     case SLiftCType: {
         // Get c type
         PiType* c_type = get_c_type();
-        type_check_i(untyped->c_type, c_type, env, a, point);
+        type_check_i(untyped->c_type, c_type, env, ctx);
 
         PiType* ty = mem_alloc(sizeof(PiType), a);
         *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
@@ -1330,7 +1320,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         PiType* self_type = mk_uvar(a);
         
         type_var(untyped->named_type.name, self_type, env);
-        type_check_i(untyped->named_type.body, self_type, env, a, point);
+        type_check_i(untyped->named_type.body, self_type, env, ctx);
         pop_type(env);
 
         untyped->ptype = untyped->named_type.body->ptype;
@@ -1341,7 +1331,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SDistinctType: {
-        type_infer_i(untyped->distinct_type, env, a, point);
+        type_infer_i(untyped->distinct_type, env, ctx);
         untyped->ptype= untyped->distinct_type->ptype;
         if (untyped->ptype->sort != TKind) {
             err.message = mv_cstr_doc("Distinct expects types and families as arguments!", a);
@@ -1363,13 +1353,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
 
         for (size_t i = 0; i < untyped->trait.fields.len; i++) {
             Syntax* s = untyped->trait.fields.data[i].val;
-            type_check_i(s, aty, env, a, point);
+            type_check_i(s, aty, env, ctx);
         }
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
     case SOpaqueType: {
-        type_infer_i(untyped->distinct_type, env, a, point);
+        type_infer_i(untyped->distinct_type, env, ctx);
         untyped->ptype= untyped->distinct_type->ptype;
         if (untyped->ptype->sort != TKind) {
             err.message = mv_cstr_doc("Opaque expects types and families as arguments!", a);
@@ -1385,8 +1375,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         panic(mv_string("Annotations are only supported at the top level."));
     }
     case SReinterpret: {
-        type_infer_i(untyped->reinterpret.type, env, a, point);
-        type_infer_i(untyped->reinterpret.body, env, a, point);
+        type_infer_i(untyped->reinterpret.type, env, ctx);
+        type_infer_i(untyped->reinterpret.body, env, ctx);
         if (untyped->reinterpret.from_native) {
             // • Expect the body to be a c value
             // • expect the type to be a pico type
@@ -1402,7 +1392,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             // Evaluate the output type, check that can reinterpret.
-            PiType* pico_type = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, a, point);
+            PiType* pico_type = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, ctx);
             CType* c_type = &untyped->reinterpret.body->ptype->c_type;
 
             if (!can_reinterpret(c_type, pico_type)) {
@@ -1420,7 +1410,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             // Evaluate the output type, check that can reinterpret.
-            PiType* type_val = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, a, point);
+            PiType* type_val = *(PiType**)eval_typed_expr(untyped->reinterpret.type, env, ctx);
             if (type_val->sort != TCType) {
                 err.range = untyped->reinterpret.type->range;
                 err.message = mv_cstr_doc("reinterpret-relic expected output type to be a c type, was not!", a);
@@ -1440,8 +1430,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case SConvert: {
-        type_infer_i(untyped->convert.type, env, a, point);
-        type_infer_i(untyped->convert.body, env, a, point);
+        type_infer_i(untyped->convert.type, env, ctx);
+        type_infer_i(untyped->convert.body, env, ctx);
         if (untyped->convert.from_native) {
             // • Expect the body to be a c value
             // • expect the type to be a pico type
@@ -1455,7 +1445,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             // Evaluate the output type, check that can convert.
-            PiType* pico_type = *(PiType**)eval_typed_expr(untyped->convert.type, env, a, point);
+            PiType* pico_type = *(PiType**)eval_typed_expr(untyped->convert.type, env, ctx);
             CType* c_type = &untyped->convert.body->ptype->c_type;
 
             if (!can_convert(c_type, pico_type)) {
@@ -1477,7 +1467,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
             }
 
             // Evaluate the output type, check that can convert.
-            PiType* type_val = *(PiType**)eval_typed_expr(untyped->convert.type, env, a, point);
+            PiType* type_val = *(PiType**)eval_typed_expr(untyped->convert.type, env, ctx);
             if (type_val->sort != TCType) {
                 err.message = mv_cstr_doc("convert-relic expected output type to be a c type, was not!", a);
                 throw_pi_error(point, err);
@@ -1496,7 +1486,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* poi
         break;
     }
     case STypeOf: {
-        type_infer_i(untyped->type_of, env, a, point);
+        type_infer_i(untyped->type_of, env, ctx);
         untyped->ptype = mem_alloc(sizeof(PiType), a);
         *untyped->ptype = (PiType) {.sort = TKind, .kind.nargs = 0};
         break;
@@ -2251,62 +2241,53 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     }
 }
 
-void* eval_typed_expr(Syntax* typed, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PiErrorPoint* point = ctx.point;
+    Target gen_target = ctx.target;
+    clear_target(gen_target);
+
     squash_types(typed, a, point);
     post_unify(typed, env, a, point);
-    Allocator exalloc = mk_executable_allocator(a);
     
     // Catch error here; so can cleanup after self before further unwinding.
     ErrorPoint cleanup_point;
     if (catch_error(cleanup_point)) goto on_error;
 
-    Target gen_target = {
-        .target = mk_assembler(current_cpu_feature_flags(), &exalloc),
-        .code_aux = mk_assembler(current_cpu_feature_flags(), &exalloc),
-        .data_aux = mem_alloc(sizeof(U8Array), a)
-    };
-    *gen_target.data_aux = mk_u8_array(128, a);
-
     // TODO (INVESTIGATE): is LinkData needed
     generate_type_expr(typed, env, gen_target, a, &cleanup_point);
 
     void* result = pico_run_expr(gen_target, pi_size_of(*typed->ptype), a, &cleanup_point);
-
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    release_executable_allocator(exalloc);
     return result;
 
- on_error:
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    release_executable_allocator(exalloc);
-    PicoError err;
-    err.range = typed->range;
-    err.message = mv_str_doc(cleanup_point.error_message, a);
-    throw_pi_error(point, err);
+ on_error: {
+        PicoError err;
+        err.range = typed->range;
+        err.message = mv_str_doc(cleanup_point.error_message, a);
+        throw_pi_error(point, err);
+    }
 }
 
-void* eval_expr(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
-    type_infer_i(untyped, env, a, point);
-    return eval_typed_expr(untyped, env, a, point);
+void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
+    type_infer_i(untyped, env, ctx);
+    return eval_typed_expr(untyped, env, ctx);
 }
 
 // TODO (BUG LOGIC UB): evaluation may produce a function pointer (or an object
 // with a function pointer) that points to generated code. This method currently
 // provides no means to capture that assembly.
-PiType* eval_type(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
-    type_infer_i(untyped, env, a, point);
+PiType* eval_type(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
+    type_infer_i(untyped, env, ctx);
 
     if (untyped->ptype->sort != TKind) {
         PicoError err = (PicoError) {
             .range = untyped->range,
-            .message = mv_cstr_doc("Value expected to be type, was not!", a),
+            .message = mv_cstr_doc("Value expected to be type, was not!", ctx.a),
         };
-        throw_pi_error(point, err);
+        throw_pi_error(ctx.point, err);
     }
 
-    PiType** result = eval_typed_expr(untyped, env, a, point);
+    PiType** result = eval_typed_expr(untyped, env, ctx);
     untyped->type = SCheckedType;
     untyped->type_val = *result;
 

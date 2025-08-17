@@ -69,7 +69,12 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // -------------------------------------------------------------------------
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
-    type_check(&abs, env, &arena, &pi_point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = target,
+    };
+    type_check(&abs, env, ctx);
+
+    clear_target(target);
     LinkData links = generate_toplevel(abs, env, target, &arena, &point);
     EvalResult evres = pico_run_toplevel(abs, target, links, module, &arena, &point);
 
@@ -308,7 +313,10 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
-    type_check(&abs, env, &arena, &pi_point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = gen_target,
+    };
+    type_check(&abs, env, ctx);
 
     if (abs.type == TLExpr) {
         if (callbacks.on_expr) {

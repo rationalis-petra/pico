@@ -124,7 +124,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    type_check(&abs, env, &arena, &pi_point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = gen_target,
+    };
+    type_check(&abs, env, ctx);
 
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
@@ -142,6 +145,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Code Generation
     // -------------------------------------------------------------------------
 
+    clear_target(gen_target);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
 
     if (opts.debug_print) {

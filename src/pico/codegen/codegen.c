@@ -2138,3 +2138,8 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
     }
 }
 
+void clear_target(Target target) {
+    clear_assembler(target.target);
+    clear_assembler(target.code_aux);
+    target.data_aux->len = 0;
+}

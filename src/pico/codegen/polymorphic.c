@@ -470,7 +470,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         PiType* struct_type = strip_type(syn.ptype);
 
         // Reserve space on the stack for the structure to go
-
         if (syn.structure.base && syn.structure.base->type != SCheckedType) {
             generate_polymorphic_i(*syn.structure.base, env, target, links, a, point);
         }    else {

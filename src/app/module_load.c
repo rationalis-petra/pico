@@ -78,10 +78,6 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     bool next_iter = true;
     Environment* env = env_from_module(module, &point, &arena);
     while (next_iter) {
-        // Prep the arena for another round
-        clear_assembler(target.target);
-        clear_assembler(target.target);
-        target.data_aux->len = 0;
         reset_arena_allocator(iter_arena);
         refresh_env(env, &iter_arena);
 
@@ -115,12 +111,17 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        type_check(&abs, env, &iter_arena, &pi_point);
+        TypeCheckContext ctx = (TypeCheckContext) {
+            .a = &iter_arena, .point = &pi_point, .target = target
+        };
+        type_check(&abs, env, ctx);
 
         // -------------------------------------------------------------------------
         // Code Generation
         // -------------------------------------------------------------------------
 
+        // Ensure the target is 'fresh' for code-gen
+        clear_target(target);
         LinkData links = generate_toplevel(abs, env, target, &iter_arena, &point);
 
         // -------------------------------------------------------------------------
@@ -224,7 +225,10 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        type_check(&abs, env, &arena, &pi_point);
+        TypeCheckContext ctx = (TypeCheckContext) {
+            .a = &arena, .point = &pi_point, .target = target
+        };
+        type_check(&abs, env, ctx);
 
         // -------------------------------------------------------------------------
         // Code Generation

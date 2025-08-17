@@ -15,9 +15,7 @@
 #include "pico/stdlib/helpers.h"
 
 void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a) {
-    target.data_aux->len = 0;
-    clear_assembler(target.code_aux);
-    clear_assembler(target.target);
+    clear_target(target);
 
     IStream* sin = mk_string_istream(mv_string(string), a);
     // Note: we need to be aware of the arena and error point, as both are used
@@ -50,11 +48,17 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     }
 
     // -------------------------------------------------------------------------
-    // Resolution
+    //  Process Term: abstract, typecheck, & evaluate
     // -------------------------------------------------------------------------
 
     TopLevel abs = abstract(res.result, env, a, &pi_point);
-    type_check(&abs, env, a, &pi_point);
+
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = a, .point = &pi_point, .target = target,
+    };
+    type_check(&abs, env, ctx);
+
+    clear_target(target);
     LinkData links = generate_toplevel(abs, env, target, a, &point);
     pico_run_toplevel(abs, target, links, module, a, &point);
 
