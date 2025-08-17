@@ -64,11 +64,25 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] struct FourElt [.x 1] [.y -2] [.z 3] [.p -4]) {Unit})");
     }
 
+    RUN("(def FourElt Struct [.x I64] [.y I64] [.z I64] [.p I64])");
+    if (test_start(log, mv_string("struct-simple-alter"))) {
+        RUN("(def ss struct FourElt [.x 1] [.y -2] [.z 3] [.p -4])");
+        int64_t expected[] = {100, -2, 3, -27};
+        TEST_EQ("((all [A] struct ss [.x 100] [.p -27]) {Unit})");
+    }
+
     RUN("(def NonAligned Struct [.x I32] [.y I64] [.z I8] [.p I16])");
-    if (test_start(log, mv_string("struct-simple"))) {
+    if (test_start(log, mv_string("struct-nonaligned"))) {
         typedef struct {int32_t x; int64_t y; int8_t z; int16_t p;} NonAligned;
         NonAligned expected = (NonAligned) {.x = 1, .y = -2, .z = 3, .p = -4};
         TEST_EQ("((all [A] struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4]) {Unit})");
+    }
+
+    if (test_start(log, mv_string("struct-nonaligned-alter"))) {
+        RUN("(def nas struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4])");
+        typedef struct {int32_t x; int64_t y; int8_t z; int16_t p;} NonAligned;
+        NonAligned expected = (NonAligned) {.x = 100, .y = -2, .z = 3, .p = -27};
+        TEST_EQ("((all [A] struct nas [.x 100] [.p -27]) {Unit})");
     }
 
     // -------------------------------------------------------------------------

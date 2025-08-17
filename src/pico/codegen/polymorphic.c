@@ -470,8 +470,13 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         PiType* struct_type = strip_type(syn.ptype);
 
         // Reserve space on the stack for the structure to go
-        generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+
+        if (syn.structure.base && syn.structure.base->type != SCheckedType) {
+            generate_polymorphic_i(*syn.structure.base, env, target, links, a, point);
+        }    else {
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_binary_op(ass, Sub, reg(RSP, sz_64), reg(RAX, sz_64), a, point);
+        }
 
         // Generate code for each of the fields (in order)
         for (size_t i = 0; i < syn.structure.fields.len; i++)
@@ -516,10 +521,20 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             generate_size_of(R10, struct_type->structure.fields.data[i].val, env, ass, a, point);
             build_binary_op(ass, Add, rref8(INDEX_REGISTER, 0, sz_64), reg(R10, sz_64), a, point);
 
-            // Add stack size to source size.
-            build_binary_op(ass, Mov, reg(R9, sz_64), imm32(8), a, point);
-            generate_align_to(R10, R9, ass, a, point);
-            build_binary_op(ass, Add, rref8(INDEX_REGISTER, -8 * (i + 2), sz_64), reg(R10, sz_64), a, point);
+            // If this field exists in the asturct, add stack size to source size.
+            bool field_source = false;
+            for (size_t j = 0; j < syn.structure.fields.len; j++) {
+                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
+                    field_source = true; 
+                    break; // Offset is correct, end the loop
+                }
+            }
+
+            if (field_source) {
+                build_binary_op(ass, Mov, reg(R9, sz_64), imm32(8), a, point);
+                generate_align_to(R10, R9, ass, a, point);
+                build_binary_op(ass, Add, rref8(INDEX_REGISTER, -8 * (i + 2), sz_64), reg(R10, sz_64), a, point);
+            }
         }
 
         // Align the struct size (top of stack)
@@ -535,17 +550,18 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // (elt 1 control_stack) = struct size
         // (elt 0 control_stack) = source_offset
 
+        const size_t nfields = struct_type->structure.fields.len;
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
             // Find what index field the structure has.
             size_t field_offset_idx = 0; 
-            for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
-                    field_offset_idx = (syn.structure.fields.len - j) + 1; 
+            for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+                if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
+                    field_offset_idx = (nfields - j) + 1; 
                     break; // Offset is correct, end the loop
                 }
             }
 
-            // Compute source_offset for next loop (by adding field stack size to dest_offset)
+            // Compute source_offset for this loop (by adding field stack size to current source_offset)
             // For field_offset_idx n, field size = index_stack[n - 1] - index_stack(n)
             build_binary_op(ass, Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * (field_offset_idx - 1), sz_64), a, point);
             build_binary_op(ass, Sub, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * field_offset_idx, sz_64), a, point);
@@ -554,10 +570,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(ass, Add, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), a, point);
 
             // RSI: size_t src_stack_offset = source_region_size - src_offset;
-            build_binary_op(ass, Mov, reg(RSI, sz_64), rref8(INDEX_REGISTER, -0x8 * (syn.structure.fields.len + 2), sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RSI, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), a, point);
             build_binary_op(ass, Sub, reg(RSI, sz_64), rref8(INDEX_REGISTER, 0x0, sz_64), a, point);
             // RDI: size_t dest_stack_offset = source_region_size + dest_offset;
-            build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(INDEX_REGISTER, -0x8 * (syn.structure.fields.len + 2), sz_64), a, point);
+            build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), a, point);
             build_binary_op(ass, Add, reg(RDI, sz_64), rref8(INDEX_REGISTER, -0x8 * field_offset_idx, sz_64), a, point);
 
             // Calculate Field size (R9) 
@@ -572,10 +588,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // Lastly, get the source_size from the index stack, and use it to
         // shrink the regular stack.
         // Then, pop all values from the index stack
-        index_stack_shrink(env, (syn.structure.fields.len + 3));
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(INDEX_REGISTER, -0x8 * (syn.structure.fields.len + 2), sz_64), a, point);
-        build_binary_op(ass, Sub, reg(INDEX_REGISTER, sz_64), imm32(0x8 * (syn.structure.fields.len + 3)), a, point);
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), a, point);
+        build_binary_op(ass, Sub, reg(INDEX_REGISTER, sz_64), imm32(0x8 * (nfields + 3)), a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), reg(RCX, sz_64), a, point);
+        index_stack_shrink(env, (nfields + 3));
         break;
     }
     case SProjector: {
