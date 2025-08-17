@@ -141,13 +141,13 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
     compile_toplevel(list_macro, module, target, &point, &pi_point, a);
 
     // Imperative Interface
-    /* const char *list_push_fn = */
-    /*     "(def push all [A] proc [(val A) (lst (Dynamic (List A)))]\n" */
-    /*     "  (if (< len capacity) " */
-    /*      ")"  */
-    /*     "  (set (lst ))\n" */
-    /*     "    (fn (elt i lst))))"; */
-    /* compile_toplevel(list_push_fn, module, target, &point, &pi_point, a); */
+    const char *list_push_fn =
+        "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
+        "  let [lst (use l)]\n"
+        "    (if (u64.< lst.len lst.capacity)\n"
+        "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
+        "      (panic {Unit} \"unimplemented\")))";
+    compile_toplevel(list_push_fn, module, target, &point, &pi_point, a);
 
     /* const char *list_pop_fn = */
     /*     "(def pop all [A] proc [(lst (Dynamic List A))] seq\n" */

@@ -62,9 +62,23 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("push"))) {
+        RUN("(def list-3 dynamic (list.mk-list {I64} 0 3))");
+        RUN("(list.push 12 list-3)");
+        RUN("(list.push 13 list-3)");
+        RUN("(list.push 14 list-3)");
+
+        Allocator current_old = get_std_current_allocator();
+        char* expected = "121314";
+        set_std_current_allocator(arena);
+        TEST_STDOUT("(list.each (proc [x] print (i64.to-string x)) (use list-3))");
+        set_std_current_allocator(current_old);
+    }
+
     // Free the data associated with the lists generated durin the test
     RUN("(free list-1.data)");
     RUN("(free list-2.data)");
+    RUN("(free (use list-3).data)");
 
     release_arena_allocator(arena);
 }
