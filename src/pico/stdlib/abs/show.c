@@ -1,9 +1,13 @@
 #include "platform/signals.h"
-#include "pico/stdlib/abs/submodules.h"
+#include "platform/memory/arena.h"
 
+#include "pico/stdlib/abs/submodules.h"
 #include "pico/stdlib/helpers.h"
 
-void add_show_module(Target target, Module *abs, Allocator *a) {
+void add_show_module(Target target, Module *abs, Allocator *alloc) {
+    Allocator arena = mk_arena_allocator(16384, alloc);
+    Allocator* a = &arena;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
@@ -20,7 +24,7 @@ void add_show_module(Target target, Module *abs, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL, a);
+    Module* module = mk_module(header, get_package(abs), NULL, alloc);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -94,4 +98,5 @@ void add_show_module(Target target, Module *abs, Allocator *a) {
 
     Result r = add_module_def(abs, string_to_symbol(mv_string("show")), module);
     if (r.type == Err) panic(r.error_message);
+    release_arena_allocator(arena);
 }

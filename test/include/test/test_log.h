@@ -23,10 +23,12 @@ typedef struct {
 
     bool in_test;
     String current_test;
+    PtrArray current_suites;
 
     size_t test_count;
     size_t passed_tests;
     size_t failed_tests;
+    Allocator* gpa;
 } TestLog;
 
 TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
