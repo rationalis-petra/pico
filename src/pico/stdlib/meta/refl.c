@@ -6,6 +6,7 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/submodules.h"
 
 #include "app/module_load.h"

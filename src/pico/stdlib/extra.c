@@ -23,21 +23,6 @@ static uint64_t std_perm_allocator;
 //static uint64_t std_region_allocator; 
 //static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
-
-static IStream* current_istream;
-void set_std_istream(IStream* current) { current_istream = current; }
-
-static OStream* current_ostream;
-OStream *set_std_ostream(OStream *current) {
-    OStream* old = current_ostream;
-    current_ostream = current;
-    return old;
-}
-
-OStream *get_std_ostream() {
-    return current_ostream;
-}
-
 Allocator get_std_current_allocator() {
     Allocator** data = get_dynamic_memory();
     Allocator* dyn = data[std_current_allocator]; 
@@ -195,26 +180,6 @@ void exit_callback() {
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     generate_c_call(exit_callback, ass, a, point);
-}
-
-void relic_print_fn(String s) {
-    write_string(s, current_ostream);
-}
-
-void relic_println_fn(String s) {
-    puts((char*)s.bytes);
-}
-
-void build_print_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
-    convert_c_fn(relic_print_fn, &fn_ctype, type, ass, a, point); 
-    delete_c_type(fn_ctype, a);
-}
-
-void build_println_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
-    convert_c_fn(relic_println_fn, &fn_ctype, type, ass, a, point); 
-    delete_c_type(fn_ctype, a);
 }
 
 RawTree atom_symbol(const char *str) {
@@ -828,22 +793,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit));
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    // print : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_print_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("print"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_println_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("print-ln"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

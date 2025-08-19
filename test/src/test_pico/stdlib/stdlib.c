@@ -23,6 +23,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 1, "meta");
+    add_import_all(&imports.clauses, a, 1, "platform");
 
     Exports exports = (Exports) {
         .export_all = true,

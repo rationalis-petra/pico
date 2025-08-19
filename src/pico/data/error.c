@@ -1,6 +1,6 @@
 #include "data/stream.h"
 #include "data/stringify.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "components/pretty/document.h"
 #include "components/pretty/stream_printer.h"
 #include "components/pretty/standard_types.h"

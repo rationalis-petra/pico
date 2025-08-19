@@ -2,7 +2,7 @@
 #define __COMPONENTS_PRETTY_STREAM_PRINTER_H
 
 #include "data/stream.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "components/pretty/document.h"
 
 void write_doc(Document* doc, uint16_t width, OStream* os);

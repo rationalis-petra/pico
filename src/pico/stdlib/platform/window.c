@@ -5,7 +5,7 @@
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
-#include "pico/stdlib/platform/window.h"
+#include "pico/stdlib/platform/submodules.h"
 
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };

@@ -48,7 +48,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         set_std_current_allocator(arena);
         char* expected = "01234";
         RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))");
-        TEST_STDOUT("(list.each (proc [x] print (i64.to-string x)) list-1)");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
         set_std_current_allocator(current_old);
     }
 
@@ -58,7 +58,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         Allocator current_old = get_std_current_allocator();
         char* expected = "12345";
         set_std_current_allocator(arena);
-        TEST_STDOUT("(list.each (proc [x] print (i64.to-string x)) list-2)");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-2)");
         set_std_current_allocator(current_old);
     }
 
@@ -71,7 +71,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         Allocator current_old = get_std_current_allocator();
         char* expected = "121314";
         set_std_current_allocator(arena);
-        TEST_STDOUT("(list.each (proc [x] print (i64.to-string x)) (use list-3))");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) (use list-3))");
         set_std_current_allocator(current_old);
     }
 

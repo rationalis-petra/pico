@@ -6,7 +6,7 @@
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "platform/window/window.h"
 #include "platform/hedron/hedron.h"
 
@@ -23,6 +23,7 @@
 #include "pico/eval/call.h"
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/values/types.h"
 

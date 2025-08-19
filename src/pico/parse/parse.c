@@ -564,15 +564,36 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     next(is, &codepoint); // consume token (")
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
-        next(is, &codepoint);
+        if (codepoint == '\\') {
+            next(is, &codepoint);
+            size_t escape_start = bytecount(is);
+            if ((result = peek(is, &codepoint)) != StreamSuccess)
+                break;
+            switch (codepoint) {
+            case 'n':
+                codepoint = '\n';
+                break;
+            case 't':
+                codepoint = '\t';
+                break;
+            default:
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Unrecognized escape character", a),
+                    .error.range.start = escape_start,
+                    .error.range.end = bytecount(is),
+                };
+            }
+        }
         push_u32(codepoint, &arr);
+        next(is, &codepoint);
     }
 
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
             .error.message = mv_cstr_doc("Stream failed", a),
-            .error.range.start = bytecount(is),
+            .error.range.start = start,
             .error.range.end = bytecount(is),
         };
     }

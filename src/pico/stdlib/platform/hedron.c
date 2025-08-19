@@ -4,8 +4,7 @@
 #include "pico/values/ctypes.h"
 #include "pico/codegen/foreign_adapters.h"
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/platform/hedron.h"
-#include "pico/stdlib/platform/window.h"
+#include "pico/stdlib/platform/submodules.h"
 
 static PiType* surface_ty;
 static PiType* shader_module_ty;

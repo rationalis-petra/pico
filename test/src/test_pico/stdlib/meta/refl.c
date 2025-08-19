@@ -31,7 +31,7 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("run-script"))) {
         String filename = string_cat(get_tmpdir(&arena), mv_string("/script.rl"), &arena);
         File *file = open_file(filename, Read | Write, &arena);
-        const char contents[] = " (print (u64.to-string 123456789)) ";
+        const char contents[] = "(terminal.write-string (u64.to-string 123456789)) ";
         U8Array data = (U8Array) {
             .len = sizeof(contents),
             .data = (uint8_t*)contents,

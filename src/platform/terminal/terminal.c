@@ -1,6 +1,7 @@
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
+#include "components/encodings/utf8.h"
 #include "data/stream.h"
 
 #include <stdio.h>

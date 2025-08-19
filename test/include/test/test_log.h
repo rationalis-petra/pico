@@ -5,7 +5,7 @@
 
 #include "platform/memory/allocator.h"
 #include "platform/profiling/profiling.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 
 typedef struct {
     bool show_fails;

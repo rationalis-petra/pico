@@ -12,6 +12,7 @@
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/values/array.h"
 #include "pico/binding/environment.h"
 #include "pico/analysis/abstraction.h"

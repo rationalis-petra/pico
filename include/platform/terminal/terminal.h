@@ -22,7 +22,6 @@ typedef enum {
 
 void init_terminal(Allocator* a);
 
-
 typedef struct FormattedOStream FormattedOStream;
 FormattedOStream* mk_formatted_ostream(OStream* os, Allocator* a);
 void delete_formatted_ostream(FormattedOStream* os, Allocator* a);

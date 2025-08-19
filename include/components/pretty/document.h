@@ -3,7 +3,7 @@
 
 #include "data/array.h"
 #include "data/string.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 
 
 /* The Document Interaface. */
