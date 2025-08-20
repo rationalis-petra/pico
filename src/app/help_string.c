@@ -1,4 +1,4 @@
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 
 #include "app/help_string.h"
 

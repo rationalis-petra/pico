@@ -1,9 +1,11 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include "platform/signals.h"
 #include "platform/memory/allocator.h"
+
 #include "data/string.h"
-#include "encodings/utf8.h"
+#include "components/encodings/utf8.h"
 
 String mk_string(const char* str, Allocator* a) {
     // TODO (FEATURE): panic if str == NULL and in debug
@@ -118,6 +120,14 @@ String string_ncat(Allocator* a, size_t n, ...) {
 }
 
 String substring(size_t start, size_t end, const String source, Allocator *a) {
+#ifdef VALIDATE_INPUTS
+  if (start > end) {
+      panic(mv_string("substring: start > end"));
+  }
+  if (end > source.memsize) {
+      panic(mv_string("substring: end > source.memsize"));
+  }
+#endif
     String out = (String) {.memsize = (end - start) + 1};
     out.bytes = mem_alloc(out.memsize, a);
     memcpy(out.bytes, source.bytes + start, out.memsize - 1);

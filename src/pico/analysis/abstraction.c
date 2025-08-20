@@ -174,6 +174,11 @@ bool is_symbol(RawTree raw) {
 }
 
 RawTree* raw_slice(RawTree* raw, size_t drop, Allocator* a) {
+#ifdef DEBUG
+  if (drop > raw->branch.nodes.len) {
+      panic(mv_string("Dropping more nodes than there are!"));
+  }
+#endif
     RawTree* out = mem_alloc(sizeof(RawTree), a);
     *out = (RawTree) {
         .type = RawBranch,
@@ -333,9 +338,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         err.range = raw.branch.nodes.data[0].range;
         err.message = mv_cstr_doc("'Declare' not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
-    case FOpen:
+    case FImport:
         err.range = raw.branch.nodes.data[0].range;
-        err.message = mv_cstr_doc("'Open' (open) not supported as inner-expression term former.", a);
+        err.message = mv_cstr_doc("'Import' (open) not supported as inner-expression term former.", a);
         throw_pi_error(point, err);
     case FProcedure: {
         if (raw.branch.nodes.len < 3) {
@@ -826,6 +831,76 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FDynamicSet: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed set expression: expects 2 args.", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* dynamic = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        Syntax* val = abstract_expr_i(*(raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, a)), env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynamicSet,
+            .ptype = NULL,
+            .range = raw.range,
+            .dynamic_set.dynamic = dynamic,
+            .dynamic_set.new_val = val,
+        };
+        return res;
+    }
+    case FDynamicLet: {
+        PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        size_t index = 1;
+
+        bool is_special = true;
+        while (is_special && index < raw.branch.nodes.len) {
+            RawTree bind = raw.branch.nodes.data[index];
+            // bind [x₁ e₁]
+            //      [x₂ e₂]
+            //  body
+            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
+            if (is_special) {
+                index++;
+                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
+                if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
+                    err.range = bind.range;
+                    err.message = mv_cstr_doc("Malformed symbol binding in bind-expression", a);
+                    throw_pi_error(point, err);
+                }
+
+                dbind->var = abstract_expr_i(bind.branch.nodes.data[0], env, a, point);
+                dbind->expr = abstract_expr_i(bind.branch.nodes.data[1], env, a, point);
+                push_ptr(dbind, &bindings);
+            }
+        }
+
+        if (index > raw.branch.nodes.len - 1) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Bind expression has no body!", a);
+            throw_pi_error(point, err);
+        }
+
+        if (index < raw.branch.nodes.len - 1) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
+            throw_pi_error(point, err);
+        }
+
+        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], env, a, point);
+        shadow_pop(bindings.len, env);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynamicLet,
+            .ptype = NULL,
+            .range = raw.range,
+            .dyn_let_expr.bindings = bindings,
+            .dyn_let_expr.body = body,
+        };
+        return res;
+    }
     case FLet: {
         SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
@@ -882,57 +957,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .range = raw.range,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
-        };
-        return res;
-    }
-    case FDynamicLet: {
-        PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
-        size_t index = 1;
-
-        bool is_special = true;
-        while (is_special && index < raw.branch.nodes.len) {
-            RawTree bind = raw.branch.nodes.data[index];
-            // bind [x₁ e₁]
-            //      [x₂ e₂]
-            //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
-                index++;
-                DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
-                if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
-                    err.range = bind.range;
-                    err.message = mv_cstr_doc("Malformed symbol binding in bind-expression", a);
-                    throw_pi_error(point, err);
-                }
-
-                dbind->var = abstract_expr_i(bind.branch.nodes.data[0], env, a, point);
-                dbind->expr = abstract_expr_i(bind.branch.nodes.data[1], env, a, point);
-                push_ptr(dbind, &bindings);
-            }
-        }
-
-        if (index > raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression has no body!", a);
-            throw_pi_error(point, err);
-        }
-
-        if (index < raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
-            throw_pi_error(point, err);
-        }
-
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], env, a, point);
-        shadow_pop(bindings.len, env);
-
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
-            .type = SDynamicLet,
-            .ptype = NULL,
-            .range = raw.range,
-            .dyn_let_expr.bindings = bindings,
-            .dyn_let_expr.body = body,
         };
         return res;
     }
@@ -2311,31 +2335,23 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* 
 
         break;
     }
-    case FOpen: {
+    case FImport: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Open expect at least 2 terms", a);
+            err.message = mv_cstr_doc("Import expect at least 2 terms", a);
             throw_pi_error(point, err);
         }
 
-        PtrArray paths = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        ImportClauseArray clauses = mk_import_clause_array(raw.branch.nodes.len - 1, a);
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            Syntax* syn = abstract_expr_i(raw.branch.nodes.data[i], env, a, point);
-            SymbolArray* arr = try_get_path(syn, a);
-            if (arr) {
-                push_ptr(arr, &paths);
-            } else {
-                err.range = raw.branch.nodes.data[i].range;
-                err.message = mv_cstr_doc("Open expects all arguments to be modules", a);
-                throw_pi_error(point, err);
-            }
-
+            ImportClause clause = abstract_import_clause(&raw.branch.nodes.data[i], a, point);
+            push_import_clause(clause, &clauses);
         }
 
         res = (TopLevel) {
-            .type = TLOpen,
-            .open.range = raw.range,
-            .open.paths = paths,
+            .type = TLImport,
+            .import.range = raw.range,
+            .import.clauses = clauses,
         };
         break;
     }
@@ -2401,21 +2417,21 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
     SymbolArray syms = mk_symbol_array(2, a); 
     while (raw.type == RawBranch) {
         if (raw.branch.nodes.len != 3) {
-            err.message = mv_cstr_doc("Invalid path component", a);
+            err.message = mv_cstr_doc("Invalid path component - expected 3 elements", a);
             throw_pi_error(point, err);
         }
         if (!eq_symbol(&raw.branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
-            err.message = mv_cstr_doc("Invalid path component", a);
+            err.message = mv_cstr_doc("Invalid path component - projector not '.'", a);
             throw_pi_error(point, err);
         }
 
-        if(!is_symbol(raw.branch.nodes.data[2])) {
-            err.range = raw.branch.nodes.data[2].range;
-            err.message = mv_cstr_doc("Invalid path component", a);
+        if(!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mv_cstr_doc("Invalid path component - field not symbol", a);
             throw_pi_error(point, err);
         }
-        push_symbol(raw.branch.nodes.data[2].atom.symbol, &syms);
-        raw = raw.branch.nodes.data[1];
+        push_symbol(raw.branch.nodes.data[1].atom.symbol, &syms);
+        raw = raw.branch.nodes.data[2];
     }
 
     if (!is_symbol(raw)) {
@@ -2423,6 +2439,14 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
         throw_pi_error(point, err);
     }
     push_symbol(raw.atom.symbol, &syms);
+
+    // Finally, reverse the path, as
+    // foo.bar.baz => (. baz (. bar foo)) => [baz bar foo] => [foo bar baz]
+    for (size_t i = 0; i < syms.len / 2; i++) {
+        Symbol tmp = syms.data[i];
+        syms.data[i] = syms.data[syms.len - (i + 1)];
+        syms.data[syms.len - (i + 1)] = tmp;
+    }
     return syms;
 }
 
@@ -2437,11 +2461,25 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         };
     } else if (raw->type == RawBranch) {
         // Possibilities:
+        // (name1 )
         // (name1 :all)
         // (name1 :as name2)
         // (. name2 name1)
         // (. (list-of-names) name1)
-        if (raw->branch.nodes.len == 2) {
+        if (raw->branch.nodes.len == 1) {
+            if (!is_symbol(raw->branch.nodes.data[0])) {
+                err.range = raw->range;
+                err.message = mv_cstr_doc("Invalid import clause - expected symbol", a);
+                throw_pi_error(point, err);
+            }
+
+            SymbolArray path = mk_symbol_array(1, a);
+            push_symbol(raw->atom.symbol, &path);
+            return (ImportClause) {
+                .type = Import,
+                .path = path,
+            };
+        } else if (raw->branch.nodes.len == 2) {
             SymbolArray path = get_module_path(raw->branch.nodes.data[0], a, point);
             
             Symbol middle;
@@ -2540,7 +2578,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             }
         } else {
             err.range = raw->range;
-            err.message = mv_cstr_doc("Invalid import clause - incorrect number of itesm", a);
+            err.message = mv_cstr_doc("Invalid import clause - incorrect number of items", a);
             throw_pi_error(point, err);
         }
     } else {
@@ -2736,7 +2774,7 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Sha
             PicoError err = (PicoError) {
                 .range = msym->range,
                 .message = mv_str_doc(string_cat(mv_string("Field not found in module: "),
-                                                 *symbol_to_string(msym->atom.symbol), a), a)
+                                                 symbol_to_string(msym->atom.symbol, a), a), a)
             };
             throw_pi_error(point, err);
         }

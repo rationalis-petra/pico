@@ -1,15 +1,20 @@
 #include "platform/signals.h"
+#include "platform/memory/arena.h"
+
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/submodules.h"
 
-void add_list_module(Target target, Module *data, Allocator *a) {
+void add_list_module(Target target, Module *data, Allocator *alloc) {
+    Allocator arena = mk_arena_allocator(16384, alloc);
+    Allocator* a = &arena;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, a),
     };
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
-    add_import_all(&imports.clauses, a, 1, "meta");
+    add_import_all(&imports.clauses, a, 2, "meta", "gen");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -20,8 +25,8 @@ void add_list_module(Target target, Module *data, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL, a);
-    delete_module_header(header);
+    Module* module = mk_module(header, get_package(data), NULL, alloc);
+    reset_arena_allocator(arena);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -36,7 +41,6 @@ void add_list_module(Target target, Module *data, Allocator *a) {
 
     // TODO (FEAT): add/implement the following:
     //  - list-free or delete-list
-    //  - push/pop (using alter)
 
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
@@ -53,7 +57,7 @@ void add_list_module(Target target, Module *data, Allocator *a) {
         "    [.gpa (use current-allocator)]\n"
         "    [.capacity capacity]\n"
         "    [.len len]\n"
-        "    [.data (malloc (u64.* (size-of A) len))]))";
+        "    [.data (malloc (u64.* (size-of A) capacity))]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, a);
     
     // TODO (BUG): use list allocator
@@ -136,6 +140,23 @@ void add_list_module(Target target, Module *data, Allocator *a) {
         "  (:right (Syntax:node ar :special new-terms)))\n";
     compile_toplevel(list_macro, module, target, &point, &pi_point, a);
 
+    // Imperative Interface
+    const char *list_push_fn =
+        "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
+        "  let [lst (use l)]\n"
+        "    (if (u64.< lst.len lst.capacity)\n"
+        "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
+        "      (panic {Unit} \"unimplemented\")))";
+    compile_toplevel(list_push_fn, module, target, &point, &pi_point, a);
+
+    /* const char *list_pop_fn = */
+    /*     "(def pop all [A] proc [(lst (Dynamic List A))] seq\n" */
+    /*     "  [let! old (use lst)]\n"  */
+    /*     "  (set lst (struct old [.len (- old.len 1)]))\n" */
+    /*     "  (elt (- old.len 1) old)\n"; */
+    /* compile_toplevel(list_pop_fn, module, target, &point, &pi_point, a); */
+
     Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
     if (r.type == Err) panic(r.error_message);
+    release_arena_allocator(arena);
 }

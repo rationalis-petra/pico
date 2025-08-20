@@ -17,4 +17,6 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
 
 void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point);
 
+void clear_target(Target target);
+
 #endif

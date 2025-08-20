@@ -12,10 +12,11 @@ struct Environment {
     // Map ids to arrays of implementations - each element of the  
     //  'implementation set' points to the relevant module.
     NamePtrAMap instances;
+    Module* base;
 };
 
 // Helper function:
-Module* path_parent(SymbolArray path, Module* root) {
+Module* path_parent(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -25,16 +26,24 @@ Module* path_parent(SymbolArray path, Module* root) {
           if (e->is_module) {
               current = e->value;
           } else {
-              panic(mv_string("error in environment.c: module not found"));
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(mfor, ea));
+              throw_error(point, message);
           }
         } else {
-            panic(mv_string("error in environment.c: module not found"));
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(mfor, ea));
+              throw_error(point, message);
         }
     }
     return current;
 }
 
-Module* path_all(SymbolArray path, Module* root) {
+Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point, Allocator* ea) {
     Module* current = root;
 
     // Don't go to the last part of the path!
@@ -44,19 +53,80 @@ Module* path_all(SymbolArray path, Module* root) {
           if (e->is_module) {
               current = e->value;
           } else {
-              panic(mv_string("error in environment.c: module not found"));
+              String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                           symbol_to_string(path.data[i], ea),
+                                           mv_string(" while constructing environment for "),
+                                           get_name(mfor, ea));
+              throw_error(point, message);
           }
         } else {
-            panic(mv_string("error in environment.c: module not found"));
+            String message = string_ncat(ea, 4, mv_string("Module not found: "),
+                                         symbol_to_string(path.data[i], ea),
+                                         mv_string(" while constructing environment for "),
+                                         get_name(mfor, ea));
+            throw_error(point, message);
         }
     }
     return current;
 }
 
-Environment* env_from_module(Module* module, Allocator* a) {
+bool import_clause_valid(Environment *env, ImportClause clause) {
+    Module* current = get_root_module(get_package(env->base));
+
+    for (size_t i = 0; i < clause.path.len; i++) {
+        ModuleEntry* e = get_def(clause.path.data[i], current);
+        if (e) {
+          if (e->is_module) {
+              current = e->value;
+          } else {
+              return false;
+          }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+void refresh_env(Environment* env, Allocator* a) {
+    Module* module = env->base;
+    // The local (module) definitions have the highest priority, so they  
+    // get loaded first
+    SymbolArray arr = get_defined_symbols(module, a);
+    for (size_t i = 0; i < arr.len; i++ ) {
+        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+    }
+    sdelete_symbol_array(arr);
+
+    // Get all implicits
+    PtrArray instances = get_defined_instances(module, a);
+    for (size_t i = 0; i < instances.len; i++ ) {
+        InstanceSrc* instance = instances.data[i];
+        PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+        PtrArray* p;
+        if (res) {
+            p = *res;
+        } else {
+            p = mem_alloc(sizeof(PtrArray), a);
+            *p = mk_ptr_array(8, a);
+            // TODO: we know this isn't in the instances; could perhaps
+            // speed up the process?
+            name_ptr_insert(instance->id, p, &env->instances);
+        }
+
+        // Add this instance to the array
+        push_ptr(instance, p);
+    }
+    sdelete_ptr_array(instances);
+}
+
+Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
-    env->symbol_origins = mk_name_ptr_amap(128, a);
-    env->instances = mk_name_ptr_amap(128, a);
+    *env = (Environment) {
+        .symbol_origins = mk_name_ptr_amap(128, a),
+        .instances = mk_name_ptr_amap(128, a),
+        .base = module,
+    };
 
     // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 
     // cache results?
@@ -72,7 +142,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
         switch (clause.type) {
         case Import: {
             Symbol last_symbol = clause.path.data[clause.path.len - 1];
-            Module* parent = path_parent(clause.path, root_module);
+            Module* parent = path_parent(clause.path, root_module, module, point, a);
             name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
             break;
         }
@@ -84,7 +154,7 @@ Environment* env_from_module(Module* module, Allocator* a) {
             break;
         case ImportAll: {
             // Find the package
-            Module* importee = path_all(clause.path, root_module);
+            Module* importee = path_all(clause.path, root_module, module, point, a);
             SymbolArray syms = get_defined_symbols(importee, a);
             for (size_t j = 0; j < syms.len; j++ ) {
                 name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
@@ -150,12 +220,17 @@ Environment* env_from_module(Module* module, Allocator* a) {
         // Add this instance to the array
         push_ptr(instance, p);
     }
+    sdelete_ptr_array(instances);
 
     return env;
 }
 
 void delete_env(Environment* env, Allocator* a) {
     sdelete_name_ptr_amap(env->symbol_origins);
+    for (size_t i = 0; i < env->instances.len; i++) {
+        mem_free(env->instances.data[i].val, &env->instances.gpa);
+    };
+    sdelete_name_ptr_amap(env->instances);
     mem_free(env, a);
 }
 

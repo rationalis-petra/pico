@@ -3,9 +3,10 @@
 
 #include "data/meta/amap_header.h"
 #include "data/meta/array_header.h"
-#include "pico/data/range.h"
 #include "platform/memory/allocator.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
+
+#include "pico/data/range.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 

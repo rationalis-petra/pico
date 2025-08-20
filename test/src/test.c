@@ -26,6 +26,7 @@
 #include "data/string.h"
 #include "data/stream.h"
 
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/extra.h"
 
 #include "test/command_line_opts.h"

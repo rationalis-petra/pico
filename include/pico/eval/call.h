@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "platform/memory/allocator.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h" // TOOD (ORGANISATION): Move link data out of codegen.h  
@@ -15,7 +15,7 @@ typedef enum EvalResult_t  {
     ERValue,
     ERDef,
     ERDecl,
-    EROpen,
+    ERImport,
 } EvalResult_t;
 
 typedef struct EvalVal {
@@ -33,7 +33,7 @@ typedef struct EvalResult {
     union {
         EvalVal val;
         EvalDef def;
-        PtrArray opened;
+        ImportClauseArray imported;
     };
 } EvalResult;
 

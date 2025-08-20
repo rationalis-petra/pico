@@ -1,5 +1,5 @@
 #include "platform/memory/arena.h"
-#include "assembler/assembler.h"
+#include "components/assembler/assembler.h"
 
 #include "test_assembler/test_assembler.h"
 #include "test_assembler/helper.h"

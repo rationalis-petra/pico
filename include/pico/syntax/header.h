@@ -2,6 +2,7 @@
 #define __PICO_SYNTAX_HEADER_H
 
 #include "data/meta/array_header.h"
+#include "components/pretty/document.h"
 #include "pico/values/values.h"
 #include "pico/data/symbol_array.h"
 
@@ -35,6 +36,7 @@ typedef struct {
 } Imports;
 
 bool imclause_eq(ImportClause c1, ImportClause c2);
+Document* pretty_import_clause(ImportClause clause, Allocator* a);
 
 //------------------------------------------------------------------------------
 // Export Clauses

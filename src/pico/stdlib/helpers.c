@@ -1,7 +1,5 @@
 #include <stdarg.h>
 
-#include "platform/memory/arena.h"
-#include "platform/memory/executable.h"
 #include "platform/jump.h"
 #include "platform/error.h"
 
@@ -17,18 +15,13 @@
 #include "pico/stdlib/helpers.h"
 
 void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a) {
-    target.data_aux->len = 0;
-    clear_assembler(target.code_aux);
-    clear_assembler(target.target);
+    clear_target(target);
 
     IStream* sin = mk_string_istream(mv_string(string), a);
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
-    IStream* cin = mk_capturing_istream(sin, &arena);
-
-    Environment* env = env_from_module(module, &arena);
+    IStream* cin = mk_capturing_istream(sin, a);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -40,7 +33,9 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    ParseResult res = parse_rawtree(cin, &arena);
+    Environment* env = env_from_module(module, &point, a);
+
+    ParseResult res = parse_rawtree(cin, a);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
     }
@@ -53,31 +48,33 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     }
 
     // -------------------------------------------------------------------------
-    // Resolution
+    //  Process Term: abstract, typecheck, & evaluate
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
-    type_check(&abs, env, &arena, &pi_point);
-    LinkData links = generate_toplevel(abs, env, target, &arena, &point);
-    pico_run_toplevel(abs, target, links, module, &arena, &point);
+    TopLevel abs = abstract(res.result, env, a, &pi_point);
 
-    release_arena_allocator(arena);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = a, .point = &pi_point, .target = target,
+    };
+    type_check(&abs, env, ctx);
+
+    clear_target(target);
+    LinkData links = generate_toplevel(abs, env, target, a, &point);
+    pico_run_toplevel(abs, target, links, module, a, &point);
+
     delete_istream(sin, a);
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, get_formatted_stdout(), &arena);
-    release_arena_allocator(arena);
+    display_error(pi_point.multi, cin, get_formatted_stdout(), NULL, a);
     delete_istream(sin, a);
     throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));
 
  on_error:
-    release_arena_allocator(arena);
     delete_istream(sin, a);
     throw_error(final_point, point.error_message);
 
  on_exit:
-    release_arena_allocator(arena);
     delete_istream(sin, a);
     throw_error(final_point, mv_string("Startup compiled definition not exepcted to exit!"));
 }

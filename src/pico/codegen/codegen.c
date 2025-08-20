@@ -4,7 +4,7 @@
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
 
-#include "pretty/string_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/internal.h"
@@ -69,7 +69,7 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
         // Do nothing; open only affects the environment
         break;
     }
-    case TLOpen: {
+    case TLImport: {
         // Do nothing; open only affects the environment
         break;
     }
@@ -346,7 +346,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 throw_error(point,
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
-                                        *symbol_to_string(syn.variable),
+                                        symbol_to_string(syn.variable, a),
                                         mv_string("' has unsupported sort")));
             }
             break;
@@ -355,9 +355,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             gen_mk_type_var(syn.variable, ass, a, point);
             break;
         case ANotFound: {
-            String* sym = symbol_to_string(syn.variable);
+            String sym = symbol_to_string(syn.variable, a);
             String msg = mv_string("Couldn't find variable during codegen: ");
-            throw_error(point, string_cat(msg, *sym, a));
+            throw_error(point, string_cat(msg, sym, a));
             break;
         }
         case ATooManyLocals: {
@@ -775,34 +775,31 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
             source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
         }
-        size_t dest_offset = 0;
+        size_t src_offset = 0;
         for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            dest_offset = pi_size_align(dest_offset, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
-
             // Find the field in the source & compute offset
-            size_t src_offset = 0;
-            for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                PiType* t = ((Syntax*)syn.structure.fields.data[j].val)->ptype;
-                src_offset += pi_stack_size_of(*t); 
+            size_t dest_offset = 0;
+            for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+                PiType* t = struct_type->structure.fields.data[j].val;
+                dest_offset = pi_size_align(dest_offset, pi_align_of(*t)); 
 
-                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
+                if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
                     break; // offset is correct, end the loop
                 }
+                dest_offset += pi_size_of(*t); 
             }
 
             // We now both the source_offset and dest_offset. These are both
             // relative to the 'bottom' of their respective structures.
             // Therefore, we now need to find their offsets relative to the `top'
             // of the stack.
+            size_t field_size = pi_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype);
+            src_offset += pi_stack_align(field_size);
             size_t src_stack_offset = source_region_size - src_offset;
             size_t dest_stack_offset = source_region_size + dest_offset;
-            size_t field_size = pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
 
             // Now, move the data.
             generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-
-            // Compute dest_offset for next loop
-            dest_offset += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
         }
 
         // Remove the space occupied by the temporary values 
@@ -933,13 +930,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case SDynamic: {
-        // TODO: check that the dynamic handles stack alignment correctly
         // Create a new dynamic variable, i.e. call the C function 
         // mk_dynamic_var(size_t size, void* default_val)
         generate(*syn.dynamic, env, target, links, a, point);
 
         // currently RSP = default_val
-        size_t val_size = pi_size_of(*syn.ptype);
+        size_t val_size = pi_size_of(*syn.dynamic->ptype);
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
@@ -960,16 +956,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
         build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
         
-        data_stack_shrink(env, ADDRESS_SIZE);
-        data_stack_grow(env, val_size);
+        data_stack_grow(env, ADDRESS_SIZE);
+        data_stack_shrink(env, val_size);
         break;
     }
     case SDynamicUse: {
-        // TODO: check that the dynamic use handles stack alignment correctly
         generate(*syn.use, env, target, links, a, point);
 
         // We now have a dynamic variable: get its' value as ptr
-
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi
         build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
@@ -993,6 +987,31 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         
         data_stack_shrink(env, ADDRESS_SIZE);
         data_stack_grow(env, val_size);
+        break;
+    }
+    case SDynamicSet: {
+        size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
+        generate(*syn.dynamic_set.dynamic, env, target, links, a, point);
+        generate(*syn.dynamic_set.new_val, env, target, links, a, point);
+
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi, arg2 = rsi
+        build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(val_size), a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx, arg2 = rdx
+        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(ass, Mov, reg(R8, sz_64), imm32(val_size), a, point);
+#else
+#error "unknown ABI"
+#endif
+        // call function
+        generate_c_call(set_dynamic_val, ass, a, point);
+
+        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), a, point);
+        data_stack_shrink(env, ADDRESS_SIZE + val_size);
         break;
     }
     case SDynamicLet: {
@@ -1065,7 +1084,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             bsize += pi_stack_size_of(*sy->ptype);
         }
         generate(*syn.let_expr.body, env, target, links, a, point);
-        address_pop_n(syn.let_expr.bindings.len, env);
 
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(bsize), a, point);
@@ -1714,7 +1732,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
         build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
 
-        data_stack_shrink(env, cts);
+        data_stack_shrink(env, cts - ADDRESS_SIZE);
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
@@ -1841,13 +1859,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
               PtrArray lines = mk_ptr_array(syms.len + 8, a);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String* module_name = get_name(entry.value);
-                  if (module_name) {
-                      push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
-                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
-                  } else {
-                      push_ptr(mk_str_doc(mv_string("Anonymous Module"), a), &moduledesc);
-                  }
+                  String module_name = get_name(entry.value, a);
+                  push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
+                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
@@ -1859,9 +1873,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                       PtrArray desc = mk_ptr_array(3, a);
                       if (mentry->is_module) {
                           push_ptr(mk_str_doc(mv_string("Module"), a), &desc);
-                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                       } else {
-                          push_ptr(mk_str_doc(*symbol_to_string(symbol), a), &desc);
+                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
                           push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, a), a), &desc);
                       }
@@ -1882,20 +1896,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                   PtrArray header = mk_ptr_array(syn.to_describe.len + 1, a);
                   push_ptr(mk_str_doc(mv_string("Path: "), a), &header);
                   for (size_t i = 0; i < syn.to_describe.len; i++) {
-                      push_ptr(mk_str_doc(*symbol_to_string(syn.to_describe.data[i]), a), &header);
+                      push_ptr(mk_str_doc(symbol_to_string(syn.to_describe.data[i], a), a), &header);
                   }
                   push_ptr(mv_sep_doc(header, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String* module_name = get_name(entry.source);
-                  if (module_name) {
-                      push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
-                      push_ptr(mk_str_doc(*module_name, a), &moduledesc);
-                  } else {
-                      push_ptr(mk_str_doc(mv_string("Source Module is Nameless"), a), &moduledesc);
-                  }
+                  String module_name = get_name(entry.source, a);
+                  push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
+                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               {
@@ -2128,3 +2138,8 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
     }
 }
 
+void clear_target(Target target) {
+    clear_assembler(target.target);
+    clear_assembler(target.code_aux);
+    target.data_aux->len = 0;
+}
