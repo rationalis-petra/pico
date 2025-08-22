@@ -1,5 +1,6 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
+#include "data/stringify.h"
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/internal.h"
@@ -217,7 +218,12 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         panic(mv_string("convert_c_fun requires types to be functions."));
     }
     if (ctype->proc.args.len != ptype->proc.args.len) {
-        panic(mv_string("convert_c_fun requires functions to have same number of args."));
+        String message = string_ncat(a, 4,
+                                     mv_string("convert_c_fun requires functions to have same number of args. \n     C Type had : "),
+                                     string_u64(ctype->proc.args.len, a),
+                                     mv_string("\n Relic type had : "),
+                                     string_u64(ptype->proc.args.len, a));
+        panic(message);
     }
 
     if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
