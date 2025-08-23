@@ -95,7 +95,6 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     start_coloured_text(regular_code_colour, fos);
     // Now, gather the past n lines
 
-    // 
     String strnum = string_u64(line_number + 1, a);
     size_t line_width = strnum.memsize;
     delete_string(strnum, a);
@@ -144,6 +143,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     delete_doc(doc, a);
     write_fstring(mv_string(" | "), fos);
 
+    // The 'bad region' may take multiple lines of code, so we check that
     String s1 = substring(current_start, range.start, buffer, a);
     // TODO (BUG) '+1' won't work with UTF-8!
     String bad_code = substring(range.start, range.end, buffer, a);

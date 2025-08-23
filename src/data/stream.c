@@ -315,6 +315,11 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 base[i] = bytes[i];
             }
             cis->buffer.memsize += size;
+
+#ifdef VALIDATE_INPUTS
+            if (cis->buffer.memsize != stream->bytecount + 1)
+                panic(mv_string("Capturing istream internal state invalid!"));
+#endif
         }
         return res;
         break;

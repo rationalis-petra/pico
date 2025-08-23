@@ -701,7 +701,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SStructure: {
-
         if (untyped->structure.base) {
             bool all_fields_required;
             type_infer_i(untyped->structure.base, env, ctx);
@@ -723,11 +722,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 throw_pi_error(point, err);
             }
 
-            if (untyped->structure.fields.len != struct_type->structure.fields.len && all_fields_required) {
-                // Figure out which field(s) are missing, and print those in the
-                // error message:
+            // Check if any fields are missing when a new struct is being created
+            // error message:
+            if (untyped->structure.base->ptype->sort == TKind) {
                 PtrArray docs = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("Structure value definition is missing the field(s):", a), &docs);
+                docs.len++;
+                bool missing_fields = false;
                 for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                     Symbol field = struct_type->structure.fields.data[i].key;
                     bool has_field = false;
@@ -737,11 +737,15 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     }
                     if (!has_field) {
                         push_ptr(mk_str_doc(symbol_to_string(field, a), a), &docs);
+                        missing_fields = true;
                     }
                 }
                 
-                err.message = mv_hsep_doc(docs, a);
-                throw_pi_error(point, err);
+                if (missing_fields) {
+                    docs.data[0] = mv_cstr_doc("Structure value definition is missing the field(s):", a);
+                    err.message = mv_hsep_doc(docs, a);
+                    throw_pi_error(point, err);
+                }
             }
 
             for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
