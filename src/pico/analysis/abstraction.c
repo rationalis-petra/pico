@@ -1157,31 +1157,26 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                     err.message = mv_cstr_doc("Special nodes in a 'seq' are expected to have a head 'let!'", a);
                     throw_pi_error(point, err);
                 }
-                for (size_t i = 0; i < (tree.branch.nodes.len - 1) / 2; i++) {
-                    RawTree rsym = tree.branch.nodes.data[(2 * i) + 1];
-                    if (rsym.type != RawAtom || rsym.atom.type != ASymbol) {
-                        err.range = tree.branch.nodes.data[(2 * i) + 1].range;
-                        err.message = mv_cstr_doc("'let!' expected to bind a symbol", a);
-                        throw_pi_error(point, err);
-                    }
-                
-                    SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
-                    *elt = (SeqElt) {
-                        .is_binding = true,
-                        .symbol = rsym.atom.symbol,
-                        .expr = abstract_expr_i(tree.branch.nodes.data[(2 * i) + 2], env, a, point),
-                    };
-
-                    num_binds++;
-                    shadow_var(rsym.atom.symbol, env);
-
-                    push_ptr(elt, &elements);
-                }
-                if (tree.branch.nodes.len % 2 != 1) {
-                    err.range = tree.branch.nodes.data[tree.branch.nodes.len - 1].range;
-                    err.message = mv_cstr_doc("Incomplete binding in let!", a);
+                if (tree.branch.nodes.len < 3) {
+                    err.range = tree.range;
+                    err.message = mv_cstr_doc("let! requires at least 2 terms.", a);
                     throw_pi_error(point, err);
                 }
+                RawTree rsym = tree.branch.nodes.data[1];
+                if (rsym.type != RawAtom || rsym.atom.type != ASymbol) {
+                    err.range = tree.branch.nodes.data[1].range;
+                    err.message = mv_cstr_doc("'let!' expected to bind a symbol", a);
+                    throw_pi_error(point, err);
+                }
+
+                RawTree* body = tree.branch.nodes.len > 3 ? raw_slice(&tree, 2, a) : &tree.branch.nodes.data[2];
+                SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
+                *elt = (SeqElt) {
+                    .is_binding = true,
+                    .symbol = rsym.atom.symbol,
+                    .expr = abstract_expr_i(*body, env, a, point),
+                };
+                push_ptr(elt, &elements);
             } else {
                 SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
                 *elt = (SeqElt) {

@@ -1,9 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/memory/std_allocator.h"
 #include "platform/threads.h"
-#include "data/amap.h"
 #include "data/array.h"
 #include "components/pretty/standard_types.h"
 

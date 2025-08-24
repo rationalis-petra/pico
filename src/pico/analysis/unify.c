@@ -139,9 +139,29 @@ UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, Ptr
     }
 
     if (lhs_args.len != rhs_args.len) {
+        PtrArray lhs_nodes = mk_ptr_array(lhs_args.len + 4, a);
+        push_ptr(mv_cstr_doc("LHS: ", a), &lhs_nodes);
+        push_ptr(mv_str_doc(symbol_to_string(lhs_sym, a), a), &lhs_nodes);
+        for (size_t i = 0; i < lhs_args.len; i++) {
+            push_ptr(pretty_type(lhs_args.data[i], a), &lhs_nodes);
+        }
+        Document* doc_lhs = mv_sep_doc(lhs_nodes, a);
+
+        PtrArray rhs_nodes = mk_ptr_array(rhs_args.len + 4, a);
+        push_ptr(mv_cstr_doc("RHS: ", a), &rhs_nodes);
+        push_ptr(mv_str_doc(symbol_to_string(rhs_sym, a), a), &rhs_nodes);
+        for (size_t i = 0; i < rhs_args.len; i++) {
+            push_ptr(pretty_type(rhs_args.data[i], a), &rhs_nodes);
+        }
+        Document* doc_rhs = mv_sep_doc(rhs_nodes, a);
+
+        PtrArray nodes = mk_ptr_array(6, a);
+        push_ptr(mv_cstr_doc("Unification failed: variants must have matching number of members.", a), &nodes);
+        push_ptr(doc_lhs, &nodes);
+        push_ptr(doc_rhs, &nodes);
         return (UnifyResult) {
             .type = USimpleError,
-            .message = mv_cstr_doc("Unification failed: RHS and LHS enums-variants must have matching number of members.", a)
+            .message = mv_vsep_doc(nodes, a),
         };
     }
 

@@ -30,7 +30,6 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        //panic(doc_to_str(pi_point.error.message, 120, a));
         panic(mv_string("pico error in list.c"));
     }
 
@@ -96,18 +95,17 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
 
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
-        "  [let! new-terms (mk-list {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len))\n"
-        "        let-terms (mk-list {Syntax} 3 3)\n"
-        "        arr-terms (mk-list {Syntax} 3 3)\n"
+        "  [let! new-terms mk-list {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len)]\n"
+        "  [let! let-terms mk-list {Syntax} 3 3]\n"
+        "  [let! arr-terms mk-list {Syntax} 3 3]\n"
         "\n"
-        "        ar (get-range (elt 0 terms))\n"
+        "  [let! ar get-range (elt 0 terms)]\n"
         "\n"
-        "        local-sym (Syntax:atom ar (Atom:symbol (mk-unique-symbol \"local-list\")))\n"
-        "        eset-sym (capture eset)\n"
+        "  [let! local-sym Syntax:atom ar (Atom:symbol (mk-unique-symbol \"local-list\"))]\n"
+        "  [let! eset-sym capture eset]\n"
         "\n"
-        "        eset-elt-terms (mk-list {Syntax} 4 4)\n"
+        "  [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
         "\n"
-        "        ]\n"
         "\n"
         "  (eset 0 (capture mk-list) arr-terms)\n"
         "  (eset 1 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
@@ -122,9 +120,9 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "\n"
         "  (labels (go-to loop 1)\n"
         "    [loop [i] seq\n"
-        "      [let! eset-elt-terms (mk-list {Syntax} 4 4)\n"
-        "            elt-range (get-range (elt i terms))\n"
-        "            idx-node (Syntax:atom elt-range (:integral (narrow (u64.- i 1) I64)))]\n"
+        "      [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
+        "      [let! elt-range get-range (elt i terms)]\n"
+        "      [let! idx-node Syntax:atom elt-range (:integral (narrow (u64.- i 1) I64))]\n"
         "      (eset 0 eset-sym eset-elt-terms)\n"
         "      (eset 1 idx-node eset-elt-terms)\n"
         "      (eset 2 (elt i terms) eset-elt-terms)\n"
