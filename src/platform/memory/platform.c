@@ -53,7 +53,7 @@ MemoryBlock platform_allocate(size_t min_size, AllocateFlags flags) {
     else if (flags == AExecute)
         prot = PAGE_EXECUTE;
     else if (flags == 0)
-        print = PAGE_NOACCESS;
+        prot = PAGE_NOACCESS;
     else 
         panic(mv_string("This set of allocation flags is not supported on windows."));
 
@@ -68,6 +68,6 @@ void platform_free(MemoryBlock block) {
 #if OS_FAMILY == UNIX
     munmap(block.data, block.size);
 #elif OS_FAMILY == WINDOWS
-    VirtualFree(mem.data, mem.size, MEM_DECOMMIT);
+    VirtualFree(block.data, block.size, MEM_DECOMMIT);
 #endif
 }
