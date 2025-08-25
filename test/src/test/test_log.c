@@ -72,7 +72,30 @@ void test_pass(TestLog* log) {
     if (log->verbosity.show_passes) {
         start_coloured_text(pass_colour, log->stream);
         write_fstring(mv_string("[Pass] "), log->stream);
-        write_fstring(log->current_test, log->stream);
+        for (size_t i = 0; i < log->current_suites.len; i++) {
+            write_fstring(*(String*)log->current_suites.data[i], log->stream);
+            write_fstring(mv_string("."), log->stream);
+        }
+        write_fstring(mv_string("\n"), log->stream);
+        end_coloured_text(log->stream);
+    }
+}
+
+void test_skip(TestLog* log) {
+    log->skipped_tests++;
+
+    if (!log->in_test) {
+        panic(mv_string("Ending test suite - passing a test but one has not been started!"));
+    }
+
+    log->in_test = false;
+    if (log->verbosity.show_passes) {
+        start_coloured_text(pass_colour, log->stream);
+        write_fstring(mv_string("[Skip] "), log->stream);
+        for (size_t i = 0; i < log->current_suites.len; i++) {
+            write_fstring(*(String*)log->current_suites.data[i], log->stream);
+            write_fstring(mv_string("."), log->stream);
+        }
         write_fstring(mv_string("\n"), log->stream);
         end_coloured_text(log->stream);
     }
@@ -135,7 +158,7 @@ int summarize_tests(TestLog *log, Allocator* a) {
     double test_time_used = time_to_double(time_diff(log->setup_time, end_time), Seconds);
 
     write_fstring(mv_string("──────────────────────────────────────────────────────────\n\n"), log->stream);
-    if (log->passed_tests + log->failed_tests != log->test_count) {
+    if (log->passed_tests + log->failed_tests + log->skipped_tests != log->test_count) {
         err_code = 1;
         start_coloured_text(fail_colour, log->stream);
         write_fstring(mv_string("Failure of test suite: total tests != passed + failed"), log->stream);
@@ -162,6 +185,12 @@ int summarize_tests(TestLog *log, Allocator* a) {
     str = string_u64(log->failed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
+    if (log->skipped_tests != 0) {
+        write_fstring(mv_string("\n                     Skipped : "), log->stream);
+        str = string_u64(log->skipped_tests, a);
+        write_fstring(str, log->stream);
+        delete_string(str, a);
+    }
     write_fstring(mv_string("\n                     Total  : "), log->stream);
     str = string_u64(log->test_count, a);
     write_fstring(str, log->stream);

@@ -26,6 +26,7 @@ typedef struct {
     PtrArray current_suites;
 
     size_t test_count;
+    size_t skipped_tests;
     size_t passed_tests;
     size_t failed_tests;
     Allocator* gpa;
@@ -41,6 +42,7 @@ void suite_end(TestLog* log);
 bool test_start(TestLog* log, String name);
 
 void test_pass(TestLog* log);
+void test_skip(TestLog* log);
 void test_fail(TestLog* log);
 
 void test_log_error(TestLog* log, String message);
