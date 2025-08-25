@@ -3,6 +3,7 @@
 
 #include "data/string.h"
 #include "pico/data/string_array.h"
+#include "pico/codegen/codegen.h"
 #include <stdbool.h>
 
 typedef enum {
@@ -16,14 +17,17 @@ typedef enum {
 
 typedef struct {
     bool debug_print;
+    CodegenBackend backend;
 } ReplOpts;
 
 typedef struct {
     String filename;
+    CodegenBackend backend;
 } ScriptOpts;
 
 typedef struct {
     String expr;
+    CodegenBackend backend;
 } EvalOpts;
 
 typedef struct {

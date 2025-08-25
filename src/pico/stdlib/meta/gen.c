@@ -4,7 +4,7 @@
 #include "pico/data/range.h"
 #include "pico/syntax/concrete.h"
 #include "pico/values/modular.h"
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/meta/submodules.h"
 

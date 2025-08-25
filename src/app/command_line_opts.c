@@ -6,6 +6,7 @@ Command parse_command(StringArray args) {
         return (Command) {
             .type = CRepl,
             .repl.debug_print = false,
+            .repl.backend = CodegenDirect,
         };
     }
 
@@ -21,6 +22,7 @@ Command parse_command(StringArray args) {
         return (Command) {
             .type = CRepl,
             .repl.debug_print = debug_print,
+            .repl.backend = CodegenDirect,
         };
     } else if (string_cmp(subcommand, mv_string("script")) == 0) {
         if (args.len != 2) {
@@ -33,6 +35,7 @@ Command parse_command(StringArray args) {
         return (Command) {
             .type = CScript,
             .script.filename = args.data[1],
+            .script.backend = CodegenDirect,
         };
     } else if (string_cmp(subcommand, mv_string("eval")) == 0) {
         if (args.len != 2) {
@@ -45,6 +48,7 @@ Command parse_command(StringArray args) {
         return (Command) {
             .type = CEval,
             .eval.expr = args.data[1],
+            .eval.backend = CodegenDirect,
         };
     } else if (string_cmp(subcommand, mv_string("help")) == 0) {
         if (args.len != 1) {

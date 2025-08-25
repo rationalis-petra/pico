@@ -2,7 +2,7 @@
 #include "data/meta/array_impl.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/codegen/internal.h"
+#include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/extra.h"
 

@@ -3,8 +3,8 @@
 #include "data/stringify.h"
 #include "components/pretty/string_printer.h"
 
-#include "pico/codegen/internal.h"
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/backend-direct/internal.h"
+#include "pico/codegen/backend-direct/foreign_adapters.h"
 
 #if ABI == SYSTEM_V_64 
 // -----------------------------------------------------------------------------
@@ -210,7 +210,7 @@ Win64ArgClass win_64_arg_class(CType* type) {
 }
 #endif
 
-void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // This function is for converting a c function (assumed platform default
     // ABI) into a pico function. This means that it assumes that all arguments
     // are pushed on the stack in forward order (last at top).
@@ -226,7 +226,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         panic(message);
     }
 
-    if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+    if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function reuturn types -", a), &nodes);
@@ -249,7 +249,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
         arg_offsets.data[idx] = offset;
         offset += pi_stack_size_of(*(PiType*)ptype->proc.args.data[idx - 1]);
 
-        if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+        if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
             // TODO (IMPROVEMENT): Move this check/assert to debug builds?
             PtrArray nodes = mk_ptr_array(4, a);
             push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
@@ -319,7 +319,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                   Regname next_reg = integer_registers[current_integer_register++];
                   // I8 max = 127
                   if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
+                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
@@ -339,7 +339,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
                   Regname next_reg = float_registers[current_float_register++];
                   // I8 max = 127
                   if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("convert_c_fn: arg offset exeeds I8 max."));
+                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
@@ -751,7 +751,7 @@ void convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, Alloca
     sdelete_u64_array(arg_offsets);
 }
 
-bool can_convert(CType *ctype, PiType *ptype) {
+bool bd_can_convert(CType *ctype, PiType *ptype) {
     ptype = strip_type(ptype);
 
     if (ctype->sort == CSProc && ptype->sort == TProc) {
@@ -760,18 +760,18 @@ bool can_convert(CType *ctype, PiType *ptype) {
         }
 
         for (size_t i = 0; i < ctype->proc.args.len; i++) {
-            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
+            if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i])) {
                 return false;
             }
         }
-        if (!can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
+        if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
             return false;
         }
 
         return true;
     }
 
-    return can_reinterpret(ctype, ptype);
+    return bd_can_reinterpret(ctype, ptype);
 }
 
 bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
@@ -889,7 +889,7 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
     panic(mv_string("Invalid prim provided to can_reinterpret_type"));
 }
 
-bool can_reinterpret(CType* ctype, PiType* ptype) {
+bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     // C doesn't have a concept of distinct types, so filter those out. 
     // TODO (BUG LOGIC): possibly don't allow opaque to be converted unless
     //                   we are in the source module
@@ -921,10 +921,10 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         if (ctype->proc.args.len != ptype->proc.args.len) return false;
 
         for (size_t i = 0; i < ptype->proc.args.len; i++) {
-            if (!can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
+            if (!bd_can_reinterpret(&ctype->proc.args.data[i].val, ptype->proc.args.data[i]))
                 return false;
         }
-        return can_reinterpret(ctype->proc.ret, ptype->proc.ret);
+        return bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret);
     }
     case TStruct: {
         if (ptype->structure.fields.len != ctype->structure.fields.len) {
@@ -932,7 +932,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         }
 
         for (size_t i = 0; i < ptype->structure.fields.len; i++) {
-          if (!can_reinterpret(&ctype->structure.fields.data[i].val,
+          if (!bd_can_reinterpret(&ctype->structure.fields.data[i].val,
                                ptype->structure.fields.data[i].val)) {
               return false;
           }
@@ -958,7 +958,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         // check that the 0th struct field is reinterpretable as a 64-bit int
         // TODO (FEATURE): change tag size based on number of enum vals 
         PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
-        if (!can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
+        if (!bd_can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
         
         CType* cunion = &ctype->structure.fields.data[1].val;
 
@@ -983,7 +983,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
             
             PtrArray* variant = ptype->enumeration.variants.data[selected_index].val;
             if (variant->len != 1) return false;
-            return can_reinterpret(cunion, variant->data[0]);
+            return bd_can_reinterpret(cunion, variant->data[0]);
         }
 
         // TODO (FEATURE): Add ability for C type to not need union/struct if
@@ -992,7 +992,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
         for (size_t i = 0; i < cunion->cunion.fields.len; i++) {
             PtrArray* variant = ptype->enumeration.variants.data[i].val;
             if (variant->len == 1) {
-                if (!can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
+                if (!bd_can_reinterpret(cunion->cunion.fields.data[i].val, variant->data[0]))
                     return false;
             } else {
                 CType* var_struct = cunion->cunion.fields.data[i].val;
@@ -1000,7 +1000,7 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
                     return false;
 
                 for (size_t j = 0; j < variant->len; j++) {
-                    if (!can_reinterpret(&var_struct->structure.fields.data[j].val, variant->data[j]))
+                    if (!bd_can_reinterpret(&var_struct->structure.fields.data[j].val, variant->data[j]))
                         return false;
                 }
             }
@@ -1028,6 +1028,6 @@ bool can_reinterpret(CType* ctype, PiType* ptype) {
     case TUVar:
         return false;
     default:
-        panic(mv_string("invalid types provided to can_reinterpret"));
+        panic(mv_string("invalid types provided to bd_can_reinterpret"));
     }
 }

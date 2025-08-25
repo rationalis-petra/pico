@@ -1,7 +1,7 @@
 #include "platform/memory/arena.h"
 #include "platform/memory/executable.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/values/ctypes.h"
 #include "pico/values/types.h"
 #include "pico/data/error.h"

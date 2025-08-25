@@ -6,7 +6,7 @@
 
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/num.h"
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 
 PiType* mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(a, 2, mk_prim_type(a, a1), mk_prim_type(a, a2), mk_prim_type(a, r));

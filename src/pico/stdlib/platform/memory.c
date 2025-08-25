@@ -2,7 +2,7 @@
 #include "platform/memory/platform.h"
 
 #include "pico/values/ctypes.h"
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
 
 void build_platform_alloc_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {

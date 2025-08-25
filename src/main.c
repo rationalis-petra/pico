@@ -257,6 +257,7 @@ int main(int argc, char** argv) {
 
     switch (command.type) {
     case CRepl: {
+        init_codegen(command.repl.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = command.repl.debug_print,
             .interactive = true,
@@ -268,6 +269,7 @@ int main(int argc, char** argv) {
         break;
     }
     case CScript: {
+        init_codegen(command.script.backend, stdalloc);
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
             run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, stdalloc);
@@ -280,6 +282,7 @@ int main(int argc, char** argv) {
         break;
     }
     case CEval: {
+        init_codegen(command.eval.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = false,
             .interactive = false,
@@ -294,7 +297,10 @@ int main(int argc, char** argv) {
         write_help_string(get_formatted_stdout());
         break;
     case CVersion:
-        write_string(mv_string("Pico Relic compiler - Version 0.0.3\n"), cout);
+        write_string(mv_string("Pico Relic Compiler - Version "), cout);
+        write_string(mv_string(version), cout);
+        write_string(mv_string("\n"), cout);
+        write_string(mv_string("target: x86_64\n"), cout);
         break;
     case CInvalid:
         write_string(command.error_message, cout);
@@ -311,6 +317,7 @@ int main(int argc, char** argv) {
     delete_assembler(ass);
     release_executable_allocator(exalloc);
 
+    teardown_codegen();
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();

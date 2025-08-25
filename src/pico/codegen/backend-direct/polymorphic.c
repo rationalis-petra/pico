@@ -5,8 +5,8 @@
 #include "platform/machine_info.h"
 #include "components/pretty/string_printer.h"
 
-#include "pico/codegen/polymorphic.h"
-#include "pico/codegen/internal.h"
+#include "pico/codegen/backend-direct/polymorphic.h"
+#include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
 
 #define INDEX_REGISTER R13

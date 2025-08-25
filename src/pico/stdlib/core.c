@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
-#include "pico/codegen/internal.h"
+#include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core.h"
 
 static PiType* ptr_type;

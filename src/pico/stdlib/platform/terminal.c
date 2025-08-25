@@ -2,7 +2,7 @@
 #include "platform/terminal/terminal.h"
 
 #include "pico/values/ctypes.h"
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
 
 typedef struct {

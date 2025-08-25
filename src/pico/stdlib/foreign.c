@@ -2,7 +2,7 @@
 #include "platform/dynamic_library.h"
 #include "platform/memory/arena.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/foreign.h"

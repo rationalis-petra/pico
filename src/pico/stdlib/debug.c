@@ -2,7 +2,7 @@
 #include "platform/signals.h"
 #include "platform/memory/arena.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/debug.h"
 
 #if OS_FAMILY == UNIX
