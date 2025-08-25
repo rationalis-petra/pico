@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "data/string.h"
+#include "pico/codegen/codegen.h"
 #include "pico/data/string_array.h"
 
 /* Command line interface
@@ -35,6 +36,7 @@ typedef struct {
     ReportType report_type;
     uint8_t report_level;
     uint8_t print_level;
+    CodegenBackend backend;
 } TestOpts;
 
 typedef struct {

@@ -3,7 +3,7 @@
 
 #include "app/command_line_opts.h"
 
-Command internal_parse_command(StringArray args, Allocator* a);
+static Command internal_parse_command(StringArray args, Allocator* a);
 
 Command parse_command(StringArray args) {
     Allocator arena = mk_arena_allocator(4096, get_std_allocator());
@@ -12,7 +12,7 @@ Command parse_command(StringArray args) {
     return cmd;
 }
 
-bool try_parse_backend(String arg, CodegenBackend *dest, Allocator* a) {
+static bool try_parse_backend(String arg, CodegenBackend *dest, Allocator* a) {
     if (begins_with(arg, mv_string("--backend=")) == 0) {
         String backend_name = substring(10, arg.memsize, arg, a);
 
@@ -27,7 +27,7 @@ bool try_parse_backend(String arg, CodegenBackend *dest, Allocator* a) {
     return false;
 }
 
-Command internal_parse_command(StringArray args, Allocator* a) {
+static Command internal_parse_command(StringArray args, Allocator* a) {
     // Step 1: the default command (assuming no arguments) is repl
     if (args.len == 0) {
         return (Command) {
