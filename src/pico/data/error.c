@@ -1,6 +1,8 @@
 #include "data/stream.h"
 #include "data/stringify.h"
 #include "platform/terminal/terminal.h"
+#include "platform/signals.h"
+
 #include "components/pretty/document.h"
 #include "components/pretty/stream_printer.h"
 #include "components/pretty/standard_types.h"
@@ -198,4 +200,22 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     // End of surrounding code
     end_coloured_text(fos);
     write_fstring(mv_string("\n"), fos);
+}
+
+static _Thread_local Hook not_implemented_hook = (Hook){.fn = NULL, .ctx = NULL}; 
+
+void not_implemented(String message) {
+    if (not_implemented_hook.fn) {
+        not_implemented_hook.fn(not_implemented_hook.ctx);
+    } else {
+        panic(message);
+    }
+}
+
+void set_not_implemented_hook(Hook hook) {
+    not_implemented_hook = hook;
+}
+
+void clear_not_implemented_hook() {
+    not_implemented_hook = (Hook){NULL, NULL};
 }

@@ -167,6 +167,11 @@ void top_eql(void *data, TestLog *log) {
     test_fail(log);
 }
 
+void skip_hook(void *ctx) {
+    TestLog* log = ctx;
+    test_skip(log);
+}
+
 void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
@@ -175,8 +180,11 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
     run_toplevel_internal(string, module, context.env, callbacks, expected_val,
                           context.log, context.target, context.a);
+    clear_not_implemented_hook();
 }
 
 typedef struct {
@@ -229,7 +237,10 @@ void test_toplevel_stdout(const char *string, const char *expected_stdout, Modul
     };
 
     OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
     run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
     set_std_ostream(old);
 
     delete_ostream(out, context.a);
@@ -406,5 +417,8 @@ void test_typecheck_eq(const char *string, PiType* expected, Environment* env, T
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = log};
+    set_not_implemented_hook(hook);
     test_typecheck_internal(string, env, callbacks, expected, log, a);
+    clear_not_implemented_hook();
 }
