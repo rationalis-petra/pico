@@ -1,10 +1,12 @@
 #include "data/stream.h"
 #include "data/stringify.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
+#include "platform/signals.h"
 
-#include "pretty/document.h"
-#include "pretty/stream_printer.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/document.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/standard_types.h"
+
 #include "pico/data/error.h"
 
 _Noreturn void throw_pi_error(PiErrorPoint* point, PicoError err) {
@@ -23,11 +25,16 @@ const Colour message_colour = (Colour){.r = 200, .g = 20, .b = 20};
 const Colour regular_code_colour = (Colour){.r = 150, .g = 150, .b = 150};
 const Colour bad_code_colour = (Colour){.r = 208, .g = 105, .b = 30};
 
-void display_error(MultiError multi, IStream *is, FormattedOStream* fos, Allocator* a) {
+void display_error(MultiError multi, IStream *is, FormattedOStream* fos, const char* filename, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
     String* buffer = get_captured_buffer(is);
+
+    if (filename) {
+        write_fstring(mv_string(filename), fos);
+        write_fstring(mv_string(": \n\n"), fos);
+    }
 
     if (multi.has_many) {
         for (size_t i = 0; i < multi.errors.len; i++) {
@@ -90,7 +97,6 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     start_coloured_text(regular_code_colour, fos);
     // Now, gather the past n lines
 
-    // 
     String strnum = string_u64(line_number + 1, a);
     size_t line_width = strnum.memsize;
     delete_string(strnum, a);
@@ -139,6 +145,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     delete_doc(doc, a);
     write_fstring(mv_string(" | "), fos);
 
+    // The 'bad region' may take multiple lines of code, so we check that
     String s1 = substring(current_start, range.start, buffer, a);
     // TODO (BUG) '+1' won't work with UTF-8!
     String bad_code = substring(range.start, range.end, buffer, a);
@@ -163,6 +170,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                     start_coloured_text(colour(208, 105, 30), fos);
                 }
                 write_fstring(bad_line, fos);
+                delete_string(bad_line, a);
                 start_idx = i + 1;
             }
         }
@@ -192,4 +200,22 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     // End of surrounding code
     end_coloured_text(fos);
     write_fstring(mv_string("\n"), fos);
+}
+
+static _Thread_local Hook not_implemented_hook = (Hook){.fn = NULL, .ctx = NULL}; 
+
+void not_implemented(String message) {
+    if (not_implemented_hook.fn) {
+        not_implemented_hook.fn(not_implemented_hook.ctx);
+    } else {
+        panic(message);
+    }
+}
+
+void set_not_implemented_hook(Hook hook) {
+    not_implemented_hook = hook;
+}
+
+void clear_not_implemented_hook() {
+    not_implemented_hook = (Hook){NULL, NULL};
 }

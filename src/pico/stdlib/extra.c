@@ -8,13 +8,12 @@
 
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
-#include "pico/stdlib/meta.h"
+#include "pico/stdlib/meta/meta.h"
 #include "pico/syntax/concrete.h"
 #include "pico/analysis/abstraction.h"
-#include "pico/codegen/foreign_adapters.h"
-#include "pico/codegen/internal.h"
+#include "pico/codegen/codegen.h"
+#include "pico/codegen/backend-direct/internal.h"
 
-#include "app/module_load.h"
 
 static jump_buf* m_buf;
 void set_exit_callback(jump_buf* buf) { m_buf = buf; }
@@ -24,20 +23,6 @@ static uint64_t std_perm_allocator;
 //static uint64_t std_region_allocator; 
 //static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
-
-static Package* current_package;
-void set_current_package(Package* current) { current_package = current; }
-
-static IStream* current_istream;
-void set_std_istream(IStream* current) { current_istream = current; }
-
-static OStream* current_ostream;
-OStream *set_std_ostream(OStream *current) {
-    OStream* old = current_ostream;
-    current_ostream = current;
-    return old;
-}
-
 Allocator get_std_current_allocator() {
     Allocator** data = get_dynamic_memory();
     Allocator* dyn = data[std_current_allocator]; 
@@ -77,21 +62,6 @@ Allocator set_std_temp_allocator(Allocator al) {
     Allocator* dyn = data[std_temp_allocator]; 
     Allocator old = *dyn;
     *dyn = al;
-    return old;
-}
-
-static uint64_t std_current_module;
-Module* get_std_current_module() {
-    void** data = get_dynamic_memory();
-    Module** dyn = data[std_current_module]; 
-    return *dyn;
-}
-
-Module* set_std_current_module(Module* md) {
-    void** data = get_dynamic_memory();
-    Module** mdle = data[std_current_module]; 
-    Module* old = *mdle;
-    *mdle = md;
     return old;
 }
 
@@ -210,88 +180,6 @@ void exit_callback() {
 
 void build_exit_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     generate_c_call(exit_callback, ass, a, point);
-}
-
-void relic_print_fn(String s) {
-    write_string(s, current_ostream);
-}
-
-void relic_println_fn(String s) {
-    puts((char*)s.bytes);
-}
-
-void build_print_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
-    convert_c_fn(relic_print_fn, &fn_ctype, type, ass, a, point); 
-    delete_c_type(fn_ctype, a);
-}
-
-void build_println_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "string", mk_string_ctype(a), (CType){.sort = CSVoid});
-    convert_c_fn(relic_println_fn, &fn_ctype, type, ass, a, point); 
-    delete_c_type(fn_ctype, a);
-}
-
-// C implementation (called from pico!)
-Result load_module_c_fun(String filename) {
-    // (ann load-module String → Unit) : load the module/code located in file! 
-    
-    Allocator* a = get_std_allocator();
-    IStream* sfile = open_file_istream(filename, a);
-    if (!sfile) {
-      return (Result) {
-        .type = Err, .error_message = mv_string("failed to open file!"),
-      };
-    }
-    FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
-
-    Module* parent = get_std_current_module();
-    load_module_from_istream(sfile, os, current_package, parent, a);
-    delete_istream(sfile, a);
-    delete_formatted_ostream(os, a);
-    return (Result) {.type = Ok};
-}
-
-void build_load_module_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType result_ctype = mk_struct_ctype(a, 2,
-                                         "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "error_message", copy_c_type(mk_string_ctype(a), a));
-
-
-    CType fn_ctype = mk_fn_ctype(a, 1, "filename", mk_string_ctype(a), result_ctype);
-
-    convert_c_fn(load_module_c_fun, &fn_ctype, type, ass, a, point); 
-}
-
-Result run_script_c_fun(String filename) {
-    // (ann load-module String → Unit) : load the module/code located in file! 
-    
-    Allocator* a = get_std_allocator();
-    IStream* sfile = open_file_istream(filename, a);
-    if (!sfile) {
-      return (Result) {
-        .type = Err, .error_message = mv_string("failed to open file!"),
-      };
-    }
-    Module* current_module = get_std_current_module();
-    FormattedOStream* os = mk_formatted_ostream(current_ostream, a);
-    run_script_from_istream(sfile, os, current_module, a);
-    delete_istream(sfile, a);
-    delete_formatted_ostream(os, a);
-    return (Result) {.type = Ok};
-}
-
-void build_run_script_fun(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // Proc type
-    // TODO: this does not accurately represent the result type!
-    CType result_ctype = mk_struct_ctype(a, 2,
-                                         "type", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                                         "error_message", copy_c_type(mk_string_ctype(a), a));
-
-
-    CType fn_ctype = mk_fn_ctype(a, 1, "filename", mk_string_ctype(a), result_ctype);
-
-    convert_c_fn(run_script_c_fun, &fn_ctype, type, ass, a, point); 
 }
 
 RawTree atom_symbol(const char *str) {
@@ -764,8 +652,23 @@ MacroResult ann_macro(RawTreeArray nodes) {
         }, &field_nodes);
 
     // push <type>
-    RawTree* tree = (nodes.len == 3) ? &nodes.data[2]
-        : raw_slice(nodes.data, 2, &a);
+    RawTree *tree;
+    if (nodes.len == 3) {
+        tree = &nodes.data[2];
+    } else {
+        const size_t drop = 2;
+        tree = mem_alloc(sizeof(RawTree), &a);
+        *tree = (RawTree) {
+            .type = RawBranch,
+            .range.start = nodes.data[drop].range.start,
+            .range.end = nodes.data[nodes.len - 1].range.end,
+            .branch.hint = HExpression,
+            .branch.nodes.len = nodes.len - drop,
+            .branch.nodes.size = nodes.size - drop,
+            .branch.nodes.data = nodes.data + drop,
+            .branch.nodes.gpa = nodes.gpa,
+        };
+    }
     push_rawtree(*tree, &field_nodes);
 
     // push [.type <type>]
@@ -836,10 +739,8 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     sym = string_to_symbol(mv_string("current-allocator"));
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
-    void* nul = NULL;
     Allocator nul_alloc = (Allocator){.malloc = NULL, .realloc = NULL, .free= NULL};
     std_temp_allocator = mk_dynamic_var(sizeof(Allocator), &nul_alloc); 
-    std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
 
     typep = mk_dynamic_type(a, mk_prim_type(a, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
@@ -892,40 +793,6 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit));
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    // print : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_print_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("print"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_println_fn(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("print-ln"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    // load-module : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_enum_type(a, 2, "Ok", 0, "Err", 1, mk_string_type(a)));
-    build_load_module_fun(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("load-module"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    // run-script : Proc [String] Result
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_enum_type(a, 2, "Ok", 0, "Err", 1, mk_string_type(a)));
-    build_run_script_fun(typep, ass, a, &point);
-    sym = string_to_symbol(mv_string("run-script"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

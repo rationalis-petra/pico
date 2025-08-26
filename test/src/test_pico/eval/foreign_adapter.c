@@ -1,6 +1,7 @@
 #include "platform/memory/arena.h"
+#include "platform/memory/executable.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/values/ctypes.h"
 #include "pico/values/types.h"
 #include "pico/data/error.h"
@@ -36,8 +37,17 @@ bool examine_struct(Struct4Words st) {
     return out;
 }
 
-void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator *a) {
-    Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+
+void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Target target, Allocator *a) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
+    Allocator exec = mk_executable_allocator(a);
+    Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exec);
     Segments prepped;
     Segments fn_segments = {.data = mk_u8_array(0, a),};
     Segments null_segments = (Segments) {
@@ -66,8 +76,9 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         int64_t expected = -90;
-        test_toplevel_eq("(foreign-add-10 -100)\n", &expected, module, log, a) ;
+        TEST_EQ("(foreign-add-10 -100)\n");
     }
         
     if (test_start(log, mv_string("4word-struct"))) {
@@ -101,9 +112,9 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         bool expected = true;
-        test_toplevel_eq("(examine-4word-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]) )\n",
-                        &expected, module, log, a) ;
+        TEST_EQ("(examine-4word-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]) )\n") ;
     }
 
     if (test_start(log, mv_string("2-4word-structs"))) {
@@ -137,10 +148,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
         delete_pi_type_p(ptype, a);
         delete_c_type(ctype, a);
         
+        refresh_env(env, a);
         bool expected = true;
-        test_toplevel_eq("(examine-two-4word-structs \n"
-                         "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n",
-                        &expected, module, log, a) ;
+        TEST_EQ("(examine-two-4word-structs \n"
+                         "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n") ;
     }
 
     
@@ -148,4 +159,5 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Allocator
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
     delete_assembler(ass);
+    release_executable_allocator(exec);
 }

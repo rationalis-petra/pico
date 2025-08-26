@@ -1,5 +1,5 @@
 #include "platform/signals.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "data/stream.h"
 
 #include <stdlib.h>

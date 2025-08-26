@@ -49,6 +49,35 @@ bool imclause_eq(ImportClause c1, ImportClause c2) {
     panic(mv_string("bad caluse"));
 }
 
+Document* pretty_import_clause(ImportClause clause, Allocator* a) {
+    PtrArray path_nodes = mk_ptr_array(clause.path.len * 2, a);
+    for (size_t i = 0; i < clause.path.len; i++) {
+        push_ptr(mv_str_doc(symbol_to_string(clause.path.data[i], a), a), &path_nodes);
+        if (i + 1 != clause.path.len)
+            push_ptr(mv_cstr_doc(".", a), &path_nodes);
+    }
+    switch (clause.type) {
+    case Import:
+        return mv_cat_doc(path_nodes, a);
+    case ImportAs: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_cat_doc(path_nodes, a), &nodes);
+        push_ptr(mv_cstr_doc(":as", a), &nodes);
+        push_ptr(mv_str_doc(symbol_to_string(clause.rename, a), a), &nodes);
+        return mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+    }
+    case ImportMany:
+        panic(mv_string("Not implemented: pretty for import many"));
+    case ImportAll: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_cat_doc(path_nodes, a), &nodes);
+        push_ptr(mv_cstr_doc(":all", a), &nodes);
+        return mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+    }
+    }
+    panic(mv_string("bad import clause"));
+}
+
 ImportClause copy_import_clause(ImportClause clause, Allocator* a) {
     ImportClause out = clause;
     out.path = scopy_symbol_array(clause.path, a);

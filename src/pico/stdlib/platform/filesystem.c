@@ -2,8 +2,8 @@
 #include "platform/filesystem/filesystem.h"
 
 #include "pico/values/ctypes.h"
-#include "pico/codegen/foreign_adapters.h"
-#include "pico/stdlib/platform/filesystem.h"
+#include "pico/codegen/codegen.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
 

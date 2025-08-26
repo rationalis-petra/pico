@@ -26,6 +26,8 @@
 #include "data/string.h"
 #include "data/stream.h"
 
+#include "pico/codegen/codegen.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/extra.h"
 
 #include "test/command_line_opts.h"
@@ -33,20 +35,32 @@
 #include "test_assembler/test_assembler.h"
 
 void all_suites(TestLog* log, Allocator* a);
-TestLog* setup_testlog(int argc, char** argv, FormattedOStream* cout, Allocator* a);
+TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator* a);
 
 int main(int argc, char** argv) {
     // Setup
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();
     OStream* cout = get_stdout_stream();
-
+    int out = 0;
     // Init terminal first, as other initializers may panic (and therefore write
     // to stdout)
     init_terminal(stdalloc);
 
+    StringArray args = mk_string_array(argc - 1, stdalloc);
+    for (int i = 1; i < argc; i++) {
+        push_string(mv_string(argv[i]), &args);
+    }
+    TestCommand command = parse_test_command(args);
+    sdelete_string_array(args);
+
+    if (command.type == CInvalid) {
+        write_string(mv_string("Invalid command - expected one of all, exept, only\n"), cout);
+        return 1;
+    }
+
     FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
-    TestLog* log = setup_testlog(argc, argv, cos, stdalloc);
+    TestLog* log = setup_testlog(command, cos, stdalloc);
 
     // Initialization order here is not important
     init_ctypes();
@@ -54,13 +68,14 @@ int main(int argc, char** argv) {
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
     thread_init_dynamic_vars();
+    init_codegen(command.opts.backend, stdalloc);
 
     set_std_istream(cin);
     set_std_ostream(cout);
 
     finish_setup(log);
     all_suites(log, stdalloc);
-    int out = summarize_tests(log, stdalloc);
+    out = summarize_tests(log, stdalloc);
 
     delete_test_log(log, stdalloc);
     delete_formatted_ostream(cos, stdalloc);
@@ -73,15 +88,7 @@ int main(int argc, char** argv) {
     return out;
 }
 
-TestLog* setup_testlog(int argc, char **argv, FormattedOStream* cout, Allocator *a) {
-    // Argument parsing
-    StringArray args = mk_string_array(argc - 1, a);
-    for (int i = 1; i < argc; i++) {
-        push_string(mv_string(argv[i]), &args);
-    }
-    TestCommand command = parse_test_command(args);
-    sdelete_string_array(args);
-
+TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator *a) {
     // TODO: setup_tests
     Verbosity v = (Verbosity) {
         .show_passes = false,

@@ -1,4 +1,7 @@
+#include <signal.h>
+
 #include "platform/signals.h"
+#include "platform/memory/std_allocator.h"
 #include "data/stringify.h"
 
 #include "test/test_log.h"
@@ -8,16 +11,30 @@ const Colour fail_colour = (Colour){.r = 200, .g = 50, .b = 50};
 const Colour info_colour = (Colour){.r = 100, .g = 210, .b = 230};
 const Colour pass_colour = (Colour){.r = 30, .g = 200, .b = 30};
 
+static TestLog* current_log = NULL;
+
+void on_segfault() {
+    panic(string_cat(mv_string("Segfault in test: "),
+          current_log->current_test,
+          get_std_allocator()));
+}
+
 TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
   TestLog* out = mem_alloc(sizeof(TestLog), a);
   *out = (TestLog) {
       .stream = stream,
       .verbosity = v,
       .start_time = query_performance_timer(),
+
+      .current_suites = mk_ptr_array(8, a),
+
       .test_count = 0,
       .passed_tests = 0,
       .failed_tests = 0,
+      .gpa = a,
   };
+  current_log = out;
+  signal(SIGSEGV, on_segfault);
   return out;
 }
 
@@ -26,10 +43,15 @@ void finish_setup(TestLog *log) {
 }
 
 bool suite_start(TestLog *log, String name) {
+    String* str = mem_alloc(sizeof(String), log->gpa);
+    *str = name;
+    push_ptr(str, &log->current_suites);
     return true;
 }
 
 void suite_end(TestLog *log) {
+    String* str = pop_ptr(&log->current_suites);
+    mem_free(str, log->gpa);
 }
 
 bool test_start(TestLog* log, String name) {
@@ -50,7 +72,30 @@ void test_pass(TestLog* log) {
     if (log->verbosity.show_passes) {
         start_coloured_text(pass_colour, log->stream);
         write_fstring(mv_string("[Pass] "), log->stream);
-        write_fstring(log->current_test, log->stream);
+        for (size_t i = 0; i < log->current_suites.len; i++) {
+            write_fstring(*(String*)log->current_suites.data[i], log->stream);
+            write_fstring(mv_string("."), log->stream);
+        }
+        write_fstring(mv_string("\n"), log->stream);
+        end_coloured_text(log->stream);
+    }
+}
+
+void test_skip(TestLog* log) {
+    log->skipped_tests++;
+
+    if (!log->in_test) {
+        panic(mv_string("Ending test suite - passing a test but one has not been started!"));
+    }
+
+    log->in_test = false;
+    if (log->verbosity.show_passes) {
+        start_coloured_text(pass_colour, log->stream);
+        write_fstring(mv_string("[Skip] "), log->stream);
+        for (size_t i = 0; i < log->current_suites.len; i++) {
+            write_fstring(*(String*)log->current_suites.data[i], log->stream);
+            write_fstring(mv_string("."), log->stream);
+        }
         write_fstring(mv_string("\n"), log->stream);
         end_coloured_text(log->stream);
     }
@@ -66,6 +111,10 @@ void test_fail(TestLog* log) {
     if (log->verbosity.show_fails) {
         start_coloured_text(fail_colour, log->stream);
         write_fstring(mv_string("[Fail] "), log->stream);
+        for (size_t i = 0; i < log->current_suites.len; i++) {
+            write_fstring(*(String*)log->current_suites.data[i], log->stream);
+            write_fstring(mv_string("."), log->stream);
+        }
         write_fstring(log->current_test, log->stream);
         write_fstring(mv_string("\n"), log->stream);
         end_coloured_text(log->stream);
@@ -73,6 +122,7 @@ void test_fail(TestLog* log) {
 }
 
 void delete_test_log(TestLog* log, Allocator* a) {
+    sdelete_ptr_array(log->current_suites);
     mem_free(log, a);
 }
 
@@ -108,7 +158,7 @@ int summarize_tests(TestLog *log, Allocator* a) {
     double test_time_used = time_to_double(time_diff(log->setup_time, end_time), Seconds);
 
     write_fstring(mv_string("──────────────────────────────────────────────────────────\n\n"), log->stream);
-    if (log->passed_tests + log->failed_tests != log->test_count) {
+    if (log->passed_tests + log->failed_tests + log->skipped_tests != log->test_count) {
         err_code = 1;
         start_coloured_text(fail_colour, log->stream);
         write_fstring(mv_string("Failure of test suite: total tests != passed + failed"), log->stream);
@@ -135,6 +185,12 @@ int summarize_tests(TestLog *log, Allocator* a) {
     str = string_u64(log->failed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
+    if (log->skipped_tests != 0) {
+        write_fstring(mv_string("\n                     Skipped : "), log->stream);
+        str = string_u64(log->skipped_tests, a);
+        write_fstring(str, log->stream);
+        delete_string(str, a);
+    }
     write_fstring(mv_string("\n                     Total  : "), log->stream);
     str = string_u64(log->test_count, a);
     write_fstring(str, log->stream);

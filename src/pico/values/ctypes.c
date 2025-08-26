@@ -1,9 +1,9 @@
 #include <stdarg.h>
+#include "data/meta/assoc_impl.h"
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "pretty/document.h"
-#include "pretty/standard_types.h"
-#include "data/meta/assoc_impl.h"
+#include "components/pretty/document.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/values/ctypes.h"
 
@@ -56,7 +56,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
 
         PtrArray arg_nodes = mk_ptr_array(type->enumeration.vals.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*name_to_string(type->enumeration.vals.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->enumeration.vals.data[i].key, a), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(" = "), a), &arg_nodes);
             push_ptr(pretty_i64(type->enumeration.vals.data[i].val, a), &arg_nodes);
             if (i - 1 != type->proc.args.len) {
@@ -71,12 +71,12 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(pretty_ctype(type->proc.ret, a), &main_nodes);
         if (!type->proc.named_tag) {
-            push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->proc.name, a), a), &main_nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len * 4, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
-            push_ptr(mk_str_doc(*name_to_string(type->proc.args.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->proc.args.data[i].key, a), a), &arg_nodes);
             push_ptr(mk_str_doc(mv_string(": "), a), &arg_nodes);
             push_ptr(pretty_ctype(&type->proc.args.data[i].val, a), &arg_nodes);
             if (i + 1 != type->proc.args.len) {
@@ -91,13 +91,13 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         PtrArray main_nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("struct {"), a), &main_nodes);
         if (!type->proc.named_tag) {
-            push_ptr(mk_str_doc(*name_to_string(type->proc.name), a), &main_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->proc.name, a), a), &main_nodes);
         }
 
         PtrArray field_nodes = mk_ptr_array(type->structure.fields.len, a);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray arg_nodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(*name_to_string(type->structure.fields.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->structure.fields.data[i].key, a), a), &arg_nodes);
             Document* tydoc = pretty_ctype(&type->structure.fields.data[i].val, a);
             if (i - 1 != type->proc.args.len) {
                 PtrArray cat_nodes = mk_ptr_array(2, a);
@@ -121,7 +121,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         PtrArray field_nodes = mk_ptr_array(type->cunion.fields.len, a);
         for (size_t i = 0; i < type->cunion.fields.len; i++) {
             PtrArray arg_nodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(*name_to_string(type->cunion.fields.data[i].key), a), &arg_nodes);
+            push_ptr(mk_str_doc(name_to_string(type->cunion.fields.data[i].key, a), a), &arg_nodes);
             Document* tydoc = pretty_ctype(type->cunion.fields.data[i].val, a);
             if (i - 1 != type->proc.args.len) {
                 PtrArray cat_nodes = mk_ptr_array(2, a);
@@ -143,7 +143,7 @@ Document* pretty_ctype(CType* type, Allocator* a) {
         return mv_cat_doc(nodes, a);
     }
     case CSIncomplete:
-        return mk_str_doc(*name_to_string(type->incomplete), a);
+        return mk_str_doc(name_to_string(type->incomplete, a), a);
     }
     // TODO (LOGIC BUG): this should be a return result or thrown error,
     // as it may indicate an error in user code, not internal code!

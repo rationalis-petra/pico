@@ -1,25 +1,20 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/memory/std_allocator.h"
 #include "platform/threads.h"
-#include "data/amap.h"
 #include "data/array.h"
-#include "pretty/standard_types.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/values/values.h"
+#include "pico/data/symbol_table.h"
 
 // The global symbol table
-static StrU64AMap symbol_table;
-static PtrArray symbol_names;
-static Allocator* symbol_allocator;
-static uint64_t distinct_counter;
+static SymbolTable symbol_table;
+size_t distinct_counter = 0;
 
 // Helper functions
 void init_symbols(Allocator* a) {
-    symbol_allocator = a;
-    symbol_table = mk_str_u64_amap(1024, a);
-    symbol_names = mk_ptr_array(1024, a);
+    init_symbol_table(&symbol_table, a);
     distinct_counter = 0;
 }
 
@@ -28,8 +23,8 @@ void delete_string_pointer(String* ptr, Allocator* a) {
     mem_free(ptr, a);
 }
 
-String* symbol_to_string(Symbol symbol) {
-    return symbol_names.data[symbol.name];
+String symbol_to_string(Symbol symbol, Allocator* a) {
+    return get_table_string(symbol.name, &symbol_table, a);
 }
 
 Symbol string_to_symbol(String string) {
@@ -41,29 +36,14 @@ Symbol string_to_unique_symbol(String string) {
 }
 
 Name string_to_name(String string) {
-    Name new_name_id = symbol_names.len;
-    Name* name = str_u64_lookup(string, symbol_table);
-    if (!name) {
-        String* map_str = mem_alloc(sizeof(String), symbol_allocator);
-        *map_str = copy_string(string, symbol_allocator);
-        push_ptr(map_str, &symbol_names);
-        str_u64_insert(*map_str, new_name_id, &symbol_table);
-        name = &new_name_id;
-    }
-    return *name;
+    return get_table_name(string, &symbol_table);
 }
-String* name_to_string(Name name) {
-    return symbol_names.data[name];
+String name_to_string(Name name, Allocator* a) {
+    return get_table_string(name, &symbol_table, a);
 }
 
 void clear_symbols() {
-    Allocator* a = get_std_allocator();
-    for (size_t i = 0; i < symbol_names.len; i++) {
-        delete_string_pointer(symbol_names.data[i], a);
-    }
-    // The strings have already been deleted from the above array, so we use a shallow 
-    // delete to avoid double-free
-    sdelete_str_u64_amap(symbol_table);
+    delete_table(&symbol_table);
 }
 
 bool symbol_eq(Symbol lhs, Symbol rhs) {
@@ -218,6 +198,11 @@ void* get_dynamic_val(uint64_t dvar) {
     return thread_dynamic_vars.data[dvar];
 }
 
+void set_dynamic_val(uint64_t dvar, void* data, size_t size) {
+    void* ptr = thread_dynamic_vars.data[dvar];
+    memcpy(ptr, data, size);
+}
+
 void delete_dynamic_var(uint64_t var) {
     DVarMetadata* data = dynamic_var_metadata.data[var];
     mem_free(data->default_value, dynamic_var_allocator);
@@ -242,8 +227,8 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDeclare:
         out = mk_str_doc(mv_string("::declare"), a);
         break;
-    case FOpen:
-        out = mk_str_doc(mv_string("::open"), a);
+    case FImport:
+        out = mk_str_doc(mv_string("::import"), a);
         break;
 
     case FApplication:
@@ -276,6 +261,12 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FDynamicUse:
         out = mk_str_doc(mv_string("::use"), a);
         break;
+    case FDynamicLet:
+        out = mk_str_doc(mv_string("::bind"), a);
+        break;
+    case FDynamicSet:
+        out = mk_str_doc(mv_string("::set"), a);
+        break;
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);
         break;
@@ -288,9 +279,6 @@ Document* pretty_former(TermFormer op, Allocator* a) {
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
-        break;
-    case FDynamicLet:
-        out = mk_str_doc(mv_string("::bind"), a);
         break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);

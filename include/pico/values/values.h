@@ -5,7 +5,7 @@
 
 #include "data/array.h"
 #include "data/string.h"
-#include "pretty/document.h"
+#include "components/pretty/document.h"
 
 typedef uint64_t Name;
 typedef U64Array NameArray;
@@ -19,11 +19,13 @@ typedef struct {
 typedef struct env_capture env_capture;
 
 // Symbol table
-String* symbol_to_string(Symbol symbol);
+String symbol_to_string(Symbol symbol, Allocator* a);
 Symbol string_to_symbol(String string);
 Symbol string_to_unique_symbol(String string);
+
 Name string_to_name(String string);
-String* name_to_string(Name name);
+String name_to_string(Name name, Allocator* a);
+
 void init_symbols(Allocator* a);
 void clear_symbols();
 
@@ -46,13 +48,14 @@ void thread_clear_dynamic_vars();
 uint64_t mk_dynamic_var(size_t size, void* default_val);
 void delete_dynamic_var(uint64_t var);
 void* get_dynamic_val(uint64_t dvar);
+void set_dynamic_val(uint64_t dvar, void* new_val, size_t size);
 void* get_dynamic_memory();
 
 typedef enum TermFormer {
     // Top Level Former
     FDefine,
     FDeclare,
-    FOpen,
+    FImport,
 
     // Term Formers: value construction/destruction
     FProcedure,
@@ -68,11 +71,13 @@ typedef enum TermFormer {
     FGenArray,
     FWith,
 
+    // Dynamic Binding
     FDynamic,
     FDynamicUse,
+    FDynamicLet,
+    FDynamicSet,
 
     // Term Formers: Control flow + binding
-    FDynamicLet,
     FLet,
     FIf,
     FLabels,

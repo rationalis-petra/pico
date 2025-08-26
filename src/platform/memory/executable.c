@@ -23,7 +23,7 @@ typedef struct ex_mem {
 } ex_mem;
 
 
-size_t platform_pagesize () {
+static size_t platform_pagesize () {
 #if OS_FAMILY == UNIX
     size_t pagesize = sysconf(_SC_PAGESIZE);
 #elif OS_FAMILY == WINDOWS

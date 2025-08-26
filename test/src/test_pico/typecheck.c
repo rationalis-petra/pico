@@ -1,17 +1,21 @@
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
+#include "pico/binding/environment.h"
 
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, log, a)
 
-void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
+void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
@@ -33,15 +37,28 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL, a);
+
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(mv_string("Error in tests: test_pico/typecheck.c"));
+    }
+    Environment* env = env_from_module(module, &point, a);
     delete_module_header(header);
+
+
+    TestContext context = (TestContext) {
+        .env = env,
+        .a = a,
+        .log = log,
+        .target = target,
+    };
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         // TODO (BUG): this leaks - set current allocator?
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
         PiType* expected = mk_prim_type(&arena, Int_64);
-        test_typecheck_eq("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))",
-            expected, module, log, a) ;
+        TEST_TYPE("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
         set_std_current_allocator(current_old);
     }
 
@@ -53,8 +70,7 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
             mk_proc_type(&arena, 1,
                          mk_struct_type(&arena, 2, "x", mk_prim_type(&arena, Int_64),
                                         "y", mk_prim_type(&arena, Int_64)), mk_prim_type(&arena, Int_64));
-        test_typecheck_eq("(proc [point] (i64.+ point.x point.y))",
-            expected, module, log, a) ;
+        TEST_TYPE("(proc [point] (i64.+ point.x point.y))");
         set_std_current_allocator(current_old);
     }
 
@@ -66,8 +82,7 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
             mk_proc_type(&arena, 1,
                          mk_enum_type(&arena, 2, "left", 1, mk_prim_type(&arena, UInt_64),
                                       "right", 1, mk_prim_type(&arena, Address)), mk_prim_type(&arena, UInt_64));
-        test_typecheck_eq("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])",
-            expected, module, log, a) ;
+        TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
         set_std_current_allocator(current_old);
     }
 
@@ -79,8 +94,7 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
                                         mk_enum_type(&arena, 2,
                                                      "left", 1, mk_prim_type(&arena, Int_64),
                                                      "right", 1, mk_prim_type(&arena, Address)));
-        test_typecheck_eq("(proc [which] if which (:left 10) (:right (malloc 8)))",
-            expected, module, log, a) ;
+        TEST_TYPE("(proc [which] if which (:left 10) (:right (malloc 8)))") ;
         set_std_current_allocator(current_old);
     }
 
@@ -90,10 +104,9 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         set_std_current_allocator(arena);
         PiType *expected = mk_proc_type(&arena, 1, mk_prim_type(&arena, UInt_64),
                                         mk_prim_type(&arena, UInt_64));
-        run_toplevel("(declare id [.type Proc [U64] U64])", module, log, a);
-        run_toplevel("(def id proc [x] x)", module, log, a);
-        test_typecheck_eq("id",
-            expected, module, log, a) ;
+        RUN("(declare id [.type Proc [U64] U64])");
+        RUN("(def id proc [x] x)");
+        TEST_TYPE("id");
         set_std_current_allocator(current_old);
     }
 
@@ -101,11 +114,13 @@ void run_pico_typecheck_tests(TestLog* log, Allocator* a) {
         // TODO (BUG): this leaks - set current allocator?
         Allocator current_old = get_std_current_allocator();
         set_std_current_allocator(arena);
-        PiType expected = (PiType){.sort = TKind, .kind.nargs = 1};
-        test_typecheck_eq("(Family [A] A)", &expected, module, log, a) ;
+        PiType ty = (PiType){.sort = TKind, .kind.nargs = 1};
+        PiType* expected = &ty;
+        TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);
     }
 
+    delete_env(env, a);
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);

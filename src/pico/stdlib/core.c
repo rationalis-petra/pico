@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
-#include "pico/codegen/internal.h"
+#include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core.h"
 
 static PiType* ptr_type;
@@ -224,8 +224,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         panic(point.error_message);
     }
 
-    // TODO: we use int64_t as it has the requisite size (8 bytes)
-    // for pico values: currently don't support non-64 bit values 
     TermFormer former;
     //TermFormer former;
     type.sort = TPrim;
@@ -247,8 +245,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("declare"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FOpen;
-    sym = string_to_symbol(mv_string("open"));
+    former = FImport;
+    sym = string_to_symbol(mv_string("import"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FProcedure;
@@ -277,6 +275,14 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FDynamicUse;
     sym = string_to_symbol(mv_string("use"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FDynamicSet;
+    sym = string_to_symbol(mv_string("set"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FDynamicLet;
+    sym = string_to_symbol(mv_string("bind"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FInstance;
@@ -321,10 +327,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     former = FLet;
     sym = string_to_symbol(mv_string("let"));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
-    former = FDynamicLet;
-    sym = string_to_symbol(mv_string("bind"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FIs;

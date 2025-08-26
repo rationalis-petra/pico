@@ -8,6 +8,7 @@
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/data/symbol_array.h"
 #include "pico/syntax/concrete.h"
+#include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -53,9 +54,10 @@ typedef enum {
     SInstance,
     SDynamic,
     SDynamicUse,
+    SDynamicSet,
+    SDynamicLet,
 
     // Control Flow & Binding
-    SDynamicLet,
     SLet,
     SIf,
     SLabels,
@@ -194,6 +196,11 @@ typedef struct {
     Symbol field;
     Syntax* val;
 } SynProjector;
+
+typedef struct {
+    Syntax* dynamic;
+    Syntax* new_val;
+} SynDynSet;
 
 typedef struct {
     SymbolArray params;
@@ -363,11 +370,13 @@ struct Syntax {
         SynMatch match;
         SynStructure structure;
         SynProjector projector;
-        Syntax* dynamic;
-        Syntax* use;
         SynInstance instance;
 
+        Syntax* dynamic;
+        SynDynSet dynamic_set;
+        Syntax* use;
         SynDynLet dyn_let_expr;
+
         SynLet let_expr;
         SynIf if_expr;
         SynLabels labels;
@@ -422,7 +431,7 @@ Document* pretty_syntax(Syntax* syntax, Allocator* a);
 typedef enum {
     TLDef,
     TLDecl,
-    TLOpen,
+    TLImport,
     TLExpr,
 } TopLevel_t;
 
@@ -441,15 +450,15 @@ typedef struct {
 
 typedef struct {
     Range range;
-    PtrArray paths;
-} OpenClause;
+    ImportClauseArray clauses;
+} TLImportClause;
 
 typedef struct {
     TopLevel_t type;
     union {
         Definition def;
         Declaration decl;
-        OpenClause open;
+        TLImportClause import;
         Syntax* expr;
     };
 } TopLevel;

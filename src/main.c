@@ -1,18 +1,18 @@
-﻿#include "platform/error.h"
+﻿#include "data/string.h"
+#include "data/stream.h"
+
+#include "platform/error.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 #include "platform/jump.h"
-#include "platform/io/terminal.h"
+#include "platform/terminal/terminal.h"
 #include "platform/window/window.h"
 #include "platform/hedron/hedron.h"
 
-#include "data/string.h"
-#include "data/stream.h"
-
-#include "assembler/assembler.h"
-#include "pretty/stream_printer.h"
-#include "pretty/document.h"
+#include "components/assembler/assembler.h"
+#include "components/pretty/stream_printer.h"
+#include "components/pretty/document.h"
 
 #include "pico/syntax/concrete.h"
 #include "pico/parse/parse.h"
@@ -23,13 +23,15 @@
 #include "pico/eval/call.h"
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
+#include "pico/stdlib/meta/meta.h"
 #include "pico/values/types.h"
 
 #include "app/command_line_opts.h"
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.0.8";
+static const char* version = "0.1.0";
 
 typedef struct {
     bool debug_print;
@@ -52,8 +54,6 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
 
-    Environment* env = env_from_module(module, &arena);
-
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
@@ -64,9 +64,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
+    Environment* env = env_from_module(module, &point, &arena);
+
     if (opts.interactive) {
-        String* name = get_name(module);
-        if (name) write_fstring(*name, cout);
+        String name = get_name(module, &arena);
+        write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }
 
@@ -81,7 +83,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, cin, get_formatted_stdout(), a);
+        display_error(multi, cin, get_formatted_stdout(), NULL, a);
         release_arena_allocator(arena);
         return true;
     }
@@ -123,7 +125,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    type_check(&abs, env, &arena, &pi_point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = gen_target,
+    };
+    type_check(&abs, env, ctx);
 
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
@@ -141,6 +146,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Code Generation
     // -------------------------------------------------------------------------
 
+    clear_target(gen_target);
     LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
 
     if (opts.debug_print) {
@@ -181,7 +187,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, cout, &arena);
+    display_error(pi_point.multi, cin, cout, NULL, &arena);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
@@ -251,6 +257,7 @@ int main(int argc, char** argv) {
 
     switch (command.type) {
     case CRepl: {
+        init_codegen(command.repl.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = command.repl.debug_print,
             .interactive = true,
@@ -262,9 +269,10 @@ int main(int argc, char** argv) {
         break;
     }
     case CScript: {
+        init_codegen(command.script.backend, stdalloc);
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
-            run_script_from_istream(fin, get_formatted_stdout(), module, stdalloc);
+            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, stdalloc);
             delete_istream(fin, stdalloc);
         } else {
             write_string(mv_string("Failed to open file: "), cout);
@@ -274,6 +282,7 @@ int main(int argc, char** argv) {
         break;
     }
     case CEval: {
+        init_codegen(command.eval.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = false,
             .interactive = false,
@@ -288,7 +297,10 @@ int main(int argc, char** argv) {
         write_help_string(get_formatted_stdout());
         break;
     case CVersion:
-        write_string(mv_string("Pico Relic compiler - Version 0.0.3\n"), cout);
+        write_string(mv_string("Pico Relic Compiler - Version "), cout);
+        write_string(mv_string(version), cout);
+        write_string(mv_string("\n"), cout);
+        write_string(mv_string("target: x86_64\n"), cout);
         break;
     case CInvalid:
         write_string(command.error_message, cout);
@@ -305,6 +317,7 @@ int main(int argc, char** argv) {
     delete_assembler(ass);
     release_executable_allocator(exalloc);
 
+    teardown_codegen();
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();

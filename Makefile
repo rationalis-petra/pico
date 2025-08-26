@@ -37,6 +37,11 @@ else
 	LINK_FLAGS := 
 endif
 
+ifdef PROFILE
+	DEBUG_FLAGS := $(DEBUG_FLAGS) -pg
+    RELEASE_FLAGS := $(DEBUG_FLAGS) -pg
+endif
+
 ifdef HEDRON
 	DEBUG_FLAGS := $(DEBUG_FLAGS) -DUSE_VULKAN $(VULKAN_INCLUDE)
     RELEASE_FLAGS := $(RELEASE_FLAGS) -DUSE_VULKAN $(VULKAN_INCLUDE)
@@ -58,7 +63,6 @@ MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
 MAKE_DEPS := $(SRCS:%=$(BUILD_DIR)/%.d) $(MAIN_SRC:%=$(BUILD_DIR)/%.d)
 
 # Every folder in ./src will need to be passed to GCC so that it can find header files
-#INC_DIRS := $(shell find $(SRC_DIRS) -type d)
 INC_DIRS := include
 # Add a prefix to INC_DIRS. So moduleA would become -ImoduleA. GCC understands this -I flag
 INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
@@ -84,10 +88,11 @@ $(RELEASE_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
 
-# Build step for C source (release)
+# Build step for C source (debug)
 $(DEBUG_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(DEBUG_FLAGS)
+
 
 # Test stuff
 # ---------------------------------------------
@@ -98,17 +103,23 @@ TEST_INC_DIR := ./test/include
 TEST_SRC_DIRS := ./test/src
 TARGET_TEST := pico_test
 
+TEST_FLAGS := $(DEBUG_FLAGS)
+
 TEST_SRCS := $(shell find $(TEST_SRC_DIRS) -name '*.c')
-TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o)
+TEST_OBJS := $(TEST_SRCS:%=$(TEST_DIR)/%.o) $(DEBUG_OBJS)
 
 # Final build step for tests 
-$(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS) $(DEBUG_OBJS)
-	$(CC) $(TEST_OBJS) $(DEBUG_OBJS) -I $(TEST_INC_DIR) -o $@ $(LINK_FLAGS) $(DEBUG_FLAGS) 
+$(TEST_DIR)/$(TARGET_TEST): $(TEST_OBJS)
+	$(CC) $(TEST_OBJS) -I $(TEST_INC_DIR) -o $@ $(LINK_FLAGS) $(TEST_FLAGS) 
 
 # Build step for C tests
 $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(DEBUG_FLAGS) 
+	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(TEST_FLAGS) 
+
+
+#  Phony targets
+# ---------------
 
 .PHONY: clean
 clean:

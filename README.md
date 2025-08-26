@@ -442,7 +442,7 @@ defined Pair : Kind [Type Type] Type
 Pairs can be constructed using the normal `struct` syntax, but type families
 more generally are most useful when paired with polymorphic functions:
 
-```
+```clojure
 user > (def my-pair struct (Pair I64 F32) [.x -12] [.y 3.1214])
 defined my-pair : Struct [.first I64] [.second F32]
 user > (def pair all [A B] proc [(x A) (y b)] 

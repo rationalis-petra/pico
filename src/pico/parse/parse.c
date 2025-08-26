@@ -16,6 +16,7 @@ ParseResult parse_atom(IStream* is, Allocator* a);
 ParseResult parse_number(IStream* is, Allocator* a);
 ParseResult parse_prefix(char prefix, IStream* is, Allocator* a);
 ParseResult parse_string(IStream* is, Allocator* a);
+ParseResult parse_rawstring(IStream* is, Allocator* a);
 ParseResult parse_char(IStream* is, Allocator* a);
 
 // Helper functions
@@ -95,6 +96,9 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
             }
             else if (point == '"') {
                 out = parse_string(is, a);
+            }
+            else if (point == '~') {
+                out = parse_rawstring(is, a);
             }
             else if (point == '#') {
                 out = parse_char(is, a);
@@ -564,15 +568,83 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     next(is, &codepoint); // consume token (")
 
     while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
-        next(is, &codepoint);
+        if (codepoint == '\\') {
+            next(is, &codepoint);
+            size_t escape_start = bytecount(is);
+            if ((result = peek(is, &codepoint)) != StreamSuccess)
+                break;
+            switch (codepoint) {
+            case 'n':
+                codepoint = '\n';
+                break;
+            case 't':
+                codepoint = '\t';
+                break;
+            case '"':
+                codepoint = '\"';
+                break;
+            case '\\':
+                codepoint = '\\';
+                break;
+            default:
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Unrecognized escape character", a),
+                    .error.range.start = escape_start,
+                    .error.range.end = bytecount(is),
+                };
+            }
+        }
         push_u32(codepoint, &arr);
+        next(is, &codepoint);
     }
 
     if (result != StreamSuccess) {
         return (ParseResult) {
             .type = ParseFail,
             .error.message = mv_cstr_doc("Stream failed", a),
-            .error.range.start = bytecount(is),
+            .error.range.start = start,
+            .error.range.end = bytecount(is),
+        };
+    }
+
+    next(is, &codepoint); // consume token (")
+    return (ParseResult) {
+        .type = ParseSuccess,
+        .result.type = RawAtom,
+        .result.range.start = start,
+        .result.range.end = bytecount(is),
+        .result.atom.type = AString,
+        .result.atom.string = string_from_UTF_32(arr, a),
+    };
+}
+
+ParseResult parse_rawstring(IStream* is, Allocator* a) {
+    StreamResult result;
+    U32Array arr = mk_u32_array(64, a);
+    uint32_t codepoint;
+    size_t start = bytecount(is);
+    next(is, &codepoint); // consume token ~
+    next(is, &codepoint); // consume token "
+    if (codepoint != '"') {
+        return (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_cstr_doc("Raw string parse failed: expect '\"' after ~", a),
+            .error.range.start = start,
+            .error.range.end = bytecount(is),
+        };
+    }
+
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && codepoint != '"') {
+        push_u32(codepoint, &arr);
+        next(is, &codepoint);
+    }
+
+    if (result != StreamSuccess) {
+        return (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_cstr_doc("Stream failed", a),
+            .error.range.start = start,
             .error.range.end = bytecount(is),
         };
     }

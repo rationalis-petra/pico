@@ -20,10 +20,16 @@ String copy_string(const String str, Allocator* a);
 String string_from_UTF_32(U32Array arr, Allocator* a);
 String string_from_ASCII(U8Array arr, Allocator* a);
 
+// String utilities:
+
 int string_cmp(const String lhs, const String rhs);
 String string_cat(const String lhs, const String rhs, Allocator* a);
 String string_ncat(Allocator* a, size_t n, ...);
 
 String substring(size_t start, size_t end, const String source, Allocator* a);
+String subview(size_t start, size_t end, const String source);
+bool begins_with(const String source, const String substr);
+
+
 
 #endif

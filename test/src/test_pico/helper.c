@@ -8,17 +8,20 @@
 
 #include "data/stream.h"
 
-#include "pretty/stream_printer.h"
+#include "components/pretty/stream_printer.h"
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/values/array.h"
+#include "pico/binding/environment.h"
 #include "pico/analysis/abstraction.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
 #include "test/test_log.h"
+#include "test_pico/helper.h"
 
 typedef struct {
     void (* on_expr)(PiType* type, void* val, void* data, TestLog* log);
@@ -28,24 +31,17 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } Callbacks;
 
-void run_toplevel_internal(const char *string, Module *module, Callbacks callbacks, void* data, TestLog* log, Allocator *a) {
+void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Target target, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
-    Allocator exalloc = mk_executable_allocator(a);
-    Allocator* exec = &exalloc;
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     IStream* cin = mk_capturing_istream(sin, &arena);
 
-    Target gen_target = {
-        .target = mk_assembler(current_cpu_feature_flags(), exec),
-        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
-        .data_aux = mem_alloc(sizeof(U8Array), &arena)
-    };
-    *gen_target.data_aux = mk_u8_array(128, &arena);
-
-    Environment* env = env_from_module(module, &arena);
+    clear_assembler(target.target);
+    clear_assembler(target.code_aux);
+    target.data_aux->len = 0;
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -74,9 +70,14 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     // -------------------------------------------------------------------------
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
-    type_check(&abs, env, &arena, &pi_point);
-    LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
-    EvalResult evres = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = target,
+    };
+    type_check(&abs, env, ctx);
+
+    clear_target(target);
+    LinkData links = generate_toplevel(abs, env, target, &arena, &point);
+    EvalResult evres = pico_run_toplevel(abs, target, links, module, &arena, &point);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
@@ -91,10 +92,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     }
     // TODO: check evres == expected_val 
 
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -102,10 +100,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     if (callbacks.on_pi_error) {
         callbacks.on_pi_error(pi_point.multi, cin, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -113,10 +108,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     if (callbacks.on_error) {
         callbacks.on_error(point.error_message, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     delete_istream(sin, a);
     return;
 
@@ -124,10 +116,7 @@ void run_toplevel_internal(const char *string, Module *module, Callbacks callbac
     if (callbacks.on_exit) {
         callbacks.on_exit(data, log);
     }
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
     release_arena_allocator(arena);
-    release_executable_allocator(exalloc);
     return;
 }
 
@@ -144,7 +133,7 @@ void fail_error(String err, TestLog* log) {
 
 void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
     Allocator arena = mk_arena_allocator(4096, get_std_allocator());
-    display_error(err, cin, get_fstream(log), &arena);
+    display_error(err, cin, get_fstream(log), NULL, &arena);
     test_log_error(log, mv_string("Test failure - message logged"));
     test_fail(log);
     release_arena_allocator(arena);
@@ -178,7 +167,12 @@ void top_eql(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestLog* log, Allocator *a) {
+void skip_hook(void *ctx) {
+    TestLog* log = ctx;
+    test_skip(log);
+}
+
+void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
         .on_top = top_eql,
@@ -186,7 +180,11 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    run_toplevel_internal(string, module, callbacks, expected_val, log, a);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, expected_val,
+                          context.log, context.target, context.a);
+    clear_not_implemented_hook();
 }
 
 typedef struct {
@@ -224,7 +222,7 @@ void top_stdout(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestLog* log, Allocator *a) {
+void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_stdout,
         .on_top = top_stdout,
@@ -232,17 +230,20 @@ void test_toplevel_stdout(const char *string, const char *expected_stdout, Modul
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    OStream* out = mk_string_ostream(a);
+    OStream* out = mk_string_ostream(context.a);
     StdoutData data = (StdoutData) {
         .stream = out,
         .expected = mv_string(expected_stdout),
     };
 
     OStream* old = set_std_ostream(out);
-    run_toplevel_internal(string, module, callbacks, &data, log, a);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
     set_std_ostream(old);
 
-    delete_ostream(out, a);
+    delete_ostream(out, context.a);
 }
 
 void log_exit(void* data, TestLog* log) {
@@ -256,18 +257,19 @@ void log_error(String err, TestLog* log) {
 void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
     // TODO: improve the test log error to take in a document 
     Allocator arena = mk_arena_allocator(4096, get_std_allocator());
-    display_error(err, cin, get_fstream(log), &arena);
+    display_error(err, cin, get_fstream(log), NULL, &arena);
     test_log_error(log, mv_string("Test failure - message logged"));
     release_arena_allocator(arena);
 }
 
-void run_toplevel(const char *string, Module *module, TestLog* log, Allocator *a) {
+void run_toplevel(const char *string, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_pi_error = log_pi_error,
         .on_error = log_error,
         .on_exit = log_exit,
     };
-    run_toplevel_internal(string, module, callbacks, NULL, log, a);
+    run_toplevel_internal(string, module, context.env, callbacks, NULL,
+                          context.log, context.target, context.a);
 }
 
 typedef struct {
@@ -278,7 +280,7 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } TypeCallbacks;
 
-void test_typecheck_internal(const char *string, Module *module, TypeCallbacks callbacks, void* data, TestLog* log, Allocator* a) {
+void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks callbacks, void* data, TestLog* log, Allocator* a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     Allocator exalloc = mk_executable_allocator(a);
     Allocator* exec = &exalloc;
@@ -294,8 +296,6 @@ void test_typecheck_internal(const char *string, Module *module, TypeCallbacks c
         .data_aux = mem_alloc(sizeof(U8Array), &arena)
     };
     *gen_target.data_aux = mk_u8_array(128, &arena);
-
-    Environment* env = env_from_module(module, &arena);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -325,7 +325,10 @@ void test_typecheck_internal(const char *string, Module *module, TypeCallbacks c
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
-    type_check(&abs, env, &arena, &pi_point);
+    TypeCheckContext ctx = (TypeCheckContext) {
+        .a = &arena, .point = &pi_point, .target = gen_target,
+    };
+    type_check(&abs, env, ctx);
 
     if (abs.type == TLExpr) {
         if (callbacks.on_expr) {
@@ -406,7 +409,7 @@ void top_type(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void test_typecheck_eq(const char *string, PiType* expected, Module *module, TestLog* log, Allocator* a) {
+void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestLog* log, Allocator* a) {
     TypeCallbacks callbacks = (TypeCallbacks) {
         .on_expr = type_eql,
         .on_top = top_type,
@@ -414,5 +417,8 @@ void test_typecheck_eq(const char *string, PiType* expected, Module *module, Tes
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    test_typecheck_internal(string, module, callbacks, expected, log, a);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = log};
+    set_not_implemented_hook(hook);
+    test_typecheck_internal(string, env, callbacks, expected, log, a);
+    clear_not_implemented_hook();
 }

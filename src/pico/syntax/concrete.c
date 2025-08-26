@@ -1,8 +1,8 @@
-#include "platform/signals.h"
 #include "data/meta/array_impl.h"
+#include "platform/signals.h"
+#include "components/pretty/standard_types.h"
 
 #include "pico/syntax/concrete.h"
-#include "pretty/standard_types.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -86,11 +86,8 @@ Document* pretty_atom(Atom atom, Allocator* a) {
         break;
     }
     case ASymbol: {
-        String* str = symbol_to_string(atom.symbol);
-        if (!str) {
-            panic(mv_string("Error in pretty_atom: can't find symbol in symbol table!"));
-        }
-        out = mk_str_doc(*str, a);
+        String str = symbol_to_string(atom.symbol, a);
+        out = mk_str_doc(str, a);
         break;
     }
     case AString: {

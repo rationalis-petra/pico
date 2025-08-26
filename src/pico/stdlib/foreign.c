@@ -2,7 +2,7 @@
 #include "platform/dynamic_library.h"
 #include "platform/memory/arena.h"
 
-#include "pico/codegen/foreign_adapters.h"
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/foreign.h"
@@ -145,7 +145,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     };
 
     // Now that we have setup appropriately, override the allocator
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
     a = &arena;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
