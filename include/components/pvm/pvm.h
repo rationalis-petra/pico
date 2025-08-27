@@ -4,6 +4,13 @@
 /* Polymorphic Virutal Machine
  * ----------------------------
  * 
+ *
  */
+
+typedef struct {
+} Block; 
+
+typedef struct {
+} Block; 
 
 #endif
