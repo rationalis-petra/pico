@@ -74,32 +74,32 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // retval = rax
     if (rsize != 0) {
-        build_binary_op(ass, Mov, reg(RDI, sz_64), imm64((int64_t)value), a, point);
-        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), imm64((int64_t)rsize), a, point);
+        build_binary_op(Mov, reg(RDI, sz_64), imm64((int64_t)value), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm64((int64_t)rsize), ass, a, point);
 
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((int64_t)&memcpy), a, point);
-        build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm64((int64_t)&memcpy), ass, a, point);
+        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         // pop value from stack
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize)), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize)), ass, a, point);
     }
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
     // retval = rax
     if (rsize != 0) {
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((int64_t)value), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(R8, sz_64), imm64((int64_t)rsize), a, point);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(32), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm64((int64_t)value), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), imm64((int64_t)rsize), ass, a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(32), ass, a, point);
 
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((int64_t)&memcpy), a, point);
-        build_unary_op(ass, Call, reg(RAX, sz_64), a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)&memcpy), ass, a, point);
+        build_unary_op(Call, reg(RAX, sz_64), ass, a, point);
         // pop value from stack
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize) + 32), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(rsize) + 32), ass, a, point);
     }
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 #else
 #error "Unknown calling convention"
 #endif

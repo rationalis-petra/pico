@@ -1187,7 +1187,7 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
     }
 }
 
-AsmResult build_binary_op(Assembler* assembler, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point) {
+AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
     BinaryTableEntry be = binary_table[bindex(dest.type, dest.sz, src.type, src.sz)];
     if (!be.valid) {
         PtrArray nodes = mk_ptr_array(8, err_allocator);
@@ -1734,7 +1734,7 @@ void build_unary_opcode_table() {
         (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x07, .init_rex_byte = 0b01000000, /*REX*/};
 }
 
-AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point) {
+AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
     if (loc.type == Dest_Register && loc.reg == RIP) {
         throw_error(point, mv_string("RIP-relative addressing not supported for unary operations!"));
     }
@@ -1914,7 +1914,7 @@ AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocat
     return out;
 }
 
-AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point) {
+AsmResult build_nullary_op(NullaryOp op, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
     uint8_t opcode;
     bool use_rex_byte = false;
     uint8_t rex_byte = 0x0;

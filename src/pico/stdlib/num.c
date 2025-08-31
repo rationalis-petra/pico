@@ -17,73 +17,73 @@ PiType* mk_unop_type(Allocator* a, PrimType arg, PrimType r) {
 }
 
 void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, Xor, reg(RAX, sz_64), imm8(1), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_binary_op(Xor, reg(RAX, sz_64), imm8(1), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
-    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, op, reg(RAX, sz), reg(RDX, sz), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_binary_op(op, reg(RAX, sz), reg(RDX, sz), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
-    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_binary_op (ass, mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), a, point);
-    build_binary_op (ass, mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), a, point);
-    build_binary_op (ass, op, reg(XMM0, sz), reg(XMM1, sz), a, point);
-    build_binary_op (ass, Add, reg(RSP, sz_64), imm8(8), a, point);
-    build_binary_op (ass, mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), ass, a, point);
+    build_binary_op(mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), ass, a, point);
+    build_binary_op(op, reg(XMM0, sz), reg(XMM1, sz), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+    build_binary_op(mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
-    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RDI, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
     switch (sz) {
     case sz_64:
     case sz_32:
-        build_binary_op (ass, Mov, reg(RDX, sz), imm32(0), a, point);
+        build_binary_op(Mov, reg(RDX, sz), imm32(0), ass, a, point);
         break;
     case sz_16:
-        build_binary_op (ass, Mov, reg(RDX, sz), imm16(0), a, point);
+        build_binary_op(Mov, reg(RDX, sz), imm16(0), ass, a, point);
         break;
     case sz_8:
-        build_binary_op (ass, Mov, reg(RDX, sz), imm8(0), a, point);
+        build_binary_op(Mov, reg(RDX, sz), imm8(0), ass, a, point);
         break;
     }
-    build_unary_op (ass, op, reg(RDI, sz), a, point);
+    build_unary_op(op, reg(RDI, sz), ass, a, point);
 
-    build_unary_op (ass, Push, reg(out, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    build_unary_op(Push, reg(out, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
-    build_unary_op (ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RDX, sz_64), a, point);
-    build_unary_op (ass, Pop, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, Cmp, reg(RAX, sz), reg(RDX, sz), a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_binary_op(Cmp, reg(RAX, sz), reg(RDX, sz), ass, a, point);
 
     // TODO (BUG): most ops only work on sz_8 - the fact that the assembler
     // didn't complain is an issue!!
-    build_unary_op (ass, op, reg(RAX, sz_64), a, point);
-    build_binary_op (ass, And, reg(RAX, sz_64), imm32(0xff), a, point);
-    build_unary_op (ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op (ass, Push, reg(RCX, sz_64), a, point);
-    build_nullary_op (ass, Ret, a, point);
+    build_unary_op(op, reg(RAX, sz_64), ass, a, point);
+    build_binary_op(And, reg(RAX, sz_64), imm32(0xff), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 String relic_u64_to_string(uint64_t u64) {

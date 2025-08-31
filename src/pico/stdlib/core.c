@@ -56,31 +56,31 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: as there is only two args, we can guarantee that RSP = pointer to SRC
     // also note that size = RBP + 0x10
     // Store the return address in RBP + 8
-    build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
 
-    build_binary_op(ass, Mov, rref8(RBP, 8, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Mov, rref8(RBP, 8, sz_64), reg(R9, sz_64), ass, a, point);
 
     // Store Dest address (located @ RBP - 8)
-    build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RBP, -8, sz_64), a, point);
+    build_binary_op(Mov, reg(RDI, sz_64), rref8(RBP, -8, sz_64), ass, a, point);
 
     // SRC address = RSP 
 
     // Store size in R9
-    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 4*ADDRESS_SIZE, sz_64), a, point); 
-    build_binary_op(ass, SHR, reg(R9, sz_64), imm8(28), a, point);
-    build_binary_op(ass, And, reg(R9, sz_64), imm32(0xFFFFFFF), a, point);
+    build_binary_op(Mov, reg(R9, sz_64), rref8(RBP, 4*ADDRESS_SIZE, sz_64), ass, a, point); 
+    build_binary_op(SHR, reg(R9, sz_64), imm8(28), ass, a, point);
+    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(R9, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RDI, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Mov, reg(R8, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), reg(RDI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -89,19 +89,19 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     generate_c_call(memcpy, ass, a, point);
 
     // Store return address in R9
-    build_binary_op(ass, Mov, reg(R9, sz_64), rref8(RBP, 8, sz_64), a, point);
+    build_binary_op(Mov, reg(R9, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
 
     // set RSP = current RBP + 5*ADDRESS
-    build_binary_op(ass, Mov, reg(RSP, sz_64), reg(RBP, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(5*ADDRESS_SIZE), a, point);
+    build_binary_op(Mov, reg(RSP, sz_64), reg(RBP, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(5*ADDRESS_SIZE), ass, a, point);
 
     // Restore the old RBP
-    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
+    build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
     // push return address
-    build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 PiType build_load_fn_ty(Allocator* a) {
@@ -148,41 +148,41 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // 5. Push return address
 
     // Store size in R8, stack size in R9
-    build_binary_op(ass, Mov, reg(R8, sz_64), rref8(RBP, 3*ADDRESS_SIZE, sz_64), a, point); 
-    build_binary_op(ass, Mov, reg(R9, sz_64), reg(R8, sz_64), a, point); 
+    build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, 3*ADDRESS_SIZE, sz_64), ass, a, point); 
+    build_binary_op(Mov, reg(R9, sz_64), reg(R8, sz_64), ass, a, point); 
 
-    build_binary_op(ass, And, reg(R9, sz_64), imm32(0xFFFFFFF), a, point);
+    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
-    build_binary_op(ass, SHR, reg(R8, sz_64), imm8(28), a, point);
-    build_binary_op(ass, And, reg(R8, sz_64), imm32(0xFFFFFFF), a, point);
+    build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
+    build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
     // Stash return address in RAX
-    build_unary_op(ass, Pop, reg(RAX, sz_64), a, point); 
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point); 
 
     // Stash load src address
-    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 
     // Set RSP = RBP + 4 Addresses - Stack Size (note that at this point, RSP = RBP)
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(4*ADDRESS_SIZE), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(4*ADDRESS_SIZE), ass, a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), reg(R9, sz_64), ass, a, point);
 
     // Set RBP = [RBP]
-    build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
+    build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
     // Make sure return address is available when we Ret
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point); 
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point); 
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
-    build_binary_op(ass, Mov, reg(RDI, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RDI, sz_64), imm8(ADDRESS_SIZE), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(R8, sz_64), a, point);
+    build_binary_op(Mov, reg(RDI, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RDI, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(R8, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RCX, sz_64), imm8(ADDRESS_SIZE), a, point);
-    build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RCX, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSI, sz_64), ass, a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -191,11 +191,11 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     generate_c_call(relic_memcpy, ass, a, point);
 
     // Return
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void add_core_module(Assembler* ass, Package* base, Allocator* a) {

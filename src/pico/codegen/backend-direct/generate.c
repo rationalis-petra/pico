@@ -1,5 +1,4 @@
 #include "data/num.h"
-#include "data/meta/array_impl.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
@@ -164,7 +163,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             throw_error(point, mv_string("Codegen: Literals must fit into less than 32 bits"));
 
         int32_t immediate = (int32_t)syn.integral.value;
-        build_unary_op(ass, Push, imm32(immediate), a, point);
+        build_unary_op(Push, imm32(immediate), ass, a, point);
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
@@ -175,14 +174,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             float f = syn.floating.value;
             void* raw = &f;
             int32_t immediate = *(int32_t*)raw;
-            build_unary_op(ass, Push, imm32(immediate), a, point);
+            build_unary_op(Push, imm32(immediate), ass, a, point);
             data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         }
         else if (syn.ptype->prim == Float_64) {
             void* raw = &syn.floating.value;
             int64_t immediate = *(int64_t*)raw;
-            build_binary_op(ass, Mov, reg(RAX,sz_64), imm64(immediate), a, point);
-            build_unary_op(ass, Push, reg(RAX,sz_64), a, point);
+            build_binary_op(Mov, reg(RAX,sz_64), imm64(immediate), ass, a, point);
+            build_unary_op(Push, reg(RAX,sz_64), ass, a, point);
             data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         } else {
             panic(mv_string("Floating literal has non-float type!"));
@@ -195,21 +194,21 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
 
         // Push the u8
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-        build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
 
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitBool: {
         int8_t immediate = syn.boolean;
-        build_unary_op(ass, Push, imm8(immediate), a, point);
+        build_unary_op(Push, imm8(immediate), ass, a, point);
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
@@ -224,30 +223,30 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // array - memory/data
         generate_perm_malloc(reg(RAX, sz_64), imm32(index_mul * syn.array_lit.subterms.len), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
         for (size_t i = 0; i < syn.array_lit.subterms.len; i++) {
             generate(*(Syntax*)syn.array_lit.subterms.data[i], env, target, links, a, point);
 
             // Copy the element into the array-block
             size_t offset = i * index_mul;
-            build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, element_stack_size, sz_64), a, point);
-            build_binary_op(ass, Add, reg(RDI, sz_64), imm32(offset), a, point);
+            build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, element_stack_size, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RDI, sz_64), imm32(offset), ass, a, point);
             generate_monomorphic_copy(RDI,RSP, element_size, ass, a, point);
-            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(element_stack_size), a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(element_stack_size), ass, a, point);
             
             data_stack_shrink(env, element_stack_size);
         }
 
         // Shape - len + data
         generate_perm_malloc(reg(RAX, sz_64), imm32(ADDRESS_SIZE * syn.array_lit.shape.len), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         for (size_t i = 0; i < syn.array_lit.shape.len; i++) {
             size_t dimension_len = syn.array_lit.shape.data[i];
-            build_binary_op(ass, Mov, rref32(RAX, i * ADDRESS_SIZE, sz_64), imm32(dimension_len), a, point);
+            build_binary_op(Mov, rref32(RAX, i * ADDRESS_SIZE, sz_64), imm32(dimension_len), ass, a, point);
         }
 
-        build_unary_op(ass, Push, imm32(syn.array_lit.shape.len), a, point);
+        build_unary_op(Push, imm32(syn.array_lit.shape.len), ass, a, point);
         data_stack_grow(env, pi_stack_size_of(*syn.ptype) - ADDRESS_SIZE);
         break;
     }
@@ -261,7 +260,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         case ALocalDirect: {
             // Copy to the current level 
             size_t size = pi_stack_size_of(*syn.ptype);
-            build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(size), a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(size), ass, a, point);
 
             // The size | 7 "rounds up" size to the nearet multiple of eight. 
             // All local variables on the stack are stored with size rounded up
@@ -270,13 +269,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size = size | 7;
             if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
-                    build_binary_op(ass, Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
-                    build_binary_op(ass, Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
+                    build_binary_op(Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
+                    build_binary_op(Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
                 }
             } else {
                 for (size_t i = 0; i < size / 8; i++) {
-                    build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), a, point);
-                    build_binary_op(ass, Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), a, point);
+                    build_binary_op(Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
+                    build_binary_op(Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
                 }
             }
             break;
@@ -291,12 +290,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             PiType indistinct_type = *strip_type(syn.ptype);
 
             // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
-            // Dynamic Vars and instances passed by value, but are guaranteed to take up 64 bits.
+            // Dynamic Vars and instances pby value, but are guaranteed to take up 64 bits.
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
                 || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
-                AsmResult out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
+                AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+                build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Primitives are (currently) all <= 64 bits, but may treating them
             // as 64-bits may overflow a allocated portion of memory, so we must
@@ -308,28 +307,28 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 /*     // Do nothing, unit value */
                 /* } else */
                 if (prim_size == 1) {
-                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), a, point);
+                    out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint8_t*)e.value), ass, a, point);
                 } else if (prim_size == 2) {
-                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint16_t*)e.value), a, point);
+                    out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint16_t*)e.value), ass, a, point);
                 } else if (prim_size == 4) {
-                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint32_t*)e.value), a, point);
+                    out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint32_t*)e.value), ass, a, point);
                 } else if (prim_size == 8) {
-                    out = build_binary_op(ass, Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), a, point);
+                    out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
                 } else {
                     panic(mv_string("Codegen expects globals bound to primitives to have size 1, 2, 4 or 8."));
                 }
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+                build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
-                AsmResult out = build_binary_op(ass, Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), a, point);
+                AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(stack_size), a, point);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
 
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
@@ -364,9 +363,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         proc_address += get_instructions(target.code_aux).len;
 
         // Generate procedure value (push the address onto the stack)
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), ass, a, point);
         backlink_code(target, out.backlink, links);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
         // Now, change the target and the assembler, such that code is now
@@ -375,9 +374,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         target.target = target.code_aux;
 
         // Codegen function setup
-        build_unary_op(ass, Push, reg(R14, sz_64), a, point);
-        build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RBP, sz_64), reg(RSP, sz_64), a, point);
+        build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
         // Codegen Procedure Body 
         size_t args_size = 0;
@@ -412,18 +411,18 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Note: R9, R14, RBP were saved previously (in the prolog)
         //       R12 is for the return address
-        build_binary_op(ass, Mov, reg(R12, sz_64),  rref8(RBP, 16, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), a, point);
+        build_binary_op(Mov, reg(R12, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
         generate_stack_move(args_size + 3 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
 
         // Pop args
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(args_size + 3 * ADDRESS_SIZE), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(args_size + 3 * ADDRESS_SIZE), ass, a, point);
 
         // push return address 
-        build_unary_op(ass, Push, reg(R12, sz_64), a, point);
-        build_nullary_op(ass, Ret, a, point);
+        build_unary_op(Push, reg(R12, sz_64), ass, a, point);
+        build_nullary_op(Ret, ass, a, point);
         break;
     }
     case SAll: {
@@ -431,9 +430,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         all_address += get_instructions(target.code_aux).len;
 
         // Generate procedure value (push the address onto the stack)
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), ass, a, point);
         backlink_code(target, out.backlink, links);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
         // Now, change the target and the assembler, such that code is now
@@ -468,8 +467,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         
             // Regular Function Call
             // Pop the function into RCX; call the function
-            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-            build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
             // Update for popping all values off the stack (also the function itself)
             data_stack_shrink(env, args_size + ADDRESS_SIZE);
 
@@ -520,9 +519,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             uint64_t result = (align << 56) | (size << 28) | stack_sz;
 
 
-            build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(ADDRESS_SIZE), a, point);
-            build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(result), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RAX, sz_64), a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Mov, reg(RAX, sz_64), imm64(result), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
         }
 
         // Calculation of offsets:
@@ -531,17 +530,17 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             offset += pi_stack_size_of(*((Syntax*)syn.all_application.implicits.data[i])->ptype);
-            build_unary_op(ass, Push, imm32(-offset), a, point);
+            build_unary_op(Push, imm32(-offset), ass, a, point);
         }
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             offset += pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
-            build_unary_op(ass, Push, imm32(-offset), a, point);
+            build_unary_op(Push, imm32(-offset), ass, a, point);
         }
 
         // Reserve for return address
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
         // Store "Old" RBP (RBP to restore)
-        build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
+        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
 
         data_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
                                                 + syn.all_application.implicits.len
@@ -565,13 +564,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Now, calculate what RBP should be 
         // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
         //     = RSP - offset
-        build_binary_op(ass, Mov, reg(RBP, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RBP, sz_64), imm32(offset + ADDRESS_SIZE), a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RBP, sz_64), imm32(offset + ADDRESS_SIZE), ass, a, point);
         
         // Regular Function Call
         // Pop the function into RCX; call the function
-        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        build_unary_op(ass, Call, reg(RCX, sz_64), a, point);
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
 
         // Update as popped args from stack
         data_stack_shrink(env, args_size + ADDRESS_SIZE);
@@ -588,8 +587,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t enum_size = pi_stack_size_of(*enum_type);
         size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size - variant_size), a, point);
-        build_unary_op(ass, Push, imm32(syn.constructor.tag), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size - variant_size), ass, a, point);
+        build_unary_op(Push, imm32(syn.constructor.tag), ass, a, point);
 
         data_stack_grow(env, enum_size);
         break;
@@ -604,11 +603,11 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
         // Make space to fit the (final) variant
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(enum_size), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
         data_stack_grow(env, enum_size);
 
         // Set the tag
-        build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), a, point);
+        build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
 
         // Generate each argument
         for (size_t i = 0; i < syn.variant.args.len; i++) {
@@ -636,7 +635,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_stack_offset), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(src_stack_offset), ass, a, point);
 
         // Grow the stack to account for the difference in enum & variant sizes
         data_stack_shrink(env, variant_stack_size - tag_size);
@@ -660,8 +659,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // 2. A jump to the relevant location
         for (size_t i = 0; i < syn.match.clauses.len; i++) {
             SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-            build_binary_op(ass, Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), a, point);
-            AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
+            build_binary_op(Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), ass, a, point);
+            AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
             push_size(get_pos(ass), &back_positions);
             push_ptr(get_instructions(ass).data + out.backlink, &back_refs);
         }
@@ -699,7 +698,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             generate(*clause.body, env, target, links, a, point);
 
             // Generate jump to end of match expression to be backlinked later
-            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+            AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
             push_size(get_pos(ass), &body_positions);
             push_u64(out.backlink, &body_refs);
 
@@ -722,7 +721,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         generate_stack_move(enum_stack_size, 0, out_size, ass, a, point);
 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(enum_stack_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
 
         data_stack_shrink(env, enum_stack_size);
         data_stack_grow(env, out_size);
@@ -740,7 +739,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             generate(*syn.structure.base, env, target, links, a, point);
         } else {
             size_t struct_size = pi_stack_size_of(*struct_type);
-            build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(struct_size), a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(struct_size), ass, a, point);
             data_stack_grow(env, struct_size);
         }
 
@@ -793,7 +792,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
 
         // Remove the space occupied by the temporary values 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(source_region_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(source_region_size), ass, a, point);
         data_stack_shrink(env, source_region_size);
         break;
     }
@@ -802,7 +801,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // First, allocate space on the stack for the value
         PiType* source_type = strip_type(syn.projector.val->ptype);
         size_t out_sz = pi_stack_size_of(*syn.ptype);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(out_sz), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
         data_stack_grow(env, out_sz);
 
         // Second, generate the structure/instance object
@@ -825,13 +824,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             generate_stack_move(src_sz, offset, out_sz, ass, a, point);
             // Now, remove the original struct from the stack
-            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(src_sz), a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(src_sz), ass, a, point);
 
             data_stack_shrink(env, src_sz);
         } else {
             // Pop the pointer to the instance from the stack - store in RSI
             data_stack_shrink(env, src_sz);
-            build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+            build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 
             // Now, calculate offset for field 
             size_t offset = 0;
@@ -841,7 +840,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                     break;
                 offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
             }
-            build_binary_op(ass, Add, reg(RSI, sz_64), imm32(offset), a, point);
+            build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
 
             // TODO (check if replace with stack copy)
             generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
@@ -863,14 +862,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)syn.ptype->instance.fields.data[i].val));
             immediate_sz += pi_size_of(*(PiType*)syn.ptype->instance.fields.data[i].val);
         }
-        build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(immediate_sz), a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
         generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // Grow by address size to account for the fact that the for loop
         // keeps a stack of the address, which is updated each iteration.
         data_stack_grow(env, ADDRESS_SIZE);
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
         // TODO (BUG): generate code that doesn't assume fields are in same order   
 
@@ -886,13 +885,13 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // Retrieve index (ptr) 
             // TODO (BUG): Check offset is < int8_t max.
-            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(offset), sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(offset), sz_64), ass, a, point);
 
             // Align RCX
             size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*val->ptype));
             if (index_offset != aligned_offset) {
                 size_t align = aligned_offset - index_offset;
-                build_binary_op(ass, Add, reg(RCX, sz_64), imm32(align), a, point);
+                build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
             }
 
             // TODO (check if replace with stack copy)
@@ -900,20 +899,20 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
             // We need to increment the current field index to be able ot access
             // the next
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(offset), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm32(offset), ass, a, point);
             index_offset += offset;
 
             // Pop value from stack
-            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(pi_stack_align(offset)), a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(offset)), ass, a, point);
             data_stack_shrink(env, offset);
 
             // Override index with new value
-            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
         }
 
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Sub, reg(RCX, sz_64), imm32(immediate_sz), a, point);
-        build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
 
         // Note: we don't shrink as the final address (on stack) is accounted
         // for by the 'grow' prior to the above for-loop
@@ -929,12 +928,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
-        build_binary_op(ass, Mov, reg(RDI, sz_64), imm32(val_size), a, point);
-        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(RDI, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(val_size), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
 #else
 #error "unknown ABI"
 #endif
@@ -943,8 +942,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         generate_c_call(mk_dynamic_var, ass, a, point);
 
         // Pop value off stack
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size), a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(val_size), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         
         data_stack_grow(env, ADDRESS_SIZE);
         data_stack_shrink(env, val_size);
@@ -956,10 +955,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // We now have a dynamic variable: get its' value as ptr
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi
-        build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
+        build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx
-        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 #else
 #error "unknown ABI"
 #endif
@@ -969,8 +968,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(val_size), a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RAX, sz_64), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
@@ -986,21 +985,21 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
-        build_binary_op(ass, Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RSI, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), imm32(val_size), a, point);
+        build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(val_size), ass, a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(R8, sz_64), imm32(val_size), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), imm32(val_size), ass, a, point);
 #else
 #error "unknown ABI"
 #endif
         // call function
         generate_c_call(set_dynamic_val, ass, a, point);
 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
         data_stack_shrink(env, ADDRESS_SIZE + val_size);
         break;
     }
@@ -1020,10 +1019,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             //   new-value
             // R15 is the dynamic memory register, move it into RCX
             // Move the index into RAX
-            build_binary_op(ass, Mov, reg(RCX, sz_64), reg(R15, sz_64), a, point);
-            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, bind_size, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), reg(R15, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, bind_size, sz_64), ass, a, point);
             // RCX holds the array - we need to index it with index located in RAX
-            build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), ass, a, point);
             // Now we have a pointer to the value stored in RCX, swap it with
             // the value on the stack
 
@@ -1037,8 +1036,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Step 3: unwind the bindings
         //  • Store the (address of the) current dynamic value index to restore in RDX
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(val_size), a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RDX, sz_64), imm32(val_size), ass, a, point);
 
         size_t offset_size = 0;
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
@@ -1046,22 +1045,22 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             size_t bind_size = pi_size_of(*dbind->expr->ptype);
 
             // Store ptr to dynamic memory (array) in RCX, and the index in RAX
-            build_binary_op(ass, Mov, reg(RCX, sz_64), reg(R15, sz_64), a, point);
-            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RDX, 0, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), reg(R15, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(RDX, 0, sz_64), ass, a, point);
             // RCX holds the array - we need to index it with index located in RAX
-            build_binary_op(ass, Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), sib(RCX, RAX, 8, sz_64), ass, a, point);
 
             // Store ptr to local value to restore in RDX 
             // TODO (check if replace with stack copy)
             generate_monomorphic_swap(RCX, RDX, bind_size, ass, a, point);
-            build_binary_op(ass, Add, reg(RDX, sz_64), imm32(bind_size + ADDRESS_SIZE), a, point);
+            build_binary_op(Add, reg(RDX, sz_64), imm32(bind_size + ADDRESS_SIZE), ass, a, point);
 
             offset_size += bind_size + ADDRESS_SIZE;
         }
 
         // Step 4: cleanup: pop bindings
         generate_stack_move(offset_size, 0, val_size, ass, a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(offset_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(offset_size), ass, a, point);
         data_stack_shrink(env, offset_size);
         break;
     }
@@ -1076,7 +1075,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         generate(*syn.let_expr.body, env, target, links, a, point);
 
         generate_stack_move(bsize, 0, pi_size_of(*syn.let_expr.body->ptype), ass, a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(bsize), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(bsize), ass, a, point);
         data_stack_shrink(env, bsize);
         address_pop_n(syn.let_expr.bindings.len, env);
         break;
@@ -1086,14 +1085,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         generate(*syn.if_expr.condition, env, target, links, a, point);
 
         // Pop the bool into R9; compare with 0
-        build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-        build_binary_op(ass, Cmp, reg(R9, sz_64), imm32(0), a, point);
+        build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
         data_stack_shrink(env, pi_stack_size_of((PiType) {.sort = TPrim, .prim = Bool}));
 
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
         // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
-        AsmResult out = build_unary_op(ass, JE, imm32(0), a, point);
+        AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
         size_t start_pos = get_pos(ass);
 
         size_t jmp_loc = out.backlink;
@@ -1105,7 +1104,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_shrink(env, pi_stack_size_of(*syn.ptype));
 
         // Generate jump to end of false branch to be backlinked later
-        out = build_unary_op(ass, JMP, imm32(0), a, point);
+        out = build_unary_op(JMP, imm32(0), ass, a, point);
 
         // calc backlink offset
         size_t end_pos = get_pos(ass);
@@ -1186,7 +1185,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             // ensure the stack is at the sam epoint for the next iteration! 
             data_stack_shrink(env,out_size);
 
-            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+            AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
 
@@ -1250,7 +1249,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 // Adjust the stack so it has the same value that one would have
                 // going into a labels expression.
                 // TODO handle dynamic variable unbinding (if needed!)
-                build_binary_op(ass, Add, reg(RSP, sz_64), imm32(delta), a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imm32(delta), ass, a, point);
             }
 
             // Stack sould "pretend" it pushed a value of type syn.ptype and
@@ -1260,7 +1259,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             data_stack_shrink(env, arg_total);
             data_stack_grow(env, pi_size_of(*syn.ptype));
 
-            AsmResult out = build_unary_op(ass, JMP, imm32(0), a, point);
+            AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
         } else {
@@ -1286,16 +1285,16 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Step 1.
         //-------
-        AsmResult out = build_binary_op(ass, LEA, reg(RAX, sz_64), rref32(RIP, 0, sz_64), a, point); // TODO: backlink N
+        AsmResult out = build_binary_op(LEA, reg(RAX, sz_64), rref32(RIP, 0, sz_64), ass, a, point); // TODO: backlink N
         size_t reset_backlink = out.backlink;
         size_t reset_instr_end = get_pos(ass);
 
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-        build_unary_op(ass, Push, reg(RBP, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
 
         // Step 2.
         //-------
-        build_unary_op(ass, Push, reg(RSP, sz_64), a, point);
+        build_unary_op(Push, reg(RSP, sz_64), ass, a, point);
         data_stack_grow(env, 3*ADDRESS_SIZE);
         address_bind_relative(syn.with_reset.point_sym, 0, env);
 
@@ -1317,7 +1316,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         size_t val_size = pi_size_of(*syn.ptype);
         size_t in_val_size = pi_size_of(*syn.with_reset.in_arg_ty);
         generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(3 * ADDRESS_SIZE), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(3 * ADDRESS_SIZE), ass, a, point);
         generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
 
         data_stack_shrink(env, 3*ADDRESS_SIZE + val_size);
@@ -1325,7 +1324,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // Step 5.
         //--------
-        out = build_unary_op(ass, JMP, imm32(0), a, point);
+        out = build_unary_op(JMP, imm32(0), ass, a, point);
         size_t end_expr_link = out.backlink;
         size_t end_expr_pos = get_pos(ass);
 
@@ -1368,9 +1367,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         //     > return-addr
         // RSP > out value
         // So do some cleanup
-        // - generate_stack_move(ADDRESS_SIZE + val_size, 0, val_size, ass, a, point);
+        // - generate_stack_move(ADDRESS_SIZE + val_size, 0, val_size, ass, ass, a, point);
         generate_stack_move(ADDRESS_SIZE + in_val_size, 0, val_size, ass, a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(ADDRESS_SIZE + in_val_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(ADDRESS_SIZE + in_val_size), ass, a, point);
 
 
         // Step 8. 
@@ -1392,25 +1391,25 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // > Ptr to reset-point
 
         // Step 1: take the ptr to reset-point
-        build_unary_op(ass, Pop, reg(R10, sz_64), a, point);
+        build_unary_op(Pop, reg(R10, sz_64), ass, a, point);
 
         // Step 2: stash the current stack ptr in R9 (this will be used to copy the argument )
-        build_binary_op(ass, Mov, reg(R9, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(R9, sz_64), reg(RSP, sz_64), ass, a, point);
 
         // Step 3: Deref return point ptr to get old RBP, RSP & RIP to jump up 
-        build_binary_op(ass, Mov, reg(RSP, sz_64), rref8(R10, -8, sz_64), a, point);
-        build_unary_op(ass, Pop, reg(RBP, sz_64), a, point);
-        build_unary_op(ass, Pop, reg(RDI, sz_64), a, point); //RDI = jump dest!
+        build_binary_op(Mov, reg(RSP, sz_64), rref8(R10, -8, sz_64), ass, a, point);
+        build_unary_op(Pop, reg(RBP, sz_64), ass, a, point);
+        build_unary_op(Pop, reg(RDI, sz_64), ass, a, point); //RDI = jump dest!
 
         // Step 4: Copy the argument onto the (new) stack.
         PiType* arg_type = syn.reset_to.arg->ptype;
         size_t asize = pi_size_of(*arg_type);
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(asize), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(asize), ass, a, point);
         // TODO (check if replace with stack copy)
         generate_monomorphic_copy(RSP, R9, asize, ass, a, point);
 
         // Step 5: Long Jump (call) register
-        build_unary_op(ass, Call, reg(RDI, sz_64), a, point);
+        build_unary_op(Call, reg(RDI, sz_64), ass, a, point);
 
         // Address environment bookkeeping: shrink the stack appropriately
         data_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
@@ -1434,7 +1433,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             }
             else if (i + 1 != syn.sequence.elements.len) {
                 if (sz != 0) {
-                    build_binary_op(ass, Add, reg(RSP, sz_64), imm32(sz), a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imm32(sz), ass, a, point);
                 }
                 data_stack_shrink(env, sz);
             }
@@ -1446,7 +1445,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         }
         if (binding_size != 0) {
             generate_stack_move(binding_size, 0, last_size, ass, a, point);
-            build_binary_op(ass, Add, reg(RSP, sz_64), imm32(binding_size), a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(binding_size), ass, a, point);
             data_stack_shrink(env, binding_size);
             address_pop_n(num_bindings, env);
         }
@@ -1493,9 +1492,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 panic(mv_string("impossible code path"));
             }
 
-            build_binary_op(ass, Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), a, point);
-            build_binary_op(ass, Mov, reg(RCX, sz), reg(RAX, sz), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz), reg(RAX, sz), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
         } else {
             panic(mv_string("can't widen this yet!"));
         }
@@ -1511,22 +1510,22 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // The size to allocate will sit atop the stack; swap it with 
         // the pointer to free stack memory
-        build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-        build_unary_op(ass, Push, reg(R14, sz_64), a, point);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(R14, sz_64), ass, a, point);
 
         // Now, increment pointer to reserve the stack memory
-        build_binary_op(ass, Add, reg(R14, sz_64), reg(RAX, sz_64), a, point);
+        build_binary_op(Add, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
 
         break;
     case SSizeOf: {
         size_t sz = pi_size_of(*syn.size->type_val);
-        build_unary_op(ass, Push, imm32(sz), a, point);
+        build_unary_op(Push, imm32(sz), ass, a, point);
         data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SAlignOf: {
         size_t sz = pi_align_of(*syn.size->type_val);
-        build_unary_op(ass, Push, imm32(sz), a, point);
+        build_unary_op(Push, imm32(sz), ass, a, point);
         data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
@@ -1539,51 +1538,51 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
                 break;
             sz += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
         }
-        build_unary_op(ass, Push, imm32(sz), a, point);
+        build_unary_op(Push, imm32(sz), ass, a, point);
         data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
         break;
     }
     case SCheckedType: {
-        build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), a, point);
-        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), ass, a, point);
+        build_unary_op(Push, reg(R9, sz_64), ass, a, point);
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SProcType:
         // Generate proc type: start by malloc'ing size for args
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.proc_type.args.len * ADDRESS_SIZE), ass, a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.proc_type.args.len; i++) {
             Syntax* arg = syn.proc_type.args.data[i];
 
             // Second, generate & move the type (note: stash & pop RCX)
-            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*arg, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
-            build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
-            build_binary_op(ass, Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Now, incremenet index by 1
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(1), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
         }
         // Stash RAX
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         generate(*syn.proc_type.return_type, env, target, links, a, point);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
-        build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-        build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
+        build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
         // Finally, generate function call to make type
         gen_mk_proc_ty(reg(RAX, sz_64), imm32(syn.proc_type.args.len), reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
         break;
@@ -1591,92 +1590,92 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Generate struct type: for each element of the struct type
         // First, malloc enough data for the array:
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 3 * ADDRESS_SIZE), ass, a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
             SymPtrCell field = syn.struct_type.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
-            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*(Syntax*)field.val, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
-            build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Now, incremenet index by 3 (to account for struct size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
         }
 
         // Finally, generate function call to make type
         gen_mk_struct_ty(reg(RAX, sz_64), imm32(syn.struct_type.fields.len), reg(RAX, sz_64), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     case SEnumType:
         // Generate enum type: malloc array for enum
         // First, malloc enough data for the array:
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 3 * ADDRESS_SIZE), ass, a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.enum_type.variants.len; i++) {
             SymPtrCell field = syn.enum_type.variants.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
 
             // Second, generate & variant (note: stash & pop RCX)
-            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
 
             PtrArray variant = *(PtrArray*)field.val;
             generate_tmp_malloc(reg(RAX, sz_64), imm32(variant.len * ADDRESS_SIZE), ass, a, point);
-            build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
             for (size_t i = 0; i < variant.len; i++) {
 
-                build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-                build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+                build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
                 data_stack_grow(env, 2*ADDRESS_SIZE);
 
                 generate(*(Syntax*)variant.data[i], env, target, links, a, point);
 
                 data_stack_shrink(env, 3*ADDRESS_SIZE);
-                build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-                build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-                build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+                build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
-                build_binary_op(ass, Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), a, point);
+                build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
 
                 // Now, incremenet index
-                build_binary_op(ass, Add, reg(RCX, sz_64), imm32(1), a, point);
+                build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
             }
 
             // The variant was just stored in RAX, move it to R9
-            build_binary_op(ass, Mov, reg(R9, sz_64), reg(RAX, sz_64), a, point);
+            build_binary_op(Mov, reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
 
-            build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
             data_stack_shrink(env, 2*ADDRESS_SIZE);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Now, incremenet index by 3 (to account for ptr + symbol)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
         }
 
         // Finally, generate function call to make type
         gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, reg(RAX, sz_64), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     case SResetType:
@@ -1712,24 +1711,24 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     case SLiftCType:
         generate(*syn.c_type, env, target, links, a, point);
-        gen_mk_c_ty(ass,a, point);
+        gen_mk_c_ty(ass, a, point);
         // Now, the type lies atop the stack, and we must pop the ctype out from
         // under it
         size_t cts = pi_stack_size_of(*syn.c_type->ptype);
 
         // TODO (IMPROVEMENT) this assumes address-size == 64 bits 
-        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(cts), a, point);
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(cts), ass, a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
         data_stack_shrink(env, cts - ADDRESS_SIZE);
         break;
     case SNamedType:
         address_bind_type(syn.named_type.name, env);
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-        build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, sizeof(Symbol));
 
         address_bind_type(syn.named_type.name, env);
@@ -1756,35 +1755,35 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
 
         // First, malloc enough data for the array:
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
-        build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(0), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
 
         for (size_t i = 0; i < syn.trait.fields.len; i++) {
             SymPtrCell field = syn.trait.fields.data[i];
             // First, move the field name
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), a, point);
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
 
             // Second, generate & move the type (note: stash & pop RCX)
-            build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
             generate(*(Syntax*)field.val, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
-            build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
-            build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
-            build_binary_op(ass, Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Now, incremenet index by 2 (to account for trait size!)
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm32(3), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
         }
 
         // Finally, generate function call to make type
         gen_mk_trait_ty(syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
         address_pop_n(syn.trait.vars.len, env);
@@ -1801,9 +1800,9 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
             proc_address += get_instructions(target.code_aux).len;
 
             // Generate procedure value (push the address onto the stack)
-            AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), a, point);
+            AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), ass, a, point);
             backlink_code(target, out.backlink, links);
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
             // Now, change the target and the assembler, such that code is now
             // generated in the 'code segment'. Then, generate the function body
@@ -1817,8 +1816,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         break;
     }
     case STypeOf: {
-        build_binary_op(ass, Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), a, point);
-        build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+        build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), ass, a, point);
+        build_unary_op(Push, reg(R9, sz_64), ass, a, point);
         data_stack_grow(env, pi_size_of(*syn.ptype));
         break;
     }
@@ -1928,38 +1927,38 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // Push the string onto the stack
         // '0' is used as a placeholder, as the correct address will be
         // substituted when backlinking!
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
-        build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-        build_unary_op(ass, Push, imm32(immediate.memsize), a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
 
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SQuote: {
         // Setup: push the memory address (in data) of the Syntax value into stack.
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
         backlink_data(target, out.backlink, links);
 
         // Now copy the entire concrete syntax tree into the data-segment,
         // setting allocators to null
         add_rawtree(syn.quoted, target, links);
 
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), ass, a, point);
         for (size_t i = 0; i < sizeof(RawTree); i += sizeof(uint64_t)) {
-            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), ass, a, point);
         }
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SCapture: {
         // Setup: push the memory address (in data) of the Syntax value into stack.
-        AsmResult out = build_binary_op(ass, Mov, reg(RAX, sz_64), imm64(0), a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
         backlink_data(target, out.backlink, links);
 
         RawTree raw = (RawTree) {
@@ -1976,10 +1975,10 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         // setting allocators to null
         add_rawtree(raw, target, links);
 
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm8(sizeof(RawTree)), ass, a, point);
         for (size_t i = 0; i < sizeof(RawTree); i += sizeof(uint64_t)) {
-            build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), a, point);
-            build_binary_op(ass, Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), ass, a, point);
         }
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;

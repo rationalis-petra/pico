@@ -242,9 +242,9 @@ typedef struct AsmResult {
     size_t backlink; // backlink to immediate (if it exists)
 } AsmResult;
 
-AsmResult build_binary_op(Assembler* ass, BinaryOp op, Location dest, Location src, Allocator* err_allocator, ErrorPoint* point);
-AsmResult build_unary_op(Assembler* assembler, UnaryOp op, Location loc, Allocator* err_allocator, ErrorPoint* point);
-AsmResult build_nullary_op(Assembler* assembler, NullaryOp op, Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* assembeler, Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler,Allocator* err_allocator, ErrorPoint* point);
+AsmResult build_nullary_op(NullaryOp op, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point);
 
 void init_asm();
 
