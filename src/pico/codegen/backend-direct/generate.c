@@ -6,7 +6,7 @@
 
 #include "components/pretty/string_printer.h"
 
-#include "pico/codegen/backend-direct/direct.h"
+#include "pico/codegen/backend-direct/generate.h"
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
@@ -24,22 +24,12 @@
  *   is top of stack)
  */
 
-int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
-    long int diff = lhs.source_offset - rhs.source_offset;
-    if (diff) return diff;
-    return lhs.dest_offset - rhs.dest_offset;
-}
-
-ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
-
-// Implementation details
-void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
-
-void get_variant_fun(size_t idx, size_t vsize, size_t esize, uint64_t* out, ErrorPoint* point);
-size_t calc_variant_stack_size(PtrArray* types);
-size_t calc_variant_size(PtrArray* types);
-void *const_fold(Syntax *typed, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
-void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
+// Internal functions
+static void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+static size_t calc_variant_size(PtrArray* types);
+static size_t calc_variant_stack_size(PtrArray* types);
+static void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
+static void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
 
 LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     InternalLinkData links = (InternalLinkData) {

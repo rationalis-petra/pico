@@ -5,8 +5,8 @@
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
+#include "components/assembler/link_data.h"
 
-#include "pico/data/sym_sarr_amap.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
@@ -32,9 +32,20 @@ typedef struct {
     Module* src;
 } InstanceSrc;
 
-/* Declarations and modules 
- * A 
+/* Declarations and Modules
+ * ------------------------
+ * A declaration is simply some kind of data we want to attach to a symbol
+ * in a module. At the moment, the only supported declaration is a 'type'
+ * declaration, which serves to report an error if a value (when defined) has a
+ * type that does not match what was declared.
  *
+ * Future intended declarations include:
+ * - Documentation strings
+ * - Custom data that is accessible by macros/metaprogramming tools
+ * - Optimisation hints, such as 'inline yes/no/auto'
+ * - Optimisation aggressiveness, i.e. 'speed n'
+ * - Memory safetychecks, either 'unsafe' (no checks), 
+ *   'enforced' (borrow checker) or 'auto' (gc/refcount integration)
  */
 
 typedef enum {
@@ -48,7 +59,8 @@ typedef struct {
     };
 } ModuleDecl;
 
-/* Definitions and codegen. 
+/* Definitions and codegen 
+ * ------------------------
  * Codegen is relatively simple: given an expression e.g. (+ 2 3) and an
  * assembler, generate use the assembler to generate the code that corresponds
  * to the expression, e.g. "mov 2, rax; add rax, 3; push rax". Complexity is introduced because:
@@ -85,25 +97,6 @@ typedef struct {
  * locations need updating if the symbol is redefined.
  * 
  */
-
-typedef struct {
-    size_t source_offset;
-    size_t dest_offset;
-} LinkMetaData;
-
-ARRAY_HEADER(LinkMetaData, link_meta, LinkMeta)
-
-typedef struct {
-    SymSArrAMap external_links;
-
-    LinkMetaArray ec_links;
-    LinkMetaArray ed_links;
-
-    LinkMetaArray cc_links;
-    LinkMetaArray cd_links;
-
-    LinkMetaArray dd_links;
-} LinkData;
 
 typedef struct {
     U8Array data;

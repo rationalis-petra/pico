@@ -30,7 +30,6 @@ void set_ptr_backlink(Assembler* assembler, size_t backlink, void* val);
 void set_i32_backlink(Assembler* assembler, size_t backlink, int32_t val);
 void set_u32_backlink(Assembler* assembler, size_t backlink, uint32_t val);
 
-
 Document* pretty_assembler(Assembler* assembler, Allocator* a);
 
 // Integral operations

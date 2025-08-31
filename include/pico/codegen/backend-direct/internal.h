@@ -1,5 +1,5 @@
-#ifndef __PICO_CODEGEN_INTERNAL_H
-#define __PICO_CODEGEN_INTERNAL_H
+#ifndef __PICO_CODEGEN_BACKEND_DIRECT_INTERNAL_H
+#define __PICO_CODEGEN_BACKEND_DIRECT_INTERNAL_H
 
 #include "data/meta/array_header.h"
 #include "components/assembler/assembler.h"

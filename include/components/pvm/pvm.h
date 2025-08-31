@@ -7,14 +7,29 @@
 #include "data/meta/array_header.h"
 #include "platform/memory/allocator.h"
 
+
 /* Polymorphic Virutal Machine
  * ----------------------------
+ * This header contains primarily the types for PVM
  * 
+ * Builder
+ * ------
  *
+ * Generate
+ * ------
  */
+
+typedef enum {
+    Reg
+} RegisterAllocAlg;
+
+typedef struct {
+    RegisterAllocAlg raa;
+} PassSet;
 
 typedef struct {
     Allocator* alloc;
+    PassSet set;
     void* tape;
 } PVMContext;
 
@@ -61,7 +76,6 @@ typedef struct {
     size_t capacity;
 } PVMType;
 
-
 /* Term: 
  * A term represents an expression. In particular, when compiled, a term will
  * emit to a target:
@@ -95,34 +109,7 @@ typedef struct {
     };
 } PVMOperand; 
 
-typedef struct {
-    union {
-        struct {
-            PVMOperand arg1;
-            PVMOperand arg2;
-        };
-        // TODO: operations like GEP, which have a type/projection set/array
-    };
-    PVMVariable asssignee; 
-} Instruction; 
-ARRAY_HEADER_TYPE(Instruction, Instr)
-
-
-// Block
-// A block is a linear sequence of instructions. 
-//
-typedef struct {
-    uint16_t id;
-    InstrArray instructions;
-    // Analysis information
-    // U32Array preds;
-} Block; 
-
-typedef struct {
-    PVMProc type; 
-    void* address;
-} PVMFuncHandle;
-
+typedef enum { PArith, PCmp, PLiteral } PVMInstrSort;
 typedef enum {
     PVMAdd,
     PVMSub,
@@ -139,6 +126,39 @@ typedef enum {
     PVMLessOrEq,
     PVMGreaterOrEq,
 } ComparisonOperator;
+
+typedef struct {
+    PVMInstrSort sort;
+    union {
+        ArithmeticOperator arith;
+        ComparisonOperator cmp;
+    };
+    union {
+        struct {
+            PVMOperand arg1;
+            PVMOperand arg2;
+        };
+        // TODO: operations like GEP, which have a type/projection set/array
+    };
+    PVMVariable asssignee; 
+} PVMInstruction; 
+ARRAY_HEADER_TYPE(PVMInstruction, Instr)
+
+
+// Block
+// A block is a linear sequence of instructions. 
+//
+typedef struct {
+    uint16_t id;
+    InstrArray instructions;
+    // Analysis information
+    // U32Array preds;
+} Block; 
+
+typedef struct {
+    PVMProc type; 
+    void* address;
+} PVMFuncHandle;
 
 typedef enum {
     CallPVM,
