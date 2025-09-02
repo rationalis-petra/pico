@@ -453,6 +453,116 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FApplication: {
         return mk_application(raw, env, a, point);
     }
+    case FExists: {
+        if (raw.branch.nodes.len < 3) {
+            err.message = mv_cstr_doc("Not enough terms provided to exists", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+
+        SynArray types = mk_ptr_array(8, a);
+        {
+            RawTree raw_types = raw.branch.nodes.data[2];
+            if (raw_types.type != RawBranch && raw_types.branch.hint != HSpecial) {
+                err.range = raw_types.range;
+                err.message = mv_cstr_doc("Exists expects second argument to be a set of types", a);
+                throw_pi_error(point, err);
+            }
+
+            for (size_t i = 0; i < raw_types.branch.nodes.len; i++) {
+                Syntax* syn = abstract_expr_i(raw_types.branch.nodes.data[i], env, a, point);
+                push_ptr(syn, &types);
+            }
+        }
+
+        size_t body_idx = 3;
+        SynArray implicits = mk_ptr_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[3];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
+                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], env, a, point);
+                    push_ptr(syn, &implicits);
+                }
+            }
+        }
+
+        if (body_idx == raw.branch.nodes.len) {
+            err.message = mv_cstr_doc("Exists lacking a body", a);
+            throw_pi_error(point, err);
+        }
+
+        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? &raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx, a);
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SExists,
+            .ptype = NULL,
+            .range = raw.range,
+            .exists.type = type,
+            .exists.types = types,
+            .exists.implicits = implicits,
+            .exists.body = body,
+        };
+        return res;
+    }
+    case FUnpack: {
+        if (raw.branch.nodes.len < 3) {
+            err.message = mv_cstr_doc("Not enough terms provided to unpack", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* packed = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+
+        SymbolArray types = mk_symbol_array(8, a);
+        {
+            RawTree raw_types = raw.branch.nodes.data[2];
+            if (!get_symbol_list(&types, raw_types) || raw_types.branch.hint != HSpecial) {
+                err.range = raw_types.range;
+                err.message = mv_cstr_doc("Not enought terms provided to unpack", a);
+                throw_pi_error(point, err);
+            }
+        }
+
+        size_t body_idx = 3;
+        SymbolArray implicits = mk_symbol_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[3];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                if (!get_symbol_list(&types, raw_implicits)) {
+                    err.range = raw_implicits.range;
+                    err.message = mv_cstr_doc("Malformed implicit list in unpack", a);
+                    throw_pi_error(point, err);
+                }
+            }
+        }
+
+        if (body_idx == raw.branch.nodes.len) {
+            err.message = mv_cstr_doc("Unpack lacking a body", a);
+            throw_pi_error(point, err);
+        }
+
+        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? &raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx, a);
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SUnpack,
+            .ptype = NULL,
+            .range = raw.range,
+            .unpack.packed = packed,
+            .unpack.types = types,
+            .unpack.implicits = implicits,
+            .unpack.body = body,
+        };
+        return res;
+    }
     case FVariant: {
         if (raw.branch.nodes.len == 2) {
             // Check that we are indeed getting a result
@@ -1743,6 +1853,53 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FExistsType: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("Exists term former requires at least 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+
+        SymbolArray vars = mk_symbol_array(8, a);
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mk_cstr_doc("Exists argument list malformed", a);
+            throw_pi_error(point, err);
+        }
+        shadow_vars(vars, env);
+
+        size_t body_idx = 2;
+        SynArray implicits = mk_ptr_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[body_idx];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
+                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], env, a, point);
+                    push_ptr(syn, &implicits);
+                }
+            }
+        }
+
+        RawTree* raw_term;
+        if (raw.branch.nodes.len == body_idx + 1) {
+            raw_term = &raw.branch.nodes.data[body_idx];
+        } else {
+            raw_term = raw_slice(&raw, body_idx, a);
+        }
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+        shadow_pop(vars.len, env);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SExistsType,
+            .ptype = NULL,
+            .range = raw.range,
+            .exists_type.vars = vars,
+            .exists_type.body = body,
+        };
+        return res;
+    }
     case FFamily: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
@@ -2201,7 +2358,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
         }
 
         if (!is_expr(raw.branch.nodes.data[0])) {
-            err.range = raw.range;
+            err.range = raw.branch.nodes.data[0].range;
             err.message = mk_cstr_doc("Unprocessed non-expression: syntax hints '[', ']' or implicits '{' '}'\n" 
                                       "should only be used for term specific syntax or implicit arguments, respectively.", a);
             throw_pi_error(point, err);

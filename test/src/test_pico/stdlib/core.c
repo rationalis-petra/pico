@@ -375,6 +375,22 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         delete_pi_type_p(expected, a);
     }
 
+    if (test_start(log, mv_string("exists-type"))) {
+        PiType* expected = mk_exists_type(a, 1, "A", 0, mk_var_type(a, "A"));
+        TEST_EQ("(Exists [A] A)");
+        delete_pi_type_p(expected, a);
+    }
+
+    if (test_start(log, mv_string("proc-exists"))) {
+        RUN("(def Unital Trait [A] [.val A])");
+        PiType* trait = mk_trait_type(a, 1, "A", 1,
+                                      "val", mk_var_type(a, "A"));
+        PiType* expected = mk_exists_type(a, 1, "A", 1, trait,
+                                          mk_var_type(a, "A"));
+        TEST_EQ("(Exists [A] {(Unital A)} A)");
+        delete_pi_type_p(expected, a);
+    }
+
     if (test_start(log, mv_string("recursive-named"))) {
         PiType* vty = mk_var_type(a, "Element");
         PiType* lty = mk_app_type(a, get_list_type(), vty);

@@ -5,6 +5,7 @@
 #include "platform/machine_info.h"
 #include "components/pretty/string_printer.h"
 
+#include "pico/data/error.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
@@ -465,6 +466,14 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         break;
+    }
+    case SExists: {
+        not_implemented(mv_string("Poly Direct Codegen for Exists"));
+        break; 
+    }
+    case SUnpack: {
+        not_implemented(mv_string("Poly Direct Codegen for Unpack"));
+        break; 
     }
     case SStructure: {
         PiType* struct_type = strip_type(syn.ptype);

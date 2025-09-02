@@ -58,10 +58,12 @@ typedef enum TermFormer {
     FImport,
 
     // Term Formers: value construction/destruction
-    FProcedure,
     FAll,
+    FProcedure,
     FMacro,
     FApplication,
+    FExists,
+    FUnpack,
     FVariant,
     FMatch,
     FStructure,
@@ -113,6 +115,7 @@ typedef enum TermFormer {
     FOpaqueType,
     FTraitType,
     FAllType,
+    FExistsType,
     FFamily,
 
     // The C type former is somewhat special, as it

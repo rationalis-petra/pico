@@ -181,6 +181,52 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case SExists: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_cstr_doc("exists", a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->exists.type, a), &nodes);
+        {
+            PtrArray types = mk_ptr_array(syntax->exists.types.len, a);
+            for (size_t i = 0; i < syntax->exists.types.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->exists.types.data[i], a), &types);
+            }
+            push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
+        }
+        {
+            PtrArray implicits = mk_ptr_array(syntax->exists.implicits.len, a);
+            for (size_t i = 0; i < syntax->exists.implicits.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->exists.implicits.data[i], a), &implicits);
+            }
+            push_ptr(mk_paren_doc("{","}", mv_sep_doc(implicits, a), a), &nodes);
+        }
+        push_ptr(pretty_syntax_internal(syntax->exists.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SUnpack: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(pretty_syntax_internal(syntax->unpack.packed, a), &nodes);
+
+        PtrArray types = mk_ptr_array(syntax->unpack.types.len, a);
+        for (size_t i = 0; i < syntax->all.args.len; i++) {
+            Document* arg = mk_str_doc(symbol_to_string(syntax->unpack.types.data[i], a), a);
+            push_ptr(arg, &nodes);
+        }
+        push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
+
+        if (syntax->unpack.implicits.len > 0) {
+            PtrArray implicits = mk_ptr_array(syntax->unpack.implicits.len, a);
+            for (size_t i = 0; i < syntax->unpack.implicits.len; i++) {
+                Document* arg = mk_str_doc(symbol_to_string(syntax->unpack.implicits.data[i], a), a);
+                push_ptr(arg, &nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(types, a), a), &implicits);
+        }
+
+        push_ptr(pretty_syntax_internal(syntax->unpack.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case SConstructor: {
         PtrArray nodes = mk_ptr_array(3, a);
         if (syntax->constructor.enum_type) {

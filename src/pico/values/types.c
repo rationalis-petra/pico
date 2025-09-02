@@ -122,10 +122,17 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TAll:
-    case TExists:
     case TFam: {
         sdelete_symbol_array(t.binder.vars);
         delete_pi_type_p(t.binder.body, a);
+        break;
+    }
+    case TExists: {
+        sdelete_symbol_array(t.exists.vars);
+        for (size_t i = 0; i < t.exists.implicits.len; i++)
+            delete_pi_type_p(t.exists.implicits.data[i], a);
+        sdelete_ptr_array(t.exists.implicits);
+        delete_pi_type_p(t.exists.body, a);
         break;
     }
 
@@ -898,7 +905,6 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TAll: {
         PtrArray nodes = mk_ptr_array(2, a);
-
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &nodes);
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
@@ -912,13 +918,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TExists: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("Exists [" ), a), &nodes);
-        for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &nodes);
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Exists" ), a), a), &nodes);
+        PtrArray types = mk_ptr_array(type->exists.vars.len, a);
+        for (size_t i = 0; i < type->exists.vars.len; i++) {
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->exists.vars.data[i], a), a), a), &types);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(types, a), a), &nodes);
+        push_ptr(pretty_type_internal(type->exists.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1630,11 +1637,34 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
 
         // Quantified Types
     case TVar: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql_i not implemented for type vars"));
+        for (size_t i = 0; i < array->len; i++) {
+            if (symbol_eq(array->data[i].l_name, lhs->var)
+                && symbol_eq(array->data[i].r_name, rhs->var))
+                return true;
+            if (symbol_eq(array->data[i].l_name, lhs->var))
+                return false;
+            if (symbol_eq(array->data[i].r_name, rhs->var))
+                return false;
+        }
+        return false;
     case TAll:
         panic(mv_string("pi_type_eql_i not implemented for all types"));
-    case TExists:
-        panic(mv_string("pi_type_eql_i not implemented for existential types"));
+    case TExists: {
+        if (lhs->exists.vars.len != rhs->exists.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->exists.vars.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->exists.vars.data[i],
+                .r_name = rhs->exists.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+        bool out = pi_type_eql_i(lhs->exists.body, rhs->exists.body, array);
+        array->len -= lhs->exists.vars.len;
+        return out;
+        break;
+    }
 
         // Used by Sytem-Fω (type constructors)
     case TCApp:
@@ -1892,6 +1922,38 @@ PiType* mk_struct_type(Allocator* a, size_t nfields, ...) {
     return structure;
 }
 
+// Sample usage: mk_trait_type(a, 1, "A", 2
+//   "val", mk_var_type(a, "A"),
+//   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
+PiType *mk_trait_type(Allocator *a, size_t nvars, ...) {
+    va_list args;
+    va_start(args, nvars);
+
+    SymbolArray vars = mk_symbol_array(nvars, a);
+    for (size_t i = 0; i < nvars ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        push_symbol(name, &vars);
+    }
+    
+    size_t nfields = va_arg(args, int);
+    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* arg = va_arg(args, PiType*);
+        sym_ptr_insert(name, arg, &fields);
+    }
+
+    va_end(args);
+
+    PiType* trait = mem_alloc(sizeof(PiType), a);
+    *trait = (PiType) {
+        .sort = TTrait,
+        .trait.vars = vars,
+        .trait.fields = fields,
+    };
+    return trait;
+}
+
 // Sample usage: mk_enum_type(a, 3,
 //   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
 //   "Singleton", 1, mk_prim_type(Int_64),
@@ -1961,6 +2023,35 @@ PiType* mk_var_type(Allocator* a, const char *name) {
     *out = (PiType) {
         .sort = TVar,
         .var = string_to_symbol(mv_string(name)),
+    };
+    return out;
+}
+
+PiType *mk_exists_type(Allocator *a, size_t nsymbols, ...) {
+    va_list args;
+    va_start(args, nsymbols);
+
+    SymbolArray vars = mk_symbol_array(nsymbols, a);
+    for (size_t i = 0; i < nsymbols; i++) {
+        push_symbol(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+    }
+
+    size_t nimplicits = va_arg(args, int);
+
+    PtrArray implicits = mk_ptr_array(nimplicits, a);
+    for (size_t i = 0; i < nimplicits; i++) {
+        push_ptr(va_arg(args, void*), &implicits);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TExists,
+        .exists.vars = vars,
+        .exists.implicits = implicits,
+        .exists.body = body,
     };
     return out;
 }

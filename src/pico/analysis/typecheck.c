@@ -498,6 +498,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SExists: {
+        not_implemented(mv_string("typecheck of exists"));
+        break;
+    }
+    case SUnpack: {
+        not_implemented(mv_string("typecheck of unpack"));
+        break;
+    }
     case SConstructor: {
         // Typecheck variant
         if (untyped->variant.enum_type) {
@@ -1290,7 +1298,18 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SExistsType: {
-        panic(mv_string("Unsupported operation: inferring type of existential type"));
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = ty;
+
+        for (size_t i = 0; i < untyped->exists_type.vars.len; i++) {
+            Symbol arg = untyped->exists_type.vars.data[i];
+            type_var(arg, ty, env);
+        }
+
+        type_check_i(untyped->exists_type.body, ty, env, ctx);
+        pop_types(env, untyped->exists_type.vars.len);
+        break;
     }
     case STypeFamily: {
         // For now, assume that each type has the kind Type (i.e. is not a family)
@@ -1680,6 +1699,14 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         }
         break;
     }
+    case SExists: {
+        not_implemented(mv_string("post-unify of exists"));
+        break;
+    }
+    case SUnpack: {
+        not_implemented(mv_string("post-unify of unpack"));
+        break;
+    }
     case SConstructor:  {
         // Resolve the variant tag
         PiType* enum_type = unwrap_type(syn->ptype, a);
@@ -1991,6 +2018,14 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         }
         break;
     }
+    case SExists: {
+        not_implemented(mv_string("post-unify of unpack"));
+        break;
+    }
+    case SUnpack: {
+        not_implemented(mv_string("post-unify of unpack"));
+        break;
+    }
     case SConstructor: {
         if (typed->variant.enum_type) {
             squash_types(typed->variant.enum_type, a, point);
@@ -2181,6 +2216,9 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     }
     case SAllType:
         squash_types(typed->bind_type.body, a, point);
+        break;
+    case SExistsType:
+        squash_types(typed->exists_type.body, a, point);
         break;
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);

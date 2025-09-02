@@ -192,6 +192,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         not_implemented(mv_string("PVM Funcall/all Generation"));
         break;
     }
+    case SExists: {
+        not_implemented(mv_string("PVM exists Generation"));
+        break;
+    }
+    case SUnpack: {
+        not_implemented(mv_string("PVM unpack Generation"));
+        break;
+    }
     case SConstructor: {
         not_implemented(mv_string("PVM Constructor Generation"));
         break;

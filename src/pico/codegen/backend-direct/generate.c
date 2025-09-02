@@ -5,6 +5,7 @@
 
 #include "components/pretty/string_printer.h"
 
+#include "pico/data/error.h"
 #include "pico/codegen/backend-direct/generate.h"
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
@@ -581,6 +582,14 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
             
+    }
+    case SExists: {
+        not_implemented(mv_string("Direct Codegen for Exists"));
+        break; 
+    }
+    case SUnpack: {
+        not_implemented(mv_string("Direct Codegen for Unpack"));
+        break; 
     }
     case SConstructor: {
         PiType* enum_type = strip_type(syn.ptype);
@@ -1698,7 +1707,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SExistsType:
-        panic(mv_string("Monomorphic codegen does not support exists type!"));
+        for (size_t i = 0; i < syn.exists_type.vars.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+        generate(*(Syntax*)syn.exists_type.body, env, target, links, a, point);
+        gen_mk_exists_ty(syn.exists_type.vars, ass, a, point);
+        address_pop_n(syn.exists_type.vars.len, env);
         break;
     case STypeFamily:
         // Family type structure: (array symbol) body
