@@ -617,6 +617,7 @@ void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     // Note how these two are reversed from their passing order
     build_unary_op(Pop, reg(R8, sz_64), ass, a, point); // Body
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point); // Implicits
+    generate_c_call(mk_exists_ty, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);
@@ -627,16 +628,35 @@ void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     // TODO: add an align here so that the function argument will be appropriately aligned
     // 
 
-    build_unary_op(Pop, reg(R10, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R11, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+
+    // Align RSP to closest 16 bytes
+    build_binary_op(Sub, reg(RSP, sz_64), imm32(8), ass, a, point);
+    build_binary_op(Mov, reg(RAX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(And, reg(RAX, sz_64), imm8(0xf), ass, a, point);
+    build_binary_op(Mov, reg(R10, sz_64), imm32(0x8), ass, a, point);
+    build_binary_op(Sub, reg(R10, sz_64), reg(RAX, sz_64), ass, a, point);
+    build_binary_op(And, reg(R10, sz_64), imm8(0xf), ass, a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), reg(R10, sz_64), ass, a, point);
     build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R10, sz_64), ass, a, point);
+    
+    // Push the arg on stack
+    build_unary_op(Push, reg(R11, sz_64), ass, a, point);
+
+    build_binary_op(Sub, reg(RSP, sz_64), imm32(32), ass, a, point);
+    build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)mk_exists_ty), ass, a, point);
+    build_unary_op(Call, reg(RAX, sz_64), ass, a, point);
+
+    build_binary_op(Add, reg(RSP, sz_64), imm32(32 + 8), ass, a, point);
+    
+    build_unary_op(Pop, reg(RCX, sz_64),  ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
+
 #else 
     #error "Unknown calling convention"
 #endif
 
-    generate_c_call(mk_exists_ty, ass, a, point);
-#if ABI == WIN_64
-    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
-#endif
 
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
