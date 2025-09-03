@@ -7,7 +7,9 @@
 
 #include "test/test_log.h"
 
+void run_pico_stdlib_core_type_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_core_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
+
 void run_pico_stdlib_num_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_extra_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 

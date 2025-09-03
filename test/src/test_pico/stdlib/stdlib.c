@@ -46,6 +46,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     delete_module_header(header);
 
     if (suite_start(log, mv_string("core"))) {
+        run_pico_stdlib_core_type_tests(log, module, env, target, a);
         run_pico_stdlib_core_tests(log, module, env, target, a);
         suite_end(log);
     }

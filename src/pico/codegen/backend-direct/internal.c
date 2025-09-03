@@ -579,7 +579,7 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
-void* mk_exists_ty(size_t len, Symbol* syms, PiType* body) {
+void* mk_exists_ty(size_t len, Symbol* syms, size_t nimplicits, void** implicits, PiType* body) {
     Allocator a = get_std_temp_allocator();
 
     PiType* ty = mem_alloc(sizeof(PiType), &a);
@@ -589,15 +589,20 @@ void* mk_exists_ty(size_t len, Symbol* syms, PiType* body) {
         .exists.vars.len = len,
         .exists.vars.size = len,
         .exists.vars.gpa = a,
+
+        .exists.implicits.data = implicits,
+        .exists.implicits.len = nimplicits,
+        .exists.implicits.size = nimplicits,
+        .exists.implicits.gpa = a,
+
         .exists.body = body,
     };
     return ty;
 }
 
-
-void gen_mk_exists_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: this allocation is fine for definitions as types get copied,
-    // probably not fine if we have a proc which returns a exists!
+    // probably not fine if we have a proc which returns a type.
     // in that case we maybe want this in a data-segment?
 
     void* data = mem_alloc(syms.len * sizeof(Symbol), a);
@@ -606,11 +611,13 @@ void gen_mk_exists_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+
+    build_binary_op(Mov, reg(RDX, sz_64), nvars, ass, a, point);
+    build_unary_op(Pop, reg(R8, sz_64), ass, a, point); // Body ??
+
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point); // Body ??
 #elif ABI == WIN_64
-    build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
+    #error "Not implemented: gen mk exists for win 64"
 #else 
     #error "Unknown calling convention"
 #endif

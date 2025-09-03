@@ -137,7 +137,7 @@ String substring(size_t start, size_t end, const String source, Allocator *a) {
 
 bool begins_with(const String source, const String substr) {
     if (substr.memsize == 0) return true;
-    if (source.memsize > substr.memsize) return false;
+    if (substr.memsize > source.memsize) return false;
 
     for (size_t i = 0; i < substr.memsize - 1; i++) {
         if (source.bytes[i] != substr.bytes[i]) return false;

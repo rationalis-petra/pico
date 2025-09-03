@@ -253,7 +253,12 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TVar:
         out.var = t.var;
         break;
-    case TExists:
+    case TExists: {
+        out.exists.vars = scopy_symbol_array(t.exists.vars, a);
+        out.exists.implicits = copy_ptr_array(t.exists.implicits,  (TyCopier)copy_pi_type_p, a);
+        out.exists.body = copy_pi_type_p(t.exists.body, a);
+        break;
+    }
     case TAll:
     case TFam: {
         out.binder.vars = scopy_symbol_array(t.binder.vars, a);
@@ -503,8 +508,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TExists:
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
-        if (type->sort == TAll) push_ptr(mk_str_doc(mv_string("(All "), a), &nodes);
-        else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
+        if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
         else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
 
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
@@ -646,6 +650,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             out = mk_cstr_doc("Macro", a);
             break;
         }
+        if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
     case TArray: {
@@ -846,7 +851,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TTrait:  {
         PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
-        push_ptr(mk_str_doc(mv_string("Trait" ), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &nodes);
         
         PtrArray id_nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("#"), a), &id_nodes);
@@ -855,7 +860,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), &vars);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), a), &vars);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
 
@@ -925,6 +930,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->exists.vars.data[i], a), a), a), &types);
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(types, a), a), &nodes);
+
+        PtrArray implicits = mk_ptr_array(type->exists.implicits.len, a);
+        for (size_t i = 0; i < type->exists.implicits.len; i++) {
+            push_ptr(pretty_type_internal(type->exists.implicits.data[i], ctx, a), &implicits);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(implicits, a), a), &nodes);
         push_ptr(pretty_type_internal(type->exists.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -977,7 +988,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     case TConstraint: {
         size_t nargs = type->constraint.nargs;
         if (nargs == 0) {
-            out = mk_str_doc(mv_string("Constraint"), a);
+            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
         } else {
             PtrArray nodes = mk_ptr_array(nargs + 2, a);
             push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
@@ -1505,12 +1516,16 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
             type_app_subst (new_type, subst, a);
             sym_ptr_insert(cell.key, new_type, &new_fields);
         }
+        sdelete_sym_ptr_assoc(subst);
+
+        typedef void* (*TyCopier)(void*, Allocator*);
+        PtrArray saved_args = copy_ptr_array(args, (TyCopier)copy_pi_type_p, a);
 
         PiType* out_ty = mem_alloc(sizeof(PiType), a);
         *out_ty = (PiType) {
             .sort = TTraitInstance,
             .instance.instance_of = family.trait.id,
-            .instance.args = args, // TODO (INVESTIGATE): is the non-copying of args a bug?
+            .instance.args = saved_args,
             .instance.fields = new_fields,
         };
         return out_ty;
@@ -1631,9 +1646,19 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     case TDistinct:
         panic(mv_string("pi_type_eql_i not implemented for distinct types"));
     case TTrait:
-        panic(mv_string("pi_type_eql_i not implemented for trait types"));
-    case TTraitInstance: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql_i not implemented for trait instance types"));
+        return lhs->trait.id == rhs->trait.id;
+
+    // note: not a "real" type in the theory
+    case TTraitInstance: {
+        if (lhs->instance.instance_of != rhs->instance.instance_of) return false;
+
+        if (lhs->instance.args.len != rhs->instance.args.len) return false;
+        for (size_t i = 0; i < lhs->instance.args.len; i++) {
+            if (!pi_type_eql_i(lhs->instance.args.data[i], rhs->instance.args.data[i], array))
+                return false;
+        }
+        return true;
+    }
 
         // Quantified Types
     case TVar: // note: not a "real" type in the theory
@@ -1648,7 +1673,20 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         }
         return false;
     case TAll:
-        panic(mv_string("pi_type_eql_i not implemented for all types"));
+        if (lhs->binder.vars.len != rhs->binder.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->binder.vars.data[i],
+                .r_name = rhs->binder.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+        bool out = pi_type_eql_i(lhs->binder.body, rhs->binder.body, array);
+        array->len -= lhs->exists.vars.len;
+        return out;
+        break;
     case TExists: {
         if (lhs->exists.vars.len != rhs->exists.vars.len)
             return false;
@@ -1660,6 +1698,19 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             };
             push_rename(rn, array);
         }
+
+        if (lhs->exists.implicits.len != rhs->exists.implicits.len) {
+            array->len -= lhs->exists.vars.len;
+            return false;
+        }
+
+        for (size_t i = 0; i < lhs->exists.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->exists.implicits.data[i], rhs->exists.implicits.data[i], array)) {
+                array->len -= lhs->exists.vars.len;
+                return false;
+            }
+        }
+
         bool out = pi_type_eql_i(lhs->exists.body, rhs->exists.body, array);
         array->len -= lhs->exists.vars.len;
         return out;
@@ -1948,6 +1999,7 @@ PiType *mk_trait_type(Allocator *a, size_t nvars, ...) {
     PiType* trait = mem_alloc(sizeof(PiType), a);
     *trait = (PiType) {
         .sort = TTrait,
+        .trait.id = distinct_id(),
         .trait.vars = vars,
         .trait.fields = fields,
     };
@@ -2027,6 +2079,27 @@ PiType* mk_var_type(Allocator* a, const char *name) {
     return out;
 }
 
+PiType *mk_all_type(Allocator *a, size_t nsymbols, ...) {
+    va_list args;
+    va_start(args, nsymbols);
+
+    SymbolArray vars = mk_symbol_array(nsymbols, a);
+    for (size_t i = 0; i < nsymbols; i++) {
+        push_symbol(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TAll,
+        .binder.vars = vars,
+        .binder.body = body,
+    };
+    return out;
+}
+
 PiType *mk_exists_type(Allocator *a, size_t nsymbols, ...) {
     va_list args;
     va_start(args, nsymbols);
@@ -2086,8 +2159,16 @@ PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
     va_list args;
     va_start(args, fam);
 
-    PtrArray fam_args = mk_ptr_array(lhs->binder.vars.len, a);
-    for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+    size_t num_args;
+    if (lhs->sort == TFam) {
+        num_args = lhs->binder.vars.len;
+    } else if (lhs->sort == TTrait) {
+        num_args = lhs->trait.vars.len;
+    } else {
+        panic(mv_string("Bad arg to mk_app_type"));
+    }
+    PtrArray fam_args = mk_ptr_array(num_args, a);
+    for (size_t i = 0; i < num_args; i++) {
         PiType* ptr = va_arg(args, PiType*);
         push_ptr(ptr, &fam_args);
     }

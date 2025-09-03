@@ -1856,7 +1856,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FExistsType: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("Exists term former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("Exists type former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
@@ -1896,6 +1896,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .ptype = NULL,
             .range = raw.range,
             .exists_type.vars = vars,
+            .exists_type.implicits = implicits,
             .exists_type.body = body,
         };
         return res;

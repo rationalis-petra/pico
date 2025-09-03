@@ -388,6 +388,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 type_check_i(untyped->application.args.data[i],
                              kind, env, ctx);
             }
+            *kind = (PiType) {.sort = fn_type.sort, .kind.nargs = 0};
             untyped->ptype = kind;
         } else {
             PtrArray arr = mk_ptr_array(2, a);
@@ -1305,6 +1306,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < untyped->exists_type.vars.len; i++) {
             Symbol arg = untyped->exists_type.vars.data[i];
             type_var(arg, ty, env);
+        }
+
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
+        untyped->ptype = t;
+        for (size_t i = 0; i < untyped->exists_type.implicits.len; i++) {
+            Syntax* implicit = untyped->exists_type.implicits.data[i];
+            type_check_i(implicit, t, env, ctx);
         }
 
         type_check_i(untyped->exists_type.body, ty, env, ctx);
@@ -2320,7 +2329,7 @@ void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 PiType* eval_type(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i(untyped, env, ctx);
 
-    if (untyped->ptype->sort != TKind) {
+    if (untyped->ptype->sort != TKind && untyped->ptype->sort != TConstraint) {
         PicoError err = (PicoError) {
             .range = untyped->range,
             .message = mv_cstr_doc("Value expected to be type, was not!", ctx.a),

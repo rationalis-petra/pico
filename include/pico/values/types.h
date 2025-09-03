@@ -231,6 +231,10 @@ PiType* unwrap_type(PiType *ty, Allocator* a);
 
 // Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);
+
+// type_app: apply the arguments (args) to a type family (fam)
+//  Memory guarantes: both the arguments (args) and famiy are untouched, and can
+//  be safely deleted etc. without affecting the returned type.
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 // Generators 
@@ -264,6 +268,9 @@ PiType* mk_distinct_type(Allocator* a, PiType* inner);
 PiType* mk_opaque_type(Allocator* a, void* module, PiType* inner);
 
 PiType* mk_var_type(Allocator* a, const char* name);
+
+// Sample usage: mk_all_type(a, 2, "A", "B", mk_prim_type(Address));
+PiType* mk_all_type(Allocator* a, size_t nsymbols, ...);
 
 // Sample usage: mk_exists_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
 PiType* mk_exists_type(Allocator* a, size_t nsymbols, ...);

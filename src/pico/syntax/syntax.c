@@ -723,7 +723,25 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         break;
     }
     case SExistsType: {
-        out = mv_str_doc(mk_string("Pretty syntax not implemented for existential type", a), a);
+        PtrArray nodes = mk_ptr_array(4, a) ;
+        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("Exists"), a), a), &nodes);
+
+        SymbolArray arr = syntax->exists_type.vars;
+        PtrArray arg_nodes = mk_ptr_array(arr.len, a);
+        for (size_t i = 0; i < arr.len; i++) {
+            push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(arr.data[i], a), a), a), &arg_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+
+        PtrArray impls = syntax->exists_type.implicits;
+        PtrArray impl_nodes = mk_ptr_array(impls.len, a);
+        for (size_t i = 0; i < impls.len; i++) {
+            push_ptr(pretty_syntax_internal(impls.data[i], a), &impl_nodes);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
+
+        push_ptr(pretty_syntax_internal(syntax->exists_type.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case STypeFamily: {

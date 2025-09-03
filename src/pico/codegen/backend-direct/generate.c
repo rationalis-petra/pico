@@ -1710,9 +1710,41 @@ void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* link
         for (size_t i = 0; i < syn.exists_type.vars.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate(*(Syntax*)syn.exists_type.body, env, target, links, a, point);
-        gen_mk_exists_ty(syn.exists_type.vars, ass, a, point);
+
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.exists_type.implicits.len * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.exists_type.implicits.len; i++) {
+            Syntax* arg = syn.exists_type.implicits.data[i];
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate(*arg, env, target, links, a, point);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 1
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+        }
+
+        // Stash RAX
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        generate(*syn.exists_type.body, env, target, links, a, point);
+        data_stack_shrink(env, 2*ADDRESS_SIZE);
+        // build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        // build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+        gen_mk_exists_ty(syn.exists_type.vars, imm32(syn.exists_type.implicits.len), ass, a, point);
         address_pop_n(syn.exists_type.vars.len, env);
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     case STypeFamily:
         // Family type structure: (array symbol) body
