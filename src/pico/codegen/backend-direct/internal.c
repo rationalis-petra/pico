@@ -285,7 +285,7 @@ void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allo
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), mem_size, ass, a, point);
 #elif ABI == WIN_64
-    build_binary_op(Mov, reg(RCX, sz_64), ass, mem_size, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64),  mem_size, ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
@@ -613,16 +613,30 @@ void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)data),ass, a, point);
 
     build_binary_op(Mov, reg(RDX, sz_64), nvars, ass, a, point);
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point); // Body ??
 
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point); // Body ??
+    // Note how these two are reversed from their passing order
+    build_unary_op(Pop, reg(R8, sz_64), ass, a, point); // Body
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point); // Implicits
 #elif ABI == WIN_64
-    #error "Not implemented: gen mk exists for win 64"
+    build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);
+
+    build_binary_op(Mov, reg(R8, sz_64), nvars, ass, a, point);
+    build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+
+    // TODO: add an align here so that the function argument will be appropriately aligned
+    // 
+
+    build_unary_op(Pop, reg(R10, sz_64), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R10, sz_64), ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_exists_ty, ass, a, point);
+#if ABI == WIN_64
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
+#endif
 
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
