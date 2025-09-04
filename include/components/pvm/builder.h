@@ -7,7 +7,7 @@
 typedef struct Builder Builder;
 
 Builder* mk_term_builder(Allocator* a);
-Block insert_block(Term term, Builder* builder);
+Block insert_block(PVMTerm term, Builder* builder);
 
 PVMFuncHandle insert_func(PVMType* type, Builder* builder);
 PVMOperand const_val(PVMType type, void* val);

@@ -33,6 +33,7 @@
 #include "test/command_line_opts.h"
 #include "test_pico/pico.h"
 #include "test_assembler/test_assembler.h"
+#include "test_pvm/test_pvm.h"
 
 void all_suites(TestLog* log, Allocator* a);
 TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator* a);
@@ -119,13 +120,18 @@ TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator *a
 
 
 void all_suites(TestLog *log, Allocator *a) {
-    if (suite_start(log, mv_string("pico"))) {
-        run_pico_tests(log, a);
+    if (suite_start(log, mv_string("assembler"))) {
+        run_assembler_tests(log, a);
         suite_end(log);
     }
 
-    if (suite_start(log, mv_string("assembler"))) {
-        run_assembler_tests(log, a);
+    if (suite_start(log, mv_string("pvm"))) {
+        run_pvm_tests(log, a);
+        suite_end(log);
+    }
+
+    if (suite_start(log, mv_string("pico"))) {
+        run_pico_tests(log, a);
         suite_end(log);
     }
 }

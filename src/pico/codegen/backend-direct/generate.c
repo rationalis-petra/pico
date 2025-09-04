@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "data/num.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
@@ -25,6 +27,8 @@
  */
 
 // Internal functions
+static void generate_entry(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
+static void generate_exit(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
 static void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 static size_t calc_variant_size(PtrArray* types);
 static size_t calc_variant_stack_size(PtrArray* types);
@@ -51,7 +55,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, All
         Symbol* recsym = top.def.value->ptype->sort != TKind ? 
             &top.def.bind : NULL;
         AddressEnv* a_env = mk_address_env(env, recsym, a);
+        size_t out_sz = pi_size_of(*top.def.value->ptype);
+
+        generate_entry(out_sz, target, a, point);
         generate(*top.def.value, a_env, target, &links, a, point);
+        generate_exit(out_sz, target, a, point);
+
         delete_address_env(a_env, a);
         break;
     }
@@ -65,7 +74,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, All
     }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
+
+        size_t out_sz = pi_size_of(*top.expr->ptype);
+        generate_entry(out_sz, target, a, point);
         generate(*top.expr, a_env, target, &links, a, point);
+        generate_exit(out_sz, target, a, point);
+
         delete_address_env(a_env, a);
         break;
     }
@@ -107,7 +121,12 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, Target target, Allocato
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
+
+    size_t out_sz = pi_size_of(*syn->ptype);
+    generate_entry(out_sz, target, a, point);
     generate(*syn, a_env, target, &links, a, point);
+    generate_exit(out_sz, target, a, point);
+
     delete_address_env(a_env, a);
 
     // The data chunk may be moved around during code-generation via 'realloc'
@@ -145,8 +164,99 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* 
         },
         .gotolinks = mk_sym_sarr_amap(8, a),
     };
+
+    size_t out_sz = pi_size_of(*syn->ptype);
+    generate_entry(out_sz, target, a, point);
     generate(*syn, a_env, target, &links, a, point);
+    generate_exit(out_sz, target, a, point);
+
     delete_address_env(a_env, a);
+}
+
+static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoint *point) {
+    // Generate as if this is a native function called as 
+    // void function(void* out_mem, void* dyamic_memor, void* temp_memory, void* shadow_stack_memory)
+
+    Assembler* ass = target.target;
+    build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RSI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R15, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R13, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R12, sz_64), ass, a, point);
+
+    // Push the argument onto the stack
+#if ABI == SYSTEM_V_64
+    if (out_sz != 0) {
+        build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
+    }
+
+    build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R14, sz_64), reg(RCX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R13, sz_64), reg(RDX, sz_64), ass, a, point);
+#elif ABI == WIN_64
+    if (out_sz != 0) {
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    }
+
+    build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R14, sz_64), reg(R8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R13, sz_64), reg(R9, sz_64), ass, a, point);
+#endif
+
+    // Code generated here may assume $RBP is the base of the stack, they are
+    // not aware of all the values we just pushed;
+    build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+}
+
+static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint *point) {
+    Assembler* ass = target.target;
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // retval = rax
+    if (out_sz != 0) {
+        build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, pi_stack_align(out_sz), sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm64((int64_t)out_sz), ass, a, point);
+
+        build_binary_op(Mov, reg(RCX, sz_64), imm64((int64_t)&memcpy), ass, a, point);
+        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+        // pop value from stack
+        build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(out_sz + 8)), ass, a, point);
+    }
+
+#elif ABI == WIN_64
+    // memcpy (dest = rcx, src = rdx, size = r8)
+    // retval = rax
+    if (out_sz != 0) {
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(out_sz), sz_64), ass,a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), imm64((int64_t)out_sz), ass, a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(32), ass, a, point);
+
+        build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)&memcpy), ass, a, point);
+        build_unary_op(Call, reg(RAX, sz_64), ass, a, point);
+        // pop value from stack
+        build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(out_sz) + 32 + 8), ass, a, point);
+    }
+#else
+#error "Unknown calling convention"
+#endif
+
+    build_unary_op(Pop, reg(R12, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R13, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R15, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RBX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RBP, sz_64), ass, a, point);
+
+    // Return
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void generate(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {

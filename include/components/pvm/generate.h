@@ -31,7 +31,7 @@ typedef struct {
     Assembler* exec_segment;
 } PVMTarget;
 
-void generate_term(Term* term, PVMTarget* target, LinkData* links, PVMGenContext context);
+void generate_term(PVMTerm* term, PVMTarget* target, LinkData* links, PVMGenContext context);
 
 void generate_proc(PVMProc* proc, PVMTarget* target, LinkData* links, PVMGenContext context);
 

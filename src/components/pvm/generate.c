@@ -19,14 +19,15 @@
 //  (note: both are needed for some arithmetic operations like division)
 
 // Internal codegen
-static void generate_instruction(PVMInstruction instruction, PVMTarget *target, LinkData *links, PVMGenContext context);
+//static void generate_instruction(PVMInstruction instruction, PVMTarget *target, LinkData *links, PVMGenContext context);
 
-void generate_term(Term *term, PVMTarget *target, LinkData *links, PVMGenContext context) {
+void generate_term(PVMTerm *term, PVMTarget *target, LinkData *links, PVMGenContext context) {
 }
 
 void generate_proc(PVMProc *proc, PVMTarget *target, LinkData *links, PVMGenContext context) {
 }
 
+/*
 static void generate_instruction(PVMInstruction instruction, PVMTarget *target,
                                  LinkData *links, PVMGenContext context) {
     switch (instruction.sort) {
@@ -43,3 +44,5 @@ static void generate_instruction(PVMInstruction instruction, PVMTarget *target,
     // default
     panic(mv_string("PVM: generate_instruction received a bad instruction (invalid sort)"));
 }
+
+*/

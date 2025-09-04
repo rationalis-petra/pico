@@ -33,6 +33,8 @@ typedef struct {
     void* tape;
 } PVMContext;
 
+PVMContext* mk_pvm_context(PassSet set, Allocator* a);
+
 /* PVM Type
  */
 typedef enum { PKind, PVar, PProc, PExists, PInt, PFloat, PPtr, POpaque } PVMSort;
@@ -84,7 +86,7 @@ typedef struct {
  *   - nt data, which is captured in a 'data' segment
  */
 typedef struct {
-} Term;
+} PVMTerm;
 
 /* Function:
  *  A collection of basic-blocks, with an entry-point.

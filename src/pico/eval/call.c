@@ -59,11 +59,31 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
     return res;
 }
 
+void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
+    void* dvars = get_dynamic_memory();
+    void* dynamic_memory_space = mem_alloc(4096, a);
+    void* offset_memory_space = mem_alloc(1024, a);
+
+    Allocator old_temp_alloc = set_std_temp_allocator(*a);
+    typedef void*(*RunExpression)(void*, void*, void*, void*); 
+    RunExpression run = (RunExpression)get_instructions(target.target).data;
+
+    void* out = mem_alloc(rsize, a);
+    run(out, dvars, dynamic_memory_space, offset_memory_space);
+
+    mem_free(dynamic_memory_space, a);
+    mem_free(offset_memory_space, a);
+    set_std_temp_allocator(old_temp_alloc);
+
+    return out;
+}
+
+/*
 // TODO: current implementation destructively modifies the assembly of the expression. probaly want a better solution in the future
 void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
-    /* result generated; */
-    /* generated.type = Ok; */
+    // result generated; 
+    // generated.type = Ok;
     void* value = mem_alloc(rsize, a);
 
     // Generate Code which will: 
@@ -124,6 +144,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "push %%r14       \n" // for dynamic memory space
         "push %%r13       \n" // for control/indexing memory space
         "push %%r12       \n" // Nonvolatile on System V + Win64
+
         "mov %2, %%r15    \n"
         "mov %3, %%r14    \n"
         "mov %4, %%r13    \n"
@@ -131,6 +152,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
         "sub $0x8, %%rbp  \n" // Do this to align RSP & RBP? Possibly to account
                               // for value on stack?
         "call *%1         \n"
+
         "pop %%r12        \n"
         "pop %%r13        \n"
         "pop %%r14        \n"
@@ -147,6 +169,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     mem_free(dynamic_memory_space, a);
     return value;
 }
+*/
 
 Document* pretty_res(EvalResult res, Allocator* a) {
     Document* out = NULL;
