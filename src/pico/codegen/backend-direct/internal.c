@@ -14,6 +14,12 @@ int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
 
 ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
 
+bool is_variable(PiType *ty) {
+    size_t out = 0;
+    Result_t result = pi_maybe_size_of(*ty, &out);
+    return result == Err; 
+}
+
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
     SizeArray* sarr = sym_sarr_lookup(sym, links->links.external_links);

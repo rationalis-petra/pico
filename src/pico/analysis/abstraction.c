@@ -2180,11 +2180,11 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
     RawTreeArray input = raw.branch.nodes;
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
-    void* offset_memory_space = mem_alloc(1024, a);
 
     Allocator old_temp_alloc = set_std_temp_allocator(*a);
     Allocator old_current_alloc = set_std_current_allocator(*a);
 
+    // TODO: swap so this is backend independent (use foreign_adapters to call) 
     int64_t out;
     __asm__ __volatile__(
                          // save nonvolatile registers
@@ -2197,23 +2197,22 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %4, %%r13    \n"
                          "mov %3, %%r14    \n"
                          "mov %2, %%r15    \n"
                          //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
                          // Push output ptr & sizeof (MacroResult), resp
-                         "push %6          \n" // output ptr
-                         "push %7          \n" // sizeof (MacroResult)
+                         "push %5          \n" // output ptr
+                         "push %6          \n" // sizeof (MacroResult)
 
                          // Push arg (array) onto stack
-                         "push 0x30(%5)       \n"
-                         "push 0x28(%5)       \n"
-                         "push 0x20(%5)       \n"
-                         "push 0x18(%5)       \n"
-                         "push 0x10(%5)       \n"
-                         "push 0x8(%5)        \n"
-                         "push (%5)         \n"
+                         "push 0x30(%4)       \n"
+                         "push 0x28(%4)       \n"
+                         "push 0x20(%4)       \n"
+                         "push 0x18(%4)       \n"
+                         "push 0x10(%4)       \n"
+                         "push 0x8(%4)        \n"
+                         "push (%4)         \n"
 
                          "mov %%rsp, %%rbp \n"
 
@@ -2262,9 +2261,8 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          : "=r" (out)
 
                          : "r" (head.macro_addr)
-                           , "r" (dvars)
                            , "r" (dynamic_memory_space)
-                           , "r" (offset_memory_space)
+                           , "r" (dvars)
                            , "r" (&input)
                            , "r" (&output)
                            , "c" (sizeof(MacroResult)) 

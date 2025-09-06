@@ -5,9 +5,15 @@
 #include "components/assembler/assembler.h"
 
 #include "pico/data/sym_sarr_amap.h"
+#include "pico/binding/address_env.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/values.h"
 #include "pico/codegen/codegen.h"
+
+#define INDEX_REGISTER R15
+#define POLYMEM_REGISTER R15
+#define DVARS_REGISTER R14
+#define DXMEM_REGISTER R13
 
 /* Utility functions shared across code generation */
 
@@ -23,12 +29,20 @@ typedef struct {
     LinkData links;
 } InternalLinkData;
 
+bool is_variable(PiType *ty);
+
+void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+
+void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+
+// Codegen utilities - generate specific things
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
 void backlink_code(Target target, size_t offset, InternalLinkData* links);
 void backlink_data(Target target, size_t offset, InternalLinkData* links);
 void backlink_data_data(Target target, size_t location, size_t offset, InternalLinkData* links);
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
-
 
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);

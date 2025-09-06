@@ -57,17 +57,15 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
 void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
-    void* offset_memory_space = mem_alloc(1024, a);
 
     Allocator old_temp_alloc = set_std_temp_allocator(*a);
-    typedef void*(*RunExpression)(void*, void*, void*, void*); 
+    typedef void*(*RunExpression)(void*, void*, void*); 
     RunExpression run = (RunExpression)get_instructions(target.target).data;
 
     void* out = mem_alloc(rsize, a);
-    run(out, dvars, dynamic_memory_space, offset_memory_space);
+    run(out, dynamic_memory_space, dvars);
 
     mem_free(dynamic_memory_space, a);
-    mem_free(offset_memory_space, a);
     set_std_temp_allocator(old_temp_alloc);
 
     return out;
