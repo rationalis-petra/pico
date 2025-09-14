@@ -49,6 +49,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, a);
 
+    /*
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
         "(def mk-list all [A] proc [len capacity]\n"
@@ -147,12 +148,13 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "      (panic {Unit} \"unimplemented\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, a);
 
-    /* const char *list_pop_fn = */
-    /*     "(def pop all [A] proc [(lst (Dynamic List A))] seq\n" */
-    /*     "  [let! old (use lst)]\n"  */
-    /*     "  (set lst (struct old [.len (- old.len 1)]))\n" */
-    /*     "  (elt (- old.len 1) old)\n"; */
-    /* compile_toplevel(list_pop_fn, module, target, &point, &pi_point, a); */
+    const char *list_pop_fn =
+        "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
+        "  [let! old (use lst)]\n"
+        "  (set lst (struct old [.len (- old.len 1)]))\n"
+        "  (elt (- old.len 1) old)\n";
+    compile_toplevel(list_pop_fn, module, target, &point, &pi_point, a);
+    */
 
     Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
     if (r.type == Err) panic(r.error_message);

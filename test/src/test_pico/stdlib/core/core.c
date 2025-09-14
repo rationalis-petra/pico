@@ -105,6 +105,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("((proc [(f (Proc [I64 I64] I64)) x y] f x y) i64.+ -256 128)");
     }
 
+    // TODO_NEW_CC: re-enable me!
     if (test_start(log, mv_string("proc-all-id"))) {
         int64_t expected = -75;
         TEST_EQ("((all [A] proc [(x A)] x) -75)");

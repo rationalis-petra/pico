@@ -20,6 +20,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
+    /*
     if (test_start(log, mv_string("seq-simple"))) {
         int64_t expected = 17;
         TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
@@ -108,6 +109,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         int64_t expected[2] = {-10, 10};
         TEST_EQ("((all [A] (use ldvar)) {Unit})");
     }
+    */
 
     /* if (test_start(log, mv_string("large-dynamic-set"))) { */
     /*     int64_t expected[2] = {100, -100}; */

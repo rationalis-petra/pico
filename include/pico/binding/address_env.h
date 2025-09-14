@@ -1,7 +1,9 @@
 #ifndef __PICO_BINDING_ADDRESS_ENV_H
 #define __PICO_BINDING_ADDRESS_ENV_H
 
+#include "data/meta/array_header.h"
 #include "platform/memory/allocator.h"
+
 #include "pico/data/sym_size_assoc.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/environment.h"
@@ -24,7 +26,6 @@ typedef struct AddressEnv AddressEnv;
  */
 typedef enum {
     ALocalDirect,
-    ALocalIndirect,
     ALocalIndexed,
     AGlobal,
     ATypeVar,
@@ -44,6 +45,14 @@ typedef struct {
     Result_t type;
     uint32_t stack_offset;
 } LabelEntry;
+
+typedef struct {
+    Symbol sym;
+    uint32_t size;
+    bool is_variable;
+} Binding;
+
+ARRAY_HEADER(Binding, binding, Binding)
 
 // Forward decl
 typedef struct TypeEnv TypeEnv;
@@ -80,12 +89,11 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env);
 void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
 
-void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);
+void address_start_poly(SymbolArray types, BindingArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
 
 // get_base is essentially only used by describe, when generating description
 // strings of values. 
-
 Environment* get_addr_base(AddressEnv* env);
 
 
@@ -122,9 +130,5 @@ void address_end_labels(AddressEnv* env);
 // Inform the environment that values have been pushed/popped from the stack.
 void data_stack_grow(AddressEnv* env, size_t amount);
 void data_stack_shrink(AddressEnv* env, size_t amount);
-
-// Inform the environment that values have been pushed/popped from the index.
-void index_stack_grow(AddressEnv* env, size_t num);
-void index_stack_shrink(AddressEnv* env, size_t num);
 
 #endif

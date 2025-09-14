@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "data/num.h"
+#include "data/stringify.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
@@ -31,7 +32,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator* a, ErrorPoin
 static void generate_exit(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
 static size_t calc_variant_size(PtrArray* types);
 static size_t calc_variant_stack_size(PtrArray* types);
-static void *const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
+static void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 static void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
 
 LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
@@ -192,15 +193,18 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
         build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
     }
 
+    // Both R14 and R15 have same value, as the variable stack has not moved
     build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R14, sz_64), reg(RCX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R14, sz_64), reg(RSI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R13, sz_64), reg(RCX, sz_64), ass, a, point);
 #elif ABI == WIN_64
     if (out_sz != 0) {
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     }
 
     build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R14, sz_64), reg(R8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R14, sz_64), reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R13, sz_64), reg(R8, sz_64), ass, a, point);
 #endif
 
     // Code generated here may assume $RBP is the base of the stack, they are
@@ -394,9 +398,6 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             }
             break;
         }
-        case ALocalIndirect:
-            panic(mv_string("Monomorphic code does not expect address entries of type 'local indirect'"));
-            break;
         case ALocalIndexed:
             panic(mv_string("Monomorphic code does not expect address entries of type 'local indexed'"));
             break;
@@ -614,16 +615,18 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // Polymorphic Funcall
         // The polymorphic codegen is different, so we therefore must also
         // call polymorphic functions differently!
-        // Step1: reserve space for types. 
+        // Step 1: reserve space for types. 
         // Recall the setup
-        // > Types
-        // > Argument Offsets
         // > Old RBP
-        // > 64-bit space
-        // > arguments (in order)
+        // > Old R15
+        // > Types
+        // > Arguments
+
+        build_binary_op(Mov, reg(R15, sz_64), reg(R14, sz_64), ass, a, point);
 
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
             // The 'type' looks as follows:
+            // +---------+-------------+---------+
             // | 16 bits | 16 bits     | 32 bits |
             // | align   | stack align | size    |
             size_t align = pi_align_of(*((Syntax*)syn.all_application.types.data[i])->type_val);
@@ -632,69 +635,95 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             // TODO BUG LOGIC Check that stack_sz < max_uint_28
             uint64_t result = (align << 56) | (size << 28) | stack_sz;
 
-
             build_binary_op(Sub, reg(RSP, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
             build_binary_op(Mov, reg(RAX, sz_64), imm64(result), ass, a, point);
             build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
         }
+        data_stack_grow(env, ADDRESS_SIZE * syn.all_application.types.len);
 
         // Calculation of offsets:
         // • Remaining offset starts @ sum of ADDRESS_SIZE * 2
-        int32_t offset = 0;
+        size_t args_size = ADDRESS_SIZE * syn.all_application.types.len;
         
-        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
-            offset += pi_stack_size_of(*((Syntax*)syn.all_application.implicits.data[i])->ptype);
-            build_unary_op(Push, imm32(-offset), ass, a, point);
-        }
-        for (size_t i = 0; i < syn.all_application.args.len; i++) {
-            offset += pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
-            build_unary_op(Push, imm32(-offset), ass, a, point);
-        }
-
-        // Reserve for return address
-        build_binary_op(Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
-        // Store "Old" RBP (RBP to restore)
-        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-
-        data_stack_grow(env, ADDRESS_SIZE * (syn.all_application.types.len
-                                                + syn.all_application.implicits.len
-                                                + syn.all_application.args.len + 2));
-
-        size_t args_size = 0;
+        PiType* body_ty = syn.all_application.function->ptype->binder.body;
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            args_size += pi_stack_size_of(*arg->ptype);
             generate_i(*arg, env, target, links, a, point);
+            size_t data_sz = pi_stack_size_of(*((Syntax*)syn.all_application.implicits.data[i])->ptype);
+            if (is_variable(((PiType*)body_ty->proc.implicits.data[i]))) {
+                args_size += ADDRESS_SIZE;
+                build_binary_op(Sub, reg(R14, sz_64), imm32(data_sz), ass, a, point);
+                generate_monomorphic_copy(R14, RSP, data_sz, ass, a, point);
+                
+                build_binary_op(Add, reg(RSP, sz_64), imm32(data_sz), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+
+                data_stack_shrink(env, data_sz);
+                data_stack_grow(env, ADDRESS_SIZE);
+            } else {
+                args_size += data_sz;
+            }
         }
+
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
-            args_size += pi_stack_size_of(*arg->ptype);
             generate_i(*arg, env, target, links, a, point);
+            size_t data_sz = pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
+            if (is_variable(((PiType*)body_ty->proc.args.data[i]))) {
+                args_size += ADDRESS_SIZE;
+                build_binary_op(Sub, reg(R14, sz_64), imm32(data_sz), ass, a, point);
+                generate_monomorphic_copy(R14, RSP, data_sz, ass, a, point);
+                
+                build_binary_op(Add, reg(RSP, sz_64), imm32(data_sz), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+
+                data_stack_shrink(env, data_sz);
+                data_stack_grow(env, ADDRESS_SIZE);
+            } else {
+                args_size += data_sz;
+            }
         }
 
         // This will push a function pointer onto the stack
         generate_i(*syn.application.function, env, target, links, a, point);
 
-        // Now, calculate what RBP should be 
-        // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
-        //     = RSP - offset
-        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RBP, sz_64), imm32(offset + ADDRESS_SIZE), ass, a, point);
-        
         // Regular Function Call
         // Pop the function into RCX; call the function
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE);
+
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
 
+        // We need to determine: 
+        // a) Whether the function is returning this value on the static stack or variable stack.
+        // b) Whether WE expect the value to be on our static or dynamic stack
+        PiType* ty = strip_type(syn.all_application.function->ptype);
+        if (ty->sort == TAll) { ty = ty->binder.body; }
+        if (ty->sort == TProc) { ty = ty->proc.ret; };
+        bool callee_varstack = is_variable(ty);
+        bool caller_varstack = is_variable(syn.ptype);
+
+        if (callee_varstack != caller_varstack) {
+          if (callee_varstack) {
+              size_t out_size = pi_stack_size_of(*syn.ptype);
+              // Copy from varstack to our stack 
+              build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+              build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), ass, a, point);
+              generate_monomorphic_copy(RSP, RCX, out_size, ass, a, point);
+
+              // Pop value from variable stack
+              build_binary_op(Add, reg(R14, sz_64), imm32(out_size), ass, a, point);
+          } else {
+              not_implemented(mv_string("Calling with value on caller varstack and callee static stack"));
+          }
+        } else {
+        }
+
         // Update as popped args from stack
-        data_stack_shrink(env, args_size + ADDRESS_SIZE);
-        data_stack_shrink(env, ADDRESS_SIZE * (syn.all_application.types.len
-                                                + syn.all_application.implicits.len
-                                                + syn.all_application.args.len + 2));
+        data_stack_shrink(env, args_size);
         // Update as pushed the final value onto the stack
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
-            
     }
     case SExists: {
         not_implemented(mv_string("Direct Codegen for Exists"));
@@ -2157,8 +2186,14 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
     // Justification: stack size of is extremely unlikely to be 2^63 bytes
     //  in size!
-    if (diff != (int64_t)pi_stack_size_of(*syn.ptype))
-        panic(mv_string("address environment constraint violated: expected size of the stack is wrong!"));
+    if (diff != (int64_t)pi_stack_size_of(*syn.ptype)) {
+        String expected = string_u64(pi_stack_size_of(*syn.ptype), a);
+        String actual = string_i64(diff, a);
+        String message = string_ncat(a, 4,
+                                     mv_string("Address environment constraint violated: expected size of the stack is wrong!\nExpected "),
+                                     expected, mv_string(" but got "), actual);
+        panic(message);
+    }
 #endif
 }
 

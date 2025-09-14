@@ -10,10 +10,12 @@
 #include "pico/values/values.h"
 #include "pico/codegen/codegen.h"
 
+#define VSTACK_BASE R15
+#define VSTACK_HEAD R14
 #define INDEX_REGISTER R15
-#define POLYMEM_REGISTER R15
-#define DVARS_REGISTER R14
-#define DXMEM_REGISTER R13
+
+#define DVARS_REGISTER R13
+//#define DXMEM_REGISTER R13
 
 /* Utility functions shared across code generation */
 

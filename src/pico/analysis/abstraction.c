@@ -2180,6 +2180,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
     RawTreeArray input = raw.branch.nodes;
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
+    void* dynamic_memory_ptr = dynamic_memory_space + 4095; // ??
 
     Allocator old_temp_alloc = set_std_temp_allocator(*a);
     Allocator old_current_alloc = set_std_current_allocator(*a);
@@ -2197,7 +2198,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %3, %%r14    \n"
+                         "mov %3, %%r13    \n"
                          "mov %2, %%r15    \n"
                          //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
@@ -2261,7 +2262,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          : "=r" (out)
 
                          : "r" (head.macro_addr)
-                           , "r" (dynamic_memory_space)
+                           , "r" (dynamic_memory_ptr)
                            , "r" (dvars)
                            , "r" (&input)
                            , "r" (&output)
