@@ -23,11 +23,6 @@ void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* e
 // Movement
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_stack_move(Location dest_offset, Location src_offset, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
-void generate_index_stack_move(size_t dest_offset, size_t src_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
-
-// index stack
-void generate_index_push(Location src, Assembler* ass, Allocator* a, ErrorPoint* point);
-void generate_index_pop(Location dest, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
@@ -168,6 +163,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         } else {
             throw_error(point, mk_string("Limitation: Literals must fit into less than 64 bits.", a));
         }
+        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
     case SLitUntypedFloating: 
@@ -232,6 +228,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             generate_stack_size_of(R9, syn.ptype, env, ass, a, point);
             build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(R9, sz_64), ass, a, point);
             build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
 
             // Next, find the source location on the variable stack
             // ------------------------------
@@ -335,145 +332,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SAllApplication: {
         not_implemented(mv_string("Polymorphic all-application"));
         // Polymorphic Funcall
-        // Step1: reserve space for types. 
-        // Recall the setup
-        // > Types
-        // > Argument Offsets
-        // > Old RBP
-        // > 64-bit space
-        // > arguments (in order)
-
-        for (size_t i = 0; i < syn.all_application.types.len; i++) {
-            PiType* type = ((Syntax*)syn.all_application.types.data[i])->type_val;
-            if (type->sort == TVar) {
-                // Optimization
-                AddressEntry e = address_env_lookup(type->var, env);
-                switch (e.type) {
-                case ALocalDirect:
-                    build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
-                    build_unary_op(Push, reg(R8, sz_64), ass, a, point);
-                    break;
-                case ALocalIndexed:
-                    panic(mv_string("All Application: Cannot generate code where type var is local indexed."));
-                    break;
-                case AGlobal:
-                    panic(mv_string("All Application: Cannot generate code where type var is local global."));
-                    break;
-                case ATypeVar:
-                    panic(mv_string("Unexpected type variable sort: ATypeVar."));
-                    break;
-                case ANotFound: {
-                    panic(mv_string("Type Variable not found during codegen."));
-                    break;
-                }
-                case ATooManyLocals: {
-                    throw_error(point, mk_string("Too Many Local variables!", a));
-                    break;
-                }
-                }
-            } else {
-                // The 'type' looks as follows:
-                // | 16 bits | 16 bits     | 32 bits |
-                // | align   | stack align | size    |
-                generate_align_of(R8, type, env, ass, a, point);
-                build_binary_op(SHL, reg(R8, sz_64), imm8(56), ass, a, point);
-                build_unary_op(Push, reg(R8, sz_64), ass, a, point);
-
-                // TODO BUG LOGIC Check that R8 < max_uint_28
-                generate_size_of(R8, type, env, ass, a, point);
-                build_binary_op(Mov, reg(RAX, sz_64), reg(R8, sz_64), ass, a, point);
-                build_binary_op(SHL, reg(R8, sz_64), imm8(28), ass, a, point);
-                build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
-
-                /* uint64_t result = (align << 56) | (size << 28) | stack_sz; */
-                // Now, we use the 'div' instruction with RDX = 0; RAX = size.
-                // Remainder stored in RDX
-                build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
-                build_binary_op(Mov, reg(RCX, sz_64), imm32(8), ass, a, point);
-                build_unary_op(Div, reg(RCX, sz_64), ass, a, point);
-
-                // We need now to if rem == 0 then 0 else 8 - rem 
-                // store 8 - rem in RCX (8 is already in rcx from above)
-                build_binary_op(Sub, reg(RCX, sz_64), reg(RDX, sz_64), ass, a, point);
-                build_binary_op(Cmp, reg(RDX, sz_64), imm8(0), ass, a, point);
-            
-                build_binary_op(CMovE, reg(RCX, sz_64), reg(RDX, sz_64), ass, a, point);
-
-                // Add this to the original size and binary-or it into the type.
-                build_binary_op(Add, reg(R8, sz_64), reg(RCX, sz_64), ass, a, point);
-                build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
-            }
-        }
-
-        // Calculation of offsets:
-        // • Remaining offset starts 0
-        // Increment by the (stack) size of each argument, push thisoffset
-        build_unary_op(Push, imm32(0), ass, a, point);
-        
-        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
-            generate_stack_size_of(RAX, ((Syntax*)syn.all_application.implicits.data[i])->ptype, env, ass, a, point);
-
-            // Pop current offset, subtract stack size, push new offset 2x 
-            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
-
-            // generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-        }
-        for (size_t i = 0; i < syn.all_application.args.len; i++) {
-            generate_stack_size_of(RAX, ((Syntax*)syn.all_application.args.data[i])->ptype, env, ass, a, point);
-
-            // Pop current offset, subtract stack size, push new offset 2x 
-            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
-
-            // generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-        }
-        // Pop the 'spare' RCX from the stack, stash the offset in the 'RCX stack'
-        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-        generate_index_push(reg(RCX, sz_64), ass, a, point);
-        data_stack_grow(env, 1);
-
-        // Reserve for return address
-        build_binary_op(Sub, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
-        // Store "Old" RBP (RBP to restore)
-        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-
-        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
-            Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            generate_polymorphic_i(*arg, env, target, links, a, point);
-
-        }
-        for (size_t i = 0; i < syn.all_application.args.len; i++) {
-            Syntax* arg = (Syntax*) syn.all_application.args.data[i];
-            generate_polymorphic_i(*arg, env, target, links, a, point);
-        }
-
-        // This will push a function pointer onto the stack
-        generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
-
-        // Now, calculate what RBP should be 
-        // RBP = RSP - (args_size + ADDRESS_SIZE) ;; (ADDRESS_SIZE accounts for function ptr)
-        //     = RSP + (offset + ADDRESS_SIZE)
-        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
-        // Mov RBP, offset + ADDRESS_SIZE
-        // mov offset into rcx
-
-        generate_index_pop(reg(RCX, sz_64), ass, a, point);
-        data_stack_shrink(env, 1);
-        // add offset to RBP. Note that we use 'sub' because RCX = -offset, so
-        // RBP - RCX = RBP - (- Offset) = RBP + Offset
-        build_binary_op(Sub, reg(RBP, sz_64), reg(RCX, sz_64), ass, a, point);
-        // add address size to RBP
-        build_binary_op(Add, reg(RBP, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
-        
-        // Regular Function Call
-        // Pop the function into RCX; call the function
-        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
         break;
     }
     case SExists: {
@@ -520,9 +378,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // 
         // -------------------------------------------------------------------------
 
-        generate_index_push(imm32(0), ass, a, point); // The source region size
-        generate_index_push(imm32(0), ass, a, point); // The base offset (0)
-        data_stack_grow(env, 2);
         for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
             generate_align_of(R8, struct_type->structure.fields.data[i].val, env, ass, a, point);
             build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
@@ -531,9 +386,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Update old offset to have alignment
             build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
-            // Generate new offset
-            generate_index_push(reg(R9, sz_64), ass, a, point);
-            data_stack_grow(env, 1);
 
             // Add size to new offset
             generate_size_of(R10, struct_type->structure.fields.data[i].val, env, ass, a, point);
@@ -561,8 +413,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         generate_align_to(R9, R8, ass, a, point);
         build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
-        generate_index_push(imm32(0), ass, a, point);
-        data_stack_grow(env, 1);
         // (elt n + 3) = source_region_size
         // (elt [2, n + 2] control_stack) = dest_offsets, struct size (reversed)
         // (elt 1 control_stack) = struct size
@@ -609,7 +459,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_binary_op(Mov, reg(RCX, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), ass, a, point);
         build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(0x8 * (nfields + 3)), ass, a, point);
         build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
-        data_stack_shrink(env, (nfields + 3));
         break;
     }
     case SProjector: {
@@ -739,8 +588,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
         // Generate the variant stack size
         generate_variant_stack_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
-        generate_index_push(reg(RCX, sz_64), ass, a, point);
-        data_stack_grow(env, 1);
 
         generate_variant_size_of(RAX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
 
@@ -749,9 +596,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_binary_op(Add, reg(RAX,sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
         build_binary_op(Sub, reg(RAX,sz_64), imm8(tag_size), ass, a, point);
 
-        generate_index_push(reg(RAX, sz_64), ass, a, point);
-        generate_index_push(imm32(0), ass, a, point);
-        data_stack_grow(env, 2);
 
         // Index Stack shape
         // variant size
@@ -789,7 +633,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
         // Remove the space occupied by the temporary values 
         build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
-        data_stack_shrink(env, 3);
         break;
     }
     case SMatch: {
@@ -837,8 +680,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
 
             // Bind Clause Vars 
-            generate_index_push(reg(RSP, sz_64), ass, a, point);
-            data_stack_grow(env, 1);
             // + tag size
             build_binary_op(Add, rref8(INDEX_REGISTER, 0, sz_64), imm8(sizeof(uint64_t)), ass, a, point);
             for (size_t i = 0; i < variant_types.len; i++) {
@@ -848,8 +689,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     generate_size_of(RAX, variant_types.data[i], env, ass, a, point);
                     build_binary_op(Add, reg(RAX, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
 
-                    generate_index_push(reg(RAX, sz_64), ass, a, point);
-                    data_stack_grow(env, 1);
                 }
             }
 
@@ -857,7 +696,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(0x8 * variant_types.len), ass, a, point);
             address_pop_n(variant_types.len, env);
-            data_stack_shrink(env, variant_types.len);
 
             // Generate jump to end of match expression to be backlinked later
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -881,10 +719,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         //size_t enum_size = pi_size_of(*match_value->ptype);
         //size_t out_size = pi_size_of(*syn.ptype);
         generate_stack_size_of(RCX, enum_type, env, ass, a, point);
-        generate_index_push(reg(RCX, sz_64), ass, a, point);
 
         generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-        generate_index_push(reg(RAX, sz_64), ass, a, point);
 
         // Now, pop the enum off of the stack!
         generate_poly_stack_move(reg(RCX, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
@@ -949,13 +785,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SLet: {
         not_implemented(mv_string("Polymorphic let"));
         // Store the (current) RSP on top of the stack.
-        generate_index_push(reg(RSP, sz_64), ass, a, point);
-        data_stack_grow(env, 1);
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
             Syntax* sy = syn.let_expr.bindings.data[i].val;
             generate_polymorphic_i(*sy, env, target, links, a, point);
-            generate_index_push(reg(RSP, sz_64), ass, a, point);
-            data_stack_grow(env, 1);
             address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
         }
 
@@ -980,14 +812,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // Store the dest offset in INDEX_REGISTER
         build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R8, sz_64), ass, a, point);
 
-        data_stack_shrink(env, syn.let_expr.bindings.len);
         address_pop_n(syn.let_expr.bindings.len, env);
 
         generate_poly_stack_move(reg(R8, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
 
         // Pop offset from index stack & shrink data/control stack accordingly
-        generate_index_pop(reg(R8, sz_64), ass, a, point);
-        data_stack_shrink(env, 1);
         build_binary_op(Add, reg(RSP, sz_64), reg(R8, sz_64), ass, a, point);
         break;
     }
@@ -1053,8 +882,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             push_symbol(syn.labels.terms.data[i].key, &labels);
 
         // Push the current value of $RSP onto the indexing stack
-        generate_index_push(reg(RSP, sz_64), ass, a, point);
-        data_stack_grow(env, 1);
 
         address_start_labels(labels, env);
 
@@ -1081,7 +908,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             // We assume that they have been pushed onto the stack by whatever
             // jumped us in here!
-            data_stack_grow(env, branch->args.len);
             address_bind_label_vars(arg_sizes, env);
             generate_polymorphic_i(*branch->body, env, target, links, a, point);
             address_unbind_label_vars(env);
@@ -1090,7 +916,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             if (lble.type == Err)
                 throw_error(point, mv_string("Label not found during codegen!!"));
 
-            data_stack_shrink(env, branch->args.len + 1);
             // TODO (possible bug: use Sub or Add and + or - ?)
             build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32((lble.stack_offset + 1) * ADDRESS_SIZE), ass, a, point);
 
@@ -1100,14 +925,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // The source offset (0)
             generate_size_of(RAX, syn.ptype, env, ass, a, point);
             build_binary_op(Mov, reg(R10, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-            generate_index_push(reg(RAX, sz_64), ass, a, point);
 
             build_binary_op(Sub, reg(R10, sz_64), reg(RAX, sz_64), ass, a, point);
             generate_poly_stack_move(reg(R10, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
 
             // Ensure the stack is at the same point for the next iteration! 
-            generate_index_pop(reg(RAX, sz_64), ass, a, point);
-            generate_index_pop(reg(RSP, sz_64), ass, a, point);
             build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -1116,7 +938,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
         // The final iteration will have shrunk the stack "too much", so add the
         // result back in.
-        data_stack_grow(env, 1);
 
         size_t label_end = get_pos(ass);
 
@@ -1165,8 +986,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Store the size in the index stack
             // (this will later be used to index the input variable to the label)
             generate_stack_size_of(RAX, expr->ptype, env, ass, a, point);
-            generate_index_push(reg(RAX, sz_64), ass, a, point);
-            data_stack_grow(env, 1);
 
             generate_polymorphic_i(*expr, env, target, links, a, point);
         }
@@ -1203,11 +1022,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(Sub, reg(R10, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Save the dest_offset (We will add this to RSP after the copy)
-            generate_index_push(reg(R10, sz_64), ass,  a, point);
 
             generate_poly_stack_move(reg(R10, sz_64), imm32(0), reg(R9, sz_64), ass, a, point);
 
-            generate_index_pop(reg(R10, sz_64), ass,  a, point);
             build_binary_op(Add, reg(RSP, sz_64), reg(R10, sz_64), ass, a, point);
 
             // Now, update the index stack to handle the new offsets 
@@ -1216,14 +1033,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             }
 
             // Now, shrink the address stack appropriately 
-            generate_index_stack_move(delta, 0, syn.go_to.args.len * 8, ass, a, point);
             build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(delta), ass, a, point);
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
 
-            data_stack_shrink(env, syn.go_to.args.len);
         } else {
             throw_error(point, mv_string("Label not found during codegen!!"));
         }
@@ -1232,9 +1047,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SSequence: {
         size_t num_bindings = 0;
 
-        // Store the (current) RSP on top of the stack.
-        generate_index_push(reg(RSP, sz_64), ass, a, point);
-        data_stack_grow(env, 1);
         for (size_t i = 0; i < syn.sequence.elements.len; i++) {
             SeqElt* elt = syn.sequence.elements.data[i];
             generate_polymorphic_i(*elt->expr, env, target, links, a, point);
@@ -1243,7 +1055,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 panic(mv_string("Cannot bind in polymorphic sequence yet)"));
                 /* num_bindings++; */
                 /* generate_index_push(reg(RSP, sz_64), ass, a, point); */
-                /* data_stack_grow(env, 1); */
                 /* address_bind_relative(elt->symbol, 0, env); */
             }
 
@@ -1255,9 +1066,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                     generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
                     build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
+                    data_stack_shrink(env, ADDRESS_SIZE);
                 } else {
                     size_t stack_sz = pi_stack_size_of(*elt->expr->ptype);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(stack_sz), ass, a, point);
+                    data_stack_shrink(env, stack_sz);
                 }
             }
             
@@ -1698,54 +1511,6 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
 #endif
 
     generate_c_call(memmove, ass, a, point);
-}
-
-void generate_index_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
-    if (size % 8 != 0) { panic(mv_string("index stack movement is always expected to be 8-byte aligned")); }
-
-    if ((dest_stack_offset + size) > 127 || (src_stack_offset + size) > 127)  {
-        // TODO: check to ensure offsets don't exceed 32 bit max
-
-#if ABI == SYSTEM_V_64
-        // stack_move (dest = rdi, src = rsi, size = rdx)
-        // copy size into RDX
-        build_binary_op(Mov, reg(RDI, sz_64), imm32(dest_stack_offset), ass, a, point);
-        build_binary_op(Add, reg(RDI, sz_64), reg(INDEX_REGISTER, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RSI, sz_64), imm32(src_stack_offset), ass, a, point);
-        build_binary_op(Add, reg(RSI, sz_64), reg(INDEX_REGISTER, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RDX, sz_64), imm32(size), ass, a, point);
-
-#elif ABI == WIN_64
-        // stack_move (dest = rcx, src = rdx, size = r8)
-        build_binary_op(Mov, reg(RCX, sz_64), imm32(dest_stack_offset), ass, a, point);
-        build_binary_op(Add, reg(RCX, sz_64), reg(INDEX_REGISTER, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RDX, sz_64), imm32(src_stack_offset), ass, a, point);
-        build_binary_op(Add, reg(RDX, sz_64), reg(INDEX_REGISTER, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(R8, sz_64), imm32(size), ass, a, point);
-#else
-#error "Unknown calling convention"
-#endif
-
-        generate_c_call(memmove, ass, a, point);
-    } else  {
-        // Using 8-bit immediate is ok
-
-        for (size_t i = 0; i < size / 8; i++) {
-            build_binary_op(Mov, reg(RAX, sz_64), rref8(INDEX_REGISTER, -src_stack_offset - (i * 8) , sz_64), ass, a, point);
-            build_binary_op(Mov, rref8(INDEX_REGISTER, -dest_stack_offset - (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
-        }
-    }
-}
-
-void generate_index_push(Location src, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_binary_op(Add, reg(INDEX_REGISTER, sz_64), imm8(8), ass, a, point);
-    build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), src, ass, a, point);
-}
-
-void generate_index_pop(Location dest, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_binary_op(Mov, dest, rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-    build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm8(8), ass, a, point);
 }
 
 U8Array free_registers(U8Array inputs, Allocator* a) {

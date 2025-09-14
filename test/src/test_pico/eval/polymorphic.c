@@ -33,12 +33,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
     }
 
-    /*
+    
     if (test_start(log, mv_string("seq-fvar"))) {
         int64_t expected = -10;
         TEST_EQ("((all [A] proc [(x A)] (seq x 3 10 x)) -10)");
     }
 
+    /*
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
         TEST_EQ("((all [A] (let [x (is -3 I32)] x)) {Unit})");
@@ -117,7 +118,6 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         int64_t expected[2] = {-10, 10};
         TEST_EQ("((all [A] (use ldvar)) {Unit})");
     }
-    */
 
     /* if (test_start(log, mv_string("large-dynamic-set"))) { */
     /*     int64_t expected[2] = {100, -100}; */
