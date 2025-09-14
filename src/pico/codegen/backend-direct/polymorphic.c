@@ -1230,7 +1230,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SSequence: {
-        not_implemented(mv_string("Polymorphic seq"));
         size_t num_bindings = 0;
 
         // Store the (current) RSP on top of the stack.
@@ -1241,54 +1240,30 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             generate_polymorphic_i(*elt->expr, env, target, links, a, point);
 
             if (elt->is_binding && i + 1 != syn.sequence.elements.len) {
-                num_bindings++;
-                generate_index_push(reg(RSP, sz_64), ass, a, point);
-                data_stack_grow(env, 1);
-                address_bind_relative(elt->symbol, 0, env);
+                panic(mv_string("Cannot bind in polymorphic sequence yet)"));
+                /* num_bindings++; */
+                /* generate_index_push(reg(RSP, sz_64), ass, a, point); */
+                /* data_stack_grow(env, 1); */
+                /* address_bind_relative(elt->symbol, 0, env); */
             }
 
             // Remember: We do not pop off the stack if this is
             // a) a binding (hence this is an else) 
             // b) the last value in the sequence (as this value is preserved)
             else if (i + 1 != syn.sequence.elements.len) {
-                generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
-                build_binary_op(Add, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+                if (is_variable(elt->expr->ptype)) {
+                    generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
+                    build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
+                } else {
+                    size_t stack_sz = pi_stack_size_of(*elt->expr->ptype);
+                    build_binary_op(Add, reg(RSP, sz_64), imm8(stack_sz), ass, a, point);
+                }
             }
             
         }
         if (num_bindings != 0) {
-            // The goal is to pop all bindings from the stack, while preserving
-            // the topmost value.
-
-            // Store size of value in RAX
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-
-            // Pop all local bindings, leaving the old RSP on top of the index stack
-            build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(ADDRESS_SIZE * num_bindings), ass, a, point);
-
-            // Move the old RSP into R8
-            build_binary_op(Mov, reg(R8, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-
-            // We want the Dest offset RSP as (destined rsp - current rsp) = (old rsp - size - current rsp)
-            build_binary_op(Sub, reg(R8, sz_64), reg(RAX, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
-
-            // Store the dest offset in INDEX_REGISTER
-            build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R8, sz_64), ass, a, point);
-
-            data_stack_shrink(env, num_bindings);
-            address_pop_n(num_bindings, env);
-
-            generate_poly_stack_move(reg(R8, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
-
-            // Pop offset from index stack & shrink data/control stack accordingly
-            generate_index_pop(reg(R8, sz_64), ass, a, point);
-            data_stack_shrink(env, 1);
-            build_binary_op(Add, reg(RSP, sz_64), reg(R8, sz_64), ass, a, point);
-        } else {
-            // Pop old RSP from index stack 
-            build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
-            data_stack_shrink(env, 1);
+            panic(mv_string("Cannot pop binds in polymorphic sequence yet)"));
         }
         break;
     }

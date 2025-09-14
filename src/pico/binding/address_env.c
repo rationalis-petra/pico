@@ -579,12 +579,10 @@ void address_end_labels(AddressEnv* env) {
 
 void data_stack_grow(AddressEnv* env, size_t amount) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    if (locals->type == LMonomorphic) locals->stack_head -= amount;
-    else (panic (mv_string("data_stack_grow should not be called on a polymorphic stack!")));
+    locals->stack_head -= amount;
 }
 
 void data_stack_shrink(AddressEnv* env, size_t amount) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
-    if (locals->type == LMonomorphic) locals->stack_head += amount;
-    else (panic (mv_string("data_stack_shrink should not be called on a polymorphic stack!")));
+    locals->stack_head += amount;
 }

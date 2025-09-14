@@ -28,12 +28,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    /*
     if (test_start(log, mv_string("seq-simple"))) {
         int64_t expected = 17;
         TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
     }
 
+    /*
     if (test_start(log, mv_string("seq-fvar"))) {
         int64_t expected = -10;
         TEST_EQ("((all [A] proc [(x A)] (seq x 3 10 x)) -10)");
