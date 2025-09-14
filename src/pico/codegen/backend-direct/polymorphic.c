@@ -111,16 +111,9 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         // Return on Variable Stack
         // R15 is the 'destination' on the variable stack of a return
         // argument.
-        PiType* ret_ty = NULL;
-        if (body.ptype->sort == TProc) {
-            ret_ty = body.ptype->proc.ret;
-        } else {
-            ret_ty = body.ptype;
-        }
 
-        generate_stack_size_of(RAX, ret_ty, env, ass, a, point);
-
-        // Restore old R15
+        // Store value at the stack head
+        generate_stack_size_of(RAX, body.ptype, env, ass, a, point);
         build_binary_op(Sub, reg(R15, sz_64), reg(RAX, sz_64), ass, a, point);
         generate_poly_move(reg(R15, sz_64), reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R14, sz_64), reg(R15, sz_64), ass, a, point);
@@ -141,8 +134,21 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         build_binary_op(Add, reg(RSP, sz_64), imm8(0x18 + args_size), ass, a, point);
     } else {
         // Return on Data Stack
-        panic(mv_string("not yet returnign on data-stack"));
+        // this is much like the steps above, where we copy 
+        size_t ret_sz = pi_stack_size_of(*body.ptype);
+    
+        // Next, restore the old stack bases (variable + static)
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R14, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
+        // Now, copy the return address into a (safe) register
+        build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
+        generate_stack_move(0x20 + args_size, 0, ret_sz, ass, a, point);
+
+        // Then the return address
+        build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(0x18 + args_size), ass, a, point);
     }
 
     build_nullary_op(Ret, ass, a, point);

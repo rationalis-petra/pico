@@ -14,6 +14,14 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     };
 
+    // Literals
+    if (test_start(log, mv_string("const-return"))) {
+        int64_t expected = -28;
+        // TODO (BUG): We should be able to remove the 'is' and still 
+        //             typecheck
+        TEST_EQ("((is (all [A] -28) (All [A] I64)) {Unit})");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Static control and binding - seq/let/if/
