@@ -154,63 +154,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     Assembler* ass = target.target;
     switch (syn.type) {
     case SLitUntypedIntegral:
-        panic(mv_string("Cannot generate polymorphic code for untyped integral."));
-    case SLitTypedIntegral: {
-        // Does it fit into 32 bits?
-        if (syn.integral.value < 0x80000000 && syn.integral.value > -80000001) {
-            int32_t immediate = syn.integral.value;
-            build_unary_op(Push, imm32(immediate), ass, a, point);
-        } else {
-            throw_error(point, mk_string("Limitation: Literals must fit into less than 64 bits.", a));
-        }
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        break;
-    }
+    case SLitTypedIntegral:
     case SLitUntypedFloating: 
-        panic(mv_string("Cannot generate polymorphic code for untyped floating!"));
-    case SLitTypedFloating: {
-        if (syn.ptype->prim == Float_32) {
-            float f = syn.floating.value;
-            void* raw = &f;
-            int32_t immediate = *(int32_t*)raw;
-            build_unary_op(Push, imm32(immediate), ass, a, point);
-            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        }
-        else if (syn.ptype->prim == Float_64) {
-            void* raw = &syn.floating.value;
-            int64_t immediate = *(int64_t*)raw;
-            build_binary_op(Mov, reg(RAX,sz_64), imm64(immediate), ass, a, point);
-            build_unary_op(Push, reg(RAX,sz_64), ass, a, point);
-            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        } else {
-            panic(mv_string("Floating literal has non-float type!"));
-        }
+    case SLitTypedFloating: 
+    case SLitBool: 
+    case SLitUnit: 
+    case SLitString: 
+        // For literals, use same as regular codegen
+        generate_i(syn, env, target, links, a, point);
         break;
-    }
-    case SLitBool: {
-        int8_t immediate = (int8_t) syn.boolean;
-        build_unary_op(Push, imm8(immediate), ass, a, point);
-        break;
-    }
-    case SLitUnit: {
-        break;
-    }
-    case SLitString: {
-        String immediate = syn.string; 
-        if (immediate.memsize > UINT32_MAX) 
-            throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
-
-        // Push the u8
-        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)(target.data_aux->data + target.data_aux->len)), ass, a, point);
-
-        // Backlink the data & copy the bytes into the data-segment.
-        backlink_data(target, out.backlink, links);
-        add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
-
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
-        break;
-    }
     case SVariable:
     case SAbsVariable: {
         // Lookup the variable in the assembly envionrment
@@ -218,9 +170,29 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             ? address_env_lookup(syn.variable, env)
             : address_abs_lookup(syn.abvar, env);
         switch (e.type) {
-        case ALocalDirect:
-            throw_error(point, mv_string("Codegen not implemented for Local Direct variables"));
+        case ALocalDirect: {
+            // Copy to the current level 
+            size_t size = pi_stack_size_of(*syn.ptype);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(size), ass, a, point);
+
+            // The size | 7 "rounds up" size to the nearet multiple of eight. 
+            // All local variables on the stack are stored with size rounded up
+            // to nearest eight, so this allows objects with size, e.g. 5, 12,
+            // etc. to have all their data copied  
+            size = size | 7;
+            if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
+                for (size_t i = 0; i < size / 8; i++) {
+                    build_binary_op(Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
+                    build_binary_op(Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
+                }
+            } else {
+                for (size_t i = 0; i < size / 8; i++) {
+                    build_binary_op(Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
+                    build_binary_op(Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
+                }
+            }
             break;
+        }
         case ALocalIndexed:
             // First, we need the size of the variable & allocate space for it on the stack
             // ------------------------------------------------------------------------------------------
@@ -1045,17 +1017,24 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SSequence: {
-        size_t num_bindings = 0;
+        size_t bind_sz = ADDRESS_SIZE; 
+
+        build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
 
         for (size_t i = 0; i < syn.sequence.elements.len; i++) {
             SeqElt* elt = syn.sequence.elements.data[i];
             generate_polymorphic_i(*elt->expr, env, target, links, a, point);
 
             if (elt->is_binding && i + 1 != syn.sequence.elements.len) {
-                panic(mv_string("Cannot bind in polymorphic sequence yet)"));
-                /* num_bindings++; */
-                /* generate_index_push(reg(RSP, sz_64), ass, a, point); */
-                /* address_bind_relative(elt->symbol, 0, env); */
+                if (is_variable(elt->expr->ptype)) {
+                    address_bind_relative_index(elt->symbol, 0, env);
+                    bind_sz += ADDRESS_SIZE;
+                } else {
+                    size_t stack_sz = pi_stack_size_of(*elt->expr->ptype);
+                    address_bind_relative(elt->symbol, 0, env);
+                    bind_sz += stack_sz;
+                }
             }
 
             // Remember: We do not pop off the stack if this is
@@ -1075,8 +1054,27 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             }
             
         }
-        if (num_bindings != 0) {
-            panic(mv_string("Cannot pop binds in polymorphic sequence yet)"));
+        if (is_variable(syn.ptype)) {
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+
+            // Grab the value of R14 we pushed at the beginning - offset bind_sz + stack head 
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz + ADDRESS_SIZE, sz_64), ass, a, point);
+            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+
+            generate_poly_move(reg(R14, sz_64), reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            // Store current index in stack return position
+            generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            data_stack_shrink(env, bind_sz);
+        } else {
+            size_t stack_sz = pi_stack_size_of(*syn.ptype);
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz + stack_sz, sz_64), ass, a, point);
+            generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            data_stack_shrink(env, bind_sz);
         }
         break;
     }

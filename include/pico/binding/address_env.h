@@ -104,6 +104,7 @@ Environment* get_addr_base(AddressEnv* env);
 
 void address_bind_type(Symbol s, AddressEnv* env);
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
+void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env);
 void address_pop_n(size_t n, AddressEnv* env);
 void address_pop(AddressEnv* env);
 

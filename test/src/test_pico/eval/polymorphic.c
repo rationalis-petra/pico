@@ -33,10 +33,19 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
     }
 
-    
     if (test_start(log, mv_string("seq-fvar"))) {
         int64_t expected = -10;
         TEST_EQ("((all [A] proc [(x A)] (seq x 3 10 x)) -10)");
+    }
+
+    if (test_start(log, mv_string("seq-bind-lit"))) {
+        int64_t expected = 6;
+        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] 10 y) I64)) -10)");
+    }
+
+    if (test_start(log, mv_string("seq-bind-fvar"))) {
+        int64_t expected = -10;
+        TEST_EQ("((all [A] proc [(x A)] (seq x [let! y x] 10 y)) -10)");
     }
 
     /*

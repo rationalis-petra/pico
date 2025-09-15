@@ -180,10 +180,9 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
         }
         if ((maddr.type == SADirect || maddr.type == SAIndexed) && symbol_eq(maddr.symbol, s)) {
             if (maddr.type == SAIndexed) {
-                int64_t offset = maddr.stack_offset - locals.stack_head;
                 return (AddressEntry) {
                     .type = ALocalIndexed,
-                    .stack_offset = offset,
+                    .stack_offset = maddr.stack_offset,
                 };
             } else {
                 if (maddr.stack_offset > INT32_MAX || maddr.stack_offset < INT32_MIN) {
@@ -400,16 +399,23 @@ void address_bind_type(Symbol s, AddressEnv* env) {
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    if (locals->type == LPolymorphic) {
-        panic(mv_string("not implemented: bind-relative in polymorphic environment"));
-    } else {
-        size_t stack_offset = locals->stack_head;
-        SAddr value = (SAddr){};
-        value.type = SADirect;
-        value.symbol = s;
-        value.stack_offset = stack_offset + offset;
-        push_saddr(value, &locals->vars);
-    }
+    size_t stack_offset = locals->stack_head;
+    SAddr value = (SAddr){};
+    value.type = SADirect;
+    value.symbol = s;
+    value.stack_offset = stack_offset + offset;
+    push_saddr(value, &locals->vars);
+}
+
+void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+    size_t stack_offset = locals->stack_head;
+    SAddr value = (SAddr){};
+    value.type = SAIndexed;
+    value.symbol = s;
+    value.stack_offset = stack_offset + offset;
+    push_saddr(value, &locals->vars);
 }
 
 void address_pop_n(size_t n, AddressEnv* env) {
