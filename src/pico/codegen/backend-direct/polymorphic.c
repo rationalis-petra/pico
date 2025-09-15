@@ -173,6 +173,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case ALocalDirect: {
             // Copy to the current level 
             size_t size = pi_stack_size_of(*syn.ptype);
+            data_stack_grow(env, size);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(size), ass, a, point);
 
             // The size | 7 "rounds up" size to the nearet multiple of eight. 
@@ -215,14 +216,17 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case AGlobal: {
             PiType indistinct_type = *strip_type(syn.ptype);
 
-            // Use RAX as a temp
-            // Note: casting void* to uint64_t only works for 64-bit systems...
+            // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
+            // Dynamic Vars and instances pby value, but are guaranteed to take up 64 bits.
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
                 || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
-                AsmResult out = build_binary_op(Mov, reg(R8, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
+                AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
-                build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+                build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
+            // Primitives are (currently) all <= 64 bits, but may treating them
+            // as 64-bits may overflow a allocated portion of memory, so we must
+            // be more careful here.
             } else if (indistinct_type.sort == TPrim) {
                 size_t prim_size = pi_size_of(indistinct_type);
                 AsmResult out;
@@ -245,21 +249,23 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             // Structs and Enums are passed by value, and have variable size.
             } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
-                size_t value_size = pi_size_of(*syn.ptype);
+                size_t value_size = pi_size_of(indistinct_type);
+                size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
                 backlink_global(syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
-                build_binary_op(Sub, reg(RSP, sz_64), imm32(value_size), ass, a, point);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
 
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
                 throw_error(point,
                             string_ncat(a, 3,
                                         mv_string("Codegen: Global var '"),
-                                        symbol_to_string(syn.variable,a ),
+                                        symbol_to_string(syn.variable, a),
                                         mv_string("' has unsupported sort")));
             }
+            data_stack_grow(env, pi_stack_size_of(indistinct_type));
             break;
         }
         case ANotFound: {
@@ -755,41 +761,48 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SLet: {
-        not_implemented(mv_string("Polymorphic let"));
-        // Store the (current) RSP on top of the stack.
-        for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
-            Syntax* sy = syn.let_expr.bindings.data[i].val;
-            generate_polymorphic_i(*sy, env, target, links, a, point);
-            address_bind_relative(syn.let_expr.bindings.data[i].key, 0, env);
-        }
+        size_t bind_sz = ADDRESS_SIZE; 
 
+        build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
+            SymPtrCell elt = syn.let_expr.bindings.data[i];
+            generate_polymorphic_i(*(Syntax*)elt.val, env, target, links, a, point);
+
+            if (is_variable(((Syntax*)elt.val)->ptype)) {
+                address_bind_relative_index(elt.key, 0, env);
+                bind_sz += ADDRESS_SIZE;
+            } else {
+                size_t stack_sz = pi_stack_size_of(*((Syntax*)elt.val)->ptype);
+                address_bind_relative(elt.key, 0, env);
+                bind_sz += stack_sz;
+            }
+        }
         generate_polymorphic_i(*syn.let_expr.body, env, target, links, a, point);
 
-        // The goal is to pop all bindings from the stack, while preserving
-        // the topmost value.
+        if (is_variable(syn.ptype)) {
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
-        // Store size of value in RAX
-        generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            // Grab the value of R14 we pushed at the beginning - offset bind_sz + stack head 
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz, sz_64), ass, a, point);
+            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
 
-        // Pop all local bindings, leaving the old RSP on top of the index stack
-        build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(ADDRESS_SIZE * syn.let_expr.bindings.len), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
-        // Move the old RSP into R8
-        build_binary_op(Mov, reg(R8, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
+            generate_poly_move(reg(R14, sz_64), reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
-        // We want the Dest offset RSP as (destined rsp - current rsp) = (old rsp - size - current rsp)
-        build_binary_op(Sub, reg(R8, sz_64), reg(RAX, sz_64), ass, a, point);
-        build_binary_op(Sub, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
-
-        // Store the dest offset in INDEX_REGISTER
-        build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R8, sz_64), ass, a, point);
-
-        address_pop_n(syn.let_expr.bindings.len, env);
-
-        generate_poly_stack_move(reg(R8, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
-
-        // Pop offset from index stack & shrink data/control stack accordingly
-        build_binary_op(Add, reg(RSP, sz_64), reg(R8, sz_64), ass, a, point);
+            // Store current index in stack return position
+            generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            data_stack_shrink(env, bind_sz);
+        } else {
+            size_t stack_sz = pi_stack_size_of(*syn.ptype);
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
+            generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            data_stack_shrink(env, bind_sz);
+        }
         break;
     }
     case SIf: {

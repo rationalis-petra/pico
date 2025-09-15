@@ -43,17 +43,34 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] 10 y) I64)) -10)");
     }
 
+    if (test_start(log, mv_string("seq-bind-lit-multi"))) {
+        int64_t expected = 6;
+        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] [let! z 3] [let! p 2] 10 y) I64)) -10)");
+    }
+
     if (test_start(log, mv_string("seq-bind-fvar"))) {
         int64_t expected = -10;
         TEST_EQ("((all [A] proc [(x A)] (seq x [let! y x] 10 y)) -10)");
     }
 
-    /*
+    if (test_start(log, mv_string("seq-bind-fvar-multi"))) {
+        int64_t expected = -10;
+        TEST_EQ("((all [A] proc [(x A)] (seq x [let! y x] [let! z 3] [let! p -2] 10 y)) -10)");
+    }
+
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
         TEST_EQ("((all [A] (let [x (is -3 I32)] x)) {Unit})");
     }
 
+    /*
+    if (test_start(log, mv_string("let-var"))) {
+        int32_t expected = -27;
+        TEST_EQ("((all [A] proc [(x A)] (let [y x] y)) -27)");
+    }
+    */
+
+    /*
     RUN("(def Point Struct [.x I64] [.y I64])");
     if (test_start(log, mv_string("large-let"))) {
         int64_t expected[2] = {3, -10};
