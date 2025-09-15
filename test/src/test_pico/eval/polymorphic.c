@@ -58,10 +58,19 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x A)] (seq x [let! y x] [let! z 3] [let! p -2] 10 y)) -10)");
     }
 
+    // TODO: polymorphic let-in-seq of large values
+
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
         TEST_EQ("((all [A] (let [x (is -3 I32)] x)) {Unit})");
     }
+
+    if (test_start(log, mv_string("simple-let-multi"))) {
+        int32_t expected = -3;
+        TEST_EQ("((all [A] (let [x (is -3 I32)] [y (is 2 I32)] x)) {Unit})");
+    }
+
+    // TODO: polymorphic let of large values
 
     /*
     if (test_start(log, mv_string("let-var"))) {
