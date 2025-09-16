@@ -91,13 +91,11 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x A)] (let [y x] y)) -27)");
     }
 
-    /*
     RUN("(def Point Struct [.x I64] [.y I64])");
     if (test_start(log, mv_string("large-let"))) {
         int64_t expected[2] = {3, -10};
         TEST_EQ("((all [A] (let [x (struct Point [.x 3] [.y -10])] x)) {Unit})");
     }
-    */
 
     RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
     if (test_start(log, mv_string("simple-if-true"))) {
@@ -110,7 +108,6 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(choose :false 3 4)");
     }
 
-    /*
     // -----------------------------------------------------
     // 
     //      Struct
@@ -123,7 +120,6 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] struct FourElt [.x 1] [.y -2] [.z 3] [.p -4]) {Unit})");
     }
 
-    RUN("(def FourElt Struct [.x I64] [.y I64] [.z I64] [.p I64])");
     if (test_start(log, mv_string("struct-simple-alter"))) {
         RUN("(def ss struct FourElt [.x 1] [.y -2] [.z 3] [.p -4])");
         int64_t expected[] = {100, -2, 3, -27};
@@ -144,6 +140,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] struct nas [.x 100] [.p -27]) {Unit})");
     }
 
+    /*
     // -------------------------------------------------------------------------
     //
     //     Dynamic binding - dynamic/use/bind/set

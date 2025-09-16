@@ -320,122 +320,77 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break; 
     }
     case SStructure: {
-        not_implemented(mv_string("Polymorphic structure"));
-        PiType* struct_type = strip_type(syn.ptype);
+        if (is_variable(syn.ptype)) {
+            panic(mv_string("Variable Struct not implemented."));
+        } else {
+            // For structures, we have to be careful - this is because the order in
+            // which arguments are evaluated is not necessarily the order in which
+            // arguments are inserted into the structure.
+            PiType* struct_type = strip_type(syn.ptype);
 
-        // Reserve space on the stack for the structure to go
-        if (syn.structure.base && syn.structure.base->type != SCheckedType) {
-            generate_polymorphic_i(*syn.structure.base, env, target, links, a, point);
-        }    else {
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
-        }
+            // Step 1: Make room on the stack for our struct (OR, just generate the
+            // base struct)
+            if (syn.structure.base && syn.structure.base->type != SCheckedType) {
+                generate_polymorphic_i(*syn.structure.base, env, target, links, a, point);
+            } else {
+                size_t struct_size = pi_stack_size_of(*struct_type);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(struct_size), ass, a, point);
+                data_stack_grow(env, struct_size);
+            }
 
-        // Generate code for each of the fields (in order)
-        for (size_t i = 0; i < syn.structure.fields.len; i++)
-        {
-            generate_polymorphic_i(*(Syntax *)syn.structure.fields.data[i].val, env, target, links, a, point);
-        }
+            // Step 2: evaluate each element/variable binding
+            for (size_t i = 0; i < syn.structure.fields.len; i++) {
+                generate_polymorphic_i(*(Syntax*)syn.structure.fields.data[i].val, env, target, links, a, point);
+            }
+        
+            // Step 3: copy each element of the array into it's place on the stack.
+            // Note: for, e.g. Struct [.x I64] [.y I64] we expect the stack to look 
+            // something like the below.
+            // ...  ..
+            // 144 y  } Destination - elements are ordered bottom-top
+            // 136 x  } 
+            // --- 
+            // 128 x   } Source - elements can be in any arbitrary order 
+            // 120 y   } <`top' of stack - grows down>
+            // ------------
 
-        // -------------------------------------------------------------------------
-        // 
-        // Movement
-        // --------
-        // The most difficult part of generating a structure is ensuring that
-        // all values end up in the "correct" location (i.e. correct part of the
-        // stack).
-        //
-        // We start by calculating two things:
-        // 1. The total size of all values just pushed onto the stack. This is
-        //    called the source-region-size or source-size.
-        // 2. The destination offsets of each field.
-        //
-        // This is then used to perform a series of smaller moves (one for each
-        // field)
-        // 
-        // -------------------------------------------------------------------------
+            // Copy from the bottom (of the destination) to the top (also of the destination) 
+            size_t source_region_size = 0;
+            for (size_t i = 0; i < syn.structure.fields.len; i++) {
+                source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
+            }
+            size_t src_offset = 0;
+            for (size_t i = 0; i < syn.structure.fields.len; i++) {
+                // Find the field in the source & compute offset
+                size_t dest_offset = 0;
+                for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
+                    PiType* t = struct_type->structure.fields.data[j].val;
+                    dest_offset = pi_size_align(dest_offset, pi_align_of(*t)); 
 
-        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            generate_align_of(R8, struct_type->structure.fields.data[i].val, env, ass, a, point);
-            build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-            generate_align_to(R9, R8, ass, a, point);
-
-            // Update old offset to have alignment
-            build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), ass, a, point);
-
-
-            // Add size to new offset
-            generate_size_of(R10, struct_type->structure.fields.data[i].val, env, ass, a, point);
-            build_binary_op(Add, rref8(INDEX_REGISTER, 0, sz_64), reg(R10, sz_64), ass, a, point);
-
-            // If this field exists in the asturct, add stack size to source size.
-            bool field_source = false;
-            for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                if (symbol_eq(syn.structure.fields.data[j].key, struct_type->structure.fields.data[i].key)) {
-                    field_source = true; 
-                    break; // Offset is correct, end the loop
+                    if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
+                        break; // offset is correct, end the loop
+                    }
+                    dest_offset += pi_size_of(*t); 
                 }
+
+                // We now both the source_offset and dest_offset. These are both
+                // relative to the 'bottom' of their respective structures.
+                // Therefore, we now need to find their offsets relative to the `top'
+                // of the stack.
+                size_t field_size = pi_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype);
+                src_offset += pi_stack_align(field_size);
+                size_t src_stack_offset = source_region_size - src_offset;
+                size_t dest_stack_offset = source_region_size + dest_offset;
+
+                // Now, move the data.
+                generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
             }
 
-            if (field_source) {
-                build_binary_op(Mov, reg(R9, sz_64), imm32(8), ass, a, point);
-                generate_align_to(R10, R9, ass, a, point);
-                build_binary_op(Add, rref8(INDEX_REGISTER, -8 * (i + 2), sz_64), reg(R10, sz_64), ass, a, point);
-            }
+            // Remove the space occupied by the temporary values 
+            build_binary_op(Add, reg(RSP, sz_64), imm32(source_region_size), ass, a, point);
+            data_stack_shrink(env, source_region_size);
+            break;
         }
-
-        // Align the struct size (top of stack)
-        generate_align_of(R8, struct_type, env, ass, a, point);
-        build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-        generate_align_to(R9, R8, ass, a, point);
-        build_binary_op(Mov, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), ass, a, point);
-
-        // (elt n + 3) = source_region_size
-        // (elt [2, n + 2] control_stack) = dest_offsets, struct size (reversed)
-        // (elt 1 control_stack) = struct size
-        // (elt 0 control_stack) = source_offset
-
-        const size_t nfields = struct_type->structure.fields.len;
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            // Find what index field the structure has.
-            size_t field_offset_idx = 0; 
-            for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
-                if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
-                    field_offset_idx = (nfields - j) + 1; 
-                    break; // Offset is correct, end the loop
-                }
-            }
-
-            // Compute source_offset for this loop (by adding field stack size to current source_offset)
-            // For field_offset_idx n, field size = index_stack[n - 1] - index_stack(n)
-            build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * (field_offset_idx - 1), sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * field_offset_idx, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(R10, sz_64), imm32(8), ass, a, point);
-            generate_align_to(R9, R10, ass, a, point);
-            build_binary_op(Add, rref8(INDEX_REGISTER, 0, sz_64), reg(R9, sz_64), ass, a, point);
-
-            // RSI: size_t src_stack_offset = source_region_size - src_offset;
-            build_binary_op(Mov, reg(RSI, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), ass, a, point);
-            build_binary_op(Sub, reg(RSI, sz_64), rref8(INDEX_REGISTER, 0x0, sz_64), ass, a, point);
-            // RDI: size_t dest_stack_offset = source_region_size + dest_offset;
-            build_binary_op(Mov, reg(RDI, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), ass, a, point);
-            build_binary_op(Add, reg(RDI, sz_64), rref8(INDEX_REGISTER, -0x8 * field_offset_idx, sz_64), ass, a, point);
-
-            // Calculate Field size (R9) 
-            // For field_offset_idx n, field size = index_stack[n - 1] - index_stack(n)
-            build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * (field_offset_idx - 1), sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R9, sz_64), rref8(INDEX_REGISTER, -0x8 * field_offset_idx, sz_64), ass, a, point);
-
-            // Now, move the data.
-            generate_poly_stack_move(reg(RDI, sz_64), reg(RSI, sz_64), reg(R9, sz_64), ass, a, point);
-
-        }
-        // Lastly, get the source_size from the index stack, and use it to
-        // shrink the regular stack.
-        // Then, pop all values from the index stack
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(INDEX_REGISTER, -0x8 * (nfields + 2), sz_64), ass, a, point);
-        build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(0x8 * (nfields + 3)), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
         break;
     }
     case SProjector: {
