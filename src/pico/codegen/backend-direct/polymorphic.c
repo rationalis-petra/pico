@@ -114,17 +114,16 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         build_binary_op(Mov, reg(R14, sz_64), reg(R15, sz_64), ass, a, point);
 
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
 
-        // Now, copy the return value and return address too
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        // Now, copy the return return address 
         build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
 
         // destination
-        // return val (RET + FROM + RBP + R15 + ARGS = 8 + 8 + 8 + 8 ARGS = 0x20 + args)
+        // return val store at (RET + FROM + RBP + R15 + ARGS = 8 + 8 + 8 + 8 ARGS = 0x20 + args)
         // return address = above - 0x8
-        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(RCX, sz_64), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(R14, sz_64), ass, a, point);
         build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
         build_binary_op(Add, reg(RSP, sz_64), imm8(0x18 + args_size), ass, a, point);
     } else {
@@ -790,10 +789,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
+
             generate_poly_move(reg(R14, sz_64), reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
             // Store current index in stack return position
-            generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
+            build_binary_op(Mov, rref8(RSP, bind_sz, sz_64), reg(R14, sz_64), ass, a, point);
             build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
         } else {

@@ -72,12 +72,10 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     // TODO: polymorphic let of large values
 
-    /*
     if (test_start(log, mv_string("let-var"))) {
-        int32_t expected = -27;
+        int64_t expected = -27;
         TEST_EQ("((all [A] proc [(x A)] (let [y x] y)) -27)");
     }
-    */
 
     /*
     RUN("(def Point Struct [.x I64] [.y I64])");
