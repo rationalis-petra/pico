@@ -1074,9 +1074,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz + ADDRESS_SIZE, sz_64), ass, a, point);
             build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
 
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
-            generate_poly_move(reg(R14, sz_64), reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+            generate_poly_move(reg(R14, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
 
             // Store current index in stack return position
             generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
