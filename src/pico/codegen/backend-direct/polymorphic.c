@@ -43,7 +43,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
                 };
                 push_binding(bind, &vars);
             } else {
-                size_t arg_sz = pi_size_of(*impl_ty);
+                size_t arg_sz = pi_stack_size_of(*impl_ty);
                 args_size += arg_sz;
                 Binding bind = (Binding) {
                     .sym = syn.procedure.implicits.data[i].key,
@@ -64,7 +64,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
                 };
                 push_binding(bind, &vars);
             } else {
-                size_t arg_sz = pi_size_of(*arg_ty);
+                size_t arg_sz = pi_stack_size_of(*arg_ty);
                 args_size += arg_sz;
                 Binding bind = (Binding) {
                     .sym = syn.procedure.args.data[i].key,
@@ -806,7 +806,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SIf: {
-        not_implemented(mv_string("Polymorphic if"));
         // Generate the condition
         generate_polymorphic_i(*syn.if_expr.condition, env, target, links, a, point);
 

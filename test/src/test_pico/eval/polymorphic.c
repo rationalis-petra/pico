@@ -22,6 +22,20 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((is (all [A] -28) (All [A] I64)) {Unit})");
     }
 
+    if (test_start(log, mv_string("static-return"))) {
+        int64_t expected = 39;
+        // TODO (BUG): We should be able to remove the 'is' and still 
+        //             typecheck
+        TEST_EQ("((is (all [A] proc [(x I64)] x) (All [A] Proc [I64] I64)) {Unit} 39)");
+    }
+
+    if (test_start(log, mv_string("mix-arg-static-return"))) {
+        int64_t expected = 39;
+        // TODO (BUG): We should be able to remove the 'is' and still 
+        //             typecheck
+        TEST_EQ("((all [A] proc [(a A) (x I64)] x) -3 39)");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Static control and binding - seq/let/if/
@@ -83,6 +97,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         int64_t expected[2] = {3, -10};
         TEST_EQ("((all [A] (let [x (struct Point [.x 3] [.y -10])] x)) {Unit})");
     }
+    */
 
     RUN("(def choose all [A] proc [(b Bool) (x A) (y A)] (if b x y))");
     if (test_start(log, mv_string("simple-if-true"))) {
@@ -95,6 +110,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(choose :false 3 4)");
     }
 
+    /*
     // -----------------------------------------------------
     // 
     //      Struct
