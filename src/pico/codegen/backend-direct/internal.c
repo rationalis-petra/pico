@@ -138,6 +138,57 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
     }
 }
 
+void generate_stack_copy_from_base(size_t dest, int64_t src, size_t size, Assembler *ass, Allocator *a, ErrorPoint *point) {
+    if ((dest + size) > 127 || (src + (int64_t)size) > 127 || src < -128)  {
+        // TODO: check to ensure offsets don't exceed 32 bit max
+
+#if ABI == SYSTEM_V_64
+        // stack_move (dest = rdi, src = rsi, size = rdx)
+        // copy size into RDX
+        build_binary_op(Mov, reg(RDI, sz_64), imm32(dest), ass, a, point);
+        build_binary_op(Add, reg(RDI, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), imm32(src), ass, a, point);
+        build_binary_op(Add, reg(RSI, sz_64), reg(RBP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(size), ass, a, point);
+
+#elif ABI == WIN_64
+        // stack_move (dest = rcx, src = rdx, size = r8)
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(dest_stack_offset), ass, a, point);
+        build_binary_op(Add, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(src_stack_offset), ass, a, point);
+        build_binary_op(Add, reg(RDX, sz_64), reg(RBP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), imm32(size), ass, a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+        generate_c_call(memmove, ass, a, point);
+    } else  {
+        // Note: we are justified here in using Using 8-bit immediate (rref8)
+        size_t leftover = size % 8;
+        if (leftover >= 4) {
+            build_binary_op(Mov, reg(RAX, sz_32), rref8(RBP, src + (size & ~7), sz_32), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, dest + (size & ~7), sz_32), reg(RAX, sz_32), ass, a, point);
+            leftover -= 4;
+        }
+        if (leftover >= 2) {
+            build_binary_op(Mov, reg(RAX, sz_16), rref8(RBP, src + (size & ~3), sz_16), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, dest + (size & ~3), sz_16), reg(RAX, sz_16), ass, a, point);
+            leftover -= 2;
+        }
+        if (leftover >= 1) {
+            build_binary_op(Mov, reg(RAX, sz_8), rref8(RBP, src + (size & ~1), sz_8), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, dest + (size & ~1), sz_8), reg(RAX, sz_8), ass, a, point);
+            leftover -= 1;
+        }
+
+        for (size_t i = 0; i < size / 8; i++) {
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(RBP, src + (i * 8) , sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, dest + (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
+        }
+    }
+}
+
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Like a monomorphic copy, except that we start at the 'end' and go backwards
     const Regname src = RSP;

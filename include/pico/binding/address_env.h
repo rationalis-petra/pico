@@ -62,10 +62,10 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
 
 void delete_address_env(AddressEnv* env, Allocator* a);
 
-// Debug utility functions
-// These are used by the codegenerator to assert properties of the address environment
-// in debug mode.
-int64_t debug_get_stack_head(AddressEnv* env);
+// Query Functions
+// Get the current offset of the stack head (i.e. $RSP) 
+// relative to the stack base ($RBP).
+int64_t get_stack_head(AddressEnv* env);
 
 /* Address environment interface
  * Lookups return either:

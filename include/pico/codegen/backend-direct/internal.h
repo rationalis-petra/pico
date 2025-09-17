@@ -48,6 +48,8 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
 
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_stack_copy_from_base(size_t dest, int64_t src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
+
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 

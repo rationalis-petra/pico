@@ -152,7 +152,7 @@ void delete_address_env(AddressEnv* env, Allocator* a) {
     mem_free(env, a);
 }
 
-int64_t debug_get_stack_head(AddressEnv *env) {
+int64_t get_stack_head(AddressEnv *env) {
     if (0 < env->local_envs.len) {
         LocalAddrs* local = env->local_envs.data[env->local_envs.len - 1];
         return local->stack_head;

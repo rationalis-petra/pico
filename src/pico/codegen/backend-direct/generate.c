@@ -268,7 +268,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
 
 #ifdef DEBUG_ASSERT
-    int64_t old_head = debug_get_stack_head(env);
+    int64_t old_head = get_stack_head(env);
 #endif
 
     Assembler* ass = target.target;
@@ -2180,7 +2180,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
     }
 
 #ifdef DEBUG_ASSERT
-    int64_t new_head = debug_get_stack_head(env);
+    int64_t new_head = get_stack_head(env);
     int64_t diff = old_head - new_head;
     if (diff < 0) panic(mv_string("diff < 0!"));
 

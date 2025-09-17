@@ -23,6 +23,7 @@ void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* e
 // Movement
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_poly_stack_move(Location dest_offset, Location src_offset, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_poly_copy_from_base(size_t dest, size_t src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
     Assembler* ass = target.target;
@@ -286,24 +287,101 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         throw_error(point, mv_string("Internal error: cannot generate procedure inside polymorphic code"));
     }
     case SApplication: {
-        not_implemented(mv_string("Polymorphic application"));
         // Generate the arguments
+        bool variable_args = false;
+        int64_t arg_base = get_stack_head(env);
         for (size_t i = 0; i < syn.application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.application.implicits.data[i];
+            variable_args |= is_variable(arg->ptype);
             generate_polymorphic_i(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
+            variable_args |= is_variable(arg->ptype);
             generate_polymorphic_i(*arg, env, target, links, a, point);
         }
 
-        // This will push a function pointer onto the stack
-        generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
+        if (!variable_args) {
+            // This will push a function pointer onto the stack
+            generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
         
-        // Regular Function Call
-        // Pop the function into RCX; call the function
-        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+            // Regular Function Call
+            // Pop the function into RCX; call the function
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+            if (is_variable(syn.ptype)) {
+                // Move value from data to 'variable' stack.
+                panic(mv_string("not implemented: variable return from static function in poly code."));
+            }
+        } else {
+            generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
+            size_t args_size = 0;
+            // Move variable args from the data stack to the variable stack
+            for (size_t i = 0; i < syn.application.implicits.len; i++) {
+                PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                if (is_variable(aty)) {
+
+                    // Unfold argument onto data-stack
+                    args_size += ADDRESS_SIZE;
+                    generate_size_of(RAX, aty, env, ass, a, point);
+                    build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+                    generate_poly_copy_from_base(0, arg_base - args_size, reg(RAX, sz_64), ass, a, point);
+                } else {
+
+                    // Copy down From Above
+                    size_t argsz = pi_stack_size_of(*aty);
+                    args_size += argsz;
+                    build_binary_op(Sub, reg(RSP, sz_64), imm8(argsz), ass, a, point);
+                    generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
+                }
+            }
+            for (size_t i = 0; i < syn.application.args.len; i++) {
+                PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                if (is_variable(aty)) {
+
+                    // Unfold argument onto data-stack
+                    args_size += ADDRESS_SIZE;;
+                    generate_size_of(RAX, aty, env, ass, a, point);
+                    build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+                    build_binary_op(Mov, reg(RDX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+                    generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
+                } else {
+
+                    // Copy down From Above
+                    size_t argsz = pi_stack_size_of(*aty);
+                    args_size += argsz;
+                    build_binary_op(Sub, reg(RSP, sz_64), imm8(argsz), ass, a, point);
+                    generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
+                }
+            }
+            // Account for the function
+            args_size += ADDRESS_SIZE;
+                
+            // Copy down the function itself & call
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
+            build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+            data_stack_shrink(env, args_size);
+
+            if (is_variable(syn.ptype)) {
+                // Move value from data to 'variable' stack.
+                generate_size_of(RAX, syn.ptype, env, ass, a, point);
+                build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), reg(RSP, sz_64), ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+                generate_poly_move(reg(R14, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imm8(args_size), ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+                data_stack_grow(env, ADDRESS_SIZE);
+            } else {
+                // regular move up the data-stack
+                panic(mv_string("Poly call proc : return static value not implemented"));
+
+            }
+        }
+
         break;
     }
     case SAllApplication: {
@@ -323,6 +401,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         if (is_variable(syn.ptype)) {
             panic(mv_string("Variable Struct not implemented."));
         } else {
+            // The following code is copied exactly from the 'regular' codegen 
+            // ------------
             // For structures, we have to be careful - this is because the order in
             // which arguments are evaluated is not necessarily the order in which
             // arguments are inserted into the structure.
@@ -1476,6 +1556,41 @@ void generate_poly_stack_move(Location dest, Location src, Location size, Assemb
 #endif
 
     generate_c_call(memmove, ass, a, point);
+}
+
+void generate_poly_copy_from_base(size_t dest, size_t src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {
+
+#if ABI == SYSTEM_V_64
+    // Check that we don't accidentally overwrite any registers!
+    if (reg_conflict(size, RDI) || reg_conflict(size, RSI)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
+    // memmove (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_binary_op(Mov, reg(RDI, sz_64), imm32(dest), ass, a, point);
+    build_binary_op(Add, reg(RDI, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), imm32(src), ass, a, point);
+    build_binary_op(Add, reg(RSI, sz_64), reg(RBP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), size, ass, a, point);
+
+#elif ABI == WIN_64
+    if (reg_conflict(size, RDX) || reg_conflict(size, R8)) {
+        panic(mv_string("In generate_poly_stack_move: invalid regitser provided to generate_poly_stack_move"));
+    }
+
+    // memmove (dest = rcx, src = rdx, size = r8)
+    build_binary_op(Mov, reg(RCX, sz_64), dest, ass, a, point);
+    build_binary_op(Add, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), src, ass, a, point);
+    build_binary_op(Add, reg(RDX, sz_64), reg(RBP, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), size, ass, a, point);
+#else
+#error "Unknown calling convention"
+#endif
+
+    generate_c_call(memmove, ass, a, point);
+    
 }
 
 U8Array free_registers(U8Array inputs, Allocator* a) {
