@@ -742,7 +742,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SDynamicUse: {
-        not_implemented(mv_string("Polymorphic use"));
         // TODO: check that the dynamic use handles stack alignment correctly
         generate_polymorphic_i(*syn.use, env, target, links, a, point);
 
@@ -761,37 +760,47 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // call function
         generate_c_call(get_dynamic_val, ass, a, point);
 
-        // Now, allocate space on stack
-        size_t val_size = pi_size_of(*syn.ptype);
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(val_size), ass, a, point);
-        build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+        if (is_variable(syn.ptype)) {
+            panic(mv_string("Not yet generating code for polymorphic dynamic use"));
+        } else{
+            // Now, allocate space on stack
+            size_t val_size = pi_size_of(*syn.ptype);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(pi_stack_align(val_size)), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
-        generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
+            generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
+            data_stack_shrink(env, ADDRESS_SIZE);
+            data_stack_grow(env, val_size);
+        }
         break;
     }
     case SDynamicSet: {
-        not_implemented(mv_string("Polymorphic set"));
-        // TODO: convert this to 'true' polymorphic code
         size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
-        generate_polymorphic_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
-        generate_polymorphic_i(*syn.dynamic_set.new_val, env, target, links, a, point);
+        generate_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
+        generate_i(*syn.dynamic_set.new_val, env, target, links, a, point);
 
 #if ABI == SYSTEM_V_64 
-        // arg1 = rdi, arg2 = rsi, arg3 = RDX
+        // arg1 = rdi, arg2 = rsi
         build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz_64), imm32(val_size), ass, a, point);
 #elif ABI == WIN_64 
-        // arg1 = rcx, arg2 = rdx, arg3 = R8
+        // arg1 = rcx, arg2 = rdx
         build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R8, sz_64), imm32(val_size), ass, a, point);
 #else
 #error "unknown ABI"
 #endif
+        // call function
         generate_c_call(set_dynamic_val, ass, a, point);
 
-        build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
+        if (is_variable(syn.ptype)) {
+            panic(mv_string("Not yet generating code for polymorphic dynamic set"));
+        } else {
+            build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
+            data_stack_shrink(env, ADDRESS_SIZE + val_size);
+        }
         break;
     }
     case SLet: {

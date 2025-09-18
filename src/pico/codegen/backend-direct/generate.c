@@ -1119,7 +1119,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
         // Now, allocate space on stack
         size_t val_size = pi_size_of(*syn.ptype);
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(pi_stack_align(val_size)), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // TODO (check if replace with stack copy)

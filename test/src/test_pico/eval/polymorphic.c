@@ -158,7 +158,6 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    /*
     RUN("(def dvar dynamic -10)");
     if (test_start(log, mv_string("dynamic-use"))) {
         int64_t expected = -10;
@@ -177,9 +176,9 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (use ldvar)) {Unit})");
     }
 
-    /* if (test_start(log, mv_string("large-dynamic-set"))) { */
-    /*     int64_t expected[2] = {100, -100}; */
-    /*     RUN("((all [A] (set ldvar struct [.x 100] [.y -100])) {Unit})"); */
-    /*     TEST_EQ("(use ldvar)"); */
-    /* } */
+    if (test_start(log, mv_string("large-dynamic-set"))) {
+        int64_t expected[2] = {100, -100};
+        RUN("((all [A] (set ldvar struct [.x 100] [.y -100])) {Unit})");
+        TEST_EQ("(use ldvar)");
+    }
 }
