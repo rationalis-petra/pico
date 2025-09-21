@@ -862,10 +862,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, bind_sz, sz_64), ass, a, point);
             build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
 
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
-
-            generate_poly_move(reg(R14, sz_64), reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+            generate_poly_move(reg(R14, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
 
             // Store current index in stack return position
             build_binary_op(Mov, rref8(RSP, bind_sz, sz_64), reg(R14, sz_64), ass, a, point);
@@ -1683,9 +1682,9 @@ void generate_poly_copy_from_base(size_t dest, size_t src, Location size, Assemb
     }
 
     // memmove (dest = rcx, src = rdx, size = r8)
-    build_binary_op(Mov, reg(RCX, sz_64), dest, ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), imm32(dest), ass, a, point);
     build_binary_op(Add, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), src, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm32(src), ass, a, point);
     build_binary_op(Add, reg(RDX, sz_64), reg(RBP, sz_64), ass, a, point);
     build_binary_op(Mov, reg(R8, sz_64), size, ass, a, point);
 #else

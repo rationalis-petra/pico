@@ -149,9 +149,9 @@ void generate_stack_copy_from_base(size_t dest, int64_t src, size_t size, Assemb
 
 #elif ABI == WIN_64
         // stack_move (dest = rcx, src = rdx, size = r8)
-        build_binary_op(Mov, reg(RCX, sz_64), imm32(dest_stack_offset), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(dest), ass, a, point);
         build_binary_op(Add, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RDX, sz_64), imm32(src_stack_offset), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(src), ass, a, point);
         build_binary_op(Add, reg(RDX, sz_64), reg(RBP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R8, sz_64), imm32(size), ass, a, point);
 #else
