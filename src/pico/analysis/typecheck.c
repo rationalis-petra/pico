@@ -468,7 +468,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, a);
             untyped->ptype = ret_type;
         } else {
-
             // Check that all type args are actually types!
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
             for (size_t i = 0; i < all_type.binder.vars.len; i++) {
@@ -495,7 +494,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                              env, ctx);
             }
 
-            untyped->ptype = proc_type->proc.ret;
+            PiType* ret_type = pi_type_subst(proc_type->proc.ret, type_binds, a);
+            untyped->ptype = ret_type;
         }
         break;
     }

@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/memory/static.h"
 
 #include "data/string.h"
 #include "data/result.h"
@@ -269,7 +270,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-        panic(mv_string("Cannot copy raw UVar (only pointer thereto)"));
+        out = t;
         break;
     case TPrim:
         out.prim = t.prim;
@@ -1483,6 +1484,10 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         panic(mv_string("Not implemetned type-app for Fam"));
         break;
 
+    case TUVar:
+        add_subst(body->uvar, subst, a);
+        break;
+
     // Kinds (higher kinds not supported)
     case TKind: break;
     default: {
@@ -1916,6 +1921,73 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
 
     }
     panic(mv_string("Invalid type provided to pi_value_eql"));
+}
+
+bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
+    switch (ty->sort) {
+    case TPrim: return false;
+    case TVar: {
+        for (size_t i = 0; i < vars.len; i++) {
+            if (cmp_symbol(ty->var, vars.data[i]) == 0) return true;
+        }
+        return false;
+    }
+    case TArray:
+        return false;
+    case TProc:
+        return false;
+    case TStruct:
+        for (size_t i = 0; i < ty->structure.fields.len; i++) {
+            if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))
+                return true;
+        }
+        return false;
+    case TEnum:
+        panic(mv_string("not implemented is_variable_for for enum"));
+    case TReset:
+        panic(mv_string("not implemented is_variable_for for reset"));
+    case TResumeMark:
+        panic(mv_string("not implemented is_variable_for for resume-mark"));
+    case TDynamic:
+        return false;
+    case TNamed:
+        push_symbol(ty->named.name, &shadowed);
+        return is_variable_for_recur(ty->named.type, vars, shadowed);
+    case TDistinct:
+        panic(mv_string("not implemented is_variable_for for distinct"));
+    case TTrait:
+        panic(mv_string("not implemented is_variable_for for trait"));
+    case TTraitInstance:
+        panic(mv_string("not implemented is_variable_for for instance"));
+    case TCType:
+        panic(mv_string("not implemented is_variable_for for c type"));
+    case TAll:
+        return false;
+    case TExists:
+        // TODO: shadow
+        panic(mv_string("not implemented is_variable_for for exists type"));
+    case TCApp:
+        panic(mv_string("not implemented is_variable_for for applied type"));
+    case TFam:
+        // TODO: shadow
+        panic(mv_string("not implemented is_variable_for for family"));
+    case TKind:
+        return false;
+    case TConstraint:
+        panic(mv_string("not implemented is_variable_for for constraint"));
+    case TUVar:
+        panic(mv_string("not implemented is_variable_for for uvar"));
+
+    default:
+        panic(mv_string("not implemented is_variable_for for this sort"));
+    }
+}
+
+bool is_variable_for(PiType *ty, SymbolArray vars) {
+    Symbol static_mem[20];
+    Allocator sta = mk_static_allocator(static_mem, sizeof(static_mem));
+    SymbolArray shadowed = mk_symbol_array(16, &sta);
+    return is_variable_for_recur(ty, vars, shadowed);
 }
 
 PiType* mk_prim_type(Allocator* a, PrimType t) {

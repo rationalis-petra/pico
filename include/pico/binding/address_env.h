@@ -95,6 +95,7 @@ void address_end_poly(AddressEnv* env, Allocator* a);
 // get_base is essentially only used by describe, when generating description
 // strings of values. 
 Environment* get_addr_base(AddressEnv* env);
+bool is_variable_in(PiType* type, AddressEnv* env);
 
 
 //------------------------------------------------------------------------------

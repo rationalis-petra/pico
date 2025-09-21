@@ -261,12 +261,6 @@ static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint
 }
 
 void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
-    if (is_variable(syn.ptype)) {
-        generate_polymorphic_i(syn, env, target, links, a, point);
-        return;
-    }
-
-
 #ifdef DEBUG_ASSERT
     int64_t old_head = get_stack_head(env);
 #endif
@@ -621,9 +615,9 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // > Old R15
         // > Types
         // > Arguments
-
         build_binary_op(Mov, reg(R15, sz_64), reg(R14, sz_64), ass, a, point);
 
+        SymbolArray type_vars = syn.all_application.function->ptype->binder.vars;
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
             // The 'type' looks as follows:
             // +---------+-------------+---------+
@@ -650,7 +644,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
             generate_i(*arg, env, target, links, a, point);
             size_t data_sz = pi_stack_size_of(*((Syntax*)syn.all_application.implicits.data[i])->ptype);
-            if (is_variable(((PiType*)body_ty->proc.implicits.data[i]))) {
+            if (is_variable_for(((PiType*)body_ty->proc.implicits.data[i]), type_vars)) {
                 args_size += ADDRESS_SIZE;
                 build_binary_op(Sub, reg(R14, sz_64), imm32(data_sz), ass, a, point);
                 generate_monomorphic_copy(R14, RSP, data_sz, ass, a, point);
@@ -669,7 +663,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
             generate_i(*arg, env, target, links, a, point);
             size_t data_sz = pi_stack_size_of(*((Syntax*)syn.all_application.args.data[i])->ptype);
-            if (is_variable(((PiType*)body_ty->proc.args.data[i]))) {
+            if (is_variable_for(((PiType*)body_ty->proc.args.data[i]), type_vars)) {
                 args_size += ADDRESS_SIZE;
                 build_binary_op(Sub, reg(R14, sz_64), imm32(data_sz), ass, a, point);
                 generate_monomorphic_copy(R14, RSP, data_sz, ass, a, point);
@@ -700,23 +694,22 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         PiType* ty = strip_type(syn.all_application.function->ptype);
         if (ty->sort == TAll) { ty = ty->binder.body; }
         if (ty->sort == TProc) { ty = ty->proc.ret; };
-        bool callee_varstack = is_variable(ty);
-        bool caller_varstack = is_variable(syn.ptype);
+        bool callee_varstack = is_variable_for(ty, type_vars);
+        bool caller_varstack = is_variable_in(syn.ptype, env);
 
         if (callee_varstack != caller_varstack) {
-          if (callee_varstack) {
-              size_t out_size = pi_stack_size_of(*syn.ptype);
-              // Copy from varstack to our stack 
-              build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-              build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), ass, a, point);
-              generate_monomorphic_copy(RSP, RCX, out_size, ass, a, point);
+            if (callee_varstack) {
+                size_t out_size = pi_stack_size_of(*syn.ptype);
+                // Copy from varstack to our stack 
+                build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), ass, a, point);
+                generate_monomorphic_copy(RSP, RCX, out_size, ass, a, point);
 
-              // Pop value from variable stack
-              build_binary_op(Add, reg(R14, sz_64), imm32(out_size), ass, a, point);
-          } else {
-              not_implemented(mv_string("Calling with value on caller varstack and callee static stack"));
-          }
-        } else {
+                // Pop value from variable stack
+                build_binary_op(Add, reg(R14, sz_64), imm32(out_size), ass, a, point);
+            } else {
+                panic(mv_string("not implemented: Calling with value on caller varstack and callee static stack"));
+            }
         }
 
         // Update as popped args from stack

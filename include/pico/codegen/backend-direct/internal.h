@@ -31,8 +31,6 @@ typedef struct {
     LinkData links;
 } InternalLinkData;
 
-bool is_variable(PiType *ty);
-
 void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 

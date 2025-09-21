@@ -53,6 +53,7 @@ struct UVarType {
     PiType* subst;
     ConstraintArray constraints;
     UVarDefault default_behaviour;
+    PtrArray substitutions;
 };
 
 typedef struct {
@@ -412,9 +413,10 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
     // Uvar Subst
     //  -------- 
     // 
-    // The goal of uvar subst is to ensure that the uvar substitutes in type. If
-    // typeis itself a uvar, then the constraints from the uvar argument must be
-    // propagated into the type argument.
+    // The goal of uvar subst is to ensure point the uvar to a specific type by
+    // assigning the 'subst' field. If the type in the 'subst' field is itself a
+    // uvar, then the constraints from the uvar argument must be propagated into
+    // the type argument. 
     // 
     // ------------------------------------------------------------
 
@@ -537,8 +539,20 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
         }
     }
     
+    for (size_t i = 0; i < uvar->substitutions.len; i++) {
+        SymPtrAssoc* subst = uvar->substitutions.data[i];
+        type = pi_type_subst(type, *subst, a);
+    }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
+}
+
+void add_subst(UVarType *uvar, SymPtrAssoc binds, Allocator *a) {
+    // NOTE: We shallow copy here due to the allocation guarantees made 
+    //       by the typecheck (caller) function.
+    SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
+    *subst = scopy_sym_ptr_assoc(binds, a);
+    push_ptr(subst, &uvar->substitutions);
 }
 
 bool has_unification_vars_p(PiType type) {
@@ -815,9 +829,10 @@ PiType* mk_uvar(Allocator* a) {
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = NoDefault,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = NoDefault,
+        .substitutions = mk_ptr_array(8, a),
     };
     
     return uvar;
@@ -829,9 +844,10 @@ PiType* mk_uvar_integral(Allocator* a) {
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = Integral,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = Integral,
+        .substitutions = mk_ptr_array(8, a),
     };
 
     Constraint con = (Constraint) {
@@ -848,9 +864,10 @@ PiType* mk_uvar_floating(Allocator* a) {
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = Floating,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = Floating,
+        .substitutions = mk_ptr_array(8, a),
     };
 
     Constraint con = (Constraint) {

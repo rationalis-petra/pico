@@ -1,5 +1,7 @@
-#include "platform/machine_info.h"
 #include "data/meta/array_impl.h"
+
+#include "platform/machine_info.h"
+#include "platform/signals.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
@@ -13,12 +15,6 @@ int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
 }
 
 ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
-
-bool is_variable(PiType *ty) {
-    size_t out = 0;
-    Result_t result = pi_maybe_size_of(*ty, &out);
-    return result == Err; 
-}
 
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 

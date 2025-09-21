@@ -64,18 +64,12 @@ int compare_binding(Binding lhs, Binding rhs) {
 
 ARRAY_CMP_IMPL(Binding, compare_binding, binding, Binding)
 
-typedef enum {
-    LPolymorphic,
-    LMonomorphic,
-} LocalType;
-
 typedef struct {
-    LocalType type;
-
     union {
         int64_t stack_head;
     };
     SAddrArray vars;
+    SymbolArray types;
 } LocalAddrs;
 
 struct AddressEnv {
@@ -97,9 +91,11 @@ AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
     a_env->env = env;
     
     LocalAddrs* local = mem_alloc(sizeof(LocalAddrs), a);
-    local->type = LMonomorphic;
-    local->stack_head = 0;
-    local->vars = mk_saddr_array(32, a);
+    *local = (LocalAddrs) {
+        .stack_head = 0,
+        .vars = mk_saddr_array(32, a),
+        .types = mk_symbol_array(0, a),
+    };
     push_ptr(local, &a_env->local_envs);
 
     return a_env; 
@@ -114,7 +110,6 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
     a_env->env = get_base(env);
     
     LocalAddrs* local = mem_alloc(sizeof(LocalAddrs), a);
-    local->type = LMonomorphic;
     local->stack_head = 0;
     local->vars = mk_saddr_array(32, a);
     push_ptr(local, &a_env->local_envs);
@@ -159,6 +154,13 @@ int64_t get_stack_head(AddressEnv *env) {
     } else {
         panic(mv_string("unexpected local address env"));
     }
+}
+
+bool is_variable_in(PiType *type, AddressEnv *env) {
+    LocalAddrs* local = env->local_envs.data[env->local_envs.len - 1];
+    SymbolArray types = local->types;
+
+    return (types.len != 0) && is_variable_for(type, types);
 }
 
 AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
@@ -279,7 +281,6 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
 void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
-    new_local->type = LMonomorphic;
     size_t stack_offset = 0;
 
     SAddr padding = (SAddr){};
@@ -328,7 +329,7 @@ void address_end_proc(AddressEnv* env, Allocator* a) {
 void address_start_poly(SymbolArray types, BindingArray vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
-    new_local->type = LPolymorphic;
+    new_local->types = types;
 
     int64_t arg_offset = 2 * REGISTER_SIZE;
 
@@ -385,10 +386,6 @@ Environment *get_addr_base(AddressEnv *env) {
 void address_bind_type(Symbol s, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    if (locals->type == LPolymorphic) {
-        panic(mv_string("Cannot bind type var in polymorphic env!"));
-    }
-
     SAddr value = (SAddr){};
     value.type = SATypeVar;
     value.symbol = s;
@@ -435,38 +432,29 @@ void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
 
-    switch (locals->type) {
-    case LMonomorphic: {
-        SAddr padding = (SAddr){};
-        padding.type = SASentinel;
-        stack_offset += REGISTER_SIZE;
-        padding.stack_offset = stack_offset;
-        push_saddr(padding, &locals->vars);
+    SAddr padding = (SAddr){};
+    padding.type = SASentinel;
+    stack_offset += REGISTER_SIZE;
+    padding.stack_offset = stack_offset;
+    push_saddr(padding, &locals->vars);
 
-        // Variables are in reverse order!
-        // due to how the stack pushes/pops args.
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
 
-        // TODO: in (some x), x getting bound to a sentinel!
-        for (size_t i = 0; i < vars.len; i++) {
-            SAddr local;
-            local.type = SADirect;
+    // TODO: in (some x), x getting bound to a sentinel!
+    for (size_t i = 0; i < vars.len; i++) {
+        SAddr local;
+        local.type = SADirect;
 
-            local.symbol = vars.data[i].key;
-            local.stack_offset = stack_offset;
-            stack_offset += vars.data[i].val;
+        local.symbol = vars.data[i].key;
+        local.stack_offset = stack_offset;
+        stack_offset += vars.data[i].val;
 
-            push_saddr(local, &locals->vars);
-        }
-
-        padding.stack_offset = stack_offset + REGISTER_SIZE;
-        push_saddr(padding, &locals->vars);
-        break;
-    } 
-    case LPolymorphic: {
-        panic(mv_string("Polymorphic enum bind not implemented"));
-        break;
+        push_saddr(local, &locals->vars);
     }
-    }
+
+    padding.stack_offset = stack_offset + REGISTER_SIZE;
+    push_saddr(padding, &locals->vars);
 }
 
 void address_unbind_enum_vars(AddressEnv* env) {
@@ -486,56 +474,27 @@ void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     int64_t stack_offset = locals->stack_head;
 
-    switch (locals->type) {
-    case LMonomorphic: {
-        SAddr padding = (SAddr){};
-        padding.type = SASentinel;
-        padding.stack_offset = stack_offset;
-        push_saddr(padding, &locals->vars);
+    SAddr padding = (SAddr){};
+    padding.type = SASentinel;
+    padding.stack_offset = stack_offset;
+    push_saddr(padding, &locals->vars);
 
-        // Variables are in reverse order!
-        // due to how the stack pushes/pops args.
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
 
-        for (size_t i = vars.len; i > 0; i--) {
-            SAddr local;
-            local.type = SADirect;
+    for (size_t i = vars.len; i > 0; i--) {
+        SAddr local;
+        local.type = SADirect;
 
-            local.symbol = vars.data[i - 1].key;
-            local.stack_offset = stack_offset;
-            stack_offset += vars.data[i - 1].val;
+        local.symbol = vars.data[i - 1].key;
+        local.stack_offset = stack_offset;
+        stack_offset += vars.data[i - 1].val;
 
-            push_saddr(local, &locals->vars);
-        }
-
-        padding.stack_offset = stack_offset + REGISTER_SIZE;
-        push_saddr(padding, &locals->vars);
-        break;
+        push_saddr(local, &locals->vars);
     }
-    case LPolymorphic: {
-        SAddr padding = (SAddr){};
-        padding.type = SASentinel;
-        padding.stack_offset = stack_offset;
-        push_saddr(padding, &locals->vars);
 
-        // Variables are in reverse order!
-        // due to how the stack pushes/pops args.
-
-        for (size_t i = vars.len; i > 0; i--) {
-            SAddr local;
-            local.type = SAIndexed;
-
-            local.symbol = vars.data[i - 1].key;
-            local.stack_offset = stack_offset;
-            stack_offset += 1;
-
-            push_saddr(local, &locals->vars);
-        }
-
-        padding.stack_offset = stack_offset + REGISTER_SIZE;
-        push_saddr(padding, &locals->vars);
-        break;
-    }
-    }
+    padding.stack_offset = stack_offset + REGISTER_SIZE;
+    push_saddr(padding, &locals->vars);
 }
 
 void address_unbind_label_vars(AddressEnv* env) {

@@ -49,7 +49,6 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  [.gpa Allocator])\n";
     compile_toplevel(mk_list_type, module, target, &point, &pi_point, a);
 
-    /*
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
         "(def mk-list all [A] proc [len capacity]\n"
@@ -66,6 +65,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  (free list.data))";
     compile_toplevel(mk_free_fn, module, target, &point, &pi_point, a);
 
+    /*
     const char *elt_fn =
         "(def elt all [A] proc [idx (arr (List A))]\n"
         "  (load {A} (num-to-address (u64.+ (u64.* idx (size-of A))\n"

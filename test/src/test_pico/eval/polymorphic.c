@@ -140,6 +140,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] struct nas [.x 100] [.p -27]) {Unit})");
     }
 
+    if (test_start(log, mv_string("struct-nonaligned-project"))) {
+        RUN("(def nas struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4])");
+        int8_t expected = 3;
+        TEST_EQ("((all [A] nas.z) {Unit})");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Funcall - calling functions from within polymorphic code
@@ -150,6 +156,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("apply"))) {
         int64_t expected = 5;
         TEST_EQ("((all [A] proc [(fn (Proc [A A] A)) (x A) (y A)] (fn x y)) i64.+ -5 10)");
+    }
+
+    if (test_start(log, mv_string("apply-poly-poly"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        RUN("(def id2 all [A] proc [(x A)] (id x))");
+        int64_t expected = 77;
+        TEST_EQ("(id 77)");
     }
 
     // -------------------------------------------------------------------------

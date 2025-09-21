@@ -23,6 +23,10 @@ typedef struct {
 // Note: this destructively mutates the type
 UnifyResult unify(PiType* lhs, PiType* rhs, Allocator* a);
 
+// Add a substitution to a uvar - when the uvar is resolved, the substitutions
+// are applied.
+void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a);
+
 // Return true if and only if the type has uninstantiated unification variables
 bool has_unification_vars_p(PiType type);
 

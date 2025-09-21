@@ -53,6 +53,18 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
         .target = target,
     };
 
+    if (test_start(log, mv_string("UVar through all"))) {
+        PiType* expected = mk_prim_type(&arena, Int_64);
+        TEST_TYPE("((all [A] -28) {Unit})");
+    }
+
+    // TODO: fix this test!
+    /* if (test_start(log, mv_string("Substitution through uvar"))) { */
+    /*     RUN("(def id all [A] proc [(x A)] x)"); */
+    /*     PiType* expected = mk_prim_type(&arena, Int_64); */
+    /*     TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)"); */
+    /* } */
+
     /* TODO_NEW_CC: re-add these tests
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         // TODO (BUG): this leaks - set current allocator?

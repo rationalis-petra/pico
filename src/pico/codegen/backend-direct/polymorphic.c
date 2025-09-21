@@ -14,11 +14,13 @@
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 
 // Type Info
+void generate_pi_type(PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+U8Array free_registers(U8Array inputs, Allocator* a);
 
 // Movement
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point);
@@ -35,7 +37,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         vars = mk_binding_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
             PiType* impl_ty = syn.ptype->proc.implicits.data[i];
-            if (is_variable(impl_ty)) {
+            if (is_variable_for(impl_ty, types)) {
                 args_size += ADDRESS_SIZE;
                 Binding bind = (Binding) {
                     .sym = syn.procedure.implicits.data[i].key,
@@ -56,7 +58,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         }
         for (size_t i = 0; i < syn.ptype->proc.args.len; i++) {
             PiType* arg_ty = syn.ptype->proc.args.data[i];
-            if (is_variable(arg_ty)) {
+            if (is_variable_for(arg_ty, types)) {
                 args_size += ADDRESS_SIZE;
                 Binding bind = (Binding) {
                     .sym = syn.procedure.args.data[i].key,
@@ -103,7 +105,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     // - always data stack?
     // - always relevant stack?
 
-    if (is_variable(body.ptype)) {
+    if (is_variable_in(body.ptype, env)) {
         // Return on Variable Stack
         // R15 is the 'destination' on the variable stack of a return
         // argument.
@@ -292,12 +294,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         int64_t arg_base = get_stack_head(env);
         for (size_t i = 0; i < syn.application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.application.implicits.data[i];
-            variable_args |= is_variable(arg->ptype);
+            variable_args |= is_variable_in(arg->ptype, env);
             generate_polymorphic_i(*arg, env, target, links, a, point);
         }
         for (size_t i = 0; i < syn.application.args.len; i++) {
             Syntax* arg = (Syntax*) syn.application.args.data[i];
-            variable_args |= is_variable(arg->ptype);
+            variable_args |= is_variable_in(arg->ptype, env);
             generate_polymorphic_i(*arg, env, target, links, a, point);
         }
 
@@ -309,7 +311,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Pop the function into RCX; call the function
             build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
-            if (is_variable(syn.ptype)) {
+            if (is_variable_in(syn.ptype, env)) {
                 // Move value from data to 'variable' stack.
                 panic(mv_string("not implemented: variable return from static function in poly code."));
             }
@@ -319,7 +321,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Move variable args from the data stack to the variable stack
             for (size_t i = 0; i < syn.application.implicits.len; i++) {
                 PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
-                if (is_variable(aty)) {
+                if (is_variable_in(aty, env)) {
 
                     // Unfold argument onto data-stack
                     args_size += ADDRESS_SIZE;
@@ -337,7 +339,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             }
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
-                if (is_variable(aty)) {
+                if (is_variable_in(aty, env)) {
 
                     // Unfold argument onto data-stack
                     args_size += ADDRESS_SIZE;;
@@ -362,7 +364,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
             data_stack_shrink(env, args_size);
 
-            if (is_variable(syn.ptype)) {
+            if (is_variable_in(syn.ptype, env)) {
                 // Move value from data to 'variable' stack.
                 generate_size_of(RAX, syn.ptype, env, ass, a, point);
                 build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
@@ -385,8 +387,72 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SAllApplication: {
-        not_implemented(mv_string("Polymorphic all-application"));
         // Polymorphic Funcall
+        build_binary_op(Mov, reg(R15, sz_64), reg(R14, sz_64), ass, a, point);
+
+        SymbolArray type_vars = syn.all_application.function->ptype->binder.vars;
+        for (size_t i = 0; i < syn.all_application.types.len; i++) {
+            PiType* type = ((Syntax*)syn.all_application.types.data[i])->type_val;
+            generate_pi_type(type, env, ass, a, point);
+        }
+
+        bool mismatch_variable_args = false;
+        int64_t arg_base = get_stack_head(env);
+
+        for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
+            mismatch_variable_args |= is_variable_for(arg->ptype, type_vars);
+            generate_polymorphic_i(*arg, env, target, links, a, point);
+        }
+
+        PiType* fn_ty = strip_type(syn.all_application.function->ptype);
+        if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
+
+        for (size_t i = 0; i < syn.all_application.args.len; i++) {
+            PiType* argty = fn_ty->proc.args.data[i];
+            Syntax* arg = (Syntax*) syn.all_application.args.data[i];
+
+            // The argument is variable for for the callee
+            if (is_variable_for(argty, type_vars)) {
+                // Is it also variable in our context?
+                // if not, we need to move to variable stack, otherwise can keep here.
+                if (!is_variable_in(arg->ptype, env)) {
+                    panic(mv_string("Not implemented copy from static stack to dynamic stack in poly codegen: all_application"));
+                }
+            } else {
+                mismatch_variable_args |= is_variable_in(arg->ptype, env);
+            }
+            generate_polymorphic_i(*arg, env, target, links, a, point);
+        }
+        generate_polymorphic_i(*syn.all_application.function, env, target, links, a, point);
+
+        if (mismatch_variable_args) {
+            panic(mv_string("Mismatch in variable args: codegen for this scenario not implemented."));
+        }
+
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE);
+
+        build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+
+        PiType* ty = fn_ty->sort == TProc ? fn_ty->proc.ret : fn_ty;
+        bool callee_varstack = is_variable_for(ty, type_vars);
+        bool caller_varstack = is_variable_in(syn.ptype, env);
+        if (callee_varstack != caller_varstack) {
+            if (callee_varstack) {
+                size_t out_size = pi_stack_size_of(*syn.ptype);
+                // Copy from varstack to our stack 
+                build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), ass, a, point);
+                generate_monomorphic_copy(RSP, RCX, out_size, ass, a, point);
+
+                // Pop value from variable stack
+                build_binary_op(Add, reg(R14, sz_64), imm32(out_size), ass, a, point);
+            } else {
+                panic(mv_string("not implemented: Calling with value on caller varstack and callee static stack"));
+            }
+        }
+
         break;
     }
     case SExists: {
@@ -398,7 +464,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break; 
     }
     case SStructure: {
-        if (is_variable(syn.ptype)) {
+        if (is_variable_in(syn.ptype, env)) {
             panic(mv_string("Variable Struct not implemented."));
         } else {
             // The following code is copied exactly from the 'regular' codegen 
@@ -474,96 +540,61 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SProjector: {
-        not_implemented(mv_string("Polymorphic projector"));
-        PiType* source_type = strip_type(syn.projector.val->ptype);
-
-        if (source_type->sort == TStruct) {
-            generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
-            build_unary_op(Push, imm8(0), ass, a, point);
-            // Now, generate a calculation of the field offset 
-            for (size_t i = 0; i < source_type->structure.fields.len; i++) {
-                if (i != 0) {
-                    // Align to the new field; can skip if size = 0;
-                    generate_align_of(R8, (PiType*)source_type->structure.fields.data[i].val, env, ass, a, point);
-                    build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-                    generate_align_to(R9, R8, ass, a, point);
-                    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
-                }
-
-                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
-                    break;
-
-                // Push the size into RAX; this is then added to the value at
-                // the top of the stack  
-                generate_size_of(RAX, (PiType*)source_type->structure.fields.data[i].val, env, ass, a, point);
-                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
-            }
-
-            // Generate the size of the struct + field
-            generate_stack_size_of(RAX, source_type, env, ass, a, point);
-            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-
-            // Now, RAX = size of field, RCX = struct size, RSI = offset
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-            build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
-
-            // Dest offset = size of struct - size of field
-            build_binary_op(Sub, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
-
-            // save dest offset
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-
-            // increment both offsets by 8
-            build_binary_op(Add, reg(RCX, sz_64), imm8(8), ass, a, point);
-            build_binary_op(Add, reg(RSI, sz_64), imm8(8), ass, a, point);
-
-            // generate poly stack move: 
-            // RAX = size
-            // RCX = dest offset (from RSP)
-            // RSI = src offset  (from RSP)
-            generate_poly_stack_move(reg(RCX, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
-
-            // Pop the field offset and shrink the stack by that much
-            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64),  ass, a, point);
-
-        // Is Instance
+        if (is_variable_in(syn.projector.val->ptype, env)) {
+            panic(mv_string("Variable Struct projection not implemented."));
         } else {
-            generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
+            PiType* source_type = strip_type(syn.projector.val->ptype);
 
-            // Now, calculate offset for field 
-            build_unary_op(Push, imm8(0), ass, a, point);
-            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                if (i != 0) {
-                    // Align to the new field; can skip if size = 0;
-                    generate_align_of(R8, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
-                    build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-                    generate_align_to(R9, R8, ass, a, point);
-                    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+            if (source_type->sort == TStruct) {
+                // TODO: check that the projector handles stack alignment correctly
+                // First, allocate space on the stack for the value
+                PiType* source_type = strip_type(syn.projector.val->ptype);
+                size_t out_sz = pi_stack_size_of(*syn.ptype);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
+                data_stack_grow(env, out_sz);
+
+                // Second, generate the structure/instance object
+                generate_i(*syn.projector.val, env, target, links, a, point);
+                size_t src_sz = pi_stack_size_of(*source_type);
+
+                // From this point, behaviour depends on whether we are projecting from
+                // a structure or from an instance
+                if (source_type->sort == TStruct) {
+                    // Now, copy the structure to the destination
+                    // for this, we need the struct size + offset of field in the struct
+                    size_t offset = 0;
+                    for (size_t i = 0; i < source_type->structure.fields.len; i++) {
+                        size_t align = pi_align_of(*(PiType*)source_type->structure.fields.data[i].val);
+                        offset = pi_size_align(offset, align);
+                        if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
+                            break;
+                        offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
+                    }
+
+                    generate_stack_move(src_sz, offset, out_sz, ass, a, point);
+                    // Now, remove the original struct from the stack
+                    build_binary_op(Add, reg(RSP, sz_64), imm32(src_sz), ass, a, point);
+
+                    data_stack_shrink(env, src_sz);
+                } else {
+                    // Pop the pointer to the instance from the stack - store in RSI
+                    data_stack_shrink(env, src_sz);
+                    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+
+                    // Now, calculate offset for field 
+                    size_t offset = 0;
+                    for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                        offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
+                        if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                            break;
+                        offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
+                    }
+                    build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
+
+                    // TODO (check if replace with stack copy)
+                    generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
                 }
-
-                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
-                    break;
-                // Push the size into RAX; this is then added to the top of the stack  
-                generate_size_of(RAX, (PiType*)source_type->instance.fields.data[i].val, env, ass, a, point);
-                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
             }
-
-            // Generate the size of the output.
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
-
-            // Pop the offset and instance ptr from the stack
-            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-            build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
-
-            // Generate the adderss of the field.
-            build_binary_op(Add, reg(RSI, sz_64), reg(RCX, sz_64), ass, a, point);
-
-            // Reserve space on the stack
-            build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
-
-            generate_poly_move(reg(RSP, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
         }
         break;
     }
@@ -760,7 +791,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // call function
         generate_c_call(get_dynamic_val, ass, a, point);
 
-        if (is_variable(syn.ptype)) {
+        if (is_variable_in(syn.ptype, env)) {
             panic(mv_string("Not yet generating code for polymorphic dynamic use"));
         } else{
             // Now, allocate space on stack
@@ -795,7 +826,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // call function
         generate_c_call(set_dynamic_val, ass, a, point);
 
-        if (is_variable(syn.ptype)) {
+        if (is_variable_in(syn.ptype, env)) {
             panic(mv_string("Not yet generating code for polymorphic dynamic set"));
         } else {
             build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
@@ -813,7 +844,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             SymPtrCell elt = syn.let_expr.bindings.data[i];
             generate_polymorphic_i(*(Syntax*)elt.val, env, target, links, a, point);
 
-            if (is_variable(((Syntax*)elt.val)->ptype)) {
+            if (is_variable_in(((Syntax*)elt.val)->ptype, env)) {
                 address_bind_relative_index(elt.key, 0, env);
                 bind_sz += ADDRESS_SIZE;
             } else {
@@ -824,7 +855,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
         generate_polymorphic_i(*syn.let_expr.body, env, target, links, a, point);
 
-        if (is_variable(syn.ptype)) {
+        if (is_variable_in(syn.ptype, env)) {
             generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
             // Grab the value of R14 we pushed at the beginning - offset bind_sz + stack head 
@@ -1083,7 +1114,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             generate_polymorphic_i(*elt->expr, env, target, links, a, point);
 
             if (elt->is_binding && i + 1 != syn.sequence.elements.len) {
-                if (is_variable(elt->expr->ptype)) {
+                if (is_variable_in(elt->expr->ptype, env)) {
                     address_bind_relative_index(elt->symbol, 0, env);
                     bind_sz += ADDRESS_SIZE;
                 } else {
@@ -1097,7 +1128,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // a) a binding (hence this is an else) 
             // b) the last value in the sequence (as this value is preserved)
             else if (i + 1 != syn.sequence.elements.len) {
-                if (is_variable(elt->expr->ptype)) {
+                if (is_variable_in(elt->expr->ptype, env)) {
                     generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
                     build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
@@ -1110,7 +1141,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             }
             
         }
-        if (is_variable(syn.ptype)) {
+        if (is_variable_in(syn.ptype, env)) {
             generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
 
             // Grab the value of R14 we pushed at the beginning - offset bind_sz + stack head 
@@ -1468,6 +1499,69 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
             build_binary_op(Mov, reg(dest, sz_64), reg(regs.data[0], sz_64), ass, a, point);
         }
         }
+    }
+}
+
+void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
+    if (is_variable_in(type, env)) {
+        if (type->sort == TVar) {
+            // Optimization
+            AddressEntry e = address_env_lookup(type->var, env);
+            switch (e.type) {
+            case ALocalDirect:
+                build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
+                build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+                break;
+            case ATooManyLocals: {
+                throw_error(point, mk_string("Too Many Local variables!", a));
+                break;
+            }
+            default: {
+                panic(mv_string("Invalid address entry sort for runtime type variable."));
+            }
+            }
+        } else {
+
+            // The 'type' looks as follows:
+            // | 16 bits | 16 bits     | 32 bits |
+            // | align   | stack align | size    |
+            generate_align_of(R8, type, env, ass, a, point);
+            build_binary_op(SHL, reg(R8, sz_64), imm8(56), ass, a, point);
+            build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+
+            // TODO BUG LOGIC Check that R8 < max_uint_28
+            generate_size_of(R8, type, env, ass, a, point);
+            build_binary_op(Mov, reg(RAX, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(SHL, reg(R8, sz_64), imm8(28), ass, a, point);
+            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+
+            /* uint64_t result = (align << 56) | (size << 28) | stack_sz; */
+            // Now, we use the 'div' instruction with RDX = 0; RAX = size.
+            // Remainder stored in RDX
+            build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm32(8), ass, a, point);
+            build_unary_op(Div, reg(RCX, sz_64), ass, a, point);
+
+            // We need now to if rem == 0 then 0 else 8 - rem 
+            // store 8 - rem in RCX (8 is already in rcx from above)
+            build_binary_op(Sub, reg(RCX, sz_64), reg(RDX, sz_64), ass, a, point);
+            build_binary_op(Cmp, reg(RDX, sz_64), imm8(0), ass, a, point);
+            
+            build_binary_op(CMovE, reg(RCX, sz_64), reg(RDX, sz_64), ass, a, point);
+
+            // Add this to the original size and binary-or it into the type.
+            build_binary_op(Add, reg(R8, sz_64), reg(RCX, sz_64), ass, a, point);
+            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+        }
+    } else {
+        size_t align = pi_align_of(*type);
+        size_t size = pi_size_of(*type);
+        size_t stack_sz = pi_stack_align(size);
+
+        // TODO BUG LOGIC Check that stack_sz < max_uint_28
+        uint64_t result = (align << 56) | (size << 28) | stack_sz;
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(result), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     }
 }
 
