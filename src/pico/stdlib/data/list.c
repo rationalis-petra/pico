@@ -65,7 +65,6 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  (free list.data))";
     compile_toplevel(mk_free_fn, module, target, &point, &pi_point, a);
 
-    /*
     const char *elt_fn =
         "(def elt all [A] proc [idx (arr (List A))]\n"
         "  (load {A} (num-to-address (u64.+ (u64.* idx (size-of A))\n"
@@ -80,6 +79,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    val))";
     compile_toplevel(eset_fn, module, target, &point, &pi_point, a);
 
+    /*
     const char *each_fn =
         "(def each all [A] proc [(fn (Proc [A] Unit)) (lst (List A))]\n"
         "  (loop [for i from 0 below lst.len]\n"

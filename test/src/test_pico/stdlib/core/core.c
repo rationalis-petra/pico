@@ -58,6 +58,32 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -------------------------------------------------------------------------
     //
+    //     Labels 
+    //
+    // -------------------------------------------------------------------------
+
+    if (test_start(log, mv_string("labels-simple"))) {
+        int64_t expected = 27;
+        TEST_EQ("(labels 27)");
+    }
+
+    if (test_start(log, mv_string("labels-single-goto"))) {
+        int64_t expected = -8;
+        TEST_EQ("(labels (go-to start) [start -8])");
+    }
+
+    if (test_start(log, mv_string("labels-pass-var"))) {
+        int64_t expected = 3;
+        TEST_EQ("(labels (go-to start 3) [start [x] x])");
+    }
+
+    if (test_start(log, mv_string("labels-loop"))) {
+        int64_t expected = 10;
+        TEST_EQ("(labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)])");
+    }
+
+    // -------------------------------------------------------------------------
+    //
     //     Dynamic binding - dynamic/use/bind/set
     //
     // -------------------------------------------------------------------------

@@ -31,6 +31,15 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } Callbacks;
 
+typedef struct {
+    jump_buf point;
+} NotImplementedCtx;
+
+void skip_hook(void *ctx) {
+    jump_buf* jmp = ctx;
+    long_jump(*jmp, 1);
+}
+
 void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Target target, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     // Note: we need to be aware of the arena and error point, as both are used
@@ -46,6 +55,11 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
+
+    jump_buf on_not_implemend;
+    if (set_jump(on_not_implemend)) goto on_not_implemented;
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = &on_not_implemend};
+    set_not_implemented_hook(hook);
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
@@ -117,6 +131,13 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
         callbacks.on_exit(data, log);
     }
     release_arena_allocator(arena);
+    delete_istream(sin, a);
+    return;
+
+ on_not_implemented:
+    release_arena_allocator(arena);
+    delete_istream(sin, a);
+    test_skip(log);
     return;
 }
 
@@ -167,11 +188,6 @@ void top_eql(void *data, TestLog *log) {
     test_fail(log);
 }
 
-void skip_hook(void *ctx) {
-    TestLog* log = ctx;
-    test_skip(log);
-}
-
 void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
@@ -180,8 +196,6 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
-    set_not_implemented_hook(hook);
     run_toplevel_internal(string, module, context.env, callbacks, expected_val,
                           context.log, context.target, context.a);
     clear_not_implemented_hook();

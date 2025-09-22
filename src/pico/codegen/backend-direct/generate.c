@@ -1295,12 +1295,13 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
         size_t out_size = pi_size_of(*syn.ptype);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
+            // Clear the stack offset, either from expression or previous label
+            data_stack_shrink(env,out_size);
             SymPtrACell cell = syn.labels.terms.data[i];
 
             // Mark Label
             size_t pos = get_pos(ass);
             sym_size_bind(cell.key, pos, &label_points);
-
             
             SynLabelBranch* branch = cell.val;
 
@@ -1321,21 +1322,15 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             LabelEntry lble = label_env_lookup(cell.key, env);
             if (lble.type == Err)
                 throw_error(point, mv_string("Label not found during codegen!!"));
-            data_stack_shrink(env, lble.stack_offset);
+            data_stack_shrink(env, arg_total);
 
             // Copy the result down the stack
             generate_stack_move(arg_total, 0, out_size, ass, a, point);
-
-            // ensure the stack is at the sam epoint for the next iteration! 
-            data_stack_shrink(env,out_size);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(arg_total), ass, a, point);
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
-
-        // The final iteration will have shrunk the stack "too much", so add the
-        // result back in.
-        data_stack_grow(env,out_size);
 
         size_t label_end = get_pos(ass);
 

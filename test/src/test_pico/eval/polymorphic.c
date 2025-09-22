@@ -142,9 +142,22 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("struct-nonaligned-project"))) {
         RUN("(def nas struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4])");
-        int8_t expected = 3;
+        int64_t expected = 3;
         TEST_EQ("((all [A] nas.z) {Unit})");
     }
+
+    // -------------------------------------------------------------------------
+    //
+    //     Labels
+    //
+    // -------------------------------------------------------------------------
+
+
+
+    /* if (test_start(log, mv_string("labels-simple"))) { */
+    /*     int8_t expected = 27; */
+    /*     TEST_EQ("(labels 27)"); */
+    /* } */
 
     // -------------------------------------------------------------------------
     //
