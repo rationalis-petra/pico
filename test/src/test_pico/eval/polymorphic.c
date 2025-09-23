@@ -17,23 +17,24 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     // Literals
     if (test_start(log, mv_string("const-return"))) {
         int64_t expected = -28;
-        // TODO (BUG): We should be able to remove the 'is' and still 
-        //             typecheck
-        TEST_EQ("((is (all [A] -28) (All [A] I64)) {Unit})");
+        TEST_EQ("((all [A] -28) {Unit})");
     }
 
     if (test_start(log, mv_string("static-return"))) {
         int64_t expected = 39;
-        // TODO (BUG): We should be able to remove the 'is' and still 
-        //             typecheck
-        TEST_EQ("((is (all [A] proc [(x I64)] x) (All [A] Proc [I64] I64)) {Unit} 39)");
+        TEST_EQ("((all [A] proc [(x I64)] x) {Unit} 39)");
     }
 
     if (test_start(log, mv_string("mix-arg-static-return"))) {
         int64_t expected = 39;
-        // TODO (BUG): We should be able to remove the 'is' and still 
-        //             typecheck
         TEST_EQ("((all [A] proc [(a A) (x I64)] x) -3 39)");
+    }
+
+    if (test_start(log, mv_string("static-return"))) {
+        RUN("(def int-id proc [(x I64)] x)");
+
+        int64_t expected = 89;
+        TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
     }
 
     // -------------------------------------------------------------------------
@@ -107,6 +108,32 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         int64_t expected = 4;
         TEST_EQ("(choose :false 3 4)");
     }
+
+    // ---------------------------------------------------------------------
+    //
+    //     Labels 
+    //
+    // -------------------------------------------------------------------------
+
+    if (test_start(log, mv_string("labels-simple"))) {
+        int64_t expected = 27;
+        TEST_EQ("((all [A] (labels 27)) {Unit})");
+    }
+
+    if (test_start(log, mv_string("labels-single-goto"))) {
+        int64_t expected = -8;
+        TEST_EQ("((all [A] labels (go-to start) [start -8]) {Unit})");
+    }
+
+    if (test_start(log, mv_string("labels-pass-var"))) {
+        int64_t expected = 3;
+        TEST_EQ("((all [A] labels (go-to start 3) [start [x] x]) {Unit})");
+    }
+
+    /* if (test_start(log, mv_string("labels-loop"))) { */
+    /*     int64_t expected = 10; */
+    /*     TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})"); */
+    /* } */
 
     // -----------------------------------------------------
     // 

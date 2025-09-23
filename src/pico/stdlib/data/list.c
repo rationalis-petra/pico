@@ -79,13 +79,13 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    val))";
     compile_toplevel(eset_fn, module, target, &point, &pi_point, a);
 
-    /*
     const char *each_fn =
         "(def each all [A] proc [(fn (Proc [A] Unit)) (lst (List A))]\n"
         "  (loop [for i from 0 below lst.len]\n"
-        "    (fn (elt i lst))))";
+        "    (seq (fn (elt i lst)) :unit)))";
     compile_toplevel(each_fn, module, target, &point, &pi_point, a);
 
+    /*
     const char *map_fn =
         "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
         "  (let [new-list (mk-list {B} lst.len lst.len)] (seq\n"

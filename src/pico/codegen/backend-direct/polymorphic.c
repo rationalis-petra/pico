@@ -366,7 +366,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             if (is_variable_in(syn.ptype, env)) {
                 // Move value from data to 'variable' stack.
-                generate_size_of(RAX, syn.ptype, env, ass, a, point);
+                generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
                 build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
                 build_binary_op(Mov, reg(R9, sz_64), reg(RSP, sz_64), ass, a, point);
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -378,9 +378,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 build_unary_op(Push, reg(R14, sz_64), ass, a, point);
                 data_stack_grow(env, ADDRESS_SIZE);
             } else {
-                // regular move up the data-stack
-                panic(mv_string("Poly call proc : return static value not implemented"));
-
+                // Regular move up the data-stack
+                data_stack_grow(env, pi_stack_size_of(*syn.ptype));
             }
         }
 
@@ -554,7 +553,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 data_stack_grow(env, out_sz);
 
                 // Second, generate the structure/instance object
-                generate_i(*syn.projector.val, env, target, links, a, point);
+                generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
                 size_t src_sz = pi_stack_size_of(*source_type);
 
                 // From this point, behaviour depends on whether we are projecting from
@@ -807,8 +806,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     }
     case SDynamicSet: {
         size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
-        generate_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
-        generate_i(*syn.dynamic_set.new_val, env, target, links, a, point);
+        generate_polymorphic_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
+        generate_polymorphic_i(*syn.dynamic_set.new_val, env, target, links, a, point);
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
@@ -927,19 +926,21 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SLabels: {
-        not_implemented(mv_string("Polymorphic labels"));
         // Labels: The code-generation for labels is as follows: 
-        // 1. Add labels to environment
-        // 2. Generate expression
-        // 3. For each expression:
-        //  3.1 Mark Beginning of label expression
-        //  3.2 Generate label expressions
-        // 4. Backlink all labels.
+        // 1. Push the current variable stack head ($r14)  
+        // 2. Add labels to environment
+        // 3. Generate expression
+        // 4. For each expression:
+        //  5.1 Mark Beginning of label expression
+        //  6.2 Generate label expressions
+        // 7. Backlink all labels.
+        
+        //build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        //data_stack_grow(env, ADDRESS_SIZE);
+
         SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
         for (size_t i = 0; i < syn.labels.terms.len; i++) 
             push_symbol(syn.labels.terms.data[i].key, &labels);
-
-        // Push the current value of $RSP onto the indexing stack
 
         address_start_labels(labels, env);
 
@@ -948,7 +949,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
 
+        size_t out_size = pi_size_of(*syn.ptype);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
+            // Clear the stack offset, either from expression or previous label
+            data_stack_shrink(env,out_size);
             SymPtrACell cell = syn.labels.terms.data[i];
 
             // Mark Label
@@ -958,14 +962,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             SynLabelBranch* branch = cell.val;
 
             // Bind Label Vars 
-            // Note: the index stack
+            size_t arg_total = 0;
             SymSizeAssoc arg_sizes = mk_sym_size_assoc(branch->args.len, a);
             for (size_t i = 0; i < branch->args.len; i++) {
-                sym_size_bind(branch->args.data[i].key, i, &arg_sizes);
+                size_t arg_size = pi_size_of(*(PiType*)branch->args.data[i].val);
+                sym_size_bind(branch->args.data[i].key, arg_size, &arg_sizes);
+                arg_total += arg_size;
             }
 
-            // We assume that they have been pushed onto the stack by whatever
-            // jumped us in here!
+            data_stack_grow(env,arg_total);
             address_bind_label_vars(arg_sizes, env);
             generate_polymorphic_i(*branch->body, env, target, links, a, point);
             address_unbind_label_vars(env);
@@ -973,29 +978,15 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             LabelEntry lble = label_env_lookup(cell.key, env);
             if (lble.type == Err)
                 throw_error(point, mv_string("Label not found during codegen!!"));
+            data_stack_shrink(env, arg_total);
 
-            // TODO (possible bug: use Sub or Add and + or - ?)
-            build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32((lble.stack_offset + 1) * ADDRESS_SIZE), ass, a, point);
-
-            // Copy the result down the stack. To do this, we need
-            // the size (RAX)
-            // The destination (initial RSP - size)
-            // The source offset (0)
-            generate_size_of(RAX, syn.ptype, env, ass, a, point);
-            build_binary_op(Mov, reg(R10, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-
-            build_binary_op(Sub, reg(R10, sz_64), reg(RAX, sz_64), ass, a, point);
-            generate_poly_stack_move(reg(R10, sz_64), imm32(0), reg(RAX, sz_64), ass, a, point);
-
-            // Ensure the stack is at the same point for the next iteration! 
-            build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
+            // Copy the result down the stack
+            generate_stack_move(arg_total, 0, out_size, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(arg_total), ass, a, point);
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
         }
-
-        // The final iteration will have shrunk the stack "too much", so add the
-        // result back in.
 
         size_t label_end = get_pos(ass);
 
@@ -1035,68 +1026,37 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SGoTo: {
-        not_implemented(mv_string("Polymorphic go-to"));
         // Generating code for a goto:
         // 1. Generate args
+        size_t arg_total = 0;
         for (size_t i = 0; i < syn.go_to.args.len; i++) {
             Syntax* expr = syn.go_to.args.data[i];
-
-            // Store the size in the index stack
-            // (this will later be used to index the input variable to the label)
-            generate_stack_size_of(RAX, expr->ptype, env, ass, a, point);
-
+            arg_total += pi_stack_size_of(*expr->ptype);
             generate_polymorphic_i(*expr, env, target, links, a, point);
         }
 
         // 2. Backlink the label
         LabelEntry lble = label_env_lookup(syn.go_to.label, env);
         if (lble.type == Ok) {
-            int64_t delta = (lble.stack_offset - syn.go_to.args.len) * 8;
-            int64_t rsp_offset = lble.stack_offset * 8;
-
-            // Sum the n prior entries in the stack
-            // While doing so, update each stack entry to be an offset from the
-            // (final) RSP 
-            if (((int64_t)syn.go_to.args.len) * -8 < INT8_MIN) {
-                throw_error(point, mv_string("Codegen error: too many arguments to label"));
-            }
-            build_binary_op(Mov, reg(R9, sz_64), imm32(0), ass, a, point);
-            for (int64_t i = 0; i < (int64_t)syn.go_to.args.len; i++) {
-                build_binary_op(Mov, reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
-                build_binary_op(Add, reg(R9, sz_64), rref8(INDEX_REGISTER, -i * 8, sz_64), ass, a, point);
-                build_binary_op(Mov, rref8(INDEX_REGISTER, -i * 8, sz_64), reg(R8, sz_64), ass, a, point);
+            size_t delta = lble.stack_offset - arg_total;
+            generate_stack_move(delta, 0, arg_total, ass, a, point);
+            if (delta != 0) {
+                // Adjust the stack so it has the same value that one would have
+                // going into a labels expression.
+                // TODO handle dynamic variable unbinding (if needed!)
+                build_binary_op(Add, reg(RSP, sz_64), imm32(delta), ass, a, point);
             }
 
-            // Adjust the stack so it has the same value that one would have
-            // going into a labels expression.
-            // TODO handle dynamic variable unbinding (if needed!)
-
-            // Get the dest offset by taking the original RSP and
-            // subtracting the new RSP and the size 
-            build_binary_op(Mov, reg(R11, sz_64), reg(INDEX_REGISTER, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R11, sz_64), imm32(rsp_offset), ass, a, point);
-            build_binary_op(Mov, reg(R10, sz_64), rref8(R11, 0, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R10, sz_64), reg(RSP, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(R10, sz_64), reg(R9, sz_64), ass, a, point);
-
-            // Save the dest_offset (We will add this to RSP after the copy)
-
-            generate_poly_stack_move(reg(R10, sz_64), imm32(0), reg(R9, sz_64), ass, a, point);
-
-            build_binary_op(Add, reg(RSP, sz_64), reg(R10, sz_64), ass, a, point);
-
-            // Now, update the index stack to handle the new offsets 
-            for (int64_t i = 0; i < (int64_t)syn.go_to.args.len; i++) {
-                build_binary_op(Add, rref8(INDEX_REGISTER, -i * 8, sz_64), reg(RSP, sz_64), ass, a, point);
-            }
-
-            // Now, shrink the address stack appropriately 
-            build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(delta), ass, a, point);
+            // Stack sould "pretend" it pushed a value of type syn.ptype and
+            // consumed all args. This is so that, e.g. if this go-to is inside
+            // a seq or if, the other branches of the if or the rest of the seq
+            // generates assuming the correct stack offset.
+            data_stack_shrink(env, arg_total);
+            data_stack_grow(env, pi_size_of(*syn.ptype));
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
-
         } else {
             throw_error(point, mv_string("Label not found during codegen!!"));
         }

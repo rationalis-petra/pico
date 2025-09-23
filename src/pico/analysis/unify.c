@@ -838,7 +838,7 @@ PiType* mk_uvar(Allocator* a) {
     return uvar;
 }
 
-PiType* mk_uvar_integral(Allocator* a) {
+PiType* mk_uvar_integral(Allocator* a, Range range) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 
 
@@ -852,13 +852,14 @@ PiType* mk_uvar_integral(Allocator* a) {
 
     Constraint con = (Constraint) {
         .type = ConInt,
+        .range = range
     };
     push_constraint(con, &uvar->uvar->constraints);
     
     return uvar;
 }
 
-PiType* mk_uvar_floating(Allocator* a) {
+PiType* mk_uvar_floating(Allocator* a, Range range) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 
 
@@ -872,6 +873,7 @@ PiType* mk_uvar_floating(Allocator* a) {
 
     Constraint con = (Constraint) {
         .type = ConFloat,
+        .range = range
     };
     push_constraint(con, &uvar->uvar->constraints);
     

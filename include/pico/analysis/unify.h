@@ -36,8 +36,8 @@ bool has_unification_vars_p(PiType type);
 void squash_type(PiType* type, Allocator* a);
 
 PiType* mk_uvar(Allocator* a);
-PiType* mk_uvar_integral(Allocator* a);
-PiType* mk_uvar_floating(Allocator* a);
+PiType* mk_uvar_integral(Allocator* a, Range range);
+PiType* mk_uvar_floating(Allocator* a, Range range);
 
 UnifyResult add_field_constraint(UVarType* uvar, Range range, Symbol field, PiType* field_ty, Allocator* a);
 UnifyResult add_variant_constraint(UVarType* uvar, Range range, Symbol field, PtrArray types, Allocator* a);

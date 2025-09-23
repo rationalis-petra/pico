@@ -162,14 +162,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
-        untyped->ptype = mk_uvar_integral(a);
+        untyped->ptype = mk_uvar_integral(a, untyped->range);
         break;
     case SLitTypedIntegral:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
     case SLitUntypedFloating:
         untyped->type = SLitTypedFloating;
-        untyped->ptype = mk_uvar_floating(a);
+        untyped->ptype = mk_uvar_floating(a, untyped->range);
         break;
     case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
