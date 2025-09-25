@@ -1,5 +1,7 @@
 #include <string.h>
 
+#include "data/stringify.h"
+
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
@@ -153,6 +155,10 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 }
 
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+#ifdef DEBUG_ASSERT
+    int64_t old_head = get_stack_head(env);
+#endif
+
     Assembler* ass = target.target;
     switch (syn.type) {
     case SLitUntypedIntegral:
@@ -304,6 +310,16 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
 
         if (!variable_args) {
+            // Calculate size to pop
+            size_t pop_sz = ADDRESS_SIZE;
+            for (size_t i = 0; i < syn.application.implicits.len; i++) {
+                PiType* aty = ((Syntax*)syn.application.implicits.data[i])->ptype;
+                pop_sz += pi_stack_size_of(*aty);
+            }
+            for (size_t i = 0; i < syn.application.args.len; i++) {
+                PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                pop_sz += pi_stack_size_of(*aty);
+            }
             // This will push a function pointer onto the stack
             generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
         
@@ -311,21 +327,25 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             // Pop the function into RCX; call the function
             build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+            data_stack_shrink(env, pop_sz);
             if (is_variable_in(syn.ptype, env)) {
                 // Move value from data to 'variable' stack.
                 panic(mv_string("not implemented: variable return from static function in poly code."));
+            } else {
+                data_stack_grow(env, pi_stack_size_of(*syn.ptype));
             }
         } else {
             generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
+
             size_t args_size = 0;
             // Move variable args from the data stack to the variable stack
             for (size_t i = 0; i < syn.application.implicits.len; i++) {
-                PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                PiType* aty = ((Syntax*)syn.application.implicits.data[i])->ptype;
                 if (is_variable_in(aty, env)) {
 
                     // Unfold argument onto data-stack
                     args_size += ADDRESS_SIZE;
-                    generate_size_of(RAX, aty, env, ass, a, point);
+                    generate_stack_size_of(RAX, aty, env, ass, a, point);
                     build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
                     generate_poly_copy_from_base(0, arg_base - args_size, reg(RAX, sz_64), ass, a, point);
                 } else {
@@ -343,7 +363,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
                     // Unfold argument onto data-stack
                     args_size += ADDRESS_SIZE;;
-                    generate_size_of(RAX, aty, env, ass, a, point);
+                    generate_stack_size_of(RAX, aty, env, ass, a, point);
                     build_binary_op(Sub, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_binary_op(Mov, reg(RDX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
                     generate_poly_move(reg(RSP, sz_64), reg(RDX, sz_64), reg(RAX, sz_64), ass, a, point);
@@ -388,24 +408,25 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SAllApplication: {
         // Polymorphic Funcall
         build_binary_op(Mov, reg(R15, sz_64), reg(R14, sz_64), ass, a, point);
+        size_t static_arg_size = 0;
 
         SymbolArray type_vars = syn.all_application.function->ptype->binder.vars;
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
             PiType* type = ((Syntax*)syn.all_application.types.data[i])->type_val;
             generate_pi_type(type, env, ass, a, point);
+            static_arg_size += ADDRESS_SIZE;
         }
 
         bool mismatch_variable_args = false;
-        int64_t arg_base = get_stack_head(env);
+        PiType* fn_ty = strip_type(syn.all_application.function->ptype);
+        if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
 
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
             mismatch_variable_args |= is_variable_for(arg->ptype, type_vars);
             generate_polymorphic_i(*arg, env, target, links, a, point);
+            static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
         }
-
-        PiType* fn_ty = strip_type(syn.all_application.function->ptype);
-        if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
 
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             PiType* argty = fn_ty->proc.args.data[i];
@@ -421,22 +442,26 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             } else {
                 mismatch_variable_args |= is_variable_in(arg->ptype, env);
             }
+            static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
             generate_polymorphic_i(*arg, env, target, links, a, point);
         }
         generate_polymorphic_i(*syn.all_application.function, env, target, links, a, point);
+        static_arg_size += ADDRESS_SIZE;
 
         if (mismatch_variable_args) {
             panic(mv_string("Mismatch in variable args: codegen for this scenario not implemented."));
         }
 
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-        data_stack_shrink(env, ADDRESS_SIZE);
 
         build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
+        data_stack_shrink(env, static_arg_size);
 
         PiType* ty = fn_ty->sort == TProc ? fn_ty->proc.ret : fn_ty;
         bool callee_varstack = is_variable_for(ty, type_vars);
         bool caller_varstack = is_variable_in(syn.ptype, env);
+
+        data_stack_grow(env, caller_varstack ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
         if (callee_varstack != caller_varstack) {
             if (callee_varstack) {
                 size_t out_size = pi_stack_size_of(*syn.ptype);
@@ -450,6 +475,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             } else {
                 panic(mv_string("not implemented: Calling with value on caller varstack and callee static stack"));
             }
+        } else {
         }
 
         break;
@@ -885,6 +911,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // Pop the bool into R9; compare with 0
         build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
         build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE);
 
         // ---------- CONDITIONAL JUMP ----------
         // compare the value to 0
@@ -911,6 +938,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
         jmp_loc = out.backlink;
         start_pos = get_pos(ass);
+
+        data_stack_shrink(env, is_variable_in(syn.ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
 
 
         // ---------- FALSE BRANCH ----------
@@ -1145,22 +1174,45 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
     case SSizeOf: {
         generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SAlignOf: {
         generate_align_of(RAX, syn.size->type_val, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SCheckedType: {
         build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), ass, a, point);
         build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     default: {
         panic(mv_string("Invalid abstract term in polymorphic codegen."));
     }
     }
+
+#ifdef DEBUG_ASSERT
+    int64_t new_head = get_stack_head(env);
+    int64_t diff = old_head - new_head;
+    if (diff < 0) panic(mv_string("diff < 0!"));
+
+    size_t stack_sz = is_variable_in(syn.ptype, env) ?
+        ADDRESS_SIZE : pi_stack_size_of(*syn.ptype);
+
+    // Justification for cast: stack size of is extremely unlikely to be 2^63 bytes
+    //  in size!
+    if (diff != (int64_t)stack_sz) {
+        String expected = string_u64(stack_sz, a);
+        String actual = string_i64(diff, a);
+        String message = string_ncat(a, 4,
+                                     mv_string("Address environment constraint violated: expected size of the stack is wrong!\nExpected "),
+                                     expected, mv_string(" but got "), actual);
+        panic(message);
+    }
+#endif
 }
 
 // Internal helper functions for movement 
@@ -1522,6 +1574,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
         build_binary_op(Mov, reg(RAX, sz_64), imm64(result), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     }
+    data_stack_grow(env, ADDRESS_SIZE);
 }
 
 void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point) {

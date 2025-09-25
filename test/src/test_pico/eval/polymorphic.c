@@ -130,10 +130,10 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] labels (go-to start 3) [start [x] x]) {Unit})");
     }
 
-    /* if (test_start(log, mv_string("labels-loop"))) { */
-    /*     int64_t expected = 10; */
-    /*     TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})"); */
-    /* } */
+    if (test_start(log, mv_string("labels-loop"))) {
+        int64_t expected = 10;
+        TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})");
+    }
 
     // -----------------------------------------------------
     // 
