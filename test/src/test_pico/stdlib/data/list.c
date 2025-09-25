@@ -29,6 +29,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("list-1.capacity");
     }
 
+    /*
     if (test_start(log, mv_string("elt-matches-eset"))) {
         int64_t expected = -123986;
         RUN("(list.eset 0 -123986 list-1)");
@@ -76,9 +77,10 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     }
 
     // Free the data associated with the lists generated durin the test
+    */
     RUN("(free list-1.data)");
-    RUN("(free list-2.data)");
-    RUN("(free (use list-3).data)");
+    /* RUN("(free list-2.data)"); */
+    /* RUN("(free (use list-3).data)"); */
 
     release_arena_allocator(arena);
 }

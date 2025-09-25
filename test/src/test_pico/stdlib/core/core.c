@@ -1,4 +1,8 @@
+#include <string.h>
+#include "platform/memory/static.h"
+
 #include "pico/stdlib/core.h"
+#include "pico/stdlib/extra.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
@@ -385,4 +389,90 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         uint64_t expected = 8;
         TEST_EQ("(offset-of y (Struct [.x I64] [.y I64]))");
     }
+
+    // -----------------------------------------------------
+    // 
+    //      Core functions (notably, load/store)
+    // 
+    // -----------------------------------------------------
+    
+    void* mem = mem_alloc(128, a);
+    Allocator old = get_std_current_allocator();
+    void* start;
+    {
+        Allocator sta = mk_static_allocator(mem, 128);
+        start = mem_alloc(8, &sta);
+    }
+
+    if (test_start(log, mv_string("test-load-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        *(int64_t*)start = 8;
+
+        set_std_current_allocator(sta);
+        uint64_t expected = 8;
+        TEST_EQ("(let [addr malloc (size-of I64)] (load {I64} addr))");
+    }
+
+    if (test_start(log, mv_string("test-load-i8"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        *(int8_t*)start = -5;
+
+        set_std_current_allocator(sta);
+        int8_t expected = -5;
+        TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
+    }
+
+    // TODO: there is a bug (likely in let, or return from all, but NOT load)
+    //       this test is disabled because there is not a bug in load.
+    /* if (test_start(log, mv_string("test-load-struct"))) { */
+    /*     Allocator sta = mk_static_allocator(mem, 128); */
+    /*     typedef struct { int64_t x; int64_t y; } IPr; */
+    /*     set_std_current_allocator(sta); */
+    /*     IPr expected = {.x = 25, .y = -5}; */
+    /*     *(IPr*)(start) = expected; */
+    /*     TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))"); */
+    /* } */
+
+    if (test_start(log, mv_string("test-store-i8"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        int8_t expected = -5;
+
+        set_std_current_allocator(sta);
+        RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
+        if (memcmp(start, &expected, sizeof(int8_t)) == 0) {
+            test_pass(log);
+        } else {
+            test_fail(log);
+        };
+    }
+
+    if (test_start(log, mv_string("test-store-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        int64_t expected = 197231987;
+
+        set_std_current_allocator(sta);
+        RUN("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
+        if (memcmp(start, &expected, sizeof(int64_t)) == 0) {
+            test_pass(log);
+        } else {
+            test_fail(log);
+        };
+    }
+
+    if (test_start(log, mv_string("test-store-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct { int64_t x; int64_t y; } IPr;
+        IPr expected = {.x = -123, .y = 9713};
+
+        set_std_current_allocator(sta);
+        RUN("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
+        if (memcmp(start, &expected, sizeof(int64_t)) == 0) {
+            test_pass(log);
+        } else {
+            test_fail(log);
+        };
+    }
+
+    set_std_current_allocator(old);
+    mem_free(mem, a);
 }

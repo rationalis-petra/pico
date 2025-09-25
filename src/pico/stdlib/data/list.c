@@ -85,7 +85,6 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    (seq (fn (elt i lst)) :unit)))";
     compile_toplevel(each_fn, module, target, &point, &pi_point, a);
 
-    /*
     const char *map_fn =
         "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
         "  (let [new-list (mk-list {B} lst.len lst.len)] (seq\n"
@@ -139,6 +138,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  (:right (Syntax:node ar :special new-terms)))\n";
     compile_toplevel(list_macro, module, target, &point, &pi_point, a);
 
+    /*
     // Imperative Interface
     const char *list_push_fn =
         "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
