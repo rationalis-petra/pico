@@ -61,12 +61,12 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
-    build_binary_op(Mov, reg(RCX, sz_64), reg(RDI, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+    build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
+    build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
 #else
 #error "Unknown calling convention"
 #endif
@@ -140,6 +140,20 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // memcpy (dest = rcx, src = rdx, size = r8)
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
 
+    // Store size in R8, stack size in R9
+    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R9, sz_64), reg(R8, sz_64), ass, a, point);
+    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
+
+    build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
+    build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
+
+    build_binary_op(Sub, reg(R14, sz_64), reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), reg(R14, sz_64), ass, a, point);
+
+    build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+
+#else
 #error "Unknown calling convention"
 #endif
 
