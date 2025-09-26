@@ -941,7 +941,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
         data_stack_shrink(env, is_variable_in(syn.ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
 
-
         // ---------- FALSE BRANCH ----------
         // Generate code for the false branch
         generate_polymorphic_i(*syn.if_expr.false_branch, env, target, links, a, point);

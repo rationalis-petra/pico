@@ -61,7 +61,7 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);

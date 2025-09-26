@@ -1943,24 +1943,31 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         }
         return false;
     case TEnum:
-        panic(mv_string("not implemented is_variable_for for enum"));
+        for (size_t i = 0; i < ty->enumeration.variants.len; i++) {
+            PtrArray arr = *(PtrArray*)ty->enumeration.variants.data[i].val;
+            for (size_t j = 0; j < arr.len; j++) {
+                if (is_variable_for_recur(arr.data[j], vars, shadowed))
+                    return true;
+            }
+        }
+        return false;
     case TReset:
-        panic(mv_string("not implemented is_variable_for for reset"));
+        return false;
     case TResumeMark:
-        panic(mv_string("not implemented is_variable_for for resume-mark"));
+        return false;
     case TDynamic:
         return false;
     case TNamed:
         push_symbol(ty->named.name, &shadowed);
         return is_variable_for_recur(ty->named.type, vars, shadowed);
     case TDistinct:
-        panic(mv_string("not implemented is_variable_for for distinct"));
+        return is_variable_for_recur(ty->distinct.type, vars, shadowed);
     case TTrait:
         panic(mv_string("not implemented is_variable_for for trait"));
     case TTraitInstance:
         panic(mv_string("not implemented is_variable_for for instance"));
     case TCType:
-        panic(mv_string("not implemented is_variable_for for c type"));
+        return false;
     case TAll:
         return false;
     case TExists:
