@@ -1,9 +1,7 @@
 #include "platform/signals.h"
-#include "platform/memory/executable.h"
 #include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/extra.h"
 
 #include "test_pico/helper.h"
 #include "test_pico/eval/eval.h"

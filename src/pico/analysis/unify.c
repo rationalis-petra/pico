@@ -133,9 +133,24 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Alloc
 
 UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, PtrArray rhs_args, SymPairArray *rename, Allocator *a) {
     if (!symbol_eq(rhs_sym, lhs_sym)) {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.",a ), &nodes);
+        {
+            PtrArray l1 = mk_ptr_array(8, a);
+            push_ptr(mv_cstr_doc("    LHS has name: ", a) ,&l1);
+            push_ptr(mv_str_doc(symbol_to_string(lhs_sym, a), a), &l1);
+            push_ptr(mv_cat_doc(l1, a), &nodes);
+        }
+        {
+            PtrArray l2 = mk_ptr_array(8, a);
+            push_ptr(mv_cstr_doc("    RHS has name: ", a) ,&l2);
+            push_ptr(mv_str_doc(symbol_to_string(rhs_sym, a), a), &l2);
+            push_ptr(mv_cat_doc(l2, a), &nodes);
+        }
+
         return (UnifyResult) {
             .type = USimpleError,
-            .message = mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.", a)
+            .message = mv_vsep_doc(nodes, a),
         };
     }
 

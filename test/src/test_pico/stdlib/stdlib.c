@@ -57,6 +57,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     }
 
     if (suite_start(log, mv_string("meta"))) {
+        if (suite_start(log, mv_string("gen"))) {
+            run_pico_stdlib_meta_gen_tests(log, module, env, target, a);
+            suite_end(log);
+        }
         if (suite_start(log, mv_string("refl"))) {
             run_pico_stdlib_meta_refl_tests(log, module, env, target, a);
             suite_end(log);
