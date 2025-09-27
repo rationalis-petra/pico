@@ -9,7 +9,7 @@
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
-#define TEST_MEM(str) test_toplevel_mem(str, expected, start, sizeof(expected), module, context)
+#define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
     TestContext context = (TestContext) {
@@ -41,6 +41,14 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
         int64_t expected = 89;
         TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
+    }
+
+    if (test_start(log, mv_string("multi-poly-call"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        RUN("(def sequence all [A] proc [(x A)] (seq (id x) (id x)))");
+
+        int64_t expected = 89;
+        TEST_EQ("(sequence 89)");
     }
 
     if (test_start(log, mv_string("poly-return-large"))) {
@@ -272,13 +280,15 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         start = mem_alloc(8, &sta);
     }
 
-    /* if (test_start(log, mv_string("test-poly-call-in-loop"))) { */
-    /*     Allocator sta = mk_static_allocator(mem, 128); */
-    /*     uint64_t expected[] = {0, 1 }; */
+    if (test_start(log, mv_string("test-multi-poly-call"))) {
+        // Test to ensure that polymorphic calls preserve the stack for a future call
+        Allocator sta = mk_static_allocator(mem, 128);
+        int64_t expected = -67;
 
-    /*     set_std_current_allocator(sta); */
-    /*     TEST_MEM("(let [addr malloc (size-of I64)] (loop [for i from 0 upto 5] (store {U64} addr i)))"); */
-    /* } */
+        set_std_current_allocator(sta);
+        RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
+        TEST_MEM("(seq [let! addr (malloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+    }
 
     set_std_current_allocator(old);
     mem_free(mem, a);

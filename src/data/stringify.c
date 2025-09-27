@@ -91,7 +91,7 @@ String string_hex_mem(const void* mem, size_t memsize, Allocator* a) {
     // each byte becomes 3 characters + null-terminator
     uint8_t* str_mem = mem_alloc(memsize * 3 + 1, a);
     for (size_t i = 0; i < memsize; i++) {
-        snprintf((char*)str_mem + (i*3), 4, "%02" PRIx8, *(uint8_t*)(mem + i));
+        snprintf((char*)str_mem + (i*3), 4, "%02" PRIx8 " ", *(uint8_t*)(mem + i));
     }
     return (String) {
         .memsize = memsize * 3 + 1,

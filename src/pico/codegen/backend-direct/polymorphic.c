@@ -107,7 +107,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     // - always data stack?
     // - always relevant stack?
 
-    if (is_variable_in(body.ptype, env)) {
+    if (is_variable_for(body.ptype, types)) {
         // Return on Variable Stack
         // R15 is the 'destination' on the variable stack of a return
         // argument.
@@ -137,9 +137,9 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         size_t ret_sz = pi_stack_size_of(*body.ptype);
     
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R14, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
 
         // Now, copy the return address into a (safe) register
         build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
