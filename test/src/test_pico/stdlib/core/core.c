@@ -9,6 +9,7 @@
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
     TestContext context = (TestContext) {
@@ -45,6 +46,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(let [x (is -3 I32)] x)");
     }
 
+    if (test_start(log, mv_string("let-large-value"))) {
+        // Test that when a value is moved up the stack, if it is larger than the 
+        // total binding size, it does not overwrite itself.
+        typedef struct {int64_t x; int64_t y;} Pr;
+        Pr expected = (Pr){ .x = 5, .y = 2 };
+        TEST_EQ("(let [x 2] (struct [.x 5] [.y x]))");
+    }
+
     if (test_start(log, mv_string("simple-sequence"))) {
         int64_t expected = 3;
         TEST_EQ("(seq 1 2 3)");
@@ -58,6 +67,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("let-many-in-sequence"))) {
         int64_t expected = 5;
         TEST_EQ("(seq [let! x 2] [let! y 3] (u32.+ x y))");
+    }
+
+    if (test_start(log, mv_string("let-large-in-sequence"))) {
+        typedef struct {int64_t x; int64_t y;} Pr;
+        Pr expected = (Pr){ .x = 122, .y = -79 };
+        TEST_EQ("(seq [let! x 122] (struct [.x 122] [.y -79]))");
     }
 
     // -------------------------------------------------------------------------
@@ -422,16 +437,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
     }
 
-    // TODO: there is a bug (likely in let, or return from all, but NOT load)
-    //       this test is disabled because there is not a bug in load.
-    /* if (test_start(log, mv_string("test-load-struct"))) { */
-    /*     Allocator sta = mk_static_allocator(mem, 128); */
-    /*     typedef struct { int64_t x; int64_t y; } IPr; */
-    /*     set_std_current_allocator(sta); */
-    /*     IPr expected = {.x = 25, .y = -5}; */
-    /*     *(IPr*)(start) = expected; */
-    /*     TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))"); */
-    /* } */
+    if (test_start(log, mv_string("test-load-struct"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct { int64_t x; int64_t y; } IPr;
+        set_std_current_allocator(sta);
+        IPr expected = {.x = 25, .y = -5};
+        *(IPr*)(start) = expected;
+        TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
+    }
 
     if (test_start(log, mv_string("test-store-i8"))) {
         Allocator sta = mk_static_allocator(mem, 128);
@@ -439,11 +452,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(sta);
         RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
-        if (memcmp(start, &expected, sizeof(int8_t)) == 0) {
-            test_pass(log);
-        } else {
-            test_fail(log);
-        };
+        TEST_MEM("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -451,12 +460,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 197231987;
 
         set_std_current_allocator(sta);
-        RUN("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
-        if (memcmp(start, &expected, sizeof(int64_t)) == 0) {
-            test_pass(log);
-        } else {
-            test_fail(log);
-        };
+        TEST_MEM("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -465,12 +469,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         IPr expected = {.x = -123, .y = 9713};
 
         set_std_current_allocator(sta);
-        RUN("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
-        if (memcmp(start, &expected, sizeof(int64_t)) == 0) {
-            test_pass(log);
-        } else {
-            test_fail(log);
-        };
+        TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
     }
 
     set_std_current_allocator(old);

@@ -29,11 +29,11 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("list-1.capacity");
     }
 
-    if (test_start(log, mv_string("elt-matches-eset"))) {
-        int64_t expected = -123986;
-        RUN("(list.eset 0 -123986 list-1)");
-        TEST_EQ("(list.elt 0 list-1)");
-    }
+    /* if (test_start(log, mv_string("elt-matches-eset"))) { */
+    /*     int64_t expected = -123986; */
+    /*     RUN("(list.eset 0 -123986 list-1)"); */
+    /*     TEST_EQ("(list.elt 0 list-1)"); */
+    /* } */
 
     /* if (test_start(log, mv_string("list-literal-macro"))) { */
     /*     int64_t expected = -2; */

@@ -18,6 +18,7 @@ String string_f64(float64_t val,  Allocator* a);
 String string_ptr(void*    val, Allocator* a);
 
 String string_hex_u8(uint8_t val, Allocator* a);
+String string_hex_mem(const void* data, size_t memsize, Allocator* a);
 
 String string_char(char val, Allocator* a);
 String string_short(short val, Allocator* a);

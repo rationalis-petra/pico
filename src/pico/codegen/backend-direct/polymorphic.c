@@ -963,8 +963,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         //  6.2 Generate label expressions
         // 7. Backlink all labels.
         
-        //build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-        //data_stack_grow(env, ADDRESS_SIZE);
+        /* build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point); */
+        /* data_stack_grow(env, ADDRESS_SIZE); */
 
         SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
         for (size_t i = 0; i < syn.labels.terms.len; i++) 

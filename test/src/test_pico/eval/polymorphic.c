@@ -1,9 +1,15 @@
+#include <string.h>
+#include "platform/memory/static.h"
+
+#include "pico/stdlib/extra.h"
+
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
+#define TEST_MEM(str) test_toplevel_mem(str, expected, start, sizeof(expected), module, context)
 
 void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
     TestContext context = (TestContext) {
@@ -35,6 +41,23 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
         int64_t expected = 89;
         TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
+    }
+
+    if (test_start(log, mv_string("poly-return-large"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        typedef struct {int64_t x; int64_t y;} Pr;
+
+        Pr expected = (Pr) {.x=127, .y=-75};
+        TEST_EQ("(id (struct [.x 127] [.y -75]))");
+    }
+
+    if (test_start(log, mv_string("poly-internal-return-large"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        RUN("(def id-2 all [A] proc [(x A)] (id x))");
+        typedef struct {int64_t x; int64_t y;} Pr;
+
+        Pr expected = (Pr) {.x=127, .y=-75};
+        TEST_EQ("(id-2 (struct [.x 127] [.y -75]))");
     }
 
     // -------------------------------------------------------------------------
@@ -234,4 +257,29 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         RUN("((all [A] (set ldvar struct [.x 100] [.y -100])) {Unit})");
         TEST_EQ("(use ldvar)");
     }
+
+    // -------------------------------------------------------------------------
+    //
+    //     Combinations known to be odd / problematic in the past
+    //
+    // -------------------------------------------------------------------------
+
+    void* mem = mem_alloc(128, a);
+    Allocator old = get_std_current_allocator();
+    void* start;
+    {
+        Allocator sta = mk_static_allocator(mem, 128);
+        start = mem_alloc(8, &sta);
+    }
+
+    /* if (test_start(log, mv_string("test-poly-call-in-loop"))) { */
+    /*     Allocator sta = mk_static_allocator(mem, 128); */
+    /*     uint64_t expected[] = {0, 1 }; */
+
+    /*     set_std_current_allocator(sta); */
+    /*     TEST_MEM("(let [addr malloc (size-of I64)] (loop [for i from 0 upto 5] (store {U64} addr i)))"); */
+    /* } */
+
+    set_std_current_allocator(old);
+    mem_free(mem, a);
 }

@@ -110,6 +110,8 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
         generate_c_call(memmove, ass, a, point);
     } else  {
         // Note: we are justified here in using Using 8-bit immediate (rref8)
+        // TODO (INVESTIGATE): do we just error if leftover != 0 (stack moves should generally
+        //       work with stack aligned values and therefore sizes)
         size_t leftover = size % 8;
         if (leftover >= 4) {
             build_binary_op(Mov, reg(RAX, sz_32), rref8(RSP, src_stack_offset + (size & ~7), sz_32), ass, a, point);
@@ -127,9 +129,12 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
             leftover -= 1;
         }
 
+        // Note: consider moving a value of size 16 up by 8. If we start at $RSP + 0,
+        // then we move the first stack 'slot' up to overwrite the second. 
         for (size_t i = 0; i < size / 8; i++) {
-            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (i * 8) , sz_64), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, dest_stack_offset + (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
+            size_t idx = (size / 8) - (i + 1);
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, src_stack_offset + (idx * 8) , sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, dest_stack_offset + (idx * 8), sz_64), reg(RAX, sz_64), ass, a, point);
         }
     }
 }
