@@ -36,6 +36,15 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(a A) (x I64)] x) -3 39)");
     }
 
+    if (test_start(log, mv_string("large-static-arguments"))) {
+        RUN("(def Quad Struct [.x I64] [.y U64] [.z I64] [.p I64])");
+        typedef struct {int64_t x; uint64_t y; int64_t z; int64_t p;} Quad;
+
+        Quad expected = (Quad) {.x = -5, .y = 10, .z = -676, .p = -897};
+        TEST_EQ("((all [A] proc [(s Quad)] s) {Unit} (struct Quad [.x -5] [.y 10] [.z -676] [.p -897]))");
+    }
+
+
     if (test_start(log, mv_string("static-return"))) {
         RUN("(def int-id proc [(x I64)] x)");
 
@@ -43,7 +52,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
     }
 
-    if (test_start(log, mv_string("multi-poly-call"))) {
+    if (test_start(log, mv_string("call-multiple-polymorphic-functions-in-sequence"))) {
         RUN("(def id all [A] proc [(x A)] x)");
         RUN("(def sequence all [A] proc [(x A)] (seq (id x) (id x)))");
 

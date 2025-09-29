@@ -331,7 +331,11 @@ void address_start_poly(SymbolArray types, BindingArray vars, AddressEnv* env, A
     new_local->vars = mk_saddr_array(32, a);
     new_local->types = types;
 
-    int64_t arg_offset = 2 * REGISTER_SIZE;
+    // We add 3x the register size to account for:
+    //   - return address
+    //   - R15  (stack base)
+    //   - old RBP
+    int64_t arg_offset = 3 * REGISTER_SIZE;
 
     SAddr padding = (SAddr){ };
     padding.type = SASentinel;
@@ -343,6 +347,9 @@ void address_start_poly(SymbolArray types, BindingArray vars, AddressEnv* env, A
     // This also means that we push args first, then types!
     for (size_t i = vars.len; i > 0; i--) {
         SAddr local;
+        local.symbol = vars.data[i - 1].sym;
+        local.stack_offset = arg_offset;
+
         if (vars.data[i - 1].is_variable) {
             local.type = SAIndexed;
             arg_offset += REGISTER_SIZE;
@@ -350,9 +357,6 @@ void address_start_poly(SymbolArray types, BindingArray vars, AddressEnv* env, A
             local.type = SADirect;
             arg_offset += vars.data[i - 1].size;
         }
-
-        local.symbol = vars.data[i - 1].sym;
-        local.stack_offset = arg_offset;
 
         push_saddr(local, &new_local->vars);
     }
@@ -362,8 +366,8 @@ void address_start_poly(SymbolArray types, BindingArray vars, AddressEnv* env, A
         local.type = SADirect;
 
         local.symbol = types.data[i - 1];
-        arg_offset += REGISTER_SIZE;
         local.stack_offset = arg_offset;
+        arg_offset += REGISTER_SIZE;
 
         push_saddr(local, &new_local->vars);
     }

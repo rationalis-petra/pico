@@ -43,6 +43,11 @@ void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("proc"))) {
+        run_pico_eval_proc_tests(log, module, env, target, a);
+        suite_end(log);
+    }
+
     if (suite_start(log, mv_string("polymorphic"))) {
         run_pico_eval_polymorphic_tests(log, module, env, target, a);
         suite_end(log);
