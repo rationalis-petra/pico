@@ -2199,8 +2199,8 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
                          "mov %3, %%r13    \n"
+                         "mov %2, %%r14    \n"
                          "mov %2, %%r15    \n"
-                         //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
                          // Push output ptr & sizeof (MacroResult), resp
                          "push %5          \n" // output ptr
