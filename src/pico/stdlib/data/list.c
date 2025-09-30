@@ -138,7 +138,6 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  (:right (Syntax:node ar :special new-terms)))\n";
     compile_toplevel(list_macro, module, target, &point, &pi_point, a);
 
-    /*
     // Imperative Interface
     const char *list_push_fn =
         "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
@@ -151,10 +150,9 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
     const char *list_pop_fn =
         "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
         "  [let! old (use lst)]\n"
-        "  (set lst (struct old [.len (- old.len 1)]))\n"
-        "  (elt (- old.len 1) old)\n";
+        "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
+        "  (elt (u64.- old.len 1) old))\n";
     compile_toplevel(list_pop_fn, module, target, &point, &pi_point, a);
-    */
 
     Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
     if (r.type == Err) panic(r.error_message);

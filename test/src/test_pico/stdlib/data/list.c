@@ -43,22 +43,15 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
                 "    elt)");
     }
 
-    // HYPOTHESIS:
-    // The segfault happens on the second loop, specifically the
-    //  wrong local varible (address) is loaded for 'terminal.write-string' 
-    // 1. Managing stack across function calls?
-    // 2. Managing stack in loop in poly?
-    // 3. Somehow, stack getting clobbered?
-    /* if (test_start(log, mv_string("each-print"))) { */
-    /*     Allocator current_old = get_std_current_allocator(); */
-    /*     set_std_current_allocator(arena); */
-    /*     char* expected = "01234"; */
-    /*     RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))"); */
-    /*     TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)"); */
-    /*     set_std_current_allocator(current_old); */
-    /* } */
+    if (test_start(log, mv_string("each-print"))) {
+        Allocator current_old = get_std_current_allocator();
+        set_std_current_allocator(arena);
+        char* expected = "01234";
+        RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))");
+        TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
+        set_std_current_allocator(current_old);
+    }
 
-    /*
     if (test_start(log, mv_string("map-add-1"))) {
         RUN("(def list-2 list.map (proc [x] i64.+ 1 x) list-1)");
 
@@ -83,10 +76,9 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     }
 
     // Free the data associated with the lists generated durin the test
-    */
     RUN("(free list-1.data)");
-    /* RUN("(free list-2.data)"); */
-    /* RUN("(free (use list-3).data)"); */
+    RUN("(free list-2.data)");
+    RUN("(free (use list-3).data)");
 
     release_arena_allocator(arena);
 }
