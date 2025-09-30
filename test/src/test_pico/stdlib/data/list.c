@@ -43,6 +43,12 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
                 "    elt)");
     }
 
+    // HYPOTHESIS:
+    // The segfault happens on the second loop, specifically the
+    //  wrong local varible (address) is loaded for 'terminal.write-string' 
+    // 1. Managing stack across function calls?
+    // 2. Managing stack in loop in poly?
+    // 3. Somehow, stack getting clobbered?
     /* if (test_start(log, mv_string("each-print"))) { */
     /*     Allocator current_old = get_std_current_allocator(); */
     /*     set_std_current_allocator(arena); */

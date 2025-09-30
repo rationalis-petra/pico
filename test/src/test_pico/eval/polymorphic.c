@@ -20,7 +20,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     };
 
-    // Literals
+    // -------------------------------------------------------------------------
+    //
+    //     Functions - function calling and ensuring functions plcae/access 
+    //                 arguments on the stack correctly.
+    //
+    // -------------------------------------------------------------------------
+
     if (test_start(log, mv_string("const-return"))) {
         int64_t expected = -28;
         TEST_EQ("((all [A] -28) {Unit})");
@@ -155,6 +161,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
+
     if (test_start(log, mv_string("labels-simple"))) {
         int64_t expected = 27;
         TEST_EQ("((all [A] (labels 27)) {Unit})");
@@ -174,6 +181,29 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         int64_t expected = 10;
         TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})");
     }
+
+    // TODO: fix the typechecking error here!
+    /* if (test_start(log, mv_string("apply-label-seq"))) { */
+    /*     int64_t expected = -510; */
+    /*     RUN("(def label-seq all [A] proc [x I64] (labels (go-to call-1) [call-1 (go-to call-2)] [call-2 x]))"); */
+    /*     TEST_EQ("(label-seq {Unit} -510)"); */
+    /* } */
+
+    /* if (test_start(log, mv_string("apply-label-seq"))) { */
+    /*     char* expected = "510"; */
+
+    /*     /\* was accessing function 'fn' as -0x18(rbp) then as -0x10(rbp) *\/ */
+    /*     /\* when stepping through code, fn seems to be 40 0x28(rbp) ?? *\/ */
+    /*     RUN("(def label-seq-2 all [A] proc [(fn (Proc [A] Unit)) (x A) (y A)] (labels (go-to call-1) [call-1 (seq (fn x) (go-to call-2))] [call-2 (fn y)]))"); */
+    /*     TEST_STDOUT("(label-seq-2 (proc [x] terminal.write-string (i64.to-string x)) 5 10)"); */
+    /* } */
+
+
+    /* if (test_start(log, mv_string("apply-label"))) { */
+    /*     int64_t expected = 0; */
+    /*     RUN("(def apply all [A] proc [(fn (Proc [A A] A)) (x A) (y A)] (lables (go-to call-1 x) [call-1 [a] (go-to call-2 (fn a y))] [call-2 [a] (fn a x)]))"); */
+    /*     TEST_EQ("(apply i64.+ -5 10)"); */
+    /* } */
 
     // -----------------------------------------------------
     // 
@@ -215,27 +245,20 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     // -------------------------------------------------------------------------
     //
-    //     Labels
-    //
-    // -------------------------------------------------------------------------
-
-
-
-    /* if (test_start(log, mv_string("labels-simple"))) { */
-    /*     int8_t expected = 27; */
-    /*     TEST_EQ("(labels 27)"); */
-    /* } */
-
-    // -------------------------------------------------------------------------
-    //
     //     Funcall - calling functions from within polymorphic code
     //
     // -------------------------------------------------------------------------
 
-
     if (test_start(log, mv_string("apply"))) {
         int64_t expected = 5;
-        TEST_EQ("((all [A] proc [(fn (Proc [A A] A)) (x A) (y A)] (fn x y)) i64.+ -5 10)");
+        RUN("(def apply all [A] proc [(fn (Proc [A A] A)) (x A) (y A)] fn x y)");
+        TEST_EQ("(apply i64.+ -5 10)");
+    }
+
+    if (test_start(log, mv_string("apply-handle-result"))) {
+        int64_t expected = 5;
+        RUN("(def apply all [A] proc [(fn (Proc [A A] A)) (x A) (y A)] (let [out fn x y] out))");
+        TEST_EQ("(apply i64.+ -5 10)");
     }
 
     if (test_start(log, mv_string("apply-poly-poly"))) {
