@@ -399,7 +399,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 data_stack_grow(env, ADDRESS_SIZE);
             } else {
                 // Regular move up the data-stack
-                // TODO (BUG): actually move me up!!
+                size_t out_sz = pi_stack_size_of(*syn.ptype);
+                generate_stack_move(args_size, 0, out_sz, ass, a, point);
                 build_binary_op(Add, reg(RSP, sz_64), imm8(args_size), ass, a, point);
                 data_stack_grow(env, pi_stack_size_of(*syn.ptype));
             }

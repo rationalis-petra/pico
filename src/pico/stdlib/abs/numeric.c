@@ -36,7 +36,6 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         panic(point.error_message);
     }
 
-    /*
     const char* num_trait = 
         "(def Num Trait [A]"
         "  [.zero A]"
@@ -47,10 +46,11 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ Proc [A A] A])\n";
     compile_toplevel(num_trait, module, target, &point, &pi_point, a);
 
-    const char* add_fn = 
-        "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)";
-    compile_toplevel(add_fn, module, target, &point, &pi_point, a);
+    /* const char* add_fn =  */
+    /*     "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)"; */
+    /* compile_toplevel(add_fn, module, target, &point, &pi_point, a); */
 
+    /*
     const char* sub_fn = 
         "(def - all [A] proc {(n (Num A))} [(x A) (y A)] n.- x y)";
     compile_toplevel(sub_fn, module, target, &point, &pi_point, a);

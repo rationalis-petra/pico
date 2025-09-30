@@ -267,6 +267,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(apply i64.+ -5 10)");
     }
 
+    if (test_start(log, mv_string("apply-known-val"))) {
+        int64_t expected = 193;
+        RUN("(def apply all [A] proc [(fn (Proc [A A] I64)) (x A) (y A)] (fn x y))");
+        TEST_EQ("(apply i64.+ -5 198)");
+    }
+
     if (test_start(log, mv_string("apply-poly-poly"))) {
         RUN("(def id all [A] proc [(x A)] x)");
         RUN("(def id2 all [A] proc [(x A)] (id x))");
