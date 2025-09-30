@@ -38,7 +38,6 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(const-ma {I64 U64})");
     }
 
-
     if (test_start(log, mv_string("static-return"))) {
         int64_t expected = 39;
         TEST_EQ("((all [A] proc [(x I64)] x) {Unit} 39)");

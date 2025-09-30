@@ -110,12 +110,6 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // RSP-8   | load address
     // RSP     | return address 
 
-    // Store size in R10 
-    build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 3*ADDRESS_SIZE, sz_64), ass, a, point);
-
-    build_binary_op(SHR, reg(RDX, sz_64), imm8(28), ass, a, point);
-    build_binary_op(And, reg(RDX, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
     // Stash return address in RAX
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
