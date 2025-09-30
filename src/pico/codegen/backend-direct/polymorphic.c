@@ -34,7 +34,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
     BindingArray vars;
     Syntax body;
 
-    size_t args_size = 0;
+    size_t args_size = types.len * REGISTER_SIZE;
     if (syn.type == SProcedure) {
         vars = mk_binding_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
@@ -128,9 +128,9 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
         // destination
         // return val store at (RET + FROM + RBP + R15 + ARGS = 8 + 8 + 8 + 8 ARGS = 0x20 + args)
         // return address = above - 0x8
-        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(R14, sz_64), ass, a, point);
-        build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x18 + args_size), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(R14, sz_64), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
     } else {
         // Return on Data Stack
         // this is much like the steps above, where we copy 
@@ -143,11 +143,11 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 
         // Now, copy the return address into a (safe) register
         build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
-        generate_stack_move(0x20 + args_size, 0, ret_sz, ass, a, point);
+        generate_stack_move(0x18 + args_size, 0, ret_sz, ass, a, point);
 
         // Then the return address
-        build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x18 + args_size), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
     }
 
     build_nullary_op(Ret, ass, a, point);

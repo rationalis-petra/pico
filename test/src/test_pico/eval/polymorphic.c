@@ -32,6 +32,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] -28) {Unit})");
     }
 
+    if (test_start(log, mv_string("multiple-type-args"))) {
+        RUN("(def const-ma all [A B] 7861)");
+        int64_t expected = 7861;
+        TEST_EQ("(const-ma {I64 U64})");
+    }
+
+
     if (test_start(log, mv_string("static-return"))) {
         int64_t expected = 39;
         TEST_EQ("((all [A] proc [(x I64)] x) {Unit} 39)");
