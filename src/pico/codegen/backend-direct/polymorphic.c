@@ -12,6 +12,8 @@
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
 
+#define STACK_ALIGN 8
+
 // Implementation details
 void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
 
@@ -610,10 +612,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             //
             // -----------------------------------------------------------------
 
-            size_t out_sz = ADDRESS_SIZE;
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
-            data_stack_grow(env, out_sz);
-
             // Second, generate the structure/instance object
             generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
             // Both instances (passed by reference) and structs (on variable
@@ -622,14 +620,18 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             // From this point, behaviour depends on whether we are projecting from
             // a structure or from an instance
-            bool field_is_var = false;
+            bool field_is_var = is_variable_in(syn.ptype, env);
+            bool offset_is_var = false;
             for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                field_is_var |= (is_variable_in(source_type->instance.fields.data[i].val, env));
+                offset_is_var |= is_variable_in(source_type->instance.fields.data[i].val, env);
+
+                // Note: we only break *after* checking the field, as the offset
+                //       of a field is dependent on its' alignment
                 if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field) == 0)
                     break;
             }
 
-            if (!field_is_var) {
+            if (!field_is_var && !offset_is_var) {
                 // Pop the pointer to the instance from the stack - store in RSI
                 data_stack_shrink(env, src_sz);
                 build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
@@ -644,22 +646,51 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 }
                 build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
 
-                generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
+                size_t val_sz = pi_size_of(*syn.ptype);
+                size_t val_stack_sz = pi_stack_align(val_sz);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(val_stack_sz), ass, a, point);
+                data_stack_grow(env, val_stack_sz);
+
+                generate_monomorphic_copy(RSP, RSI, val_sz, ass, a, point);
+            } else if (!field_is_var && offset_is_var) {
+                // Now, calculate offset for field 
+                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+
+                // Pop the pointer to the instance from the stack - store in RSI
+                data_stack_shrink(env, src_sz);
+                build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RSI, sz_64), reg(RDI, sz_64), ass, a, point);
+
+                size_t val_sz = pi_size_of(*syn.ptype);
+                size_t val_stack_sz = pi_stack_align(val_sz);
+                build_binary_op(Sub, reg(RSP, sz_64), imm32(val_stack_sz), ass, a, point);
+                data_stack_grow(env, val_stack_sz);
+
+                generate_monomorphic_copy(RSP, RSI, val_sz, ass, a, point);
             } else {
-                // Size of dest
+                // Note: stack remains unchanged; as we popped of instance, but
+                //       dynamic stack val ptr
+
+                // Generate field offset and size. 
+                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+                build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
                 generate_size_of(RAX, syn.ptype, env, ass, a, point);
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
-                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R8, sz_64), imm32(STACK_ALIGN), ass, a, point);
+                generate_align_to(R9, R8, ass, a, point);
 
-                data_stack_shrink(env, src_sz);
                 build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
 
                 // source
                 build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
                 build_binary_op(Add, reg(RSI, sz_64), reg(RDI, sz_64), ass, a, point);
 
                 build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
                 generate_poly_move(reg(R14, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
             }
         }
