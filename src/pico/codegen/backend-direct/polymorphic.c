@@ -494,15 +494,65 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break; 
     }
     case SStructure: {
+        PiType* struct_type = strip_type(syn.ptype);
         if (is_variable_in(syn.ptype, env)) {
-            panic(mv_string("Variable Struct not implemented."));
+            // Reserve space on the stack for the structure to go
+            if (syn.structure.base && syn.structure.base->type != SCheckedType) {
+                generate_polymorphic_i(*syn.structure.base, env, target, links, a, point);
+            } else {
+                generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+                build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+                build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+                data_stack_grow(env, ADDRESS_SIZE);
+            }
+            int64_t head = get_stack_head(env);
+
+            // Generate code for each of the fields (in order)
+            for (size_t i = 0; i < struct_type->structure.fields.len; i++)
+                generate_polymorphic_i(*(Syntax *)syn.structure.fields.data[i].val, env, target, links, a, point);
+
+            // Copy the field contents into the final struct.
+            int64_t source_pos = head - get_stack_head(env);
+            build_unary_op(Push, imm8(0), ass, a, point);
+            for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
+                Symbol field = struct_type->structure.fields.data[i].key;
+                PiType* ty = struct_type->structure.fields.data[i].val;
+
+                size_t source_offset = 0;
+                for (size_t j = 0; j < syn.structure.fields.len; j++) {
+                    if (symbol_eq(field, syn.structure.fields.data[j].key) == 0) break;
+                    PiType* field_ty = ((Syntax*)syn.structure.fields.data[j].val)->ptype;
+                    source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
+                }
+
+                // Update destination with alignment
+                generate_align_of(R10, ty, env, ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                generate_align_to(R9, R10, ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+
+                generate_size_of(RAX, ty, env, ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+                // Copy to dest
+                build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, source_pos, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RSI, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                generate_poly_move(reg(RSI, sz_64), rref8(RSP, source_offset, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                // Add to size
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+            }
+            // Now, copy up the stack
+            build_binary_op(Add, reg(RSP, sz_64), imm8(source_pos), ass, a, point);
+            data_stack_shrink(env, source_pos);
+
         } else {
             // The following code is copied exactly from the 'regular' codegen 
             // ------------
             // For structures, we have to be careful - this is because the order in
             // which arguments are evaluated is not necessarily the order in which
             // arguments are inserted into the structure.
-            PiType* struct_type = strip_type(syn.ptype);
 
             // Step 1: Make room on the stack for our struct (OR, just generate the
             // base struct)
