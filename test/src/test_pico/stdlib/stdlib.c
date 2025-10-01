@@ -22,6 +22,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
 
@@ -73,6 +74,13 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("abs"))) {
+        if (suite_start(log, mv_string("numeric"))) {
+            run_pico_stdlib_abs_numeric_tests(log, module, env, target, a);
+            suite_end(log);
+        }
+        suite_end(log);
+    }
     if (suite_start(log, mv_string("data"))) {
     /* TODO_NEW_CC: re-enable me!
         if (suite_start(log, mv_string("pair"))) {

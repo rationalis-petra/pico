@@ -17,6 +17,9 @@ void run_pico_stdlib_meta_tests(TestLog* log, Module* module, Environment* env, 
 void run_pico_stdlib_meta_refl_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_meta_gen_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 
+void run_pico_stdlib_abs_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
+void run_pico_stdlib_abs_numeric_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
+
 void run_pico_stdlib_data_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_data_list_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_data_pair_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);

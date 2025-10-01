@@ -163,7 +163,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 
             // Get all implicits
             PtrArray instances = get_defined_instances(importee, a);
-            for (size_t j = 0; j < instances.len; j++ ) {
+            for (size_t j = 0; j < instances.len; j++) {
                 InstanceSrc* instance = instances.data[j];
 
                 PtrArray* arr = NULL;
@@ -228,6 +228,11 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 void delete_env(Environment* env, Allocator* a) {
     sdelete_name_ptr_amap(env->symbol_origins);
     for (size_t i = 0; i < env->instances.len; i++) {
+        PtrArray arr = *(PtrArray*)env->instances.data[i].val;
+        for (size_t j = 0; j < arr.len; j++) {
+            mem_free(arr.data[j], a);
+        }
+        sdelete_ptr_array(arr);
         mem_free(env->instances.data[i].val, &env->instances.gpa);
     };
     sdelete_name_ptr_amap(env->instances);

@@ -1965,10 +1965,7 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     case TTrait:
         panic(mv_string("not implemented is_variable_for for trait"));
     case TTraitInstance:
-        for (size_t i = 0; i < ty->instance.fields.len; i++) {
-            if (is_variable_for_recur(ty->instance.fields.data[i].val, vars, shadowed))
-                return true;
-        }
+        // Traits are passed around by reference, therefore have constant size.
         return false;
     case TCType:
         return false;

@@ -19,6 +19,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 void generate_pi_type(PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_to(Regname sz, Regname align, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+void generate_offset_of(Regname dest, Symbol field, SymPtrAMap fields, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
@@ -224,7 +225,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         case AGlobal: {
             PiType indistinct_type = *strip_type(syn.ptype);
 
-            // Procedures (inc. polymorphic procedures), Types and types are passed by reference (i.e. they are addresses). 
+            // Procedures (inc. polymorphic procedures), Types are passed by reference (i.e. they are addresses). 
             // Dynamic Vars and instances pby value, but are guaranteed to take up 64 bits.
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
                 || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
@@ -405,7 +406,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 data_stack_grow(env, pi_stack_size_of(*syn.ptype));
             }
         }
-
         break;
     }
     case SAllApplication: {
@@ -568,15 +568,17 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SProjector: {
-        if (is_variable_in(syn.projector.val->ptype, env)) {
-            panic(mv_string("Variable Struct projection not implemented."));
-        } else {
-            PiType* source_type = strip_type(syn.projector.val->ptype);
+        PiType* source_type = strip_type(syn.projector.val->ptype);
+        if (source_type->sort == TStruct) {
+            // -----------------------------------------------------------------
+            //
+            //                               STRUCTURE
+            //
+            // -----------------------------------------------------------------
 
-            if (source_type->sort == TStruct) {
-                // TODO: check that the projector handles stack alignment correctly
-                // First, allocate space on the stack for the value
-                PiType* source_type = strip_type(syn.projector.val->ptype);
+            if (is_variable_in(syn.projector.val->ptype, env)) {
+                panic(mv_string("not (yet) projecting out of variable structs."));
+            } else {
                 size_t out_sz = pi_stack_size_of(*syn.ptype);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
                 data_stack_grow(env, out_sz);
@@ -584,44 +586,81 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 // Second, generate the structure/instance object
                 generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
                 size_t src_sz = pi_stack_size_of(*source_type);
-
-                // From this point, behaviour depends on whether we are projecting from
-                // a structure or from an instance
-                if (source_type->sort == TStruct) {
-                    // Now, copy the structure to the destination
-                    // for this, we need the struct size + offset of field in the struct
-                    size_t offset = 0;
-                    for (size_t i = 0; i < source_type->structure.fields.len; i++) {
-                        size_t align = pi_align_of(*(PiType*)source_type->structure.fields.data[i].val);
-                        offset = pi_size_align(offset, align);
-                        if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
-                            break;
-                        offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
-                    }
-
-                    generate_stack_move(src_sz, offset, out_sz, ass, a, point);
-                    // Now, remove the original struct from the stack
-                    build_binary_op(Add, reg(RSP, sz_64), imm32(src_sz), ass, a, point);
-
-                    data_stack_shrink(env, src_sz);
-                } else {
-                    // Pop the pointer to the instance from the stack - store in RSI
-                    data_stack_shrink(env, src_sz);
-                    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
-
-                    // Now, calculate offset for field 
-                    size_t offset = 0;
-                    for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                        offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
-                        if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
-                            break;
-                        offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
-                    }
-                    build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
-
-                    // TODO (check if replace with stack copy)
-                    generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
+                // Now, copy the structure to the destination
+                // for this, we need the struct size + offset of field in the struct
+                size_t offset = 0;
+                for (size_t i = 0; i < source_type->structure.fields.len; i++) {
+                    size_t align = pi_align_of(*(PiType*)source_type->structure.fields.data[i].val);
+                    offset = pi_size_align(offset, align);
+                    if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
+                        break;
+                    offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
                 }
+
+                generate_stack_move(src_sz, offset, out_sz, ass, a, point);
+                // Now, remove the original struct from the stack
+                build_binary_op(Add, reg(RSP, sz_64), imm32(src_sz), ass, a, point);
+
+                data_stack_shrink(env, src_sz);
+            } 
+        } else {
+            // -----------------------------------------------------------------
+            //
+            //                               INSTANCE
+            //
+            // -----------------------------------------------------------------
+
+            size_t out_sz = ADDRESS_SIZE;
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
+            data_stack_grow(env, out_sz);
+
+            // Second, generate the structure/instance object
+            generate_polymorphic_i(*syn.projector.val, env, target, links, a, point);
+            // Both instances (passed by reference) and structs (on variable
+            // stack) will occupy an address size on the stack.
+            size_t src_sz = ADDRESS_SIZE;
+
+            // From this point, behaviour depends on whether we are projecting from
+            // a structure or from an instance
+            bool field_is_var = false;
+            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                field_is_var |= (is_variable_in(source_type->instance.fields.data[i].val, env));
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field) == 0)
+                    break;
+            }
+
+            if (!field_is_var) {
+                // Pop the pointer to the instance from the stack - store in RSI
+                data_stack_shrink(env, src_sz);
+                build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+
+                // Now, calculate offset for field 
+                size_t offset = 0;
+                for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                    offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
+                    if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                        break;
+                    offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
+                }
+                build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
+
+                generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
+            } else {
+                // Size of dest
+                generate_size_of(RAX, syn.ptype, env, ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+
+                data_stack_shrink(env, src_sz);
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+                // source
+                build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RSI, sz_64), reg(RDI, sz_64), ass, a, point);
+
+                build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+                generate_poly_move(reg(R14, sz_64), reg(RSI, sz_64), reg(RAX, sz_64), ass, a, point);
             }
         }
         break;
@@ -1412,6 +1451,28 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
         }
         }
     }
+}
+
+void generate_offset_of(Regname dest, Symbol field, SymPtrAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
+    build_unary_op(Push, imm8(0), ass, a, point);
+    for (size_t i = 0; i < fields.len; i++) {
+        if (i != 0) {
+            // Align to the new field; can skip if size = 0;
+            generate_align_of(R8, (PiType*)fields.data[i].val, env, ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            generate_align_to(R9, R8, ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+        }
+
+        if (symbol_eq(fields.data[i].key, field))
+            break;
+
+        // Push the size into RAX; this is then added to the value at
+        // the top of the stack  
+        generate_size_of(RAX, (PiType*)fields.data[i].val, env, ass, a, point);
+        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+    }
+    build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
 }
 
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
