@@ -38,25 +38,25 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(pair.pair 1432 -120938)");
     }
 
-    /* typedef struct { */
-    /*     int32_t x; */
-    /*     int32_t y; */
-    /* } Point32; */
-    /* if (test_start(log, mv_string("pair-small-size"))) { */
-    /*     Point32 expected = (Point32) {.x = 1432, .y = -960}; */
-    /*     TEST_EQ("(pair.pair (is 1432 I32) (is -960 I32))"); */
-    /* } */
+    typedef struct {
+        int32_t x;
+        int32_t y;
+    } Point32;
+    if (test_start(log, mv_string("pair-small-size"))) {
+        Point32 expected = (Point32) {.x = 1432, .y = -960};
+        TEST_EQ("(pair.pair (is 1432 I32) (is -960 I32))");
+    }
 
-    /* typedef struct { */
-    /*     uint64_t tag; */
-    /*     int32_t x; */
-    /*     int32_t y; */
-    /* } EnumPoint; */
+    typedef struct {
+        uint64_t tag;
+        int32_t x;
+        int32_t y;
+    } EnumPoint;
 
-    /* if (test_start(log, mv_string("pair-in-enum"))) { */
-    /*     EnumPoint expected = (EnumPoint) {.tag = 0, .x = 1432, .y = -120938}; */
-    /*     TEST_EQ("(:some (pair.pair {I32 I32} 1432 -120938))"); */
-    /* } */
+    if (test_start(log, mv_string("pair-in-enum"))) {
+        EnumPoint expected = (EnumPoint) {.tag = 0, .x = 1432, .y = -120938};
+        TEST_EQ("(:some (pair.pair {I32 I32} 1432 -120938))");
+    }
 
     release_arena_allocator(arena);
 }

@@ -65,7 +65,6 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     /*     TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)"); */
     /* } */
 
-    /* TODO_NEW_CC: re-add these tests
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         // TODO (BUG): this leaks - set current allocator?
         Allocator current_old = get_std_current_allocator();
@@ -132,7 +131,6 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
         TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);
     }
-    */
 
     delete_env(env, a);
     delete_module(module);

@@ -523,17 +523,13 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 PiType* ty = struct_type->structure.fields.data[i].val;
 
                 size_t source_offset = 2 * ADDRESS_SIZE;
+                bool field_present = false;
                 for (size_t j = syn.structure.fields.len; j > 0; j--) {
                     size_t idx = j - 1;
-                    if (symbol_eq(field, syn.structure.fields.data[idx].key)) break;
+                    if (symbol_eq(field, syn.structure.fields.data[idx].key)) { field_present = true; break; }
                     PiType* field_ty = ((Syntax*)syn.structure.fields.data[idx].val)->ptype;
                     source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
                 }
-                /* for (size_t j = 0; j < syn.structure.fields.len; j++) { */
-                /*     if (symbol_eq(field, syn.structure.fields.data[j].key)) break; */
-                /*     PiType* field_ty = ((Syntax*)syn.structure.fields.data[j].val)->ptype; */
-                /*     source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty); */
-                /* } */
 
                 // Update destination with alignment
                 generate_align_of(R10, ty, env, ass, a, point);
@@ -542,17 +538,19 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
                 generate_size_of(RAX, ty, env, ass, a, point);
-                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+                if (field_present) {
+                    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
-                // Copy to dest
-                build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, dest_pos, sz_64), ass, a, point);
-                build_binary_op(Add, reg(RSI, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
-                generate_poly_move(reg(RSI, sz_64), rref8(RSP, source_offset, sz_64), reg(RAX, sz_64), ass, a, point);
+                    // Copy to dest
+                    build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, dest_pos, sz_64), ass, a, point);
+                    build_binary_op(Add, reg(RSI, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+                    generate_poly_move(reg(RSI, sz_64), rref8(RSP, source_offset, sz_64), reg(RAX, sz_64), ass, a, point);
 
-                // Add to size
-                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                    // Add to size
+                    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                }
 
-                // Align size to stack
+                // Add field size to offset
                 build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
             }
             // Now, copy up the stack, restore stack head
