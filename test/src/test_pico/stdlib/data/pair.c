@@ -33,10 +33,10 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(pair-fn -987 935)");
     }
 
-    /* if (test_start(log, mv_string("pair-poly-fn"))) { */
-    /*     Point expected = (Point) {.x = 1432, .y = -120938}; */
-    /*     TEST_EQ("(pair.pair 1432 -120938)"); */
-    /* } */
+    if (test_start(log, mv_string("pair-poly-fn"))) {
+        Point expected = (Point) {.x = 1432, .y = -120938};
+        TEST_EQ("(pair.pair 1432 -120938)");
+    }
 
     /* typedef struct { */
     /*     int32_t x; */

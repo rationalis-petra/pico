@@ -512,18 +512,28 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 generate_polymorphic_i(*(Syntax *)syn.structure.fields.data[i].val, env, target, links, a, point);
 
             // Copy the field contents into the final struct.
-            int64_t source_pos = head - get_stack_head(env);
+            // ----------------------------------------------
+            // Precompute dest_pos - the position in the stack where the
+            // variable pointer to the output struct is = difference between
+            // here & head + offset stored on stack + field size storedon stack.
+            int64_t dest_pos = 2 * ADDRESS_SIZE + (head - get_stack_head(env));
             build_unary_op(Push, imm8(0), ass, a, point);
             for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                 Symbol field = struct_type->structure.fields.data[i].key;
                 PiType* ty = struct_type->structure.fields.data[i].val;
 
-                size_t source_offset = 0;
-                for (size_t j = 0; j < syn.structure.fields.len; j++) {
-                    if (symbol_eq(field, syn.structure.fields.data[j].key) == 0) break;
-                    PiType* field_ty = ((Syntax*)syn.structure.fields.data[j].val)->ptype;
+                size_t source_offset = 2 * ADDRESS_SIZE;
+                for (size_t j = syn.structure.fields.len; j > 0; j--) {
+                    size_t idx = j - 1;
+                    if (symbol_eq(field, syn.structure.fields.data[idx].key)) break;
+                    PiType* field_ty = ((Syntax*)syn.structure.fields.data[idx].val)->ptype;
                     source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
                 }
+                /* for (size_t j = 0; j < syn.structure.fields.len; j++) { */
+                /*     if (symbol_eq(field, syn.structure.fields.data[j].key)) break; */
+                /*     PiType* field_ty = ((Syntax*)syn.structure.fields.data[j].val)->ptype; */
+                /*     source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty); */
+                /* } */
 
                 // Update destination with alignment
                 generate_align_of(R10, ty, env, ass, a, point);
@@ -535,17 +545,21 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
                 // Copy to dest
-                build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, source_pos, sz_64), ass, a, point);
-                build_binary_op(Add, reg(RSI, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, dest_pos, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RSI, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
                 generate_poly_move(reg(RSI, sz_64), rref8(RSP, source_offset, sz_64), reg(RAX, sz_64), ass, a, point);
 
                 // Add to size
                 build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+                // Align size to stack
                 build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
             }
-            // Now, copy up the stack
-            build_binary_op(Add, reg(RSP, sz_64), imm8(source_pos), ass, a, point);
-            data_stack_shrink(env, source_pos);
+            // Now, copy up the stack, restore stack head
+            int64_t tmps_size = head - get_stack_head(env);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(tmps_size + ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            data_stack_shrink(env, tmps_size);
 
         } else {
             // The following code is copied exactly from the 'regular' codegen 
@@ -677,7 +691,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
                 // Note: we only break *after* checking the field, as the offset
                 //       of a field is dependent on its' alignment
-                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field) == 0)
+                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
                     break;
             }
 
