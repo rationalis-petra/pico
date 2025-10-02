@@ -249,6 +249,40 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] nas.z) {Unit})");
     }
 
+    // -----------------------------------------------------
+    // 
+    //      Variant
+    // 
+    // -----------------------------------------------------
+
+    if (test_start(log, mv_string("static-variant-1"))) {
+        RUN("(def EU8I64 Enum [:small U8] [:large I64])");
+        typedef struct {uint64_t tag; union {uint8_t sml; int64_t large;};} Eu8i64;
+        Eu8i64 expected = {.tag = 0, .sml = 25};
+        TEST_EQ("((all [A] EU8I64:small 25) {Unit})");
+    }
+
+    if (test_start(log, mv_string("static-variant-2"))) {
+        RUN("(def EU8I64 Enum [:small U8] [:large I64])");
+        typedef struct {uint64_t tag; union {uint8_t sml; int64_t large;};} Eu8i64;
+        Eu8i64 expected = {.tag = 1, .large = -27847};
+        TEST_EQ("((all [A] EU8I64:large -27847) {Unit})");
+    }
+
+    if (test_start(log, mv_string("variable-variant-1"))) {
+        RUN("(def Either Family [A B] Enum [:lhs A] [:rhs B])");
+        typedef struct {uint64_t tag; union {uint8_t sml; int64_t large;};} Eu8i64;
+        Eu8i64 expected = {.tag = 0, .sml = 98};
+        TEST_EQ("((all [A B] proc [(x A)] (Either A B):lhs x) {U8 I64} 98)");
+    }
+
+    if (test_start(log, mv_string("variable-variant-2"))) {
+        RUN("(def Either Family [A B] Enum [:lhs A] [:rhs B])");
+        typedef struct {uint64_t tag; union {uint8_t sml; int64_t large;};} Eu8i64;
+        Eu8i64 expected = {.tag = 1, .large = -879};
+        TEST_EQ("((all [A B] proc [(y B)] (Either A B):rhs y) {U8 I64} -879)");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Funcall - calling functions from within polymorphic code

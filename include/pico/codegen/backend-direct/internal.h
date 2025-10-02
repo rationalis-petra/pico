@@ -15,7 +15,6 @@
 #define INDEX_REGISTER R15
 
 #define DVARS_REGISTER R13
-//#define DXMEM_REGISTER R13
 
 /* Utility functions shared across code generation */
 
@@ -36,6 +35,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
+
+size_t calc_variant_size(PtrArray* types);
+size_t calc_variant_stack_size(PtrArray* types);
 
 // Codegen utilities - generate specific things
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);

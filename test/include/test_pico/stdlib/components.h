@@ -23,6 +23,7 @@ void run_pico_stdlib_abs_numeric_tests(TestLog* log, Module* module, Environment
 void run_pico_stdlib_data_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_data_list_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_data_pair_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
+void run_pico_stdlib_data_either_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 void run_pico_stdlib_data_ptr_tests(TestLog* log, Module* module, Environment* env, Target target, Allocator* a);
 
 #endif

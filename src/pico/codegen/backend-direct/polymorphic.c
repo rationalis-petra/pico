@@ -771,71 +771,121 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SVariant: {
-        not_implemented(mv_string("Polymorphic variant"));
-        // TODO (FEAT BUG): ensure this will correctly handle non-stack aligned
-        // enum tags, members and overall enums gracefully.
-        const size_t tag_size = sizeof(uint64_t);
-        PiType* enum_type = strip_type(syn.variant.enum_type->type_val);
-        generate_stack_size_of(RCX, enum_type, env, ass, a, point);
+        if (is_variable_in(syn.ptype, env)) {
+            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+            build_binary_op(Sub, reg(R14, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
+            int64_t head = get_stack_head(env);
 
-        // Make space to fit the (final) variant
-        build_binary_op(Sub, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
+            // Set the tag
+            build_binary_op(Mov, rref8(R14, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
 
-        // Set the tag
-        build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
+            // Generate each argument
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                generate_polymorphic_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
+            }
 
-        // Generate each argument
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            generate_polymorphic_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
-        }
+            // Now, copy arguments up into the variant.
+            // ----------------------------------------
 
-        // Generate the variant stack size
-        generate_variant_stack_size_of(RCX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
+            // push the dest offset (starts ad address size) 
+            build_unary_op(Push, imm8(ADDRESS_SIZE), ass, a, point);
+            int64_t dest_pos = (head - get_stack_head(env));
 
-        generate_variant_size_of(RAX, enum_type->enumeration.variants.data[syn.variant.tag].val, env, ass, a, point);
+            size_t source_offset = 0;
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                PiType* field_ty = ((Syntax*)syn.variant.args.data[i])->ptype;
+                // We now have both the source_offset and dest_offset. These are both
+                // relative to the 'bottom' of their respective structures.
+                // Therefore, we now need to find their offsets relative to the `top'
+                // of the stack.
+                if (is_variable_in(field_ty, env)) {
+                    // Update destination with alignment
+                    generate_align_of(R10, field_ty, env, ass, a, point);
+                    build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                    generate_align_to(R9, R10, ass, a, point);
+                    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
+                    generate_size_of(RAX, field_ty, env, ass, a, point);
+                    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
-        // dest_stack_offset = RAX = variant_size + variant_stack_size - tag_size
-        build_binary_op(Add, reg(RAX,sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
-        build_binary_op(Sub, reg(RAX,sz_64), imm8(tag_size), ass, a, point);
+                    // Copy to dest
+                    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, dest_pos + (2*ADDRESS_SIZE), sz_64), ass, a, point);
+                    build_binary_op(Add, reg(RDI, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+                    generate_poly_move(reg(RDI, sz_64), rref8(RSP, source_offset + 2*ADDRESS_SIZE, sz_64), reg(RAX, sz_64), ass, a, point);
 
+                    // Add field size to dest offset
+                    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                    build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
 
-        // Index Stack shape
-        // variant size
-        // dest offset
-        // src offset
+                    source_offset += ADDRESS_SIZE;
+                } else {
+                    size_t field_size = pi_size_of(*field_ty);
+                    build_binary_op(Mov, reg(R9, sz_64), imm32(pi_align_of(*field_ty)), ass, a, point);
+                    build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                    generate_align_to(R9, R10, ass, a, point);
+                    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
-        // Now, move them into the space allocated in reverse order
-        PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
+                    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, dest_pos + ADDRESS_SIZE, sz_64), ass,a, point);
+                    build_binary_op(Add, reg(RDI, sz_64), rref8(RSP, 0, sz_64), ass,a, point);
 
-        // Note, as we are reversing the order, we start at the top of the stack (last enum element),
-        // which gets copied to the end of the enum
-        for (size_t i = 0; i < syn.variant.args.len; i++) {
-            // We now have both the source_offset and dest_offset. These are both
-            // relative to the 'bottom' of their respective structures.
-            // Therefore, we now need to find their offsets relative to the `top'
-            // of the stack.
+                    build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass,a, point);
+                    generate_monomorphic_copy(RDI, RSI, field_size, ass, a, point);
+
+                    build_binary_op(Add, rref8(RSP, 0, sz_64), imm32(field_size), ass, a, point);
+                    source_offset += pi_stack_align(field_size);
+                }
+            }
+            data_stack_shrink(env, dest_pos);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(dest_pos + ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+
+        } else {
+            const size_t tag_size = sizeof(uint64_t);
+            PiType* enum_type = strip_type(syn.ptype);
+            size_t enum_size = pi_size_of(*enum_type);
+            size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+            size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
+
+            // Make space to fit the (final) variant
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
+            data_stack_grow(env, enum_size);
+
+            // Set the tag
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
+
+            // Generate each argument
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                generate_polymorphic_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
+            }
+
+            // Now, move them into the space allocated in reverse order
+            PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
+
+            // Note, as we are reversing the order, we start at the top of the stack (last enum element),
+            // which gets copied to the end of the enum
+            size_t src_stack_offset = 0;
+            size_t dest_stack_offset = variant_size + variant_stack_size - tag_size;
+            for (size_t i = 0; i < syn.variant.args.len; i++) {
+                // We now have both the source_offset and dest_offset. These are both
+                // relative to the 'bottom' of their respective structures.
+                // Therefore, we now need to find their offsets relative to the `top'
+                // of the stack.
             
-            generate_size_of(RAX,args.data[syn.variant.args.len - (i + 1)], env, ass, a, point);
-            build_binary_op(Sub, rref8(INDEX_REGISTER, -0x8, sz_64), reg(RAX, sz_64), ass, a, point);
+                size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
 
-            // RSI = dest offset, R9 = src offset
-            build_binary_op(Mov, reg(RSI, sz_64), rref8(INDEX_REGISTER, -0x8, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(R9, sz_64), rref8(INDEX_REGISTER, 0, sz_64), ass, a, point);
+                dest_stack_offset -= field_size;
+                generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
+                src_stack_offset += pi_stack_align(field_size);
+            }
 
-            generate_poly_stack_move(reg(RSI, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+            // Remove the space occupied by the temporary values 
+            build_binary_op(Add, reg(RSP, sz_64), imm32(src_stack_offset), ass, a, point);
 
-            //src_stack_offset += stack_size_of(field_size);
-            generate_stack_size_of(RAX,args.data[syn.variant.args.len - (i + 1)], env, ass, a, point);
-            build_binary_op(Add, rref8(INDEX_REGISTER, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+            // Grow the stack to account for the difference in enum & variant sizes
+            data_stack_shrink(env, variant_stack_size - tag_size);
         }
-
-        build_binary_op(Sub, reg(INDEX_REGISTER, sz_64), imm32(3 * ADDRESS_SIZE), ass, a, point);
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(INDEX_REGISTER, 8, sz_64), ass, a, point);
-        build_binary_op(Sub, reg(RCX, sz_64), imm32(tag_size), ass, a, point);
-
-        // Remove the space occupied by the temporary values 
-        build_binary_op(Add, reg(RSP, sz_64), reg(RCX, sz_64), ass, a, point);
         break;
     }
     case SMatch: {
@@ -1591,7 +1641,7 @@ void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, A
     // Push size onto stack
     build_unary_op(Push, imm32(total), ass, a, point);
     for (size_t i = 0; i < types->len; i++) {
-        generate_variant_align_of(R9, types->data[i], env, ass, a, point);
+        generate_align_of(R9, types->data[i], env, ass, a, point);
         build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
         build_binary_op(Cmp, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 

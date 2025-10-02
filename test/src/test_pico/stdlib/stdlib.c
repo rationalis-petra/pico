@@ -86,6 +86,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
             run_pico_stdlib_data_pair_tests(log, module, env, target, a);
             suite_end(log);
         }
+        if (suite_start(log, mv_string("either"))) {
+            run_pico_stdlib_data_either_tests(log, module, env, target, a);
+            suite_end(log);
+        }
         if (suite_start(log, mv_string("list"))) {
             run_pico_stdlib_data_list_tests(log, module, env, target, a);
             suite_end(log);

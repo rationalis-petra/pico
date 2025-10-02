@@ -30,8 +30,6 @@
 // Internal functions
 static void generate_entry(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
 static void generate_exit(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
-static size_t calc_variant_size(PtrArray* types);
-static size_t calc_variant_stack_size(PtrArray* types);
 static void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 static void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
 
