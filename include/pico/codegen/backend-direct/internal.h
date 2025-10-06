@@ -76,5 +76,6 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
 
+void add_rawtree(RawTree tree, Target target, InternalLinkData* links);
 
 #endif

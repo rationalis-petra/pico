@@ -925,3 +925,59 @@ void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location
     }
 }
 
+
+void add_tree_children(RawTreeArray trees, U8Array *arr) {
+    for (size_t i = 0; i < trees.len; i++) {
+        RawTree tree = trees.data[i];
+        // TODO (BUG FEAT): set self .data = NULL, .gpa = NULL, as memory is now static/comptime
+        if (tree.type == RawBranch) {
+            add_tree_children(tree.branch.nodes, arr);
+        }
+    }
+}
+
+void backlink_children(const size_t field_offset, size_t base_id, size_t* head, RawTreeArray trees, Target target, InternalLinkData* links) {
+    for (size_t i = 0; i < trees.len; i++) {
+        RawTree tree = trees.data[i];
+        size_t current_idx = base_id + sizeof(RawTree) * i;
+        if (tree.type == RawBranch) {
+            size_t new_base_id = *head;
+            backlink_data_data(target, current_idx , new_base_id + field_offset, links);
+            *head += sizeof(RawTree) * tree.branch.nodes.len;
+            backlink_children(field_offset, new_base_id, head, tree.branch.nodes, target, links);
+        }
+    }
+}
+
+void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
+    if (tree.type == RawAtom) {
+        add_u8_chunk((uint8_t*)&tree, sizeof(RawTree), target.data_aux);
+    } else {
+        // Start index of 
+        size_t start_idx = target.data_aux->len;
+        RawTree copy = (RawTree) {
+            .type = tree.type,
+            .range = tree.range,
+            .branch.hint = tree.branch.hint,
+            .branch.nodes.data = NULL, // this will be backlinked later
+            .branch.nodes.len = tree.branch.nodes.len,
+            .branch.nodes.size = tree.branch.nodes.len,
+            // TODO; add allocator callbacks!
+        };
+        // Step 1: Copy in the tree
+        add_u8_chunk((uint8_t*)&copy, sizeof(RawTree), target.data_aux);
+        add_u8_chunk((uint8_t*)&tree.branch.nodes.data, sizeof(RawTree) * tree.branch.nodes.len, target.data_aux);
+        add_tree_children(tree.branch.nodes, target.data_aux);
+
+        // Step 2: Backlink nodes
+        // ----------------------
+        // The field offset for .branch.nodes.data from the rawtree (note: C
+        // does not allow us to calculate this value directly, so we use a
+        // little pointer arithmetic cheat to properly calculate it.
+        const size_t field_offset = ((size_t)&tree.branch.nodes.data) - ((size_t)&tree);
+
+        size_t head = start_idx + sizeof(RawTree) * tree.branch.nodes.len;
+        backlink_data_data(target, start_idx, start_idx + field_offset, links);
+        backlink_children(field_offset, start_idx, &head, tree.branch.nodes, target, links);
+    }
+}

@@ -1982,7 +1982,7 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     case TKind:
         return false;
     case TConstraint:
-        panic(mv_string("not implemented is_variable_for for constraint"));
+        return false;
     case TUVar:
         panic(mv_string("not implemented is_variable_for for uvar"));
 
