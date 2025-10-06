@@ -114,7 +114,7 @@ void address_pop(AddressEnv* env);
 //   it establishes bindings for the members of the enum, but does not adjust the
 //   stack head.
 // Unbind removes these bindings. Like bind, it does not adjust the stack head.
-void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env);
+void address_bind_enum_vars(BindingArray args, bool is_variable, AddressEnv* env);
 void address_unbind_enum_vars(AddressEnv* env);
 
 // Bind and unbind label vars: 

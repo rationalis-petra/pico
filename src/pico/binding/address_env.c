@@ -114,9 +114,6 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
     local->vars = mk_saddr_array(32, a);
     push_ptr(local, &a_env->local_envs);
 
-
-    // NOTE: BELOW CODE IS EXTRACT FROM BIND_TYPE 
-    // ------------------------------------------
     SymLocalAssoc syms = get_local_vars(env);
     for (size_t i = 0; i < syms.len; i++) {
         SAddr value = (SAddr){};
@@ -127,7 +124,6 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
             value.type = SAInaccessibleLocal;
         }
         value.stack_offset = 0;
-        // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
         push_saddr(value, &local->vars);
     }
 
@@ -212,6 +208,8 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
 
     // TODO (BUG) this seemed to be returning ALocalIndirect 
     // when no match was found??
+    // add a test case where we get a typecheck success but no address lookup
+    // (such as for nested procedures).
 
     // Now search globally
     EnvEntry e = env_lookup(s, env->env);
@@ -239,9 +237,8 @@ AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env) {
             SAddr maddr = locals.vars.data[i - 1];
             if (maddr.type != SASentinel) s.index--; 
 
-            // TODO: check for type vars?
+            // TODO: Should I be checking for type vars here?
             if (s.index == 0) {
-                // TODO: Check if the offset can fit into an immediate
                 return (AddressEntry) {
                     .type = maddr.type == SADirect ? ALocalDirect : ALocalIndexed,
                     .stack_offset = maddr.stack_offset,
@@ -264,10 +261,9 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if (maddr.type == SALabel && symbol_eq(maddr.symbol, s)) {
-            // TODO: Check if the offset can fit into an immediate
             return (LabelEntry) {
-              .type = Ok,
-              .stack_offset = maddr.stack_offset - current_head,
+                .type = Ok,
+                .stack_offset = maddr.stack_offset - current_head,
             };
         };
     }
@@ -393,7 +389,6 @@ void address_bind_type(Symbol s, AddressEnv* env) {
     SAddr value = (SAddr){};
     value.type = SATypeVar;
     value.symbol = s;
-    // TODO INVESTIGATE (compiler warning): value.stack_offset may be uninitialized
     push_saddr(value, &locals->vars);
 }
 
@@ -431,33 +426,32 @@ void address_pop(AddressEnv* env) {
     pop_saddr(&locals->vars);
 }
 
-void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env) {
+void address_bind_enum_vars(BindingArray vars, bool is_variable, AddressEnv* env) {
     // Note: We don't adjust the stack head
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
 
     SAddr padding = (SAddr){};
     padding.type = SASentinel;
-    stack_offset += REGISTER_SIZE;
+    stack_offset += is_variable ? 0 : REGISTER_SIZE;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &locals->vars);
 
     // Variables are in reverse order!
     // due to how the stack pushes/pops args.
 
-    // TODO: in (some x), x getting bound to a sentinel!
     for (size_t i = 0; i < vars.len; i++) {
         SAddr local;
-        local.type = SADirect;
+        Binding bind = vars.data[i];
 
-        local.symbol = vars.data[i].key;
+        local.type = bind.is_variable ? SAIndexed : SADirect;
+        local.symbol = bind.sym;
         local.stack_offset = stack_offset;
-        stack_offset += vars.data[i].val;
 
+        stack_offset += bind.size;
         push_saddr(local, &locals->vars);
     }
 
-    padding.stack_offset = stack_offset + REGISTER_SIZE;
     push_saddr(padding, &locals->vars);
 }
 

@@ -283,6 +283,20 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A B] proc [(y B)] (Either A B):rhs y) {U8 I64} -879)");
     }
 
+    // -----------------------------------------------------
+    // 
+    //      Match
+    // 
+    // -----------------------------------------------------
+
+    if (test_start(log, mv_string("variable-variant-2"))) {
+        RUN("(def Either Family [A B] Enum [:lhs A] [:rhs B])");
+        int64_t expected = 916213;
+        RUN("(def reduce all [A B C] proc [(v (Either A B)) (f (Proc [A] C)) (g (Proc [B] C))] match v [[:lhs x] f x] [[:rhs x] g x])");
+        RUN("(def id-i64 proc [(x I64)] x)");
+        TEST_EQ("(reduce {I64 I64 I64} (:lhs 916213) id-i64 id-i64)");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Funcall - calling functions from within polymorphic code

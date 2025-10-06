@@ -638,7 +638,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 }
 
                 if (!found_tag) {
-                    err.message = mv_cstr_doc("Unable to find variant tag in match", a);
+                    PtrArray nodes = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("The tag", a), &nodes);
+                    push_ptr(mk_str_doc(symbol_to_string(clause->tagname, a), a), &nodes);
+                    push_ptr(mv_cstr_doc("does not correspond to any tag in the enum type.", a), &nodes);
+                    err.message = mv_sep_doc(nodes, a);
                     throw_pi_error(point, err);
                 }
 

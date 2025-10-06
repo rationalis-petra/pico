@@ -784,7 +784,6 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         break;
     }
     case SMatch: {
-        // TODO: check that the match handles stack alignment correctly
         // Generate code for the value
         Syntax* match_value = syn.match.val;
         PiType* enum_type = strip_type(syn.match.val->ptype);
@@ -829,13 +828,16 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
 
             // Bind Clause Vars 
-            SymSizeAssoc arg_sizes = mk_sym_size_assoc(variant_types.len, a);
+            BindingArray arg_sizes = mk_binding_array(variant_types.len, a);
             for (size_t i = 0; i < variant_types.len; i++) {
-                sym_size_bind(clause.vars.data[i]
-                              , pi_size_of(*(PiType*)variant_types.data[i])
-                              , &arg_sizes);
+                Binding binder = (Binding) {
+                    .sym = clause.vars.data[i],
+                    .size = pi_size_of(*(PiType*)variant_types.data[i]),
+                    .is_variable = false,
+                };
+                push_binding(binder, &arg_sizes);
             }
-            address_bind_enum_vars(arg_sizes, env);
+            address_bind_enum_vars(arg_sizes, false, env);
 
             generate_i(*clause.body, env, target, links, a, point);
 
