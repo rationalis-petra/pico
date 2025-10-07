@@ -1765,6 +1765,13 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
+    case SOffsetOf: {
+        PiType* struct_type = strip_type(syn.offset_of.body->type_val);
+        generate_offset_of(RAX, syn.offset_of.field, struct_type->structure.fields, env, ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
     case SCheckedType: {
         build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), ass, a, point);
         build_unary_op(Push, reg(R9, sz_64), ass, a, point);

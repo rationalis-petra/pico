@@ -1053,39 +1053,12 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
     case SUnName:
     case SWiden:
     case SNarrow:
+    case SSizeOf:
+    case SAlignOf: 
+    case SOffsetOf: 
+    case SCheckedType: 
         generate_polymorphic_i(syn, env, target, links, a, point);
         break;
-    case SSizeOf: {
-        generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
-        break;
-    }
-    case SAlignOf: {
-        generate_align_of(RAX, syn.size->type_val, env, ass, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
-        break;
-    }
-    case SOffsetOf: {
-        size_t sz = 0;
-        PiType* struct_type = strip_type(syn.offset_of.body->type_val);
-        for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-            sz = pi_size_align(sz, pi_align_of(*(PiType*)struct_type->structure.fields.data[i].val));
-            if (symbol_eq(struct_type->structure.fields.data[i].key, syn.offset_of.field))
-                break;
-            sz += pi_size_of(*(PiType*)struct_type->structure.fields.data[i].val);
-        }
-        build_unary_op(Push, imm32(sz), ass, a, point);
-        data_stack_grow(env, pi_stack_align(sizeof(uint32_t)));
-        break;
-    }
-    case SCheckedType: {
-        build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), ass, a, point);
-        build_unary_op(Push, reg(R9, sz_64), ass, a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        break;
-    }
     case SProcType:
         // Generate proc type: start by malloc'ing size for args
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.proc_type.args.len * ADDRESS_SIZE), ass, a, point);
