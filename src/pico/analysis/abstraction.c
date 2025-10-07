@@ -1443,24 +1443,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
-    case FDynAlloc: {
-        if (raw.branch.nodes.len != 2) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'dynamic-alloc' expects precisely 2 arguments!", a);
-            throw_pi_error(point, err);
-        }
-
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
-        
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
-            .type = SDynAlloc,
-            .ptype = NULL,
-            .range = raw.range,
-            .size = term,
-        };
-        return res;
-    }
     case FSizeOf: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;

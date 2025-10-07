@@ -98,7 +98,6 @@ typedef enum TermFormer {
     FUnName,
     FWiden,
     FNarrow,
-    FDynAlloc,
     FSizeOf,
     FAlignOf,
     FOffsetOf,

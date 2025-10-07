@@ -1753,9 +1753,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // TODO (BUG): appropriately narrow (sign-extend/double broaden)
         generate_i(*syn.narrow.val, env, target, links, a, point);
         break;
-    case SDynAlloc: {
-        throw_error(point, mv_string("Not implemented: dynamic allocation in polymorphic code."));
-    }
     case SSizeOf: {
         generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);

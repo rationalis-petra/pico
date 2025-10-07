@@ -332,10 +332,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("unname"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FDynAlloc;
-    sym = string_to_symbol(mv_string("dyn-alloc"));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
     former = FSizeOf;
     sym = string_to_symbol(mv_string("size-of"));
     add_def(module, sym, type, &former, null_segments, NULL);

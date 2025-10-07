@@ -289,9 +289,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
     case SNarrow:
         not_implemented(mv_string("PVM Narrow Generation"));
         break;
-    case SDynAlloc:
-        not_implemented(mv_string("PVM Dyn-Alloc Generation"));
-        break;
     case SSizeOf: {
         not_implemented(mv_string("PVM Size-Of Generation"));
         break;

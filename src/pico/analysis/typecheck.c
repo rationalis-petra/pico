@@ -1175,18 +1175,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = narrow_type; 
         break;
     }
-    case SDynAlloc: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
-        *t = (PiType){.sort = TPrim, .prim = UInt_64};
-        type_check_i(untyped->size, t, env, ctx);
-
-        PiType* out = mem_alloc(sizeof(PiType), a);
-        *out = (PiType){.sort = TPrim, .prim = Address};
-        untyped->ptype = out; 
-        break;
-    }
     case SSizeOf: {
-        // TODO: this is sus. 
         eval_type(untyped->size, env, ctx);
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -1911,7 +1900,6 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SUnName:
         post_unify(syn->unname, env, a, point);
         break;
-    case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
         post_unify(syn->size, env, a, point);
@@ -2186,7 +2174,6 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         squash_type(typed->narrow.type->type_val, a);
         squash_types(typed->narrow.val, a, point);
         break;
-    case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
         squash_types(typed->size, a, point);

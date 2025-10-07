@@ -329,9 +329,6 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FNarrow:
         out = mk_str_doc(mv_string("::narrow"), a);
         break;
-    case FDynAlloc:
-        out = mk_str_doc(mv_string("::dynamic-allocate"), a);
-        break;
     case FSizeOf:
         out = mk_str_doc(mv_string("::size-of"), a);
         break;

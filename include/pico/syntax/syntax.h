@@ -76,7 +76,6 @@ typedef enum {
     SUnName,
     SWiden,
     SNarrow,
-    SDynAlloc,
     SSizeOf,
     SAlignOf,
     SOffsetOf,

@@ -540,126 +540,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         data_stack_grow(env, out_size);
         break;
     }
-    case SStructure: {
-        // For structures, we have to be careful - this is because the order in
-        // which arguments are evaluated is not necessarily the order in which
-        // arguments are inserted into the structure.
-        PiType* struct_type = strip_type(syn.ptype);
-
-        // Step 1: Make room on the stack for our struct (OR, just generate the
-        // base struct)
-        if (syn.structure.base && syn.structure.base->type != SCheckedType) {
-            generate_i(*syn.structure.base, env, target, links, a, point);
-        } else {
-            size_t struct_size = pi_stack_size_of(*struct_type);
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(struct_size), ass, a, point);
-            data_stack_grow(env, struct_size);
-        }
-
-        // Step 2: evaluate each element/variable binding
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            generate_i(*(Syntax*)syn.structure.fields.data[i].val, env, target, links, a, point);
-        }
-        
-        // Step 3: copy each element of the array into it's place on the stack.
-        // Note: for, e.g. Struct [.x I64] [.y I64] we expect the stack to look 
-        // something like the below.
-        // ...  ..
-        // 144 y  } Destination - elements are ordered bottom-top
-        // 136 x  } 
-        // --- 
-        // 128 x   } Source - elements can be in any arbitrary order 
-        // 120 y   } <`top' of stack - grows down>
-        // ------------
-
-        // Copy from the bottom (of the destination) to the top (also of the destination) 
-        size_t source_region_size = 0;
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
-        }
-        size_t src_offset = 0;
-        for (size_t i = 0; i < syn.structure.fields.len; i++) {
-            // Find the field in the source & compute offset
-            size_t dest_offset = 0;
-            for (size_t j = 0; j < struct_type->structure.fields.len; j++) {
-                PiType* t = struct_type->structure.fields.data[j].val;
-                dest_offset = pi_size_align(dest_offset, pi_align_of(*t)); 
-
-                if (symbol_eq(syn.structure.fields.data[i].key, struct_type->structure.fields.data[j].key)) {
-                    break; // offset is correct, end the loop
-                }
-                dest_offset += pi_size_of(*t); 
-            }
-
-            // We now both the source_offset and dest_offset. These are both
-            // relative to the 'bottom' of their respective structures.
-            // Therefore, we now need to find their offsets relative to the `top'
-            // of the stack.
-            size_t field_size = pi_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype);
-            src_offset += pi_stack_align(field_size);
-            size_t src_stack_offset = source_region_size - src_offset;
-            size_t dest_stack_offset = source_region_size + dest_offset;
-
-            // Now, move the data.
-            generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-        }
-
-        // Remove the space occupied by the temporary values 
-        build_binary_op(Add, reg(RSP, sz_64), imm32(source_region_size), ass, a, point);
-        data_stack_shrink(env, source_region_size);
+    case SStructure: 
+    case SProjector: 
+        generate_polymorphic_i(syn, env, target, links, a, point);
         break;
-    }
-    case SProjector: {
-        // TODO: check that the projector handles stack alignment correctly
-        // First, allocate space on the stack for the value
-        PiType* source_type = strip_type(syn.projector.val->ptype);
-        size_t out_sz = pi_stack_size_of(*syn.ptype);
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
-        data_stack_grow(env, out_sz);
-
-        // Second, generate the structure/instance object
-        generate_i(*syn.projector.val, env, target, links, a, point);
-        size_t src_sz = pi_stack_size_of(*source_type);
-
-        // From this point, behaviour depends on whether we are projecting from
-        // a structure or from an instance
-        if (source_type->sort == TStruct) {
-            // Now, copy the structure to the destination
-            // for this, we need the struct size + offset of field in the struct
-            size_t offset = 0;
-            for (size_t i = 0; i < source_type->structure.fields.len; i++) {
-                size_t align = pi_align_of(*(PiType*)source_type->structure.fields.data[i].val);
-                offset = pi_size_align(offset, align);
-                if (symbol_eq(source_type->structure.fields.data[i].key, syn.projector.field))
-                    break;
-                offset += pi_size_of(*(PiType*)source_type->structure.fields.data[i].val);
-            }
-
-            generate_stack_move(src_sz, offset, out_sz, ass, a, point);
-            // Now, remove the original struct from the stack
-            build_binary_op(Add, reg(RSP, sz_64), imm32(src_sz), ass, a, point);
-
-            data_stack_shrink(env, src_sz);
-        } else {
-            // Pop the pointer to the instance from the stack - store in RSI
-            data_stack_shrink(env, src_sz);
-            build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
-
-            // Now, calculate offset for field 
-            size_t offset = 0;
-            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
-                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
-                    break;
-                offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
-            }
-            build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
-
-            // TODO (check if replace with stack copy)
-            generate_monomorphic_copy(RSP, RSI, out_sz, ass, a, point);
-        }
-        break;
-    }
     case SInstance: {
         // TODO: check that the instance handles stack alignment correctly
         /* Instances work as follows:
@@ -762,60 +646,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         data_stack_shrink(env, val_size);
         break;
     }
-    case SDynamicUse: {
-        generate_i(*syn.use, env, target, links, a, point);
-
-        // We now have a dynamic variable: get its' value as ptr
-#if ABI == SYSTEM_V_64 
-        // arg1 = rdi
-        build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
-#elif ABI == WIN_64 
-        // arg1 = rcx
-        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-#else
-#error "unknown ABI"
-#endif
-
-        // call function
-        generate_c_call(get_dynamic_val, ass, a, point);
-
-        // Now, allocate space on stack
-        size_t val_size = pi_size_of(*syn.ptype);
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(pi_stack_align(val_size)), ass, a, point);
-        build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
-
-        // TODO (check if replace with stack copy)
-        generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
-        
-        data_stack_shrink(env, ADDRESS_SIZE);
-        data_stack_grow(env, val_size);
+    case SDynamicUse: 
+    case SDynamicSet: 
+        generate_polymorphic_i(syn, env, target, links, a, point);
         break;
-    }
-    case SDynamicSet: {
-        size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
-        generate_i(*syn.dynamic_set.dynamic, env, target, links, a, point);
-        generate_i(*syn.dynamic_set.new_val, env, target, links, a, point);
-
-#if ABI == SYSTEM_V_64 
-        // arg1 = rdi, arg2 = rsi
-        build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RDX, sz_64), imm32(val_size), ass, a, point);
-#elif ABI == WIN_64 
-        // arg1 = rcx, arg2 = rdx
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(R8, sz_64), imm32(val_size), ass, a, point);
-#else
-#error "unknown ABI"
-#endif
-        // call function
-        generate_c_call(set_dynamic_val, ass, a, point);
-
-        build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
-        data_stack_shrink(env, ADDRESS_SIZE + val_size);
-        break;
-    }
     case SDynamicLet: {
         // TODO: check that the dynamic let handles stack alignment correctly
 
@@ -893,56 +727,9 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         address_pop_n(syn.let_expr.bindings.len, env);
         break;
     }
-    case SIf: {
-        // generate the condition
-        generate_i(*syn.if_expr.condition, env, target, links, a, point);
-
-        // Pop the bool into R9; compare with 0
-        build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
-        build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
-        data_stack_shrink(env, pi_stack_size_of((PiType) {.sort = TPrim, .prim = Bool}));
-
-        // ---------- CONDITIONAL JUMP ----------
-        // compare the value to 0
-        // jump to false branch if equal to 0 -- the immediate 8 is a placeholder
-        AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
-        size_t start_pos = get_pos(ass);
-
-        size_t jmp_loc = out.backlink;
-
-        // ---------- TRUE BRANCH ----------
-        // now, generate the code to run (if true)
-        generate_i(*syn.if_expr.true_branch, env, target, links, a, point);
-        // Shrink the stack by the result size
-        data_stack_shrink(env, pi_stack_size_of(*syn.ptype));
-
-        // Generate jump to end of false branch to be backlinked later
-        out = build_unary_op(JMP, imm32(0), ass, a, point);
-
-        // calc backlink offset
-        size_t end_pos = get_pos(ass);
-        if (end_pos - start_pos > INT32_MAX) {
-            throw_error(point, mk_string("Jump in conditional too large", a));
-        } 
-
-        // backlink
-        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
-        jmp_loc = out.backlink;
-        start_pos = get_pos(ass);
-
-
-        // ---------- FALSE BRANCH ----------
-        // Generate code for the false branch
-        generate_i(*syn.if_expr.false_branch, env, target, links, a, point);
-
-        // calc backlink offset
-        end_pos = get_pos(ass);
-        if (end_pos - start_pos > INT32_MAX) {
-            throw_error(point, mk_string("Jump in conditional too large", a));
-        } 
-        set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
+    case SIf: 
+        generate_polymorphic_i(syn, env, target, links, a, point);
         break;
-    }
     case SLabels: {
         // Labels: The code-generation for labels is as follows: 
         // 1. Add labels to environment
@@ -1260,73 +1047,13 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         break;
     }
     case SIs:
-        generate_i(*syn.is.val, env, target, links, a, point);
-        break;
     case SInTo:
-        generate_i(*syn.into.val, env, target, links, a, point);
-        break;
     case SOutOf:
-        generate_i(*syn.out_of.val, env, target, links, a, point);
-        break;
     case SName:
-        generate_i(*syn.name.val, env, target, links, a, point);
-        break;
     case SUnName:
-        generate_i(*syn.unname, env, target, links, a, point);
-        break;
     case SWiden:
-        // TODO (BUG): appropriately widen (sign-extend/double broaden)
-        generate_i(*syn.widen.val, env, target, links, a, point);
-        if (syn.widen.val->ptype->prim < UInt_8) {
-            // is signed, 
-            panic(mv_string("can't widen signed ints yet!"));
-        } else if (syn.widen.val->ptype->prim < Float_32) {
-            // is unsigned, so the movzx instruction will do:
-            LocationSize sz;
-            switch (syn.widen.val->ptype->prim) {
-            case UInt_8:
-                sz = sz_8;
-                break;
-            case UInt_16:
-                sz = sz_16;
-                break;
-            case UInt_32:
-                sz = sz_32;
-                break;
-            case UInt_64:
-                sz = sz_64;
-                break;
-            default:
-                panic(mv_string("impossible code path"));
-            }
-
-            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(RCX, sz), reg(RAX, sz), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
-        } else {
-            panic(mv_string("can't widen this yet!"));
-        }
-
-        break;
     case SNarrow:
-        // TODO: if signed -ve => 0??
-        // TODO (BUG): appropriately narrow (sign-extend/double broaden)
-        generate_i(*syn.narrow.val, env, target, links, a, point);
-        break;
-    case SDynAlloc:
-        panic(mv_string("Dyn alloc temporarily unsupported"));
-        /*
-        generate_i(*syn.size, env, target, links, a, point);
-
-        // The size to allocate will sit atop the stack; swap it with 
-        // the pointer to free stack memory
-        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-        build_unary_op(Push, reg(DXMEM_REGISTER, sz_64), ass, a, point);
-
-        // Now, increment pointer to reserve the stack memory
-        build_binary_op(Add, reg(DXMEM_REGISTER, sz_64), reg(RAX, sz_64), ass, a, point);
-        */
-
+        generate_polymorphic_i(syn, env, target, links, a, point);
         break;
     case SSizeOf: {
         generate_size_of(RAX, syn.size->type_val, env, ass, a, point);

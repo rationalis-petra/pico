@@ -477,10 +477,6 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(narrow ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
-    case SDynAlloc: {
-        out = mk_paren_doc("(dyn-alloc ", ")", pretty_syntax_internal(syntax->size, a), a);
-        break;
-    }
     case SSizeOf: {
         out = mk_paren_doc("(size-of ", ")", pretty_syntax_internal(syntax->size, a), a);
         break;
