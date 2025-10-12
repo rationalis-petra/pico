@@ -38,6 +38,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 
 size_t calc_variant_size(PtrArray* types);
 size_t calc_variant_stack_size(PtrArray* types);
+void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 
 // Codegen utilities - generate specific things
 void backlink_global(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);

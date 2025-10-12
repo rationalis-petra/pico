@@ -455,6 +455,47 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -----------------------------------------------------
     // 
+    //      Miscellaneous Bits and Bobs
+    // 
+    // -----------------------------------------------------
+
+    if (test_start(log, mv_string("size-of-I64"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of I64)");
+    }
+
+    if (test_start(log, mv_string("size-of-I8"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(size-of I8)");
+    }
+
+    if (test_start(log, mv_string("align-of-I64"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of I64)");
+    }
+
+    if (test_start(log, mv_string("align-of-I8"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(align-of I8)");
+    }
+
+    if (test_start(log, mv_string("offset-of-simple-0"))) {
+        uint64_t expected = 0;
+        TEST_EQ("(offset-of x (Struct [.x I8] [.y I16]))");
+    }
+
+    if (test_start(log, mv_string("offset-of-simple-nonzero"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(offset-of y (Struct [.x I8] [.y I8]))");
+    }
+
+    if (test_start(log, mv_string("offset-of-complex-nonzero"))) {
+        uint64_t expected = 2;
+        TEST_EQ("(offset-of y (Struct [.x I8] [.y I16]))");
+    }
+
+    // -----------------------------------------------------
+    // 
     //      Core functions (notably, load/store)
     // 
     // -----------------------------------------------------
