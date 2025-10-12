@@ -623,6 +623,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
             PiType* argty = fn_ty->proc.args.data[i];
             Syntax* arg = (Syntax*) syn.all_application.args.data[i];
+            generate_polymorphic_i(*arg, env, target, links, a, point);
 
             // The argument is variable for for the callee
             if (is_variable_for(argty, type_vars)) {
@@ -642,7 +643,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 mismatch_variable_args |= is_variable_in(arg->ptype, env);
             }
             static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
-            generate_polymorphic_i(*arg, env, target, links, a, point);
         }
         generate_polymorphic_i(*syn.all_application.function, env, target, links, a, point);
         static_arg_size += ADDRESS_SIZE;
@@ -1805,6 +1805,290 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
+    case SProcType: {
+        // Generate proc type: start by malloc'ing size for args
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.proc_type.args.len * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.proc_type.args.len; i++) {
+            Syntax* arg = syn.proc_type.args.data[i];
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(*arg, env, target, links, a, point);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 1
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+        }
+        // Stash RAX
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        generate_i(*syn.proc_type.return_type, env, target, links, a, point);
+        data_stack_shrink(env, 2*ADDRESS_SIZE);
+        build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+        // Finally, generate function call to make type
+        gen_mk_proc_ty(reg(RAX, sz_64), imm32(syn.proc_type.args.len), reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        break;
+    }
+    case SStructType: {
+        // Generate struct type: for each element of the struct type
+        // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.struct_type.fields.len * 3 * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
+            SymPtrCell field = syn.struct_type.fields.data[i];
+            // First, move the field name
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(*(Syntax*)field.val, env, target, links, a, point);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 3 (to account for struct size!)
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
+        }
+
+        // Finally, generate function call to make type
+        gen_mk_struct_ty(reg(RAX, sz_64), imm32(syn.struct_type.fields.len), reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
+    case SEnumType: {
+        // Generate enum type: malloc array for enum
+        // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.enum_type.variants.len * 3 * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.enum_type.variants.len; i++) {
+            SymPtrCell field = syn.enum_type.variants.data[i];
+            // First, move the field name
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
+
+            // Second, generate & variant (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+
+            PtrArray variant = *(PtrArray*)field.val;
+            generate_tmp_malloc(reg(RAX, sz_64), imm32(variant.len * ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+            for (size_t i = 0; i < variant.len; i++) {
+
+                build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+                data_stack_grow(env, 2*ADDRESS_SIZE);
+
+                generate_i(*(Syntax*)variant.data[i], env, target, links, a, point);
+
+                data_stack_shrink(env, 3*ADDRESS_SIZE);
+                build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+                build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+                // Now, incremenet index
+                build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+            }
+
+            // The variant was just stored in RAX, move it to R9
+            build_binary_op(Mov, reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+            data_stack_shrink(env, 2*ADDRESS_SIZE);
+
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 3 (to account for ptr + symbol)
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
+        }
+
+        // Finally, generate function call to make type
+        gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
+    case SResetType:
+        generate_i(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
+        generate_i(*(Syntax*)syn.reset_type.out, env, target, links, a, point);
+        gen_mk_reset_ty(ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE);
+        break;
+    case SDynamicType:
+        generate_i(*(Syntax*)syn.dynamic_type, env, target, links, a, point);
+        gen_mk_dynamic_ty(ass, a, point);
+        break;
+    case SAllType:
+        // Forall type structure: (array symbol) body
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+        generate_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
+        gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
+        address_pop_n(syn.bind_type.bindings.len, env);
+        break;
+    case SExistsType: {
+        for (size_t i = 0; i < syn.exists_type.vars.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.exists_type.implicits.len * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.exists_type.implicits.len; i++) {
+            Syntax* arg = syn.exists_type.implicits.data[i];
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(*arg, env, target, links, a, point);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 1
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+        }
+
+        // Stash RAX
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        generate_i(*syn.exists_type.body, env, target, links, a, point);
+        data_stack_shrink(env, 2*ADDRESS_SIZE);
+        // build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        // build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+        gen_mk_exists_ty(syn.exists_type.vars, imm32(syn.exists_type.implicits.len), ass, a, point);
+        address_pop_n(syn.exists_type.vars.len, env);
+        data_stack_grow(env, ADDRESS_SIZE);
+        break;
+    }
+    case STypeFamily:
+        // Family type structure: (array symbol) body
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+        generate_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
+        gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
+        address_pop_n(syn.bind_type.bindings.len, env);
+        break;
+    case SLiftCType: {
+        generate_i(*syn.c_type, env, target, links, a, point);
+        gen_mk_c_ty(ass, a, point);
+        // Now, the type lies atop the stack, and we must pop the ctype out from
+        // under it
+        size_t cts = pi_stack_size_of(*syn.c_type->ptype);
+
+        // TODO (IMPROVEMENT) this assumes address-size == 64 bits 
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(cts), ass, a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+
+        data_stack_shrink(env, cts - ADDRESS_SIZE);
+        break;
+    }
+    case SNamedType: {
+        address_bind_type(syn.named_type.name, env);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.named_type.name, env);
+        generate_i(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        address_pop(env);
+
+        gen_mk_named_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
+        break;
+    }
+    case SDistinctType:
+        generate_i(*(Syntax*)syn.distinct_type, env, target, links, a, point);
+        gen_mk_distinct_ty(ass, a, point);
+        break;
+    case SOpaqueType:
+        generate_i(*(Syntax*)syn.opaque_type, env, target, links, a, point);
+        gen_mk_opaque_ty(ass, a, point);
+        break;
+    case STraitType: {
+        // Generate trait type: first bind relevant variables
+        for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
+            address_bind_type(syn.bind_type.bindings.data[i], env);
+        }
+
+        // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+
+        for (size_t i = 0; i < syn.trait.fields.len; i++) {
+            SymPtrCell field = syn.trait.fields.data[i];
+            // First, move the field name
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(*(Syntax*)field.val, env, target, links, a, point);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 2 (to account for trait size!)
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
+        }
+
+        // Finally, generate function call to make type
+        gen_mk_trait_ty(syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        address_pop_n(syn.trait.vars.len, env);
+        break;
+    }
     default: {
         panic(mv_string("Invalid abstract term in polymorphic codegen."));
     }
@@ -2225,27 +2509,22 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
     /* size_t rem = size % 8; */
     /* size_t pad = rem == 0 ? 0 : align - rem; */
     /* return size + pad; */
+    // If we assume align is a power of 2, then this also works:
+    // size_t pad = ( ~(size & (align - 1)) + 1) & (align - 1)
+    // return size + pad;
 
-    // We accomplish modulo with IDiv, which stores the remainder (modulo) in RDX 
-    build_binary_op(Mov, reg(RAX, sz_64), reg(sz_reg, sz_64), ass, a, point); 
-    build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point); 
-    build_binary_op(Mov, reg(RCX, sz_64), reg(align, sz_64), ass, a, point); 
-    build_unary_op(IDiv, reg(RCX, sz_64), ass, a, point); 
+    // align_reg = align - 1 (what if align = 0?)
+    build_binary_op(Sub, reg(align, sz_64), imm8(1), ass, a, point); 
 
-    // Now, rem is in RDX
+    // start building pad (RCX)
+    build_binary_op(Mov, reg(RCX, sz_64), reg(sz_reg, sz_64), ass, a, point); 
+    build_binary_op(And, reg(RCX, sz_64), reg(align, sz_64), ass, a, point); 
+    build_unary_op(Not, reg(RCX, sz_64), ass, a, point); 
+    build_binary_op(Add, reg(RCX, sz_64), imm8(1), ass, a, point); 
+    build_binary_op(And, reg(RCX, sz_64), reg(align, sz_64), ass, a, point); 
 
-    // Store align - rem in RAX and 0 in RCX
-    build_binary_op(Mov, reg(RAX, sz_64), reg(align, sz_64), ass, a, point); 
-    build_binary_op(Sub, reg(RAX, sz_64), reg(RDX, sz_64), ass, a, point); 
-    build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point); 
-
-    // Nowd to the compare (rem == 0) and CMove (asignment base on compare), so
-    // the result (pad) is in RDX
-    build_binary_op(Cmp, reg(RDX, sz_64), imm32(0), ass, a, point); 
-    build_binary_op(CMovE, reg(RAX, sz_64), reg(RCX, sz_64), ass, a, point); 
-
-    // Finally, add size (sz_reg) to padding (RDX)
-    build_binary_op(Add, reg(sz_reg, sz_64), reg(RAX, sz_64), ass, a, point); 
+    // Finally, add size (sz_reg) to padding (RCX)
+    build_binary_op(Add, reg(sz_reg, sz_64), reg(RCX, sz_64), ass, a, point); 
 }
 
 void generate_poly_move(Location dest, Location src, Location size, Assembler* ass, Allocator* a, ErrorPoint* point) {

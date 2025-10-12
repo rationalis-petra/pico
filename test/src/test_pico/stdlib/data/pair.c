@@ -44,7 +44,7 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* 
     } Point32;
     if (test_start(log, mv_string("pair-small-size"))) {
         Point32 expected = (Point32) {.x = 1432, .y = -960};
-        TEST_EQ("(pair.pair (is 1432 I32) (is -960 I32))");
+        TEST_EQ("(pair.pair {I32 I32} 1432 -960)");
     }
 
     typedef struct {
