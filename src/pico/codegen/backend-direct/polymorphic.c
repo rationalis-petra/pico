@@ -234,7 +234,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
         for (size_t i = 0; i < syn.array_lit.subterms.len; i++) {
-            generate_i(*(Syntax*)syn.array_lit.subterms.data[i], env, target, links, a, point);
+            generate_polymorphic_i(*(Syntax*)syn.array_lit.subterms.data[i], env, target, links, a, point);
 
             // Copy the element into the array-block
             size_t offset = i * index_mul;
@@ -414,7 +414,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
 
         address_start_proc(impl_sizes, arg_sizes, env, a);
-        generate_i(*syn.procedure.body, env, target, links, a, point);
+        generate_polymorphic_i(*syn.procedure.body, env, target, links, a, point);
         address_end_proc(env, a);
 
         // Codegen function teardown:
@@ -463,7 +463,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SMacro:
-        generate_i(*syn.transformer, env, target, links, a, point);
+        generate_polymorphic_i(*syn.transformer, env, target, links, a, point);
         break;
     case SApplication: {
         if (syn.application.function->ptype->sort == TProc) {
@@ -582,11 +582,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             for (size_t i = 0; i < syn.application.args.len; i++) {
                 Syntax* arg = (Syntax*) syn.application.args.data[i];
                 args_size += pi_stack_size_of(*arg->ptype);
-                generate_i(*arg, env, target, links, a, point);
+                generate_polymorphic_i(*arg, env, target, links, a, point);
             }
 
             // push the type onto the stack:
-            generate_i(*syn.application.function, env, target, links, a, point);
+            generate_polymorphic_i(*syn.application.function, env, target, links, a, point);
 
             gen_mk_family_app(syn.application.args.len, ass, a, point);
             // Update for popping all values off the stack (also the function itself)
@@ -614,10 +614,30 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
 
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
+            PiType* argty = fn_ty->proc.implicits.data[i];
             Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            mismatch_variable_args |= is_variable_for(arg->ptype, type_vars);
             generate_polymorphic_i(*arg, env, target, links, a, point);
-            static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
+
+            // The argument is variable for for the callee
+            if (is_variable_for(argty, type_vars)) {
+                // Is it also variable in our context?
+                // if not, we need to move to variable stack, otherwise can keep here.
+                static_arg_size += ADDRESS_SIZE;
+                if (!is_variable_in(arg->ptype, env)) {
+                    size_t arg_size = pi_stack_size_of(*arg->ptype);
+                    build_binary_op(Sub, reg(R14, sz_64), imm8(arg_size), ass, a, point);
+                    generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
+                    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+
+                    data_stack_shrink(env, arg_size);
+                    data_stack_grow(env, ADDRESS_SIZE);
+
+                }
+            } else {
+                mismatch_variable_args |= is_variable_in(arg->ptype, env);
+                static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
+            }
         }
 
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
@@ -629,6 +649,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             if (is_variable_for(argty, type_vars)) {
                 // Is it also variable in our context?
                 // if not, we need to move to variable stack, otherwise can keep here.
+                static_arg_size += ADDRESS_SIZE;
                 if (!is_variable_in(arg->ptype, env)) {
                     size_t arg_size = pi_stack_size_of(*arg->ptype);
                     build_binary_op(Sub, reg(R14, sz_64), imm8(arg_size), ass, a, point);
@@ -641,8 +662,8 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 }
             } else {
                 mismatch_variable_args |= is_variable_in(arg->ptype, env);
+                static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
             }
-            static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
         }
         generate_polymorphic_i(*syn.all_application.function, env, target, links, a, point);
         static_arg_size += ADDRESS_SIZE;
@@ -674,7 +695,6 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             } else {
                 panic(mv_string("not implemented: Calling with value on caller varstack and callee static stack"));
             }
-        } else {
         }
 
         break;
@@ -1090,11 +1110,10 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         Syntax* match_value = syn.match.val;
         PiType* enum_type = strip_type(syn.match.val->ptype);
 
-        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-        data_stack_grow(env, ADDRESS_SIZE);
-        int64_t var_head_offset = get_stack_head(env);
-
         if (is_variable_in(enum_type, env)) {
+            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
+            int64_t var_head_offset = get_stack_head(env);
             generate_polymorphic_i(*match_value, env, target, links, a, point);
 
             SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
@@ -1331,8 +1350,38 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
 
             data_stack_shrink(env, enum_stack_size);
             data_stack_grow(env, out_size);
-            break;
         }
+        break;
+    }
+    case SDynamic: {
+        // Create a new dynamic variable, i.e. call the C function 
+        // mk_dynamic_var(size_t size, void* default_val)
+        generate_i(*syn.dynamic, env, target, links, a, point);
+
+        // currently RSP = default_val
+        size_t val_size = pi_size_of(*syn.dynamic->ptype);
+
+#if ABI == SYSTEM_V_64 
+        // arg1 = rdi, arg2 = rsi
+        build_binary_op(Mov, reg(RDI, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
+#elif ABI == WIN_64 
+        // arg1 = rcx, arg2 = rdx
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(val_size), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+#else
+#error "unknown ABI"
+#endif
+
+        // call function
+        generate_c_call(mk_dynamic_var, ass, a, point);
+
+        // Pop value off stack
+        build_binary_op(Add, reg(RSP, sz_64), imm32(val_size), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        
+        data_stack_grow(env, ADDRESS_SIZE);
+        data_stack_shrink(env, val_size);
         break;
     }
     case SDynamicUse: {
@@ -1683,9 +1732,9 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             data_stack_shrink(env, bind_sz);
         } else {
             size_t stack_sz = pi_stack_size_of(*syn.ptype);
-            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref32(RSP, bind_sz + stack_sz, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
         }
         break;
@@ -1712,7 +1761,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
 
         // TODO (BUG): appropriately widen (sign-extend/double broaden)
-        generate_i(*syn.widen.val, env, target, links, a, point);
+        generate_polymorphic_i(*syn.widen.val, env, target, links, a, point);
         if (syn.widen.val->ptype->prim < UInt_8) {
             // is signed, 
             panic(mv_string("can't widen signed ints yet!"));
@@ -1751,7 +1800,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         }
         // TODO: if signed -ve => 0??
         // TODO (BUG): appropriately narrow (sign-extend/double broaden)
-        generate_i(*syn.narrow.val, env, target, links, a, point);
+        generate_polymorphic_i(*syn.narrow.val, env, target, links, a, point);
         break;
     case SSizeOf: {
         generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
@@ -1817,7 +1866,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*arg, env, target, links, a, point);
+            generate_polymorphic_i(*arg, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1832,7 +1881,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // Stash RAX
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-        generate_i(*syn.proc_type.return_type, env, target, links, a, point);
+        generate_polymorphic_i(*syn.proc_type.return_type, env, target, links, a, point);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
         build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
         build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -1860,7 +1909,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*(Syntax*)field.val, env, target, links, a, point);
+            generate_polymorphic_i(*(Syntax*)field.val, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1906,7 +1955,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
                 data_stack_grow(env, 2*ADDRESS_SIZE);
 
-                generate_i(*(Syntax*)variant.data[i], env, target, links, a, point);
+                generate_polymorphic_i(*(Syntax*)variant.data[i], env, target, links, a, point);
 
                 data_stack_shrink(env, 3*ADDRESS_SIZE);
                 build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1939,13 +1988,13 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SResetType:
-        generate_i(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
-        generate_i(*(Syntax*)syn.reset_type.out, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.reset_type.in, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.reset_type.out, env, target, links, a, point);
         gen_mk_reset_ty(ass, a, point);
         data_stack_shrink(env, ADDRESS_SIZE);
         break;
     case SDynamicType:
-        generate_i(*(Syntax*)syn.dynamic_type, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.dynamic_type, env, target, links, a, point);
         gen_mk_dynamic_ty(ass, a, point);
         break;
     case SAllType:
@@ -1953,7 +2002,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
         gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
@@ -1972,7 +2021,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*arg, env, target, links, a, point);
+            generate_polymorphic_i(*arg, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1988,7 +2037,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         // Stash RAX
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-        generate_i(*syn.exists_type.body, env, target, links, a, point);
+        generate_polymorphic_i(*syn.exists_type.body, env, target, links, a, point);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
         // build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
         // build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -2003,12 +2052,12 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.bind_type.body, env, target, links, a, point);
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SLiftCType: {
-        generate_i(*syn.c_type, env, target, links, a, point);
+        generate_polymorphic_i(*syn.c_type, env, target, links, a, point);
         gen_mk_c_ty(ass, a, point);
         // Now, the type lies atop the stack, and we must pop the ctype out from
         // under it
@@ -2031,7 +2080,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         data_stack_grow(env, sizeof(Symbol));
 
         address_bind_type(syn.named_type.name, env);
-        generate_i(*(Syntax*)syn.named_type.body, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.named_type.body, env, target, links, a, point);
         address_pop(env);
 
         gen_mk_named_ty(ass, a, point);
@@ -2040,11 +2089,11 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
         break;
     }
     case SDistinctType:
-        generate_i(*(Syntax*)syn.distinct_type, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.distinct_type, env, target, links, a, point);
         gen_mk_distinct_ty(ass, a, point);
         break;
     case SOpaqueType:
-        generate_i(*(Syntax*)syn.opaque_type, env, target, links, a, point);
+        generate_polymorphic_i(*(Syntax*)syn.opaque_type, env, target, links, a, point);
         gen_mk_opaque_ty(ass, a, point);
         break;
     case STraitType: {
@@ -2068,7 +2117,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, Internal
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*(Syntax*)field.val, env, target, links, a, point);
+            generate_polymorphic_i(*(Syntax*)field.val, env, target, links, a, point);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
