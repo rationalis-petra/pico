@@ -54,6 +54,11 @@ void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("modular"))) {
+        run_pico_eval_modular_tests(log, module, env, target, a);
+        suite_end(log);
+    }
+
     if (suite_start(log, mv_string("foreign-adapter"))) {
         run_pico_eval_foreign_adapter_tests(log, module, env, target, a);
         suite_end(log);

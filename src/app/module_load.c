@@ -236,6 +236,8 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         // Code Generation
         // -------------------------------------------------------------------------
 
+        // Ensure the target is 'fresh' for code-gen
+        clear_target(target);
         LinkData links = generate_toplevel(abs, env, target, &arena, &point);
 
         // -------------------------------------------------------------------------

@@ -30,7 +30,7 @@ static void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links
 
 LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     LinkData links = (LinkData) {
-        .external_links = mk_sym_sarr_amap(8, a),
+        .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(32, a),
         .ed_links = mk_link_meta_array(8, a),
         .cc_links = mk_link_meta_array(32, a),
@@ -91,7 +91,7 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocat
     
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     LinkData links = (LinkData) {
-        .external_links = mk_sym_sarr_amap(8, a),
+        .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(8, a),
         .ed_links = mk_link_meta_array(8, a),
         .cc_links = mk_link_meta_array(8, a),
@@ -126,7 +126,7 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocat
 void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     LinkData links = (LinkData) {
-        .external_links = mk_sym_sarr_amap(8, a),
+        .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(8, a),
         .ed_links = mk_link_meta_array(8, a),
         .cc_links = mk_link_meta_array(8, a),

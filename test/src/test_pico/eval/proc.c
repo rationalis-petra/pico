@@ -33,4 +33,15 @@ void run_pico_eval_proc_tests(TestLog *log, Module* module, Environment* env, Ta
         Quad expected = (Quad) {.x = -5, .y = 10, .z = -676, .p = -897};
         TEST_EQ("((proc [(s Quad)] s) (struct Quad [.x -5] [.y 10] [.z -676] [.p -897]))");
     }
+
+    /* (def my-func proc [] seq */
+    /*   [let! my-list (list.mk-list {I64} 4 4)] */
+    /*   ;;(list.each print-fn my-list) */
+    /*   my-list) */
+    
+    /* if (test_start(log, mv_string("large-static-argument"))) { */
+    /*     uint64_t expected = 4; */
+    /*     RUN("(def my-func proc [] seq [let! my-list (list.mk-list {I64} 4 4)] my-list)"); */
+    /*     TEST_EQ("(my-func).len"); */
+    /* } */
 }

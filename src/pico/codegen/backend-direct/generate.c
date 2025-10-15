@@ -37,7 +37,7 @@ void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* 
 LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
-            .external_links = mk_sym_sarr_amap(8, a),
+            .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(32, a),
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(32, a),
@@ -111,7 +111,7 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, Target target, Allocato
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
-            .external_links = mk_sym_sarr_amap(8, a),
+            .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
@@ -154,7 +154,7 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* 
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
-            .external_links = mk_sym_sarr_amap(8, a),
+            .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
@@ -419,7 +419,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             if (indistinct_type.sort == TProc || indistinct_type.sort == TAll || indistinct_type.sort == TKind
                 || indistinct_type.sort == TDynamic || indistinct_type.sort == TTraitInstance) {
                 AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64(*(uint64_t*)e.value), ass, a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
+                backlink_global(target, syn.variable, out.backlink, links, a);
                 build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Primitives are (currently) all <= 64 bits, but may treating them
@@ -442,7 +442,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 } else {
                     panic(mv_string("Codegen expects globals bound to primitives to have size 1, 2, 4 or 8."));
                 }
-                backlink_global(syn.variable, out.backlink, links, a);
+                backlink_global(target, syn.variable, out.backlink, links, a);
                 build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Structs and Enums are passed by value, and have variable size.
@@ -450,7 +450,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
-                backlink_global(syn.variable, out.backlink, links, a);
+                backlink_global(target, syn.variable, out.backlink, links, a);
 
                 // Allocate space on the stack for composite type (struct/enum)
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);

@@ -11,8 +11,10 @@ typedef struct {
 
 ARRAY_HEADER(LinkMetaData, link_meta, LinkMeta)
 
+// See modular.h for an explanation of fields
+
 typedef struct {
-    SymSArrAMap external_links;
+    SymSArrAMap external_code_links;
 
     LinkMetaArray ec_links;
     LinkMetaArray ed_links;

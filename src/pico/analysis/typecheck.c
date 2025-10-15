@@ -334,6 +334,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             fn_type.proc.args = args;
             fn_type.proc.ret = ret;
             *untyped->application.function->ptype = fn_type;
+            untyped->ptype = ret;
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {

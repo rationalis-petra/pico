@@ -299,17 +299,23 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
     }
 
     if (links) {
+        // TODO (possible bug)
+        // perhaps 'backlinks' of an entry need to be renamed/reworked so we can
+        // distinguish between code segment, executable segment and value?
         entry.backlinks = mem_alloc(sizeof(SymSArrAMap), module->allocator);
-        *(entry.backlinks) = copy_sym_sarr_amap(links->external_links,
+        *(entry.backlinks) = copy_sym_sarr_amap(links->external_code_links,
                                                 copy_symbol,
                                                 scopy_size_array,
                                                 module->allocator);
 
-        // swap out self-references
-        SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
-        sym_ptr_insert(symbol, entry.value, &self_ref);
-        update_function(entry.value, self_ref, links->external_links);
-        sdelete_sym_ptr_amap(self_ref);
+        if (segments.code.len != 0) {
+            // Move this to thecode segment bit?
+            // swap out self-references
+            SymPtrAMap self_ref = mk_sym_ptr_amap(1, module->allocator);
+            sym_ptr_insert(symbol, entry.value, &self_ref);
+            update_function(entry.code_segment->data, self_ref, links->external_code_links);
+            sdelete_sym_ptr_amap(self_ref);
+        }
     } else {
         entry.backlinks = NULL;
     }
