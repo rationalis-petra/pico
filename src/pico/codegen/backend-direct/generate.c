@@ -803,12 +803,12 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
         break;
     }
-    case SExists: {
-        not_implemented(mv_string("Poly Direct Codegen for Exists"));
+    case SSeal: {
+        not_implemented(mv_string("Poly Direct Codegen for Seal"));
         break; 
     }
-    case SUnpack: {
-        not_implemented(mv_string("Poly Direct Codegen for Unpack"));
+    case SUnseal: {
+        not_implemented(mv_string("Poly Direct Codegen for Unseal"));
         break; 
     }
     case SStructure: {
@@ -2365,16 +2365,16 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
-    case SExistsType: {
-        for (size_t i = 0; i < syn.exists_type.vars.len; i++) {
+    case SSealedType: {
+        for (size_t i = 0; i < syn.sealed_type.vars.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
 
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.exists_type.implicits.len * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.sealed_type.implicits.len * ADDRESS_SIZE), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
-        for (size_t i = 0; i < syn.exists_type.implicits.len; i++) {
-            Syntax* arg = syn.exists_type.implicits.data[i];
+        for (size_t i = 0; i < syn.sealed_type.implicits.len; i++) {
+            Syntax* arg = syn.sealed_type.implicits.data[i];
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
@@ -2396,13 +2396,11 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // Stash RAX
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-        generate_i(*syn.exists_type.body, env, target, links, a, point);
+        generate_i(*syn.sealed_type.body, env, target, links, a, point);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
-        // build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
-        // build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
-        gen_mk_exists_ty(syn.exists_type.vars, imm32(syn.exists_type.implicits.len), ass, a, point);
-        address_pop_n(syn.exists_type.vars.len, env);
+        gen_mk_sealed_ty(syn.sealed_type.vars, imm32(syn.sealed_type.implicits.len), ass, a, point);
+        address_pop_n(syn.sealed_type.vars.len, env);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }

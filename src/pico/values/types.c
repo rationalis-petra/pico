@@ -128,12 +128,12 @@ void delete_pi_type(PiType t, Allocator* a) {
         delete_pi_type_p(t.binder.body, a);
         break;
     }
-    case TExists: {
-        sdelete_symbol_array(t.exists.vars);
-        for (size_t i = 0; i < t.exists.implicits.len; i++)
-            delete_pi_type_p(t.exists.implicits.data[i], a);
-        sdelete_ptr_array(t.exists.implicits);
-        delete_pi_type_p(t.exists.body, a);
+    case TSealed: {
+        sdelete_symbol_array(t.sealed.vars);
+        for (size_t i = 0; i < t.sealed.implicits.len; i++)
+            delete_pi_type_p(t.sealed.implicits.data[i], a);
+        sdelete_ptr_array(t.sealed.implicits);
+        delete_pi_type_p(t.sealed.body, a);
         break;
     }
 
@@ -254,10 +254,10 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TVar:
         out.var = t.var;
         break;
-    case TExists: {
-        out.exists.vars = scopy_symbol_array(t.exists.vars, a);
-        out.exists.implicits = copy_ptr_array(t.exists.implicits,  (TyCopier)copy_pi_type_p, a);
-        out.exists.body = copy_pi_type_p(t.exists.body, a);
+    case TSealed: {
+        out.sealed.vars = scopy_symbol_array(t.sealed.vars, a);
+        out.sealed.implicits = copy_ptr_array(t.sealed.implicits,  (TyCopier)copy_pi_type_p, a);
+        out.sealed.body = copy_pi_type_p(t.sealed.body, a);
         break;
     }
     case TAll:
@@ -506,11 +506,29 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
-    case TExists:
+    case TSealed: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("(Sealed "), a), &nodes);
+
+        /* PtrArray impls = mk_ptr_array(type->sealed.implicits.len, a); */
+        /* for (size_t i = 0; i < type->sealed.implicits.len; i++) { */
+        /*     push_ptr(mk_str_doc(symbol_to_string(type->sealed.implicits.data[i], a), a), &impls); */
+        /* } */
+        /* push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(impls, a), a), &nodes); */
+
+        PtrArray args = mk_ptr_array(type->sealed.vars.len, a);
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
+        push_ptr(pretty_type(type->binder.body, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
-        if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
-        else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
 
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
@@ -923,21 +941,21 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case TExists: {
+    case TSealed: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Exists" ), a), a), &nodes);
-        PtrArray types = mk_ptr_array(type->exists.vars.len, a);
-        for (size_t i = 0; i < type->exists.vars.len; i++) {
-            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->exists.vars.data[i], a), a), a), &types);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Sealed" ), a), a), &nodes);
+        PtrArray types = mk_ptr_array(type->sealed.vars.len, a);
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->sealed.vars.data[i], a), a), a), &types);
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(types, a), a), &nodes);
 
-        PtrArray implicits = mk_ptr_array(type->exists.implicits.len, a);
-        for (size_t i = 0; i < type->exists.implicits.len; i++) {
-            push_ptr(pretty_type_internal(type->exists.implicits.data[i], ctx, a), &implicits);
+        PtrArray implicits = mk_ptr_array(type->sealed.implicits.len, a);
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            push_ptr(pretty_type_internal(type->sealed.implicits.data[i], ctx, a), &implicits);
         }
         push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(implicits, a), a), &nodes);
-        push_ptr(pretty_type_internal(type->exists.body, ctx, a), &nodes);
+        push_ptr(pretty_type_internal(type->sealed.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1156,8 +1174,8 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TAll:
         *out = ADDRESS_SIZE;
         return Ok;
-    case TExists:
-        panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));
+    case TSealed:
+        panic(mv_string("pi_maybe_size_of not implemented for sort: Sealed."));
     case TCApp:
         panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
@@ -1274,8 +1292,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         break;
     case TVar:
         return Err;
-    case TExists:
-        panic(mv_string("Need to implement: align-of ctype"));
+    case TSealed:
+        panic(mv_string("Need to implement: align-of sealed"));
     case TAll:
         *out = sizeof(void*);
         return Ok;
@@ -1471,8 +1489,8 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         // Note: when implementing, consider shadowing
         panic(mv_string("Not implemetned type-app for All"));
         break;
-    case TExists:
-        panic(mv_string("Not implemetned type-app for Exists"));
+    case TSealed:
+        panic(mv_string("Not implemetned type-app for Sealed"));
         break;
 
     // Used by Sytem-Fω (type constructors)
@@ -1689,35 +1707,35 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             push_rename(rn, array);
         }
         bool out = pi_type_eql_i(lhs->binder.body, rhs->binder.body, array);
-        array->len -= lhs->exists.vars.len;
+        array->len -= lhs->sealed.vars.len;
         return out;
         break;
-    case TExists: {
-        if (lhs->exists.vars.len != rhs->exists.vars.len)
+    case TSealed: {
+        if (lhs->sealed.vars.len != rhs->sealed.vars.len)
             return false;
 
-        for (size_t i = 0; i < lhs->exists.vars.len; i++) {
+        for (size_t i = 0; i < lhs->sealed.vars.len; i++) {
             Rename rn = (Rename) {
-                .l_name = lhs->exists.vars.data[i],
-                .r_name = rhs->exists.vars.data[i],
+                .l_name = lhs->sealed.vars.data[i],
+                .r_name = rhs->sealed.vars.data[i],
             };
             push_rename(rn, array);
         }
 
-        if (lhs->exists.implicits.len != rhs->exists.implicits.len) {
-            array->len -= lhs->exists.vars.len;
+        if (lhs->sealed.implicits.len != rhs->sealed.implicits.len) {
+            array->len -= lhs->sealed.vars.len;
             return false;
         }
 
-        for (size_t i = 0; i < lhs->exists.implicits.len; i++) {
-            if (!pi_type_eql_i(lhs->exists.implicits.data[i], rhs->exists.implicits.data[i], array)) {
-                array->len -= lhs->exists.vars.len;
+        for (size_t i = 0; i < lhs->sealed.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->sealed.implicits.data[i], rhs->sealed.implicits.data[i], array)) {
+                array->len -= lhs->sealed.vars.len;
                 return false;
             }
         }
 
-        bool out = pi_type_eql_i(lhs->exists.body, rhs->exists.body, array);
-        array->len -= lhs->exists.vars.len;
+        bool out = pi_type_eql_i(lhs->sealed.body, rhs->sealed.body, array);
+        array->len -= lhs->sealed.vars.len;
         return out;
         break;
     }
@@ -1896,11 +1914,11 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         panic(mv_string("Not implemented: comparing values of type t-var"));
     }
     case TAll:
-        panic(mv_string("Not implemented: comparing values of type all"));
-    case TExists:
-        panic(mv_string("Not implemented: comparing values of type exists"));
+        panic(mv_string("Not implemented: comparing values of type All"));
+    case TSealed:
+        panic(mv_string("Not implemented: comparing values of type Sealed"));
     case TFam: {
-        panic(mv_string("Not implemented: comparing values of type family"));
+        panic(mv_string("Not implemented: comparing values of type Family"));
     }
     case TCApp: {
         panic(mv_string("Not implemented: comparing values of type app"));
@@ -1971,9 +1989,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         return false;
     case TAll:
         return false;
-    case TExists:
+    case TSealed:
         // TODO: shadow
-        panic(mv_string("not implemented is_variable_for for exists type"));
+        panic(mv_string("not implemented is_variable_for for sealed type"));
     case TCApp:
         panic(mv_string("not implemented is_variable_for for applied type"));
     case TFam:
@@ -2180,7 +2198,7 @@ PiType *mk_all_type(Allocator *a, size_t nsymbols, ...) {
     return out;
 }
 
-PiType *mk_exists_type(Allocator *a, size_t nsymbols, ...) {
+PiType *mk_sealed_type(Allocator *a, size_t nsymbols, ...) {
     va_list args;
     va_start(args, nsymbols);
 
@@ -2201,10 +2219,10 @@ PiType *mk_exists_type(Allocator *a, size_t nsymbols, ...) {
 
     PiType* out = mem_alloc(sizeof(PiType), a);
     *out = (PiType) {
-        .sort = TExists,
-        .exists.vars = vars,
-        .exists.implicits = implicits,
-        .exists.body = body,
+        .sort = TSealed,
+        .sealed.vars = vars,
+        .sealed.implicits = implicits,
+        .sealed.body = body,
     };
     return out;
 }

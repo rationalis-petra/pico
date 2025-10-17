@@ -1020,7 +1020,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     case TCType:
     case TVar:
     case TAll:
-    case TExists:
+    case TSealed:
     case TCApp:
     case TFam:
     case TKind:

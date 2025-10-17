@@ -38,9 +38,9 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
         delete_pi_type_p(expected, a);
     }
 
-    if (test_start(log, mv_string("exists-type"))) {
-        PiType* expected = mk_exists_type(a, 1, "A", 0, mk_var_type(a, "A"));
-        TEST_EQ("(Exists [A] A)");
+    if (test_start(log, mv_string("sealed-type"))) {
+        PiType* expected = mk_sealed_type(a, 1, "A", 0, mk_var_type(a, "A"));
+        TEST_EQ("(Sealed [A] A)");
         delete_pi_type_p(expected, a);
     }
 
@@ -53,8 +53,8 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
         PiType* instance = mk_app_type(a, trait, var_type);
         // TODO: update this to get the defined type, rather than this hack
 
-        PiType* expected = mk_exists_type(a, 1, "A", 1, instance, mk_var_type(a, "A"));
-        TEST_EQ("(Exists [A] {(Unital A)} A)");
+        PiType* expected = mk_sealed_type(a, 1, "A", 1, instance, mk_var_type(a, "A"));
+        TEST_EQ("(Sealed [A] {(Unital A)} A)");
         delete_pi_type_p(var_type, a);
         delete_pi_type_p(expected, a);
         delete_pi_type_p(trait, a);

@@ -500,12 +500,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
-    case SExists: {
-        not_implemented(mv_string("typecheck of exists"));
+    case SSeal: {
+        not_implemented(mv_string("typecheck of seal"));
         break;
     }
-    case SUnpack: {
-        not_implemented(mv_string("typecheck of unpack"));
+    case SUnseal: {
+        not_implemented(mv_string("typecheck of unseal"));
         break;
     }
     case SConstructor: {
@@ -1292,26 +1292,26 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
-    case SExistsType: {
+    case SSealedType: {
         PiType* ty = mem_alloc(sizeof(PiType), a);
         *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
         untyped->ptype = ty;
 
-        for (size_t i = 0; i < untyped->exists_type.vars.len; i++) {
-            Symbol arg = untyped->exists_type.vars.data[i];
+        for (size_t i = 0; i < untyped->sealed_type.vars.len; i++) {
+            Symbol arg = untyped->sealed_type.vars.data[i];
             type_var(arg, ty, env);
         }
 
         PiType* t = mem_alloc(sizeof(PiType), a);
         *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
         untyped->ptype = t;
-        for (size_t i = 0; i < untyped->exists_type.implicits.len; i++) {
-            Syntax* implicit = untyped->exists_type.implicits.data[i];
+        for (size_t i = 0; i < untyped->sealed_type.implicits.len; i++) {
+            Syntax* implicit = untyped->sealed_type.implicits.data[i];
             type_check_i(implicit, t, env, ctx);
         }
 
-        type_check_i(untyped->exists_type.body, ty, env, ctx);
-        pop_types(env, untyped->exists_type.vars.len);
+        type_check_i(untyped->sealed_type.body, ty, env, ctx);
+        pop_types(env, untyped->sealed_type.vars.len);
         break;
     }
     case STypeFamily: {
@@ -1702,12 +1702,12 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         }
         break;
     }
-    case SExists: {
-        not_implemented(mv_string("post-unify of exists"));
+    case SSeal: {
+        not_implemented(mv_string("post-unify of seal"));
         break;
     }
-    case SUnpack: {
-        not_implemented(mv_string("post-unify of unpack"));
+    case SUnseal: {
+        not_implemented(mv_string("post-unify of unseal"));
         break;
     }
     case SConstructor:  {
@@ -1922,7 +1922,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SOpaqueType:
     case STraitType:
     case SAllType:
-    case SExistsType:
+    case SSealedType:
     case STypeFamily:
         break;
     case SLiftCType:
@@ -2020,12 +2020,12 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         }
         break;
     }
-    case SExists: {
-        not_implemented(mv_string("post-unify of unpack"));
+    case SSeal: {
+        not_implemented(mv_string("post-unify of seal"));
         break;
     }
-    case SUnpack: {
-        not_implemented(mv_string("post-unify of unpack"));
+    case SUnseal: {
+        not_implemented(mv_string("post-unify of unseal"));
         break;
     }
     case SConstructor: {
@@ -2218,8 +2218,8 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     case SAllType:
         squash_types(typed->bind_type.body, a, point);
         break;
-    case SExistsType:
-        squash_types(typed->exists_type.body, a, point);
+    case SSealedType:
+        squash_types(typed->sealed_type.body, a, point);
         break;
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);

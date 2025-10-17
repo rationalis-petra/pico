@@ -453,9 +453,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FApplication: {
         return mk_application(raw, env, a, point);
     }
-    case FExists: {
+    case FSeal: {
         if (raw.branch.nodes.len < 3) {
-            err.message = mv_cstr_doc("Not enough terms provided to exists", a);
+            err.message = mv_cstr_doc("Not enough terms provided to seal", a);
             throw_pi_error(point, err);
         }
         Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
@@ -465,7 +465,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             RawTree raw_types = raw.branch.nodes.data[2];
             if (raw_types.type != RawBranch && raw_types.branch.hint != HSpecial) {
                 err.range = raw_types.range;
-                err.message = mv_cstr_doc("Exists expects second argument to be a set of types", a);
+                err.message = mv_cstr_doc("Seal expects second argument to be a set of types", a);
                 throw_pi_error(point, err);
             }
 
@@ -489,7 +489,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         }
 
         if (body_idx == raw.branch.nodes.len) {
-            err.message = mv_cstr_doc("Exists lacking a body", a);
+            err.message = mv_cstr_doc("Seal lacking a body", a);
             throw_pi_error(point, err);
         }
 
@@ -500,22 +500,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SExists,
+            .type = SSeal,
             .ptype = NULL,
             .range = raw.range,
-            .exists.type = type,
-            .exists.types = types,
-            .exists.implicits = implicits,
-            .exists.body = body,
+            .seal.type = type,
+            .seal.types = types,
+            .seal.implicits = implicits,
+            .seal.body = body,
         };
         return res;
     }
-    case FUnpack: {
+    case FUnseal: {
         if (raw.branch.nodes.len < 3) {
             err.message = mv_cstr_doc("Not enough terms provided to unpack", a);
             throw_pi_error(point, err);
         }
-        Syntax* packed = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        Syntax* sealed = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
 
         SymbolArray types = mk_symbol_array(8, a);
         {
@@ -553,13 +553,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SUnpack,
+            .type = SUnseal,
             .ptype = NULL,
             .range = raw.range,
-            .unpack.packed = packed,
-            .unpack.types = types,
-            .unpack.implicits = implicits,
-            .unpack.body = body,
+            .unseal.sealed = sealed,
+            .unseal.types = types,
+            .unseal.implicits = implicits,
+            .unseal.body = body,
         };
         return res;
     }
@@ -1835,17 +1835,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
-    case FExistsType: {
+    case FSealedType: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("Exists type former requires at least 2 arguments!", a);
+            err.message = mk_cstr_doc("Sealed type former requires at least 2 arguments!", a);
             throw_pi_error(point, err);
         }
 
         SymbolArray vars = mk_symbol_array(8, a);
         if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
             err.range = raw.branch.nodes.data[1].range;
-            err.message = mk_cstr_doc("Exists argument list malformed", a);
+            err.message = mk_cstr_doc("Sealed argument list malformed", a);
             throw_pi_error(point, err);
         }
         shadow_vars(vars, env);
@@ -1874,12 +1874,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SExistsType,
+            .type = SSealedType,
             .ptype = NULL,
             .range = raw.range,
-            .exists_type.vars = vars,
-            .exists_type.implicits = implicits,
-            .exists_type.body = body,
+            .sealed_type.vars = vars,
+            .sealed_type.implicits = implicits,
+            .sealed_type.body = body,
         };
         return res;
     }

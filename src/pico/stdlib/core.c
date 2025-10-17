@@ -224,8 +224,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("all"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FExists;
-    sym = string_to_symbol(mv_string("exists"));
+    former = FSeal;
+    sym = string_to_symbol(mv_string("seal"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FMacro;
@@ -236,8 +236,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("apply"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FUnpack;
-    sym = string_to_symbol(mv_string("unpack"));
+    former = FUnseal;
+    sym = string_to_symbol(mv_string("unseal"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FProjector;
@@ -384,8 +384,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     sym = string_to_symbol(mv_string("All"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FExistsType;
-    sym = string_to_symbol(mv_string("Exists"));
+    former = FSealedType;
+    sym = string_to_symbol(mv_string("Sealed"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FFamily;

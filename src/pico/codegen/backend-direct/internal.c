@@ -639,28 +639,28 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
-void* mk_exists_ty(size_t len, Symbol* syms, size_t nimplicits, void** implicits, PiType* body) {
+void* mk_sealed_ty(size_t len, Symbol* syms, size_t nimplicits, void** implicits, PiType* body) {
     Allocator a = get_std_temp_allocator();
 
     PiType* ty = mem_alloc(sizeof(PiType), &a);
     *ty = (PiType) {
-        .sort = TExists,
-        .exists.vars.data = syms,
-        .exists.vars.len = len,
-        .exists.vars.size = len,
-        .exists.vars.gpa = a,
+        .sort = TSealed,
+        .sealed.vars.data = syms,
+        .sealed.vars.len = len,
+        .sealed.vars.size = len,
+        .sealed.vars.gpa = a,
 
-        .exists.implicits.data = implicits,
-        .exists.implicits.len = nimplicits,
-        .exists.implicits.size = nimplicits,
-        .exists.implicits.gpa = a,
+        .sealed.implicits.data = implicits,
+        .sealed.implicits.len = nimplicits,
+        .sealed.implicits.size = nimplicits,
+        .sealed.implicits.gpa = a,
 
-        .exists.body = body,
+        .sealed.body = body,
     };
     return ty;
 }
 
-void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_sealed_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Note: this allocation is fine for definitions as types get copied,
     // probably not fine if we have a proc which returns a type.
     // in that case we maybe want this in a data-segment?
@@ -677,7 +677,7 @@ void gen_mk_exists_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     // Note how these two are reversed from their passing order
     build_unary_op(Pop, reg(R8, sz_64), ass, a, point); // Body
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point); // Implicits
-    generate_c_call(mk_exists_ty, ass, a, point);
+    generate_c_call(mk_sealed_ty, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
     build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)data),ass, a, point);

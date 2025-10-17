@@ -62,8 +62,8 @@ typedef enum TermFormer {
     FProcedure,
     FMacro,
     FApplication,
-    FExists,
-    FUnpack,
+    FSeal,
+    FUnseal,
     FVariant,
     FMatch,
     FStructure,
@@ -114,7 +114,7 @@ typedef enum TermFormer {
     FOpaqueType,
     FTraitType,
     FAllType,
-    FExistsType,
+    FSealedType,
     FFamily,
 
     // The C type former is somewhat special, as it

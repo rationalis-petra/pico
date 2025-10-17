@@ -181,49 +181,49 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SExists: {
+    case SSeal: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_cstr_doc("exists", a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax->exists.type, a), &nodes);
+        push_ptr(mv_cstr_doc("seal", a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->seal.type, a), &nodes);
         {
-            PtrArray types = mk_ptr_array(syntax->exists.types.len, a);
-            for (size_t i = 0; i < syntax->exists.types.len; i++) {
-                push_ptr(pretty_syntax_internal(syntax->exists.types.data[i], a), &types);
+            PtrArray types = mk_ptr_array(syntax->seal.types.len, a);
+            for (size_t i = 0; i < syntax->seal.types.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->seal.types.data[i], a), &types);
             }
             push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
         }
         {
-            PtrArray implicits = mk_ptr_array(syntax->exists.implicits.len, a);
-            for (size_t i = 0; i < syntax->exists.implicits.len; i++) {
-                push_ptr(pretty_syntax_internal(syntax->exists.implicits.data[i], a), &implicits);
+            PtrArray implicits = mk_ptr_array(syntax->seal.implicits.len, a);
+            for (size_t i = 0; i < syntax->seal.implicits.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->seal.implicits.data[i], a), &implicits);
             }
             push_ptr(mk_paren_doc("{","}", mv_sep_doc(implicits, a), a), &nodes);
         }
-        push_ptr(pretty_syntax_internal(syntax->exists.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->seal.body, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
-    case SUnpack: {
+    case SUnseal: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(pretty_syntax_internal(syntax->unpack.packed, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->unseal.sealed, a), &nodes);
 
-        PtrArray types = mk_ptr_array(syntax->unpack.types.len, a);
+        PtrArray types = mk_ptr_array(syntax->unseal.types.len, a);
         for (size_t i = 0; i < syntax->all.args.len; i++) {
-            Document* arg = mk_str_doc(symbol_to_string(syntax->unpack.types.data[i], a), a);
+            Document* arg = mk_str_doc(symbol_to_string(syntax->unseal.types.data[i], a), a);
             push_ptr(arg, &nodes);
         }
         push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
 
-        if (syntax->unpack.implicits.len > 0) {
-            PtrArray implicits = mk_ptr_array(syntax->unpack.implicits.len, a);
-            for (size_t i = 0; i < syntax->unpack.implicits.len; i++) {
-                Document* arg = mk_str_doc(symbol_to_string(syntax->unpack.implicits.data[i], a), a);
+        if (syntax->unseal.implicits.len > 0) {
+            PtrArray implicits = mk_ptr_array(syntax->unseal.implicits.len, a);
+            for (size_t i = 0; i < syntax->unseal.implicits.len; i++) {
+                Document* arg = mk_str_doc(symbol_to_string(syntax->unseal.implicits.data[i], a), a);
                 push_ptr(arg, &nodes);
             }
             push_ptr(mk_paren_doc("{", "}", mv_sep_doc(types, a), a), &implicits);
         }
 
-        push_ptr(pretty_syntax_internal(syntax->unpack.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->unseal.body, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
@@ -718,25 +718,25 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SExistsType: {
+    case SSealedType: {
         PtrArray nodes = mk_ptr_array(4, a) ;
-        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("Exists"), a), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("Sealed"), a), a), &nodes);
 
-        SymbolArray arr = syntax->exists_type.vars;
+        SymbolArray arr = syntax->sealed_type.vars;
         PtrArray arg_nodes = mk_ptr_array(arr.len, a);
         for (size_t i = 0; i < arr.len; i++) {
             push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(arr.data[i], a), a), a), &arg_nodes);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
 
-        PtrArray impls = syntax->exists_type.implicits;
+        PtrArray impls = syntax->sealed_type.implicits;
         PtrArray impl_nodes = mk_ptr_array(impls.len, a);
         for (size_t i = 0; i < impls.len; i++) {
             push_ptr(pretty_syntax_internal(impls.data[i], a), &impl_nodes);
         }
         push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
 
-        push_ptr(pretty_syntax_internal(syntax->exists_type.body, a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->sealed_type.body, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }

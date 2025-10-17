@@ -60,7 +60,7 @@ typedef enum {
   // Quantified Types
   TVar,
   TAll,
-  TExists,
+  TSealed,
 
   // Used by Sytem-Fω (type constructors)
   TCApp,
@@ -132,7 +132,7 @@ typedef struct {
     SymbolArray vars;
     PtrArray implicits;
     PiType* body;
-} ExistsType;
+} SealedType;
 
 typedef struct {
     Symbol name;
@@ -175,10 +175,10 @@ struct PiType {
         NamedType named;
         DistinctType distinct;
 
-        // From System Fω: variables, application, abstraction (exists, forall, lambda)
+        // From System Fω: variables, application, abstraction (sealed, forall, lambda)
         Symbol var;
         TAppType app;
-        ExistsType exists;
+        SealedType sealed;
         TypeBinder binder;
 
         PiKind kind;
@@ -274,8 +274,8 @@ PiType* mk_var_type(Allocator* a, const char* name);
 // Sample usage: mk_all_type(a, 2, "A", "B", mk_prim_type(Address));
 PiType* mk_all_type(Allocator* a, size_t nsymbols, ...);
 
-// Sample usage: mk_exists_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
-PiType* mk_exists_type(Allocator* a, size_t nsymbols, ...);
+// Sample usage: mk_sealed_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
+PiType* mk_sealed_type(Allocator* a, size_t nsymbols, ...);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
 PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body);

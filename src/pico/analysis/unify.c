@@ -652,8 +652,9 @@ bool has_unification_vars_p(PiType type) {
     case TVar: return false;
     
     case TAll:
-    case TExists: {
         return has_unification_vars_p(*type.binder.body);
+    case TSealed: {
+        panic(mv_string("not implemented; unify for sealed type"));
     }
     case TCApp: {
         for (size_t i = 0; i < type.app.args.len; i++) {

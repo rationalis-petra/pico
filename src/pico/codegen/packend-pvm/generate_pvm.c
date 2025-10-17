@@ -192,12 +192,12 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         not_implemented(mv_string("PVM Funcall/all Generation"));
         break;
     }
-    case SExists: {
-        not_implemented(mv_string("PVM exists Generation"));
+    case SSeal: {
+        not_implemented(mv_string("PVM seal Generation"));
         break;
     }
-    case SUnpack: {
-        not_implemented(mv_string("PVM unpack Generation"));
+    case SUnseal: {
+        not_implemented(mv_string("PVM unseal Generation"));
         break;
     }
     case SConstructor: {
@@ -323,8 +323,8 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
     case SAllType:
         not_implemented(mv_string("PVM All-Type Generation"));
         break;
-    case SExistsType:
-        not_implemented(mv_string("PVM Exists-Type Generation"));
+    case SSealedType:
+        not_implemented(mv_string("PVM Sealed-Type Generation"));
         break;
     case STypeFamily:
         not_implemented(mv_string("PVM Type-Fam Generation"));
