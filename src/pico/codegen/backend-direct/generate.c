@@ -182,7 +182,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
     build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
     build_unary_op(Push, reg(RSI, sz_64), ass, a, point);
     build_unary_op(Push, reg(R15, sz_64), ass, a, point);
-    build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
     build_unary_op(Push, reg(R13, sz_64), ass, a, point);
     build_unary_op(Push, reg(R12, sz_64), ass, a, point);
 
@@ -192,9 +192,9 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
         build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
     }
 
-    // Both R14 and R15 have same value, as the variable stack has not moved
+    // Both VSTACK_HEAD and R15 have same value, as the variable stack has not moved
     build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R14, sz_64), reg(RSI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RSI, sz_64), ass, a, point);
     build_binary_op(Mov, reg(R13, sz_64), reg(RCX, sz_64), ass, a, point);
 #elif ABI == WIN_64
     if (out_sz != 0) {
@@ -202,7 +202,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
     }
 
     build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R14, sz_64), reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(R13, sz_64), reg(R8, sz_64), ass, a, point);
 #endif
 
@@ -246,9 +246,11 @@ static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint
 #error "Unknown calling convention"
 #endif
 
+    build_binary_op(Mov, reg(RAX, sz_64), reg(R14, sz_64), ass, a, point);
+
     build_unary_op(Pop, reg(R12, sz_64), ass, a, point);
     build_unary_op(Pop, reg(R13, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(R14, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(VSTACK_HEAD, sz_64), ass, a, point);
     build_unary_op(Pop, reg(R15, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
@@ -495,7 +497,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         target.target = target.code_aux;
 
         // Codegen function setup
-        build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
         build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
@@ -520,7 +522,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         address_end_proc(env, a);
 
         // Codegen function teardown:
-        // + restore old RBP & R14 in registers
+        // + restore old RBP & VSTACK_HEAD in registers
         // + stash return address
         // + copy result down stack, accounting for
         //   + Return address, old RBP & old RSP
@@ -530,10 +532,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // Storage of function output 
         size_t ret_size = pi_stack_size_of(*syn.procedure.body->ptype);
 
-        // Note: R9, R14, RBP were saved previously (in the prolog)
+        // Note: R9, VSTACK_HEAD, RBP were saved previously (in the prolog)
         //       R12 is for the return address
         build_binary_op(Mov, reg(R12, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(R14, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
         generate_stack_move(args_size + 3 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
@@ -727,7 +729,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 static_arg_size += ADDRESS_SIZE;
                 if (!is_variable_in(arg->ptype, env)) {
                     size_t arg_size = pi_stack_size_of(*arg->ptype);
-                    build_binary_op(Sub, reg(R14, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
                     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
@@ -754,7 +756,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 static_arg_size += ADDRESS_SIZE;
                 if (!is_variable_in(arg->ptype, env)) {
                     size_t arg_size = pi_stack_size_of(*arg->ptype);
-                    build_binary_op(Sub, reg(R14, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
                     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
@@ -1718,6 +1720,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             data_stack_shrink(env, bind_sz);
         } else {
             size_t stack_sz = pi_stack_size_of(*syn.ptype);
+            // HERE IS !!BUG!!
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
             build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
@@ -1913,7 +1916,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
     }
     case SWithReset: {
         // TODO: check that the with-reset handles stack alignment correctly
-        // TODO: make sure that with-reset and reset-to handle R13 and R14 correctly
+        // TODO: make sure that with-reset and reset-to handle R13 and VSTACK_HEAD correctly
         //                (dynamic vars + index stack)
         // Overview of reset codegen
         // 1. Push as reset point onto the stack
@@ -2062,11 +2065,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         break;
     }
     case SSequence: {
-        size_t bind_sz = ADDRESS_SIZE; 
-
         build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
+        size_t bind_sz = 0; 
         for (size_t i = 0; i < syn.sequence.elements.len; i++) {
             SeqElt* elt = syn.sequence.elements.data[i];
             generate_i(*elt->expr, env, target, links, a, point);
@@ -2112,14 +2114,14 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
             // Store current index in stack return position
             generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
-            data_stack_shrink(env, bind_sz);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz + ADDRESS_SIZE), ass, a, point);
+            data_stack_shrink(env, bind_sz + ADDRESS_SIZE);
         } else {
             size_t stack_sz = pi_stack_size_of(*syn.ptype);
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref32(RSP, bind_sz + stack_sz, sz_64), ass, a, point);
-            generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm32(bind_sz), ass, a, point);
-            data_stack_shrink(env, bind_sz);
+            generate_stack_move(bind_sz + ADDRESS_SIZE, 0, stack_sz, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(bind_sz + ADDRESS_SIZE), ass, a, point);
+            data_stack_shrink(env, bind_sz + ADDRESS_SIZE);
         }
         break;
     }

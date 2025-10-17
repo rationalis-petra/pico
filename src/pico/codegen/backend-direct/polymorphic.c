@@ -97,6 +97,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 
         // Store value at the stack head
         generate_stack_size_of(RAX, body.ptype, env, ass, a, point);
+        build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
         build_binary_op(Sub, reg(R15, sz_64), reg(RAX, sz_64), ass, a, point);
         generate_poly_move(reg(R15, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(R15, sz_64), ass, a, point);

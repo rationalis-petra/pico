@@ -1,3 +1,5 @@
+#include "platform/signals.h"
+
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
 #include "pico/stdlib/extra.h"
@@ -64,7 +66,15 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     RunExpression run = (RunExpression)get_instructions(target.target).data;
 
     void* out = mem_alloc(rsize, a);
+
+#ifdef DEBUG_ASSERT
+    void* new_dmp = run(out, dynamic_memory_ptr, dvars);
+    if (new_dmp != dynamic_memory_ptr) {
+        panic(mv_string("Variable Stack Head (R14) register constraint violated."));
+    }
+#else
     run(out, dynamic_memory_ptr, dvars);
+#endif
 
     mem_free(dynamic_memory_space, a);
     set_std_temp_allocator(old_temp_alloc);
