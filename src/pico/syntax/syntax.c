@@ -181,6 +181,52 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
+    case SSeal: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_cstr_doc("seal", a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->seal.type, a), &nodes);
+        {
+            PtrArray types = mk_ptr_array(syntax->seal.types.len, a);
+            for (size_t i = 0; i < syntax->seal.types.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->seal.types.data[i], a), &types);
+            }
+            push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
+        }
+        {
+            PtrArray implicits = mk_ptr_array(syntax->seal.implicits.len, a);
+            for (size_t i = 0; i < syntax->seal.implicits.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->seal.implicits.data[i], a), &implicits);
+            }
+            push_ptr(mk_paren_doc("{","}", mv_sep_doc(implicits, a), a), &nodes);
+        }
+        push_ptr(pretty_syntax_internal(syntax->seal.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case SUnseal: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(pretty_syntax_internal(syntax->unseal.sealed, a), &nodes);
+
+        PtrArray types = mk_ptr_array(syntax->unseal.types.len, a);
+        for (size_t i = 0; i < syntax->all.args.len; i++) {
+            Document* arg = mk_str_doc(symbol_to_string(syntax->unseal.types.data[i], a), a);
+            push_ptr(arg, &nodes);
+        }
+        push_ptr(mk_paren_doc("[","]", mv_sep_doc(types, a), a), &nodes);
+
+        if (syntax->unseal.implicits.len > 0) {
+            PtrArray implicits = mk_ptr_array(syntax->unseal.implicits.len, a);
+            for (size_t i = 0; i < syntax->unseal.implicits.len; i++) {
+                Document* arg = mk_str_doc(symbol_to_string(syntax->unseal.implicits.data[i], a), a);
+                push_ptr(arg, &nodes);
+            }
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(types, a), a), &implicits);
+        }
+
+        push_ptr(pretty_syntax_internal(syntax->unseal.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        break;
+    }
     case SConstructor: {
         PtrArray nodes = mk_ptr_array(3, a);
         if (syntax->constructor.enum_type) {
@@ -431,10 +477,6 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mk_paren_doc("(narrow ", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
         break;
     }
-    case SDynAlloc: {
-        out = mk_paren_doc("(dyn-alloc ", ")", pretty_syntax_internal(syntax->size, a), a);
-        break;
-    }
     case SSizeOf: {
         out = mk_paren_doc("(size-of ", ")", pretty_syntax_internal(syntax->size, a), a);
         break;
@@ -676,8 +718,26 @@ Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
         out = mv_sep_doc(nodes, a);
         break;
     }
-    case SExistsType: {
-        out = mv_str_doc(mk_string("Pretty syntax not implemented for existential type", a), a);
+    case SSealedType: {
+        PtrArray nodes = mk_ptr_array(4, a) ;
+        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("Sealed"), a), a), &nodes);
+
+        SymbolArray arr = syntax->sealed_type.vars;
+        PtrArray arg_nodes = mk_ptr_array(arr.len, a);
+        for (size_t i = 0; i < arr.len; i++) {
+            push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(arr.data[i], a), a), a), &arg_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+
+        PtrArray impls = syntax->sealed_type.implicits;
+        PtrArray impl_nodes = mk_ptr_array(impls.len, a);
+        for (size_t i = 0; i < impls.len; i++) {
+            push_ptr(pretty_syntax_internal(impls.data[i], a), &impl_nodes);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_sep_doc(impl_nodes, a), a), &nodes);
+
+        push_ptr(pretty_syntax_internal(syntax->sealed_type.body, a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case STypeFamily: {

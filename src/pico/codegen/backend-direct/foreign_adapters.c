@@ -323,9 +323,9 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
-                  build_binary_op(ass, Mov, reg(next_reg, sz_64),
+                  build_binary_op(Mov, reg(next_reg, sz_64),
                                   rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
-                                  a, point);
+                                  ass, a, point);
               }
               break;
           }
@@ -343,9 +343,9 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
-                  build_binary_op(ass, MovSD, reg(next_reg, sz_64),
+                  build_binary_op(MovSD, reg(next_reg, sz_64),
                                   rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
-                                  a, point);
+                                  ass, a, point);
               }
               break;
           }
@@ -383,7 +383,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     }
 
     // Use RBX as an indexing register, to point to the 'base'
-    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(Mov, reg(RBX, sz_64), reg(RSP, sz_64), ass, a, point);
 
     // The stack shall be aligned either on 16 bytes, (32 bytes if __m256 is used) or
     // 64 bytes (if __m512 is used). The alignment is to the 'end of input
@@ -395,23 +395,23 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     needed_stack_offset = expected_stack_align - needed_stack_offset;
 
     // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), imm32(8), ass, a, point);
     // Get the bottom byte of RSP (store in RAX), which is the info we need to
     // perform (16-byte) alignment.
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
+    build_binary_op(Mov, reg(RAX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(And, reg(RAX, sz_64), imm8(0xf), ass, a, point);
 
     // Do some fancy stuff
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(needed_stack_offset), a, point);
-    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
-    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
-    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Mov, reg(R9, sz_64), imm32(needed_stack_offset), ass, a, point);
+    build_binary_op(Sub, reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+    build_binary_op(And, reg(R9, sz_64), imm8(0xf), ass, a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
     if (pass_return_in_memory) {
         // pass in memory - reserve space on stack:
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(return_arg_size), a, point);
-        build_binary_op(ass, Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
+        build_binary_op(Mov, reg(integer_registers[0], sz_64), reg(RSP, sz_64), ass, a, point);
     }
 
     for (size_t i = 0; i < in_memory_args.len; i++) {
@@ -419,15 +419,15 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         // pass in memory - reserve space on stack:
         size_t arg_idx = in_memory_args.data[in_memory_args.len - (i + 1)];
         size_t arg_size = arg_offsets.data[arg_idx] - arg_offsets.data[arg_idx + 1];
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(arg_size), a, point);
-        build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx + 1]), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(arg_size), ass, a, point);
+        build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(R10, sz_64), imm32(arg_offsets.data[arg_idx + 1]), ass, a, point);
         generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
     }
 
     // Call function
-    build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
-    build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
+    build_binary_op(Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), ass, a, point);
+    build_unary_op(Call, reg(RBX, sz_64), ass, a, point);
 
     if (pass_return_in_memory) {
         //        Stack currently looks like
@@ -447,59 +447,59 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         }
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         if (input_area_size <= INT8_MAX) {
-            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+            build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), ass, a, point);
         } else {
-            build_binary_op(ass, Mov, reg(RCX, sz_64), imm32(input_area_size), a, point);
-            build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
-            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RCX, 0, sz_64), a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm32(input_area_size), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RBX, sz_64), rref8(RCX, 0, sz_64), ass, a, point);
         }
 
         // TODO: check usages of input area size: may be > 127
 
         // Use to to calculate the location of the return address (store in RCX)
-        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
         if (input_area_size <= INT8_MAX) {
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm8(input_area_size), ass, a, point);
         } else {
-            build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(input_area_size), a, point);
-            build_binary_op(ass, Add, reg(RCX, sz_64), reg(RSI, sz_64), a, point);
+            build_binary_op(Mov, reg(RSI, sz_64), imm32(input_area_size), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), reg(RSI, sz_64), ass, a, point);
         }
-        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
+        build_binary_op(Add, reg(RCX, sz_64), reg(RBX, sz_64), ass, a, point); // align adjust
         // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), ass, a, point);  
 
         // To copy the value, first store target address (END of where return value is copied) in RDX 
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
         if (unadjusted_offset <= INT8_MAX) {
-            build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
+            build_binary_op(Add, reg(RDX, sz_64), imm32(unadjusted_offset), ass, a, point);
         } else {
-            build_binary_op(ass, Mov, reg(RSI, sz_64), imm32(unadjusted_offset), a, point);
-            build_binary_op(ass, Add, reg(RDX, sz_64), reg(RSI, sz_64), a, point);
+            build_binary_op(Mov, reg(RSI, sz_64), imm32(unadjusted_offset), ass, a, point);
+            build_binary_op(Add, reg(RDX, sz_64), reg(RSI, sz_64), ass, a, point);
         }
-        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
+        build_binary_op(Add, reg(RDX, sz_64), reg(RBX, sz_64), ass, a, point);
 
         // Now, generate a stack copy targeting RDX
         // TODO: check for not overfloating imm8 maximum
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), ass, a, point);
         generate_stack_copy(RDX, return_arg_size, ass, a, point);
 
         // Then, the remainder of memory (sans the return arg) from the stack.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(return_arg_size), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), reg(RBX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), ass, a, point);
 
         // Push return address
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     } else {
         // Pop all memory arguments (both pico and c)
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm8(8), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(input_area_size), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
 
-        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
         // The -0x8 accounts for the fact that we just popped the return address! 
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
 
         // Now, push registers onto stack
         size_t current_return_register = return_classes.len - 1;
@@ -511,7 +511,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
             case SysVInteger: {
                 Regname next_reg = return_integer_registers[current_return_register--];
                 // Push from registers into memory
-                build_unary_op(ass, Push, reg(next_reg, sz_64), a, point);
+                build_unary_op(Push, reg(next_reg, sz_64), ass,a, point);
                 break;
             }
             case SysVSSE:
@@ -534,11 +534,11 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                 break;
             case SysVMemory:
                 break;
-            }
+            } 
         }
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     }
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 
     sdelete_u8_array(return_classes);
     sdelete_u64_array(in_memory_args);
@@ -570,32 +570,32 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     }
 
     // Use RBX as an indexing register, to point to the 'base' (before runtime offsets are added)
-    build_binary_op(ass, Mov, reg(RBX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(Mov, reg(RBX, sz_64), reg(RSP, sz_64), ass, a, point);
 
     const size_t expected_stack_align = 16;
     size_t needed_stack_offset = input_area_size % expected_stack_align;
     needed_stack_offset = expected_stack_align - needed_stack_offset;
 
     // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm32(8), a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), imm32(8), ass, a, point);
     // Get the bottom byte of RSP (store in RAX), which is the info we need to
     // perform (16-byte) alignment.
-    build_binary_op(ass, Mov, reg(RAX, sz_64), reg(RSP, sz_64), a, point);
-    build_binary_op(ass, And, reg(RAX, sz_64), imm8(0xf), a, point);
+    build_binary_op(Mov, reg(RAX, sz_64), reg(RSP, sz_64), ass, a, point);
+    build_binary_op(And, reg(RAX, sz_64), imm8(0xf), ass, a, point);
 
     // Do some fancy stuff
-    build_binary_op(ass, Mov, reg(R9, sz_64), imm32(needed_stack_offset), a, point);
-    build_binary_op(ass, Sub, reg(R9, sz_64), reg(RAX, sz_64), a, point);
-    build_binary_op(ass, And, reg(R9, sz_64), imm8(0xf), a, point);
-    build_binary_op(ass, Sub, reg(RSP, sz_64), reg(R9, sz_64), a, point);
-    build_binary_op(ass, Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), a, point);
+    build_binary_op(Mov, reg(R9, sz_64), imm32(needed_stack_offset), ass, a, point);
+    build_binary_op(Sub, reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+    build_binary_op(And, reg(R9, sz_64), imm8(0xf), ass, a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
 
 
     // Check for return arg/space
     if (pass_in_memory) {
         Regname next_reg = integer_registers[current_register++];
-        build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), a, point);
-        build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Sub, reg(RSP, sz_64), imm8(pi_stack_align(c_size_of(*ctype->proc.ret))), ass, a, point);
+        build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
     }
 
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
@@ -608,16 +608,16 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
             break;
           case Win64Floating:
               Regname next_reg = float_registers[current_register++];
-              build_binary_op(ass, MovSD, reg(next_reg, sz_64),
+              build_binary_op(MovSD, reg(next_reg, sz_64),
                               rref8(RBX, arg_offsets.data[i + 1], sz_64),
-                              a, point);
+                              ass, a, point);
               break;
           case Win64Integer:
           case Win64SmallAggregate: {
               Regname next_reg = integer_registers[current_register++];
-              build_binary_op(ass, Mov, reg(next_reg, sz_64),
+              build_binary_op(Mov, reg(next_reg, sz_64),
                               rref8(RBX, arg_offsets.data[i + 1], sz_64),
-                              a, point);
+                              ass, a, point);
               break;
           }
           case Win64LargeAggregate: {
@@ -625,21 +625,21 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               // we know that next_reg is about to hold a pointer to this
               // argument, so we can safely use it as a scratch register.
               // In this case, it stores the source of the stack argument (to copy)
-              build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RBX, sz_64), a, point);
+              build_binary_op(Mov, reg(next_reg, sz_64), reg(RBX, sz_64), ass, a, point);
               if (arg_offsets.data[i+1] > INT8_MAX) {
-                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), a, point);
+                  build_binary_op(Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), ass, a, point);
               } else {
-                  build_binary_op(ass, Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+                  build_binary_op(Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
               }
 
               // TODO (IMPROVEMENT) what if different sizes?
               // Copy the argument to the bottom of the stack.
               size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
-              build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(arg_size), a, point);
+              build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
               generate_monomorphic_copy(RSP, next_reg, arg_size, ass, a, point);
 
               // Now, update the register to point to the argument.
-              build_binary_op(ass, Mov, reg(next_reg, sz_64), reg(RSP, sz_64), a, point);
+              build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
               break;
           }
           case Win64M128: {
@@ -647,22 +647,22 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
           }
           }
       } else {
-          build_binary_op(ass, Mov, reg(R10, sz_64), reg(RBX, sz_64), a, point);
-          build_binary_op(ass, Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), a, point);
+          build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
+          build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
 
           // TODO (IMPROVEMENT) what if different sizes?
           // Copy the argument to the bottom of the stack.
           size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
-          build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(arg_size), a, point);
+          build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
           generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
       }
     }
     
     // Call function
-    build_binary_op(ass, Sub, reg(RSP, sz_64), imm8(32), a, point);
-    build_binary_op(ass, Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), a, point);
-    build_unary_op(ass, Call, reg(RBX, sz_64), a, point);
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(32), a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), imm8(32), ass, a, point);
+    build_binary_op(Mov, reg(RBX, sz_64), imm64((uint64_t)cfn), ass, a, point);
+    build_unary_op(Call, reg(RBX, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(32), ass, a, point);
 
     // Unwind: 
     if (pass_in_memory) {
@@ -683,66 +683,66 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         }
         // in RBX, store the stack alignment adjust (i.e. the size of the align padding)
         if (input_area_size <= INT8_MAX) {
-            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), a, point);
+            build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, input_area_size, sz_64), ass, a, point);
         } else {
-            build_binary_op(ass, Mov, reg(R8, sz_64), reg(RSP, sz_64), a, point);
-            build_binary_op(ass, Add, reg(R8, sz_64), imm32(input_area_size), a, point);
-            build_binary_op(ass, Mov, reg(RBX, sz_64), rref8(R8, 0, sz_64), a, point);
+            build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
+            build_binary_op(Add, reg(R8, sz_64), imm32(input_area_size), ass, a, point);
+            build_binary_op(Mov, reg(RBX, sz_64), rref8(R8, 0, sz_64), ass, a, point);
         }
 
         // Use to to calculate the location of the return address (store in RCX)
-        build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
         if (input_area_size <= INT8_MAX) {
-            build_binary_op(ass, Add, reg(RCX, sz_64), imm8(input_area_size), a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm8(input_area_size), ass, a, point);
         } else {
-            build_binary_op(ass, Mov, reg(R8, sz_64), imm32(input_area_size), a, point);
-            build_binary_op(ass, Add, reg(RCX, sz_64), reg(R8, sz_64), a, point);
+            build_binary_op(Mov, reg(R8, sz_64), imm32(input_area_size), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), reg(R8, sz_64), ass, a, point);
         }
-        build_binary_op(ass, Add, reg(RCX, sz_64), reg(RBX, sz_64), a, point); // align adjust
+        build_binary_op(Add, reg(RCX, sz_64), reg(RBX, sz_64), ass, a, point); // align adjust
         // RCX = ret_addr = [RCX + sizeof(align adjust) = 0x8]
-        build_binary_op(ass, Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), a, point);  
+        build_binary_op(Mov, reg(RCX, sz_64), rref8(RCX, 0x8, sz_64), ass, a, point);  
 
         // To copy the value, first store target address (END of where return value is copied) in RDX 
-        build_binary_op(ass, Mov, reg(RDX, sz_64), reg(RSP, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), imm32(unadjusted_offset), a, point);
-        build_binary_op(ass, Add, reg(RDX, sz_64), reg(RBX, sz_64), a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RDX, sz_64), imm32(unadjusted_offset), ass, a, point);
+        build_binary_op(Add, reg(RDX, sz_64), reg(RBX, sz_64), ass, a, point);
 
         // Then, update RSP to point to the return arg.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(input_area_size - return_arg_size), ass, a, point);
 
         // Now, generate a stack copy targeting RDX
         generate_stack_copy(RDX, return_arg_size, ass, a, point);
 
         // Then, pop all memory (sans the return arg) from the stack.
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(return_arg_size), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), reg(RBX, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(return_arg_size), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), reg(RBX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(0x8 + arg_offsets.data[0] - return_arg_size), ass, a, point);
 
         // Push return address
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
     } else {
         // Pop all memory arguments (both pico and c)
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(input_area_size), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), a, point);
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(0x8), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(input_area_size), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(0x8), ass, a, point);
 
         // Pop return address
-        build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
+        build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
 
         // The offsets account for the return address (which we just popped!), therefore subtract 0x8
-        build_binary_op(ass, Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
 
         // Now, push result onto stack
         if (return_arg_size > 0) {
-            build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         }
 
         // Push return address
-        build_unary_op(ass, Push, reg(RCX, sz_64), a, point);
+        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
     }
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 
 #else
 #error "convert_c_fun not implemented for unknonw arch"
@@ -1020,7 +1020,7 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     case TCType:
     case TVar:
     case TAll:
-    case TExists:
+    case TSealed:
     case TCApp:
     case TFam:
     case TKind:

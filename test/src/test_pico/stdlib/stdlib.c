@@ -22,6 +22,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
 
@@ -46,6 +47,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     delete_module_header(header);
 
     if (suite_start(log, mv_string("core"))) {
+        run_pico_stdlib_core_type_tests(log, module, env, target, a);
         run_pico_stdlib_core_tests(log, module, env, target, a);
         suite_end(log);
     }
@@ -56,6 +58,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     }
 
     if (suite_start(log, mv_string("meta"))) {
+        if (suite_start(log, mv_string("gen"))) {
+            run_pico_stdlib_meta_gen_tests(log, module, env, target, a);
+            suite_end(log);
+        }
         if (suite_start(log, mv_string("refl"))) {
             run_pico_stdlib_meta_refl_tests(log, module, env, target, a);
             suite_end(log);
@@ -68,9 +74,20 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
 
+    if (suite_start(log, mv_string("abs"))) {
+        if (suite_start(log, mv_string("numeric"))) {
+            run_pico_stdlib_abs_numeric_tests(log, module, env, target, a);
+            suite_end(log);
+        }
+        suite_end(log);
+    }
     if (suite_start(log, mv_string("data"))) {
         if (suite_start(log, mv_string("pair"))) {
             run_pico_stdlib_data_pair_tests(log, module, env, target, a);
+            suite_end(log);
+        }
+        if (suite_start(log, mv_string("either"))) {
+            run_pico_stdlib_data_either_tests(log, module, env, target, a);
             suite_end(log);
         }
         if (suite_start(log, mv_string("list"))) {

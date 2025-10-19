@@ -1,10 +1,16 @@
+#include <string.h>
+#include "platform/memory/static.h"
+
 #include "pico/stdlib/core.h"
+#include "pico/stdlib/extra.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define ASSERT_EQ(str) assert_toplevel_eq(str, &expected, module, context)
+#define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
     TestContext context = (TestContext) {
@@ -19,11 +25,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     //  Widen/Narrow
     // 
     // -----------------------------------------------------
+
     if (test_start(log, mv_string("widen-u32-u64"))) {
         int64_t expected = 678;
         TEST_EQ("(widen (is 678 U32) U64)");
     }
-
 
     // -------------------------------------------------------------------------
     //
@@ -41,6 +47,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(let [x (is -3 I32)] x)");
     }
 
+    if (test_start(log, mv_string("let-large-value"))) {
+        // Test that when a value is moved up the stack, if it is larger than the 
+        // total binding size, it does not overwrite itself.
+        typedef struct {int64_t x; int64_t y;} Pr;
+        Pr expected = (Pr){ .x = 5, .y = 2 };
+        TEST_EQ("(let [x 2] (struct [.x 5] [.y x]))");
+    }
+
     if (test_start(log, mv_string("simple-sequence"))) {
         int64_t expected = 3;
         TEST_EQ("(seq 1 2 3)");
@@ -54,6 +68,38 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("let-many-in-sequence"))) {
         int64_t expected = 5;
         TEST_EQ("(seq [let! x 2] [let! y 3] (u32.+ x y))");
+    }
+
+    if (test_start(log, mv_string("let-large-in-sequence"))) {
+        typedef struct {int64_t x; int64_t y;} Pr;
+        Pr expected = (Pr){ .x = 122, .y = -79 };
+        TEST_EQ("(seq [let! x 122] (struct [.x 122] [.y -79]))");
+    }
+
+    // -------------------------------------------------------------------------
+    //
+    //     Labels 
+    //
+    // -------------------------------------------------------------------------
+
+    if (test_start(log, mv_string("labels-simple"))) {
+        int64_t expected = 27;
+        TEST_EQ("(labels 27)");
+    }
+
+    if (test_start(log, mv_string("labels-single-goto"))) {
+        int64_t expected = -8;
+        TEST_EQ("(labels (go-to start) [start -8])");
+    }
+
+    if (test_start(log, mv_string("labels-pass-var"))) {
+        int64_t expected = 3;
+        TEST_EQ("(labels (go-to start 3) [start [x] x])");
+    }
+
+    if (test_start(log, mv_string("labels-loop"))) {
+        int64_t expected = 10;
+        TEST_EQ("(labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)])");
     }
 
     // -------------------------------------------------------------------------
@@ -109,7 +155,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = -75;
         TEST_EQ("((all [A] proc [(x A)] x) -75)");
     }
-
 
     // -------------------------------------------------------------------------
     //
@@ -333,6 +378,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     //      Type Metadata (size, align, offset)
     // 
     // -----------------------------------------------------
+
     if (test_start(log, mv_string("test-size-of-I64"))) {
         uint64_t expected = 8;
         TEST_EQ("(size-of I64)");
@@ -360,28 +406,203 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -----------------------------------------------------
     // 
-    //      Type Constructors
+    //  Instances
     // 
     // -----------------------------------------------------
-    if (test_start(log, mv_string("I64"))) {
-        PiType* expected = mk_prim_type(a, Int_64);
-        TEST_EQ("I64");
-        delete_pi_type_p(expected, a);
+
+    if (test_start(log, mv_string("instance-const"))) {
+        int64_t expected = 77;
+        RUN("(def Inhabited Trait [A] [.value A])");
+        // TODO (BUG)
+        // swapping the order of below statements gives an 'ambiguous instance' error?
+        RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
+        RUN("(def i64-inhabited instance (Inhabited I64) [.value 77])");
+
+        TEST_EQ("(get-value {I64} 5)");
     }
 
-    if (test_start(log, mv_string("proc-const"))) {
-        PiType* expected = mk_proc_type(a, 2, mk_prim_type(a, Int_64), mk_prim_type(a, Int_64), mk_prim_type(a, Int_64));
-        TEST_EQ("(Proc [I64 I64] I64)");
-        delete_pi_type_p(expected, a);
+    if (test_start(log, mv_string("instance-mval"))) {
+        int64_t expected = -77;
+        RUN("(def MultiInhabited Trait [A] [.val-1 A] [.val-2 A])");
+        // TODO (BUG)
+        // swapping the order of below statements gives an 'ambiguous instance' error?
+        RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
+        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-1 77] [.val-2 -77])");
+
+        TEST_EQ("(get-second-value {I64} 5)");
     }
 
-    if (test_start(log, mv_string("recursive-named"))) {
-        PiType* vty = mk_var_type(a, "Element");
-        PiType* lty = mk_app_type(a, get_list_type(), vty);
-        PiType* expected = mk_named_type(a, "Element",
-                                         mk_struct_type(a, 1, "children", lty));
-        TEST_EQ("(Named Element Struct [.chidren (List Element)])");
-        delete_pi_type_p(expected, a);
-        delete_pi_type_p(vty, a);
+    if (test_start(log, mv_string("instance-mval"))) {
+        uint64_t expected = 43;
+        RUN("(def MultiConstInhabited Trait [A] [.val-1 A] [.val-2 U64])");
+        RUN("(def get-snd-const-value all [A] proc {(in (MultiConstInhabited A))} [(x A)] in.val-2)");
+        RUN("(def i64-multi-const-inhabited instance (MultiConstInhabited I64) [.val-1 77] [.val-2 43])");
+
+        TEST_EQ("(get-snd-const-value {I64} 5)");
     }
+
+    // TODO: enable me!
+    /* if (test_start(log, mv_string("instance-const-unaligned"))) { */
+    /*     int64_t expected = -98; */
+    /*     RUN("(def Inhabited Trait [A] [.value A])"); */
+    /*     // TODO (BUG) */
+    /*     // swapping the order of below statements gives an 'ambiguous instance' error? */
+    /*     RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)"); */
+    /*     RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])"); */
+
+    /*     TEST_EQ("(get-value {I8} 5)"); */
+    /* } */
+
+    // -----------------------------------------------------
+    // 
+    //      Miscellaneous Bits and Bobs
+    // 
+    // -----------------------------------------------------
+
+    if (test_start(log, mv_string("size-of-I64"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of I64)");
+    }
+
+    if (test_start(log, mv_string("size-of-I8"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(size-of I8)");
+    }
+
+    if (test_start(log, mv_string("align-of-I64"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of I64)");
+    }
+
+    if (test_start(log, mv_string("align-of-I8"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(align-of I8)");
+    }
+
+    if (test_start(log, mv_string("offset-of-simple-0"))) {
+        uint64_t expected = 0;
+        TEST_EQ("(offset-of x (Struct [.x I8] [.y I16]))");
+    }
+
+    if (test_start(log, mv_string("offset-of-simple-nonzero"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(offset-of y (Struct [.x I8] [.y I8]))");
+    }
+
+    if (test_start(log, mv_string("offset-of-complex-nonzero"))) {
+        uint64_t expected = 2;
+        TEST_EQ("(offset-of y (Struct [.x I8] [.y I16]))");
+    }
+
+    // -----------------------------------------------------
+    // 
+    //      Core functions (notably, load/store)
+    // 
+    // -----------------------------------------------------
+    
+    void* mem = mem_alloc(128, a);
+    Allocator old = get_std_current_allocator();
+    void* start;
+    {
+        Allocator sta = mk_static_allocator(mem, 128);
+        start = mem_alloc(8, &sta);
+    }
+
+    if (test_start(log, mv_string("test-load-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        *(int64_t*)start = 8;
+
+        set_std_current_allocator(sta);
+        uint64_t expected = 8;
+        TEST_EQ("(let [addr malloc (size-of I64)] (load {I64} addr))");
+    }
+
+    if (test_start(log, mv_string("test-load-i8"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        *(int8_t*)start = -5;
+
+        set_std_current_allocator(sta);
+        int8_t expected = -5;
+        TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
+    }
+
+    if (test_start(log, mv_string("test-load-struct"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct { int64_t x; int64_t y; } IPr;
+        set_std_current_allocator(sta);
+        IPr expected = {.x = 25, .y = -5};
+        *(IPr*)(start) = expected;
+        TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
+    }
+
+    if (test_start(log, mv_string("test-store-i8"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        int8_t expected = -5;
+
+        set_std_current_allocator(sta);
+        RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
+        TEST_MEM("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
+    }
+
+    if (test_start(log, mv_string("test-store-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        int64_t expected = 197231987;
+
+        set_std_current_allocator(sta);
+        TEST_MEM("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
+    }
+
+    if (test_start(log, mv_string("test-store-i64"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct { int64_t x; int64_t y; } IPr;
+        IPr expected = {.x = -123, .y = 9713};
+
+        set_std_current_allocator(sta);
+        TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
+    }
+
+
+    // ---------------------------------------------------------------
+    //
+    //      Sealing
+    //
+    // ---------------------------------------------------------------
+    //
+    // The sealing tests are after load/store, as load/store are
+    // necessary to test sealing/unsealing
+    //
+    // ---------------------------------------------------------------
+
+    if (test_start(log, mv_string("seal-val"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct {uint64_t tinfo; void* address; } SID;
+        SID expected = {.tinfo = 0x800000080000008, .address = start};
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.p Address])");
+        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+    }
+
+    if (test_start(log, mv_string("unseal-trivial"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct {uint64_t tinfo; void* address; } SID;
+        SID expected = {.tinfo = 0x800000080000008, .address = start};
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.p Address])");
+        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+    }
+
+    if (test_start(log, mv_string("unseal-load/store"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        uint64_t expected = 16823;
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
+        RUN("(def sl seq [let! dest malloc 8] [let! src malloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
+        TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");
+    }
+
+    set_std_current_allocator(old);
+    mem_free(mem, a);
 }

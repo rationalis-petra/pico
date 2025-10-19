@@ -1,7 +1,9 @@
 #ifndef __PICO_BINDING_ADDRESS_ENV_H
 #define __PICO_BINDING_ADDRESS_ENV_H
 
+#include "data/meta/array_header.h"
 #include "platform/memory/allocator.h"
+
 #include "pico/data/sym_size_assoc.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/environment.h"
@@ -24,7 +26,6 @@ typedef struct AddressEnv AddressEnv;
  */
 typedef enum {
     ALocalDirect,
-    ALocalIndirect,
     ALocalIndexed,
     AGlobal,
     ATypeVar,
@@ -45,6 +46,14 @@ typedef struct {
     uint32_t stack_offset;
 } LabelEntry;
 
+typedef struct {
+    Symbol sym;
+    uint32_t size;
+    bool is_variable;
+} Binding;
+
+ARRAY_HEADER(Binding, binding, Binding)
+
 // Forward decl
 typedef struct TypeEnv TypeEnv;
 
@@ -53,10 +62,10 @@ AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
 
 void delete_address_env(AddressEnv* env, Allocator* a);
 
-// Debug utility functions
-// These are used by the codegenerator to assert properties of the address environment
-// in debug mode.
-int64_t debug_get_stack_head(AddressEnv* env);
+// Query Functions
+// Get the current offset of the stack head (i.e. $RSP) 
+// relative to the stack base ($RBP).
+int64_t get_stack_head(AddressEnv* env);
 
 /* Address environment interface
  * Lookups return either:
@@ -80,13 +89,13 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env);
 void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
 
-void address_start_poly(SymbolArray types, SymbolArray args, AddressEnv* env, Allocator* a);
+void address_start_poly(SymbolArray types, BindingArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
 
 // get_base is essentially only used by describe, when generating description
 // strings of values. 
-
 Environment* get_addr_base(AddressEnv* env);
+bool is_variable_in(PiType* type, AddressEnv* env);
 
 
 //------------------------------------------------------------------------------
@@ -94,9 +103,27 @@ Environment* get_addr_base(AddressEnv* env);
 //  bind values associated with specific forms/values (e.g. enums/structs)
 //------------------------------------------------------------------------------
 
+// When generating type-literals (e.g. All [A] Proc [A] A), the variables 'A'
+// must generate code to produce corresponding TVars. Addrss_bind_type is used for
+// this purpose
 void address_bind_type(Symbol s, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RSP in the
+// local environment. 'S' may be any static (runtime) value but NOT a runtime type
+// Note: The binding actually happens relative to $RBP, so lookups remain 
+//   valid even after binding happens
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RSP in the
+// local environment. 'S' may be any static (runtime) type but NOT a runtime value
+void address_bind_relative_type(Symbol s, size_t offset, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RBP in the
+// local environment, and that this binding is to a pointer on the variable stack
+void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env);
+
 void address_pop_n(size_t n, AddressEnv* env);
+void address_pop_n_types(size_t n, AddressEnv* env);
 void address_pop(AddressEnv* env);
 
 // Bind and unbind enum vars: 
@@ -104,7 +131,7 @@ void address_pop(AddressEnv* env);
 //   it establishes bindings for the members of the enum, but does not adjust the
 //   stack head.
 // Unbind removes these bindings. Like bind, it does not adjust the stack head.
-void address_bind_enum_vars(SymSizeAssoc vars, AddressEnv* env);
+void address_bind_enum_vars(BindingArray args, bool is_variable, AddressEnv* env);
 void address_unbind_enum_vars(AddressEnv* env);
 
 // Bind and unbind label vars: 
@@ -122,9 +149,5 @@ void address_end_labels(AddressEnv* env);
 // Inform the environment that values have been pushed/popped from the stack.
 void data_stack_grow(AddressEnv* env, size_t amount);
 void data_stack_shrink(AddressEnv* env, size_t amount);
-
-// Inform the environment that values have been pushed/popped from the index.
-void index_stack_grow(AddressEnv* env, size_t num);
-void index_stack_shrink(AddressEnv* env, size_t num);
 
 #endif

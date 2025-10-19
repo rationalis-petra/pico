@@ -1,5 +1,3 @@
-#include "pico/stdlib/meta/submodules.h"
-
 #include "platform/memory/arena.h"
 #include "platform/filesystem/filesystem.h"
 

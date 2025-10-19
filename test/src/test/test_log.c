@@ -165,23 +165,30 @@ int summarize_tests(TestLog *log, Allocator* a) {
         end_coloured_text(log->stream);
     }
 
-    if (log->failed_tests == 0 && err_code == 0) {
+    if (log->failed_tests == 0 && log->skipped_tests == 0 && err_code == 0) {
         start_coloured_text(pass_colour, log->stream);
-        write_fstring(mv_string("                   All tests Passed\n"), log->stream);
+        write_fstring(mv_string("                     All Tests Passed\n"), log->stream);
+        end_coloured_text(log->stream);
+    } else if (log->skipped_tests != 0 && err_code == 0) {
+        err_code = 1;
+        start_coloured_text(err_colour, log->stream);
+        write_fstring(mv_string("                    Some Tests Skipped\n"), log->stream);
         end_coloured_text(log->stream);
     } else if (log->failed_tests != 0) {
         err_code = 1;
         start_coloured_text(fail_colour, log->stream);
-        write_fstring(mv_string("Some Tests Failed\n"), log->stream);
+        write_fstring(mv_string("                     Some Tests Failed\n"), log->stream);
         end_coloured_text(log->stream);
+    } else {
+        write_fstring(mv_string("                     Unexpected Error\n"), log->stream);
     }
     String str;
 
-    write_fstring(mv_string("\n                     Passed : "), log->stream);
+    write_fstring(mv_string("\n                      Passed : "), log->stream);
     str = string_u64(log->passed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
-    write_fstring(mv_string("\n                     Failed : "), log->stream);
+    write_fstring(mv_string("\n                      Failed : "), log->stream);
     str = string_u64(log->failed_tests, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
@@ -191,24 +198,24 @@ int summarize_tests(TestLog *log, Allocator* a) {
         write_fstring(str, log->stream);
         delete_string(str, a);
     }
-    write_fstring(mv_string("\n                     Total  : "), log->stream);
+    write_fstring(mv_string("\n                       Total : "), log->stream);
     str = string_u64(log->test_count, a);
     write_fstring(str, log->stream);
     delete_string(str, a);
     write_fstring(mv_string("\n"), log->stream);
-    write_fstring(mv_string("\n                 Time Taken: "), log->stream);
+    write_fstring(mv_string("\n                  Time Taken : "), log->stream);
     String time = string_double(cpu_time_used, a) ;
     write_fstring(time, log->stream);
     write_fstring(mv_string("s"), log->stream);
     delete_string(time, a);
 
-    write_fstring(mv_string("\n                 Setup Time: "), log->stream);
+    write_fstring(mv_string("\n                  Setup Time : "), log->stream);
     time = string_double(setup_time_used, a) ;
     write_fstring(time, log->stream);
     write_fstring(mv_string("s"), log->stream);
     delete_string(time, a);
 
-    write_fstring(mv_string("\n                  Test Time: "), log->stream);
+    write_fstring(mv_string("\n                   Test Time : "), log->stream);
     time = string_double(test_time_used, a) ;
     write_fstring(time, log->stream);
     write_fstring(mv_string("s"), log->stream);

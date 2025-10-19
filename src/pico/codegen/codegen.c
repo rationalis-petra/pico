@@ -3,7 +3,9 @@
 #include "pico/data/error.h"
 #include "pico/binding/address_env.h"
 #include "pico/codegen/codegen.h"
-#include "pico/codegen/backend-direct/direct.h"
+#include "pico/codegen/backend-direct/generate.h"
+#include "pico/codegen/backend-direct/foreign_adapters.h"
+#include "pico/codegen/backend-pvm/generate.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
 
 static CodegenBackend global_backend = CodegenDirect;
@@ -21,7 +23,7 @@ LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Alloca
     case CodegenDirect:
         return bd_generate_toplevel(top, env, target, a, point);
     case CodegenPVM:
-        not_implemented(mv_string("Unimplemented: generate_toplevel for Codegen PVM"));
+        return pvm_generate_toplevel(top, env, target, a, point);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }
@@ -31,7 +33,7 @@ LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* 
     case CodegenDirect:
         return bd_generate_expr(syn, env, target, a, point);
     case CodegenPVM:
-        not_implemented(mv_string("Unimplemented: generate_expr for Codegen PVM"));
+        return pvm_generate_expr(syn, env, target, a, point);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }
@@ -41,7 +43,7 @@ void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, 
     case CodegenDirect:
         return bd_generate_type_expr(syn, env, target, a, point);
     case CodegenPVM:
-        not_implemented(mv_string("Unimplemented: generate_type_expr for Codegen PVM"));
+        return pvm_generate_type_expr(syn, env, target, a, point);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }
@@ -67,7 +69,7 @@ void convert_c_fn(void *cfn, CType *ctype, PiType *ptype, Assembler *ass, Alloca
     case CodegenDirect:
         return bd_convert_c_fn(cfn, ctype, ptype, ass, a, point);
     case CodegenPVM:
-        not_implemented(mv_string("Unimplemented: convert_c_fn for Codegen PVM"));
+        return bd_convert_c_fn(cfn, ctype, ptype, ass, a, point);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }

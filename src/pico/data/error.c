@@ -208,6 +208,7 @@ void not_implemented(String message) {
     if (not_implemented_hook.fn) {
         not_implemented_hook.fn(not_implemented_hook.ctx);
     } else {
+        write_string(mv_string("Unhandled unimplemented exception raised.\n"), get_stdout_stream());
         panic(message);
     }
 }

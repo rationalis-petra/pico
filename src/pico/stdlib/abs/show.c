@@ -37,6 +37,7 @@ void add_show_module(Target target, Module *abs, Allocator *alloc) {
         panic(point.error_message);
     }
 
+    /*
     const char* num_trait = 
         "(def Show Trait [A]"
         "  [.to-string Proc [A] String])\n";
@@ -95,6 +96,7 @@ void add_show_module(Target target, Module *abs, Allocator *alloc) {
         "(def f32-show instance (Show F32)"
         "  [.to-string f32.to-string])\n";
     compile_toplevel(show_f32_instnace, module, target, &point, &pi_point, a);
+    */
 
     Result r = add_module_def(abs, string_to_symbol(mv_string("show")), module);
     if (r.type == Err) panic(r.error_message);

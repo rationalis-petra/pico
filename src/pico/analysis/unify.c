@@ -53,6 +53,7 @@ struct UVarType {
     PiType* subst;
     ConstraintArray constraints;
     UVarDefault default_behaviour;
+    PtrArray substitutions;
 };
 
 typedef struct {
@@ -132,9 +133,24 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Alloc
 
 UnifyResult unify_variant(Symbol lhs_sym, PtrArray lhs_args, Symbol rhs_sym, PtrArray rhs_args, SymPairArray *rename, Allocator *a) {
     if (!symbol_eq(rhs_sym, lhs_sym)) {
+        PtrArray nodes = mk_ptr_array(8, a);
+        push_ptr(mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.",a ), &nodes);
+        {
+            PtrArray l1 = mk_ptr_array(8, a);
+            push_ptr(mv_cstr_doc("    LHS has name: ", a) ,&l1);
+            push_ptr(mv_str_doc(symbol_to_string(lhs_sym, a), a), &l1);
+            push_ptr(mv_cat_doc(l1, a), &nodes);
+        }
+        {
+            PtrArray l2 = mk_ptr_array(8, a);
+            push_ptr(mv_cstr_doc("    RHS has name: ", a) ,&l2);
+            push_ptr(mv_str_doc(symbol_to_string(rhs_sym, a), a), &l2);
+            push_ptr(mv_cat_doc(l2, a), &nodes);
+        }
+
         return (UnifyResult) {
             .type = USimpleError,
-            .message = mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.", a)
+            .message = mv_vsep_doc(nodes, a),
         };
     }
 
@@ -412,9 +428,10 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
     // Uvar Subst
     //  -------- 
     // 
-    // The goal of uvar subst is to ensure that the uvar substitutes in type. If
-    // typeis itself a uvar, then the constraints from the uvar argument must be
-    // propagated into the type argument.
+    // The goal of uvar subst is to ensure point the uvar to a specific type by
+    // assigning the 'subst' field. If the type in the 'subst' field is itself a
+    // uvar, then the constraints from the uvar argument must be propagated into
+    // the type argument. 
     // 
     // ------------------------------------------------------------
 
@@ -537,8 +554,20 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, Allocator* a) {
         }
     }
     
+    for (size_t i = 0; i < uvar->substitutions.len; i++) {
+        SymPtrAssoc* subst = uvar->substitutions.data[i];
+        type = pi_type_subst(type, *subst, a);
+    }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
+}
+
+void add_subst(UVarType *uvar, SymPtrAssoc binds, Allocator *a) {
+    // NOTE: We shallow copy here due to the allocation guarantees made 
+    //       by the typecheck (caller) function.
+    SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
+    *subst = scopy_sym_ptr_assoc(binds, a);
+    push_ptr(subst, &uvar->substitutions);
 }
 
 bool has_unification_vars_p(PiType type) {
@@ -623,8 +652,13 @@ bool has_unification_vars_p(PiType type) {
     case TVar: return false;
     
     case TAll:
-    case TExists: {
         return has_unification_vars_p(*type.binder.body);
+    case TSealed: {
+        for (size_t i = 0; i < type.sealed.implicits.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.sealed.implicits.data[i]))
+                return true;
+        }
+        return has_unification_vars_p(*(PiType*)type.sealed.body);
     }
     case TCApp: {
         for (size_t i = 0; i < type.app.args.len; i++) {
@@ -710,6 +744,13 @@ void squash_type(PiType* type, Allocator* a) {
     case TAll: 
     case TFam: {
         squash_type(type->binder.body, a);
+        break;
+    }
+    case TSealed: {
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            squash_type(type->sealed.implicits.data[i], a);
+        }
+        squash_type(type->sealed.body, a);
         break;
     }
     case TNamed: {
@@ -815,46 +856,51 @@ PiType* mk_uvar(Allocator* a) {
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = NoDefault,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = NoDefault,
+        .substitutions = mk_ptr_array(8, a),
     };
     
     return uvar;
 }
 
-PiType* mk_uvar_integral(Allocator* a) {
+PiType* mk_uvar_integral(Allocator* a, Range range) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = Integral,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = Integral,
+        .substitutions = mk_ptr_array(8, a),
     };
 
     Constraint con = (Constraint) {
         .type = ConInt,
+        .range = range
     };
     push_constraint(con, &uvar->uvar->constraints);
     
     return uvar;
 }
 
-PiType* mk_uvar_floating(Allocator* a) {
+PiType* mk_uvar_floating(Allocator* a, Range range) {
     PiType* uvar = mem_alloc(sizeof(PiType), a);
     uvar->sort = TUVar; 
 
     uvar->uvar = mem_alloc(sizeof(UVarType), a);
     *uvar->uvar = (UVarType) {
-      .subst = NULL,
-      .constraints = mk_constraint_array(4, a),
-      .default_behaviour = Floating,
+        .subst = NULL,
+        .constraints = mk_constraint_array(4, a),
+        .default_behaviour = Floating,
+        .substitutions = mk_ptr_array(8, a),
     };
 
     Constraint con = (Constraint) {
         .type = ConFloat,
+        .range = range
     };
     push_constraint(con, &uvar->uvar->constraints);
     

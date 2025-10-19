@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <string.h>
 
 #include "platform/memory/arena.h"
 #include "platform/memory/executable.h"
@@ -7,6 +8,7 @@
 #include "platform/error.h"
 
 #include "data/stream.h"
+#include "data/stringify.h"
 
 #include "components/pretty/stream_printer.h"
 
@@ -31,6 +33,15 @@ typedef struct {
     void (* on_exit)(void* data, TestLog* log);
 } Callbacks;
 
+typedef struct {
+    jump_buf point;
+} NotImplementedCtx;
+
+void skip_hook(void *ctx) {
+    jump_buf* jmp = ctx;
+    long_jump(*jmp, 1);
+}
+
 void run_toplevel_internal(const char *string, Module *module, Environment* env, Callbacks callbacks, void* data, TestLog* log, Target target, Allocator *a) {
     IStream* sin = mk_string_istream(mv_string(string), a);
     // Note: we need to be aware of the arena and error point, as both are used
@@ -46,6 +57,11 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
     set_exit_callback(&exit_point);
+
+    jump_buf on_not_implemend;
+    if (set_jump(on_not_implemend)) goto on_not_implemented;
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = &on_not_implemend};
+    set_not_implemented_hook(hook);
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
@@ -117,6 +133,13 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
         callbacks.on_exit(data, log);
     }
     release_arena_allocator(arena);
+    delete_istream(sin, a);
+    return;
+
+ on_not_implemented:
+    release_arena_allocator(arena);
+    delete_istream(sin, a);
+    test_skip(log);
     return;
 }
 
@@ -160,16 +183,30 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
         test_pass(log);
     }
 }
+void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
+    Allocator* std = get_std_allocator();
+    if (!pi_value_eql(type, val, data, std)) {
+        Allocator arena = mk_arena_allocator(4096, std);
+        Allocator* a = &arena;
+        FormattedOStream* os = get_fstream(log);
+        write_fstring(mv_string("Expected: "), os);
+        Document* doc = pretty_pi_value(data, type, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\nGot: "), os);
+        doc = pretty_pi_value(val, type, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\n"), os);
+        test_fail(log);
+        release_arena_allocator(arena);
+    }
+}
 
 void top_eql(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
     write_fstring(mv_string("Did not evaluate to a value."), os);
     test_fail(log);
-}
-
-void skip_hook(void *ctx) {
-    TestLog* log = ctx;
-    test_skip(log);
 }
 
 void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
@@ -180,8 +217,19 @@ void test_toplevel_eq(const char *string, void *expected_val, Module *module, Te
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
-    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
-    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, expected_val,
+                          context.log, context.target, context.a);
+    clear_not_implemented_hook();
+}
+
+void assert_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_assert_eql,
+        .on_top = top_eql,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
     run_toplevel_internal(string, module, context.env, callbacks, expected_val,
                           context.log, context.target, context.a);
     clear_not_implemented_hook();
@@ -216,6 +264,28 @@ void expr_stdout(PiType* type, void* val, void* data, TestLog* log) {
     }
 }
 
+void expr_assert_stdout(PiType* type, void* val, void* data, TestLog* log) {
+    if (type->sort != TPrim || type->prim != Unit) {
+        test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
+        test_fail(log);
+    } else {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        StdoutData vals = *(StdoutData*)data;
+        String actual = *current_string(vals.stream, a);
+        if (string_cmp(actual, vals.expected) != 0) {
+            FormattedOStream* os = get_fstream(log);
+            write_fstring(mv_string("Expected: "), os);
+            write_fstring(vals.expected, os);
+            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(actual, os);
+            write_fstring(mv_string("\n"), os);
+            test_fail(log);
+        }
+        release_arena_allocator(arena);
+    }
+}
+
 void top_stdout(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
     write_fstring(mv_string("Did not evaluate to a value."), os);
@@ -234,6 +304,138 @@ void test_toplevel_stdout(const char *string, const char *expected_stdout, Modul
     StdoutData data = (StdoutData) {
         .stream = out,
         .expected = mv_string(expected_stdout),
+    };
+
+    OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
+    set_std_ostream(old);
+
+    delete_ostream(out, context.a);
+}
+
+void assert_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_assert_stdout,
+        .on_top = top_stdout,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    OStream* out = mk_string_ostream(context.a);
+    StdoutData data = (StdoutData) {
+        .stream = out,
+        .expected = mv_string(expected_stdout),
+    };
+
+    OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
+    set_std_ostream(old);
+
+    delete_ostream(out, context.a);
+}
+
+typedef struct {
+    const void* expected;
+    const void* actual;
+    size_t memsize;
+} MemData;
+
+void expr_mem(PiType* type, void* val, void* data, TestLog* log) {
+    if (type->sort != TPrim || type->prim != Unit) {
+        test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
+        test_fail(log);
+    } else {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        MemData vals = *(MemData*)data;
+        if (memcmp(vals.actual, vals.expected, vals.memsize) != 0) {
+            FormattedOStream* os = get_fstream(log);
+            write_fstring(mv_string("Expected: "), os);
+            write_fstring(string_hex_mem(vals.expected, vals.memsize, a), os);
+            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(string_hex_mem(vals.actual, vals.memsize, a), os);
+            write_fstring(mv_string("\n"), os);
+            test_fail(log);
+        } else {
+            test_pass(log);
+        }
+        release_arena_allocator(arena);
+    }
+}
+
+void assert_expr_mem(PiType* type, void* val, void* data, TestLog* log) {
+    if (type->sort != TPrim || type->prim != Unit) {
+        test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
+        test_fail(log);
+    } else {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        MemData vals = *(MemData*)data;
+        if (memcmp(vals.actual, vals.expected, vals.memsize) != 0) {
+            FormattedOStream* os = get_fstream(log);
+            write_fstring(mv_string("Expected: "), os);
+            write_fstring(string_hex_mem(vals.expected, vals.memsize, a), os);
+            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(string_hex_mem(vals.actual, vals.memsize, a), os);
+            write_fstring(mv_string("\n"), os);
+            test_fail(log);
+        } else {
+            test_pass(log);
+        }
+        release_arena_allocator(arena);
+    }
+}
+
+void top_mem(void *data, TestLog *log) {
+    FormattedOStream* os = get_fstream(log);
+    write_fstring(mv_string("Did not evaluate to a value."), os);
+    test_fail(log);
+}
+
+void test_toplevel_mem(const char *string, const void *expected, const void* actual, size_t memsize, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_mem,
+        .on_top = top_mem,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    OStream* out = mk_string_ostream(context.a);
+    MemData data = (MemData) {
+        .expected = expected,
+        .actual = actual,
+        .memsize = memsize,
+    };
+
+    OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
+    set_std_ostream(old);
+
+    delete_ostream(out, context.a);
+}
+
+void assert_toplevel_mem(const char *string, const void *expected, const void* actual, size_t memsize, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = assert_expr_mem,
+        .on_top = top_mem,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    OStream* out = mk_string_ostream(context.a);
+    MemData data = (MemData) {
+        .expected = expected,
+        .actual = actual,
+        .memsize = memsize,
     };
 
     OStream* old = set_std_ostream(out);

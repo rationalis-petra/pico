@@ -453,6 +453,134 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     case FApplication: {
         return mk_application(raw, env, a, point);
     }
+    case FSeal: {
+        if (raw.branch.nodes.len < 3) {
+            err.message = mv_cstr_doc("Not enough terms provided to seal", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+
+        SynArray types = mk_ptr_array(8, a);
+        {
+            RawTree raw_types = raw.branch.nodes.data[2];
+            if (raw_types.type != RawBranch && raw_types.branch.hint != HSpecial) {
+                err.range = raw_types.range;
+                err.message = mv_cstr_doc("Seal expects second argument to be a set of types", a);
+                throw_pi_error(point, err);
+            }
+
+            for (size_t i = 0; i < raw_types.branch.nodes.len; i++) {
+                Syntax* syn = abstract_expr_i(raw_types.branch.nodes.data[i], env, a, point);
+                push_ptr(syn, &types);
+            }
+        }
+
+        size_t body_idx = 3;
+        SynArray implicits = mk_ptr_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[3];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
+                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], env, a, point);
+                    push_ptr(syn, &implicits);
+                }
+            }
+        }
+
+        if (body_idx == raw.branch.nodes.len) {
+            err.message = mv_cstr_doc("Seal lacking a body", a);
+            throw_pi_error(point, err);
+        }
+
+        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? &raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx, a);
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SSeal,
+            .ptype = NULL,
+            .range = raw.range,
+            .seal.type = type,
+            .seal.types = types,
+            .seal.implicits = implicits,
+            .seal.body = body,
+        };
+        return res;
+    }
+    case FUnseal: {
+        if (raw.branch.nodes.len < 3) {
+            err.message = mv_cstr_doc("Not enough terms provided to unseal", a);
+            throw_pi_error(point, err);
+        }
+        Syntax* sealed; 
+        Symbol binder;
+        {
+
+            RawTree raw_binder = raw.branch.nodes.data[1];
+            if (raw_binder.type != RawBranch
+                || raw_binder.branch.hint != HSpecial
+                || raw_binder.branch.nodes.len != 2
+                || !is_symbol(raw_binder.branch.nodes.data[0])) {
+
+                err.range = raw_binder.range;
+                err.message = mv_cstr_doc("Unseal binding form expected here, i.e. (unseal [var sealed-val] ...)", a);
+                throw_pi_error(point, err);
+            }
+            
+            binder = raw_binder.branch.nodes.data[0].atom.symbol;
+            sealed = abstract_expr_i(raw_binder.branch.nodes.data[1], env, a, point);
+        }
+
+        SymbolArray types = mk_symbol_array(8, a);
+        {
+            RawTree raw_types = raw.branch.nodes.data[2];
+            if (!get_symbol_list(&types, raw_types) || raw_types.branch.hint != HSpecial) {
+                err.range = raw_types.range;
+                err.message = mv_cstr_doc("Invalid type binding provided to unseal", a);
+                throw_pi_error(point, err);
+            }
+        }
+
+        size_t body_idx = 3;
+        SymbolArray implicits = mk_symbol_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[3];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                if (!get_symbol_list(&types, raw_implicits)) {
+                    err.range = raw_implicits.range;
+                    err.message = mv_cstr_doc("Malformed implicit list in unseal", a);
+                    throw_pi_error(point, err);
+                }
+            }
+        }
+
+        if (body_idx == raw.branch.nodes.len) {
+            err.message = mv_cstr_doc("Unseal lacking a body", a);
+            throw_pi_error(point, err);
+        }
+
+        RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
+            ? &raw.branch.nodes.data[body_idx]
+            : raw_slice(&raw, body_idx, a);
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SUnseal,
+            .ptype = NULL,
+            .range = raw.range,
+            .unseal.sealed = sealed,
+            .unseal.binder = binder,
+            .unseal.types = types,
+            .unseal.implicits = implicits,
+            .unseal.body = body,
+        };
+        return res;
+    }
     case FVariant: {
         if (raw.branch.nodes.len == 2) {
             // Check that we are indeed getting a result
@@ -1333,24 +1461,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
-    case FDynAlloc: {
-        if (raw.branch.nodes.len != 2) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'dynamic-alloc' expects precisely 2 arguments!", a);
-            throw_pi_error(point, err);
-        }
-
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
-        
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
-            .type = SDynAlloc,
-            .ptype = NULL,
-            .range = raw.range,
-            .size = term,
-        };
-        return res;
-    }
     case FSizeOf: {
         if (raw.branch.nodes.len != 2) {
             err.range = raw.range;
@@ -1743,6 +1853,54 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
         };
         return res;
     }
+    case FSealedType: {
+        if (raw.branch.nodes.len < 3) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("Sealed type former requires at least 2 arguments!", a);
+            throw_pi_error(point, err);
+        }
+
+        SymbolArray vars = mk_symbol_array(8, a);
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
+            err.range = raw.branch.nodes.data[1].range;
+            err.message = mk_cstr_doc("Sealed argument list malformed", a);
+            throw_pi_error(point, err);
+        }
+        shadow_vars(vars, env);
+
+        size_t body_idx = 2;
+        SynArray implicits = mk_ptr_array(8, a);
+        {
+            RawTree raw_implicits = raw.branch.nodes.data[body_idx];
+            if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
+                body_idx++;
+                for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
+                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], env, a, point);
+                    push_ptr(syn, &implicits);
+                }
+            }
+        }
+
+        RawTree* raw_term;
+        if (raw.branch.nodes.len == body_idx + 1) {
+            raw_term = &raw.branch.nodes.data[body_idx];
+        } else {
+            raw_term = raw_slice(&raw, body_idx, a);
+        }
+        Syntax* body = abstract_expr_i(*raw_term, env, a, point);
+        shadow_pop(vars.len, env);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SSealedType,
+            .ptype = NULL,
+            .range = raw.range,
+            .sealed_type.vars = vars,
+            .sealed_type.implicits = implicits,
+            .sealed_type.body = body,
+        };
+        return res;
+    }
     case FFamily: {
         if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
@@ -2022,11 +2180,12 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
     RawTreeArray input = raw.branch.nodes;
     void* dvars = get_dynamic_memory();
     void* dynamic_memory_space = mem_alloc(4096, a);
-    void* offset_memory_space = mem_alloc(1024, a);
+    void* dynamic_memory_ptr = dynamic_memory_space + 4095; // ??
 
     Allocator old_temp_alloc = set_std_temp_allocator(*a);
     Allocator old_current_alloc = set_std_current_allocator(*a);
 
+    // TODO: swap so this is backend independent (use foreign_adapters to call) 
     int64_t out;
     __asm__ __volatile__(
                          // save nonvolatile registers
@@ -2039,23 +2198,22 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %4, %%r13    \n"
-                         "mov %3, %%r14    \n"
+                         "mov %3, %%r13    \n"
+                         "mov %2, %%r14    \n"
                          "mov %2, %%r15    \n"
-                         //"sub $0x8, %%rbp  \n" // Do this to align RSP & RBP?
 
                          // Push output ptr & sizeof (MacroResult), resp
-                         "push %6          \n" // output ptr
-                         "push %7          \n" // sizeof (MacroResult)
+                         "push %5          \n" // output ptr
+                         "push %6          \n" // sizeof (MacroResult)
 
                          // Push arg (array) onto stack
-                         "push 0x30(%5)       \n"
-                         "push 0x28(%5)       \n"
-                         "push 0x20(%5)       \n"
-                         "push 0x18(%5)       \n"
-                         "push 0x10(%5)       \n"
-                         "push 0x8(%5)        \n"
-                         "push (%5)         \n"
+                         "push 0x30(%4)       \n"
+                         "push 0x28(%4)       \n"
+                         "push 0x20(%4)       \n"
+                         "push 0x18(%4)       \n"
+                         "push 0x10(%4)       \n"
+                         "push 0x8(%4)        \n"
+                         "push (%4)         \n"
 
                          "mov %%rsp, %%rbp \n"
 
@@ -2104,9 +2262,8 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, Allocator* a) {
                          : "=r" (out)
 
                          : "r" (head.macro_addr)
+                           , "r" (dynamic_memory_ptr)
                            , "r" (dvars)
-                           , "r" (dynamic_memory_space)
-                           , "r" (offset_memory_space)
                            , "r" (&input)
                            , "r" (&output)
                            , "c" (sizeof(MacroResult)) 
@@ -2201,7 +2358,7 @@ Syntax* abstract_expr_i(RawTree raw, ShadowEnv* env, Allocator* a, PiErrorPoint*
         }
 
         if (!is_expr(raw.branch.nodes.data[0])) {
-            err.range = raw.range;
+            err.range = raw.branch.nodes.data[0].range;
             err.message = mk_cstr_doc("Unprocessed non-expression: syntax hints '[', ']' or implicits '{' '}'\n" 
                                       "should only be used for term specific syntax or implicit arguments, respectively.", a);
             throw_pi_error(point, err);

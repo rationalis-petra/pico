@@ -234,11 +234,17 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FApplication:
         out = mk_str_doc(mv_string("::application"), a);
         break;
+    case FUnseal:
+        out = mk_str_doc(mv_string("::unseal"), a);
+        break;
     case FProcedure:
         out = mk_str_doc(mv_string("::procedure"), a);
         break;
     case FAll:
         out = mk_str_doc(mv_string("::all"), a);
+        break;
+    case FSeal:
+        out = mk_str_doc(mv_string("::seal"), a);
         break;
     case FMacro:
         out = mk_str_doc(mv_string("::macro"), a);
@@ -323,9 +329,6 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FNarrow:
         out = mk_str_doc(mv_string("::narrow"), a);
         break;
-    case FDynAlloc:
-        out = mk_str_doc(mv_string("::dynamic-allocate"), a);
-        break;
     case FSizeOf:
         out = mk_str_doc(mv_string("::size-of"), a);
         break;
@@ -369,6 +372,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FAllType:
         out = mk_str_doc(mv_string("::All"), a);
+        break;
+    case FSealedType:
+        out = mk_str_doc(mv_string("::Sealed"), a);
         break;
     case FFamily:
         out = mk_str_doc(mv_string("::Family"), a);

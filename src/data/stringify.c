@@ -87,6 +87,18 @@ String string_hex_u8(uint8_t val, Allocator* a) {
     return mv_string(str);
 }
 
+String string_hex_mem(const void* mem, size_t memsize, Allocator* a) {
+    // each byte becomes 3 characters + null-terminator
+    uint8_t* str_mem = mem_alloc(memsize * 3 + 1, a);
+    for (size_t i = 0; i < memsize; i++) {
+        snprintf((char*)str_mem + (i*3), 4, "%02" PRIx8 " ", *(uint8_t*)(mem + i));
+    }
+    return (String) {
+        .memsize = memsize * 3 + 1,
+        .bytes = str_mem,
+    };
+}
+
 String string_char(char val, Allocator *a) {
     int len = snprintf(NULL, 0, "%d", (int)val) + 1;
     char* str = (char*)mem_alloc(sizeof(char) * len, a);

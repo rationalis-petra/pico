@@ -46,6 +46,8 @@ typedef enum {
     SMacro,
     SApplication,
     SAllApplication,
+    SSeal,
+    SUnseal,
     SConstructor,
     SVariant,
     SMatch,
@@ -74,7 +76,6 @@ typedef enum {
     SUnName,
     SWiden,
     SNarrow,
-    SDynAlloc,
     SSizeOf,
     SAlignOf,
     SOffsetOf,
@@ -91,7 +92,7 @@ typedef enum {
     SOpaqueType,
     STraitType,
     SAllType,
-    SExistsType,
+    SSealedType,
     STypeFamily,
     SLiftCType,
 
@@ -160,6 +161,21 @@ typedef struct {
     SynArray implicits;
     SynArray args;
 } SynAllApp;
+
+typedef struct {
+    Syntax* type;
+    SynArray types;
+    SynArray implicits;
+    Syntax* body;
+} SynSeal;
+
+typedef struct {
+    Syntax* sealed;
+    Symbol binder;
+    SymbolArray types;
+    SymbolArray implicits;
+    Syntax* body;
+} SynUnseal;
 
 typedef struct {
     Syntax* enum_type;
@@ -304,6 +320,12 @@ typedef struct {
 } SynBind;
 
 typedef struct {
+    SymbolArray vars;
+    PtrArray implicits;
+    Syntax* body;
+} SynSealedType;
+
+typedef struct {
     Symbol name;
     Syntax* body;
 } SynName;
@@ -365,6 +387,8 @@ struct Syntax {
         Syntax* transformer;
         SynApp application;
         SynAllApp all_application;
+        SynSeal seal;
+        SynUnseal unseal;
         SynConstructor constructor;
         SynVariant variant;
         SynMatch match;
@@ -401,6 +425,7 @@ struct Syntax {
         SynResetType reset_type;
         Syntax* dynamic_type;
         SynBind bind_type;
+        SynSealedType sealed_type;
         SynName named_type;
         Syntax* distinct_type;
         Syntax* opaque_type;

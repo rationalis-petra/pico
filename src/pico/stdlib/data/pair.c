@@ -39,11 +39,6 @@ void add_pair_module(Target target, Module *data, Allocator *alloc) {
         panic(point.error_message);
     }
 
-    // TODO (FEAT): add/implement the following:
-    //  - array-free or delete-array
-    //  - map
-    //  - each
-
     const char *mk_pair_fn =
         "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])";
     compile_toplevel(mk_pair_fn, module, target, &point, &pi_point, a);

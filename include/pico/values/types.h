@@ -60,7 +60,7 @@ typedef enum {
   // Quantified Types
   TVar,
   TAll,
-  TExists,
+  TSealed,
 
   // Used by Sytem-Fω (type constructors)
   TCApp,
@@ -129,6 +129,12 @@ typedef struct {
 } TypeBinder;
 
 typedef struct {
+    SymbolArray vars;
+    PtrArray implicits;
+    PiType* body;
+} SealedType;
+
+typedef struct {
     Symbol name;
     PiType* type;
     PtrArray* args;
@@ -169,9 +175,10 @@ struct PiType {
         NamedType named;
         DistinctType distinct;
 
-        // From System Fω: variables, application, abstraction (exists, forall, lambda)
+        // From System Fω: variables, application, abstraction (sealed, forall, lambda)
         Symbol var;
         TAppType app;
+        SealedType sealed;
         TypeBinder binder;
 
         PiKind kind;
@@ -189,6 +196,8 @@ Document* pretty_type(PiType* type, Allocator* a);
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
 bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
+
+bool is_variable_for(PiType *ty, SymbolArray vars);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
@@ -224,6 +233,10 @@ PiType* unwrap_type(PiType *ty, Allocator* a);
 
 // Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);
+
+// type_app: apply the arguments (args) to a type family (fam)
+//  Memory guarantes: both the arguments (args) and famiy are untouched, and can
+//  be safely deleted etc. without affecting the returned type.
 PiType* type_app (PiType family, PtrArray args, Allocator* a);
 
 // Generators 
@@ -235,6 +248,11 @@ PiType* mk_proc_type(Allocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
 PiType* mk_struct_type(Allocator* a, size_t nfields, ...);
+
+// Sample usage: mk_trait_type(a, 1, "A", 2
+//   "val", mk_var_type(a, "A"),
+//   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
+PiType* mk_trait_type(Allocator* a, size_t nfields, ...);
 
 // Sample usage: mk_enum_type(a, 3,
 //   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
@@ -252,6 +270,12 @@ PiType* mk_distinct_type(Allocator* a, PiType* inner);
 PiType* mk_opaque_type(Allocator* a, void* module, PiType* inner);
 
 PiType* mk_var_type(Allocator* a, const char* name);
+
+// Sample usage: mk_all_type(a, 2, "A", "B", mk_prim_type(Address));
+PiType* mk_all_type(Allocator* a, size_t nsymbols, ...);
+
+// Sample usage: mk_sealed_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
+PiType* mk_sealed_type(Allocator* a, size_t nsymbols, ...);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
 PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body);

@@ -13,7 +13,7 @@ Command parse_command(StringArray args) {
 }
 
 static bool try_parse_backend(String arg, CodegenBackend *dest, Allocator* a) {
-    if (begins_with(arg, mv_string("--backend=")) == 0) {
+    if (begins_with(arg, mv_string("--backend="))) {
         String backend_name = substring(10, arg.memsize, arg, a);
 
         if (string_cmp(backend_name, mv_string("direct")) == 0) {

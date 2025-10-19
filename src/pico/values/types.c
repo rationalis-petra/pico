@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/memory/static.h"
 
 #include "data/string.h"
 #include "data/result.h"
@@ -122,10 +123,17 @@ void delete_pi_type(PiType t, Allocator* a) {
     }
 
     case TAll:
-    case TExists:
     case TFam: {
         sdelete_symbol_array(t.binder.vars);
         delete_pi_type_p(t.binder.body, a);
+        break;
+    }
+    case TSealed: {
+        sdelete_symbol_array(t.sealed.vars);
+        for (size_t i = 0; i < t.sealed.implicits.len; i++)
+            delete_pi_type_p(t.sealed.implicits.data[i], a);
+        sdelete_ptr_array(t.sealed.implicits);
+        delete_pi_type_p(t.sealed.body, a);
         break;
     }
 
@@ -246,7 +254,12 @@ PiType copy_pi_type(PiType t, Allocator* a) {
     case TVar:
         out.var = t.var;
         break;
-    case TExists:
+    case TSealed: {
+        out.sealed.vars = scopy_symbol_array(t.sealed.vars, a);
+        out.sealed.implicits = copy_ptr_array(t.sealed.implicits,  (TyCopier)copy_pi_type_p, a);
+        out.sealed.body = copy_pi_type_p(t.sealed.body, a);
+        break;
+    }
     case TAll:
     case TFam: {
         out.binder.vars = scopy_symbol_array(t.binder.vars, a);
@@ -257,7 +270,7 @@ PiType copy_pi_type(PiType t, Allocator* a) {
         break;
 
     case TUVar:
-        panic(mv_string("Cannot copy raw UVar (only pointer thereto)"));
+        out = t;
         break;
     case TPrim:
         out.prim = t.prim;
@@ -493,12 +506,32 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
         break;
     }
-    case TExists:
+    case TSealed: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mk_str_doc(mv_string("(sealed "), a), &nodes);
+
+        /* PtrArray impls = mk_ptr_array(type->sealed.implicits.len, a); */
+        /* for (size_t i = 0; i < type->sealed.implicits.len; i++) { */
+        /*     push_ptr(mk_str_doc(symbol_to_string(type->sealed.implicits.data[i], a), a), &impls); */
+        /* } */
+        /* push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(impls, a), a), &nodes); */
+
+        size_t offset = 0;
+        PtrArray args = mk_ptr_array(type->sealed.vars.len, a);
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            void** pval = (void**)(val + offset);
+            push_ptr(pretty_ptr(*pval, a), &args);
+            offset += REGISTER_SIZE;
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
+        push_ptr(pretty_pi_value(val + offset, type->sealed.body, a), &nodes);
+
+        out = mv_sep_doc(nodes, a);
+        break;
+    }
     case TFam: {
         PtrArray nodes = mk_ptr_array(3, a);
-        if (type->sort == TAll) push_ptr(mk_str_doc(mv_string("(All "), a), &nodes);
-        else if (type->sort == TExists) push_ptr(mk_str_doc(mv_string("(Exists "), a), &nodes);
-        else push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(Fam "), a), &nodes);
 
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
@@ -639,6 +672,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             out = mk_cstr_doc("Macro", a);
             break;
         }
+        if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
     case TArray: {
@@ -839,7 +873,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TTrait:  {
         PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
-        push_ptr(mk_str_doc(mv_string("Trait" ), a), &nodes);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &nodes);
         
         PtrArray id_nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("#"), a), &id_nodes);
@@ -848,7 +882,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), &vars);
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), a), &vars);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
 
@@ -898,7 +932,6 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TAll: {
         PtrArray nodes = mk_ptr_array(2, a);
-
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &nodes);
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
@@ -911,14 +944,21 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
-    case TExists: {
-        PtrArray nodes = mk_ptr_array(type->binder.vars.len + 3, a);
-        push_ptr(mk_str_doc(mv_string("Exists [" ), a), &nodes);
-        for (size_t i = 0; i < type->binder.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &nodes);
+    case TSealed: {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Sealed" ), a), a), &nodes);
+        PtrArray types = mk_ptr_array(type->sealed.vars.len, a);
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->sealed.vars.data[i], a), a), a), &types);
         }
-        push_ptr(mk_str_doc(mv_string("]" ), a), &nodes);
-        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(types, a), a), &nodes);
+
+        PtrArray implicits = mk_ptr_array(type->sealed.implicits.len, a);
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            push_ptr(pretty_type_internal(type->sealed.implicits.data[i], ctx, a), &implicits);
+        }
+        push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(implicits, a), a), &nodes);
+        push_ptr(pretty_type_internal(type->sealed.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -970,7 +1010,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     case TConstraint: {
         size_t nargs = type->constraint.nargs;
         if (nargs == 0) {
-            out = mk_str_doc(mv_string("Constraint"), a);
+            out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
         } else {
             PtrArray nodes = mk_ptr_array(nargs + 2, a);
             push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
@@ -1137,8 +1177,23 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TAll:
         *out = ADDRESS_SIZE;
         return Ok;
-    case TExists:
-        panic(mv_string("pi_maybe_size_of not implemented for sort: Exists."));
+    case TSealed: {
+        size_t total = (REGISTER_SIZE * type.sealed.vars.len) + (ADDRESS_SIZE * type.sealed.implicits.len); 
+        size_t align = 8;
+        {
+            size_t tmp_align;
+            Result_t res = pi_maybe_align_of(*type.sealed.body, &tmp_align);
+            if (res != Ok) return res;
+            total = pi_size_align(total, tmp_align);
+            align = align > tmp_align ? align : tmp_align;
+            size_t body_size;
+            res = pi_maybe_size_of(*type.sealed.body, &body_size);
+            if (res != Ok) return res;
+            total += body_size;
+        }
+        *out = pi_size_align(total, align);
+        return Ok;
+    }
     case TCApp:
         panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
@@ -1255,8 +1310,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         break;
     case TVar:
         return Err;
-    case TExists:
-        panic(mv_string("Need to implement: align-of ctype"));
+    case TSealed:
+        panic(mv_string("Need to implement: align-of sealed"));
     case TAll:
         *out = sizeof(void*);
         return Ok;
@@ -1452,8 +1507,8 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
         // Note: when implementing, consider shadowing
         panic(mv_string("Not implemetned type-app for All"));
         break;
-    case TExists:
-        panic(mv_string("Not implemetned type-app for Exists"));
+    case TSealed:
+        panic(mv_string("Not implemetned type-app for Sealed"));
         break;
 
     // Used by Sytem-Fω (type constructors)
@@ -1463,6 +1518,10 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, Allocator* a) {
     case TFam:
         // Note: when implementing, consider shadowing
         panic(mv_string("Not implemetned type-app for Fam"));
+        break;
+
+    case TUVar:
+        add_subst(body->uvar, subst, a);
         break;
 
     // Kinds (higher kinds not supported)
@@ -1498,12 +1557,16 @@ PiType* type_app (PiType family, PtrArray args, Allocator* a) {
             type_app_subst (new_type, subst, a);
             sym_ptr_insert(cell.key, new_type, &new_fields);
         }
+        sdelete_sym_ptr_assoc(subst);
+
+        typedef void* (*TyCopier)(void*, Allocator*);
+        PtrArray saved_args = copy_ptr_array(args, (TyCopier)copy_pi_type_p, a);
 
         PiType* out_ty = mem_alloc(sizeof(PiType), a);
         *out_ty = (PiType) {
             .sort = TTraitInstance,
             .instance.instance_of = family.trait.id,
-            .instance.args = args, // TODO (INVESTIGATE): is the non-copying of args a bug?
+            .instance.args = saved_args,
             .instance.fields = new_fields,
         };
         return out_ty;
@@ -1624,17 +1687,76 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     case TDistinct:
         panic(mv_string("pi_type_eql_i not implemented for distinct types"));
     case TTrait:
-        panic(mv_string("pi_type_eql_i not implemented for trait types"));
-    case TTraitInstance: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql_i not implemented for trait instance types"));
+        return lhs->trait.id == rhs->trait.id;
+
+    // note: not a "real" type in the theory
+    case TTraitInstance: {
+        if (lhs->instance.instance_of != rhs->instance.instance_of) return false;
+
+        if (lhs->instance.args.len != rhs->instance.args.len) return false;
+        for (size_t i = 0; i < lhs->instance.args.len; i++) {
+            if (!pi_type_eql_i(lhs->instance.args.data[i], rhs->instance.args.data[i], array))
+                return false;
+        }
+        return true;
+    }
 
         // Quantified Types
     case TVar: // note: not a "real" type in the theory
-        panic(mv_string("pi_type_eql_i not implemented for type vars"));
+        for (size_t i = 0; i < array->len; i++) {
+            if (symbol_eq(array->data[i].l_name, lhs->var)
+                && symbol_eq(array->data[i].r_name, rhs->var))
+                return true;
+            if (symbol_eq(array->data[i].l_name, lhs->var))
+                return false;
+            if (symbol_eq(array->data[i].r_name, rhs->var))
+                return false;
+        }
+        return false;
     case TAll:
-        panic(mv_string("pi_type_eql_i not implemented for all types"));
-    case TExists:
-        panic(mv_string("pi_type_eql_i not implemented for existential types"));
+        if (lhs->binder.vars.len != rhs->binder.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->binder.vars.data[i],
+                .r_name = rhs->binder.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+        bool out = pi_type_eql_i(lhs->binder.body, rhs->binder.body, array);
+        array->len -= lhs->sealed.vars.len;
+        return out;
+        break;
+    case TSealed: {
+        if (lhs->sealed.vars.len != rhs->sealed.vars.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->sealed.vars.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->sealed.vars.data[i],
+                .r_name = rhs->sealed.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+
+        if (lhs->sealed.implicits.len != rhs->sealed.implicits.len) {
+            array->len -= lhs->sealed.vars.len;
+            return false;
+        }
+
+        for (size_t i = 0; i < lhs->sealed.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->sealed.implicits.data[i], rhs->sealed.implicits.data[i], array)) {
+                array->len -= lhs->sealed.vars.len;
+                return false;
+            }
+        }
+
+        bool out = pi_type_eql_i(lhs->sealed.body, rhs->sealed.body, array);
+        array->len -= lhs->sealed.vars.len;
+        return out;
+        break;
+    }
 
         // Used by Sytem-Fω (type constructors)
     case TCApp:
@@ -1810,11 +1932,20 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         panic(mv_string("Not implemented: comparing values of type t-var"));
     }
     case TAll:
-        panic(mv_string("Not implemented: comparing values of type all"));
-    case TExists:
-        panic(mv_string("Not implemented: comparing values of type exists"));
+        panic(mv_string("Not implemented: comparing values of type All"));
+    case TSealed: {
+        size_t offset = 0;
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            uint64_t lhs_tinfo = *(uint64_t*)(lhs + offset);
+            uint64_t rhs_tinfo = *(uint64_t*)(rhs + offset);
+            if (lhs_tinfo != rhs_tinfo) return false;
+            offset += REGISTER_SIZE;
+        }
+
+        return pi_value_eql(type->sealed.body, lhs + offset, rhs + offset, a);
+    }
     case TFam: {
-        panic(mv_string("Not implemented: comparing values of type family"));
+        panic(mv_string("Not implemented: comparing values of type Family"));
     }
     case TCApp: {
         panic(mv_string("Not implemented: comparing values of type app"));
@@ -1835,6 +1966,81 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
 
     }
     panic(mv_string("Invalid type provided to pi_value_eql"));
+}
+
+bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
+    switch (ty->sort) {
+    case TPrim: return false;
+    case TVar: {
+        for (size_t i = 0; i < vars.len; i++) {
+            if (cmp_symbol(ty->var, vars.data[i]) == 0) return true;
+        }
+        return false;
+    }
+    case TArray:
+        return false;
+    case TProc:
+        return false;
+    case TStruct:
+        for (size_t i = 0; i < ty->structure.fields.len; i++) {
+            if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))
+                return true;
+        }
+        return false;
+    case TEnum:
+        for (size_t i = 0; i < ty->enumeration.variants.len; i++) {
+            PtrArray arr = *(PtrArray*)ty->enumeration.variants.data[i].val;
+            for (size_t j = 0; j < arr.len; j++) {
+                if (is_variable_for_recur(arr.data[j], vars, shadowed))
+                    return true;
+            }
+        }
+        return false;
+    case TReset:
+        return false;
+    case TResumeMark:
+        return false;
+    case TDynamic:
+        return false;
+    case TNamed:
+        push_symbol(ty->named.name, &shadowed);
+        return is_variable_for_recur(ty->named.type, vars, shadowed);
+    case TDistinct:
+        return is_variable_for_recur(ty->distinct.type, vars, shadowed);
+    case TTrait:
+        panic(mv_string("not implemented is_variable_for for trait"));
+    case TTraitInstance:
+        // Traits are passed around by reference, therefore have constant size.
+        return false;
+    case TCType:
+        return false;
+    case TAll:
+        return false;
+    case TSealed:
+        // TODO: shadow
+        panic(mv_string("not implemented is_variable_for for sealed type"));
+    case TCApp:
+        panic(mv_string("not implemented is_variable_for for applied type"));
+    case TFam:
+        // TODO: shadow
+        panic(mv_string("not implemented is_variable_for for family"));
+    case TKind:
+        return false;
+    case TConstraint:
+        return false;
+    case TUVar:
+        panic(mv_string("not implemented is_variable_for for uvar"));
+
+    default:
+        panic(mv_string("not implemented is_variable_for for this sort"));
+    }
+}
+
+bool is_variable_for(PiType *ty, SymbolArray vars) {
+    Symbol static_mem[20];
+    Allocator sta = mk_static_allocator(static_mem, sizeof(static_mem));
+    SymbolArray shadowed = mk_symbol_array(16, &sta);
+    return is_variable_for_recur(ty, vars, shadowed);
 }
 
 PiType* mk_prim_type(Allocator* a, PrimType t) {
@@ -1890,6 +2096,39 @@ PiType* mk_struct_type(Allocator* a, size_t nfields, ...) {
     PiType* structure = mem_alloc(sizeof(PiType), a);
     *structure = (PiType) {.sort = TStruct, .structure.fields = fields,};
     return structure;
+}
+
+// Sample usage: mk_trait_type(a, 1, "A", 2
+//   "val", mk_var_type(a, "A"),
+//   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
+PiType *mk_trait_type(Allocator *a, size_t nvars, ...) {
+    va_list args;
+    va_start(args, nvars);
+
+    SymbolArray vars = mk_symbol_array(nvars, a);
+    for (size_t i = 0; i < nvars ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        push_symbol(name, &vars);
+    }
+    
+    size_t nfields = va_arg(args, int);
+    SymPtrAMap fields = mk_sym_ptr_amap(nfields, a);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* arg = va_arg(args, PiType*);
+        sym_ptr_insert(name, arg, &fields);
+    }
+
+    va_end(args);
+
+    PiType* trait = mem_alloc(sizeof(PiType), a);
+    *trait = (PiType) {
+        .sort = TTrait,
+        .trait.id = distinct_id(),
+        .trait.vars = vars,
+        .trait.fields = fields,
+    };
+    return trait;
 }
 
 // Sample usage: mk_enum_type(a, 3,
@@ -1965,6 +2204,56 @@ PiType* mk_var_type(Allocator* a, const char *name) {
     return out;
 }
 
+PiType *mk_all_type(Allocator *a, size_t nsymbols, ...) {
+    va_list args;
+    va_start(args, nsymbols);
+
+    SymbolArray vars = mk_symbol_array(nsymbols, a);
+    for (size_t i = 0; i < nsymbols; i++) {
+        push_symbol(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TAll,
+        .binder.vars = vars,
+        .binder.body = body,
+    };
+    return out;
+}
+
+PiType *mk_sealed_type(Allocator *a, size_t nsymbols, ...) {
+    va_list args;
+    va_start(args, nsymbols);
+
+    SymbolArray vars = mk_symbol_array(nsymbols, a);
+    for (size_t i = 0; i < nsymbols; i++) {
+        push_symbol(string_to_symbol(mv_string(va_arg(args, char*))), &vars);
+    }
+
+    size_t nimplicits = va_arg(args, int);
+
+    PtrArray implicits = mk_ptr_array(nimplicits, a);
+    for (size_t i = 0; i < nimplicits; i++) {
+        push_ptr(va_arg(args, void*), &implicits);
+    }
+
+    PiType* body = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* out = mem_alloc(sizeof(PiType), a);
+    *out = (PiType) {
+        .sort = TSealed,
+        .sealed.vars = vars,
+        .sealed.implicits = implicits,
+        .sealed.body = body,
+    };
+    return out;
+}
+
 PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body) {
     PiType* out = mem_alloc(sizeof(PiType), a);
     *out = (PiType) {
@@ -1995,8 +2284,16 @@ PiType* mk_app_type(Allocator *a, PiType* fam, ...) {
     va_list args;
     va_start(args, fam);
 
-    PtrArray fam_args = mk_ptr_array(lhs->binder.vars.len, a);
-    for (size_t i = 0; i < lhs->binder.vars.len; i++) {
+    size_t num_args;
+    if (lhs->sort == TFam) {
+        num_args = lhs->binder.vars.len;
+    } else if (lhs->sort == TTrait) {
+        num_args = lhs->trait.vars.len;
+    } else {
+        panic(mv_string("Bad arg to mk_app_type"));
+    }
+    PtrArray fam_args = mk_ptr_array(num_args, a);
+    for (size_t i = 0; i < num_args; i++) {
         PiType* ptr = va_arg(args, PiType*);
         push_ptr(ptr, &fam_args);
     }

@@ -13,7 +13,7 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
         .target = target,
     };
 
-    if (test_start(log, mv_string("positive-int-literal"))) {
+    if (test_start(log, mv_string("function-large-body"))) {
         int64_t expected = 10;
         TEST_EQ("10");
     }

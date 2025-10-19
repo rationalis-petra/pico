@@ -9,6 +9,7 @@
 #include "pico/analysis/unify.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/values/ctypes.h"
+#include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/core.h"
@@ -162,14 +163,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
-        untyped->ptype = mk_uvar_integral(a);
+        untyped->ptype = mk_uvar_integral(a, untyped->range);
         break;
     case SLitTypedIntegral:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
         break;
     case SLitUntypedFloating:
         untyped->type = SLitTypedFloating;
-        untyped->ptype = mk_uvar_floating(a);
+        untyped->ptype = mk_uvar_floating(a, untyped->range);
         break;
     case SLitTypedFloating:
         untyped->ptype = mk_prim_type(a, untyped->integral.type);
@@ -334,6 +335,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             fn_type.proc.args = args;
             fn_type.proc.ret = ret;
             *untyped->application.function->ptype = fn_type;
+            untyped->ptype = ret;
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
@@ -388,6 +390,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 type_check_i(untyped->application.args.data[i],
                              kind, env, ctx);
             }
+            *kind = (PiType) {.sort = fn_type.sort, .kind.nargs = 0};
             untyped->ptype = kind;
         } else {
             PtrArray arr = mk_ptr_array(2, a);
@@ -467,7 +470,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, a);
             untyped->ptype = ret_type;
         } else {
-
             // Check that all type args are actually types!
             SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
             for (size_t i = 0; i < all_type.binder.vars.len; i++) {
@@ -494,8 +496,69 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                              env, ctx);
             }
 
-            untyped->ptype = proc_type->proc.ret;
+            PiType* ret_type = pi_type_subst(proc_type->proc.ret, type_binds, a);
+            untyped->ptype = ret_type;
         }
+        break;
+    }
+    case SSeal: {
+        untyped->ptype = eval_type(untyped->seal.type, env, ctx);
+        PiType* sealed_type = unwrap_type(untyped->ptype, a);
+
+        if (sealed_type->sort != TSealed) {
+            err.range = untyped->seal.type->range;
+            err.message = mv_cstr_doc("Must use sealed type to seal a value.", a);
+            throw_pi_error(point, err);
+        }
+
+        if (sealed_type->sealed.vars.len != untyped->seal.types.len) {
+            err.message = mv_cstr_doc("Incorrect number of type arguments provided to a seal.", a);
+            throw_pi_error(point, err);
+        }
+
+        // Substitute a uvar in in for the sealed type:
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
+        for (size_t i = 0; i < sealed_type->sealed.vars.len; i++) {
+            PiType* ty = eval_type(untyped->seal.types.data[i], env, ctx);
+            sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
+        }
+
+        if (sealed_type->sealed.implicits.len > 0) {
+            not_implemented(mv_string("Sealing with implicits."));
+        }
+        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+
+        type_check_i(untyped->seal.body, body_type, env, ctx);
+        break;
+    }
+    case SUnseal: {
+        type_infer_i(untyped->unseal.sealed, env, ctx);
+        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, a);
+        if (sealed_type->sort != TSealed) {
+            err.range = untyped->unseal.sealed->range;
+            err.message = mv_cstr_doc("When unsealing, the unsealed value must have a 'Sealed' type.", a);
+            throw_pi_error(point, err);
+        }
+
+        if (sealed_type->sealed.vars.len != untyped->unseal.types.len) {
+            err.message = mv_cstr_doc("Number of type parameeters in unseal does not match those in the sealed type.", a);
+            throw_pi_error(point, err);
+        }
+
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
+        for (size_t i = 0; i < sealed_type->sealed.vars.len; i++) {
+            PiType* ty = mem_alloc(sizeof(PiType), a);
+            *ty = (PiType) {.sort = TVar, .var = untyped->unseal.types.data[i]};
+            sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
+
+            type_qvar(untyped->unseal.types.data[i], ty, env);
+        }
+        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+        type_var(untyped->unseal.binder, var_ty, env);
+        type_infer_i(untyped->unseal.body, env, ctx);
+        untyped->ptype = untyped->unseal.body->ptype;
+
+        pop_types(env, 1 + sealed_type->sealed.vars.len);
         break;
     }
     case SConstructor: {
@@ -629,7 +692,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 }
 
                 if (!found_tag) {
-                    err.message = mv_cstr_doc("Unable to find variant tag in match", a);
+                    PtrArray nodes = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("The tag", a), &nodes);
+                    push_ptr(mk_str_doc(symbol_to_string(clause->tagname, a), a), &nodes);
+                    push_ptr(mv_cstr_doc("does not correspond to any tag in the enum type.", a), &nodes);
+                    err.message = mv_sep_doc(nodes, a);
                     throw_pi_error(point, err);
                 }
 
@@ -1162,18 +1229,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = narrow_type; 
         break;
     }
-    case SDynAlloc: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
-        *t = (PiType){.sort = TPrim, .prim = UInt_64};
-        type_check_i(untyped->size, t, env, ctx);
-
-        PiType* out = mem_alloc(sizeof(PiType), a);
-        *out = (PiType){.sort = TPrim, .prim = Address};
-        untyped->ptype = out; 
-        break;
-    }
     case SSizeOf: {
-        // TODO: this is sus. 
         eval_type(untyped->size, env, ctx);
         PiType* out = mem_alloc(sizeof(PiType), a);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
@@ -1289,8 +1345,27 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         pop_types(env, untyped->bind_type.bindings.len);
         break;
     }
-    case SExistsType: {
-        panic(mv_string("Unsupported operation: inferring type of existential type"));
+    case SSealedType: {
+        PiType* ty = mem_alloc(sizeof(PiType), a);
+        *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
+        untyped->ptype = ty;
+
+        for (size_t i = 0; i < untyped->sealed_type.vars.len; i++) {
+            Symbol arg = untyped->sealed_type.vars.data[i];
+            type_var(arg, ty, env);
+        }
+
+        PiType* t = mem_alloc(sizeof(PiType), a);
+        *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
+        untyped->ptype = t;
+        for (size_t i = 0; i < untyped->sealed_type.implicits.len; i++) {
+            Syntax* implicit = untyped->sealed_type.implicits.data[i];
+            type_check_i(implicit, t, env, ctx);
+        }
+
+        type_check_i(untyped->sealed_type.body, ty, env, ctx);
+        pop_types(env, untyped->sealed_type.vars.len);
+        break;
     }
     case STypeFamily: {
         // For now, assume that each type has the kind Type (i.e. is not a family)
@@ -1680,6 +1755,30 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         }
         break;
     }
+    case SSeal: {
+        if (syn->seal.implicits.len > 0) {
+            panic(mv_string("not implemented: post-unify for seal with > 0 implicits"));
+        }
+        post_unify(syn->seal.body, env, a, point);
+        break;
+    }
+    case SUnseal: {
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(syn->unseal.types.len, a);
+        for (size_t i = 0; i < syn->unseal.types.len; i++) {
+            Symbol arg = syn->unseal.types.data[i];
+
+            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+
+            sym_ptr_bind(arg, arg_ty, &type_binds);
+            type_qvar(arg, arg_ty, env);
+        }
+        PiType* var_ty = pi_type_subst(syn->unseal.sealed->ptype->sealed.body, type_binds, a);
+        type_var(syn->unseal.binder, var_ty, env);
+        post_unify(syn->unseal.body, env, a, point);
+        pop_types(env, syn->all.args.len + 1);
+        break;
+    }
     case SConstructor:  {
         // Resolve the variant tag
         PiType* enum_type = unwrap_type(syn->ptype, a);
@@ -1871,7 +1970,6 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SUnName:
         post_unify(syn->unname, env, a, point);
         break;
-    case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
         post_unify(syn->size, env, a, point);
@@ -1893,7 +1991,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SOpaqueType:
     case STraitType:
     case SAllType:
-    case SExistsType:
+    case SSealedType:
     case STypeFamily:
         break;
     case SLiftCType:
@@ -1989,6 +2087,25 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         for (size_t i = 0; i < typed->all_application.args.len; i++) {
             squash_types(typed->all_application.args.data[i], a, point);
         }
+        break;
+    }
+    case SSeal: {
+        squash_types(typed->seal.body, a, point);
+
+        for (size_t i = 0; i < typed->seal.types.len; i++) {
+            squash_types(typed->seal.types.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->seal.implicits.len; i++) {
+            squash_types(typed->seal.implicits.data[i], a, point);
+        }
+        break;
+    }
+    case SUnseal: {
+        squash_types(typed->unseal.sealed, a, point);
+
+        // TODO (BUG!): ensure that there are no free types in typed->unseal.body->ptype
+        squash_types(typed->unseal.body, a, point);
         break;
     }
     case SConstructor: {
@@ -2138,7 +2255,6 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         squash_type(typed->narrow.type->type_val, a);
         squash_types(typed->narrow.val, a, point);
         break;
-    case SDynAlloc:
     case SSizeOf:
     case SAlignOf:
         squash_types(typed->size, a, point);
@@ -2181,6 +2297,9 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
     }
     case SAllType:
         squash_types(typed->bind_type.body, a, point);
+        break;
+    case SSealedType:
+        squash_types(typed->sealed_type.body, a, point);
         break;
     case STypeFamily:
         squash_types(typed->bind_type.body, a, point);
@@ -2282,7 +2401,7 @@ void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 PiType* eval_type(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i(untyped, env, ctx);
 
-    if (untyped->ptype->sort != TKind) {
+    if (untyped->ptype->sort != TKind && untyped->ptype->sort != TConstraint) {
         PicoError err = (PicoError) {
             .range = untyped->range,
             .message = mv_cstr_doc("Value expected to be type, was not!", ctx.a),

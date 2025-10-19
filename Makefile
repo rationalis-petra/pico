@@ -22,6 +22,35 @@ VULKAN_LINK=-lvulkan
 VULKAN_INCLUDE=
 endif
 
+## Emit info and warnings
+##-------------------------------------
+ifeq ($(HELP), YES)
+	DUMMY := $(info To enable or disable certain features and packages, such as Windowing or Hedron, please see the file 'default.config')
+	DUMMY := $(info To disable this message, set 'HELP=YES' to 'HELP=NO', or just delete the line entirely)
+endif
+
+RPAREN = )
+MIN_GCC_VERSION := 13.0.0
+CURRENT_GCC_VERSION := $(shell gcc --version | head -n 1 | sed 's/.*$(RPAREN) \([0-9.]*\).*/\1/')
+
+ifneq ($(shell echo -e "$(CURRENT_GCC_VERSION)\n$(MIN_GCC_VERSION)" | sort -V | head -n 1), $(MIN_GCC_VERSION))
+	DUMMY := $(warning GCC version is out of date - require at least $(MIN_GCC_VERSION) but have $(CURRENT_GCC_VERSION). It is very likely that the build will fail)
+endif
+
+ifeq ($(HEDRON), YES)
+ifeq ($(OS), Windows_NT)
+ifeq ($(wildcard $(VULKAN_DIR)), )
+	DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedro or install the Vulkan SDK and point VULKAN_DIR at it)
+endif
+endif
+
+else
+undefine HEDRON
+endif
+
+ifneq ($(DEBUG_ASSERT), YES)
+undefine DEBUG_ASSERT
+endif
 
 ## Platform specifics and configuration
 ##-------------------------------------
@@ -37,7 +66,7 @@ else
 	LINK_FLAGS := 
 endif
 
-ifdef PROFILE
+ifeq ($(PROFILE), YES)
 	DEBUG_FLAGS := $(DEBUG_FLAGS) -pg
     RELEASE_FLAGS := $(DEBUG_FLAGS) -pg
 endif
@@ -166,7 +195,7 @@ debug_mode:
 
 # use make <target> QUIET=1 to prevent make from printing! 
 # can be used in scripts, e.g. git pre-commit hooks
-ifdef QUIET
+ifeq ($(QUIET), YES)
 .SILENT:
 endif
 

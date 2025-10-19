@@ -689,7 +689,7 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronPipeline *create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface) {
+HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface) {
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }
@@ -1275,9 +1275,31 @@ HedronShaderModule* create_shader_module(U8Array code)
   {panic(mv_string("Hedron not supported on this build"));}
 void destroy_shader_module(HedronShaderModule* module)
   {panic(mv_string("Hedron not supported on this build"));}
-HedronPipeline* create_pipeline(PtrArray shaders, HedronSurface* surface)
+HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface)
   {panic(mv_string("Hedron not supported on this build"));}
 void destroy_pipeline(HedronPipeline* pipeline)
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronBuffer* create_buffer(BufferType type, uint64_t size)
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_buffer(HedronBuffer* buffer)
+  {panic(mv_string("Hedron not supported on this build"));}
+void set_buffer_data(HedronBuffer* buffer, void* data)
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronSemaphore* create_semaphore()
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_semaphore(HedronSemaphore* semaphore)
+  {panic(mv_string("Hedron not supported on this build"));}
+HedronFence* create_fence()
+  {panic(mv_string("Hedron not supported on this build"));}
+void destroy_fence(HedronFence* fence)
+  {panic(mv_string("Hedron not supported on this build"));}
+void wait_for_fence(HedronFence* fence)
+  {panic(mv_string("Hedron not supported on this build"));}
+void reset_fence(HedronFence* fence)
+  {panic(mv_string("Hedron not supported on this build"));}
+void wait_for_device()
+  {panic(mv_string("Hedron not supported on this build"));}
+ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore)
   {panic(mv_string("Hedron not supported on this build"));}
 HedronCommandPool* create_command_pool()
   {panic(mv_string("Hedron not supported on this build"));}
@@ -1301,25 +1323,15 @@ void command_end_render_pass(HedronCommandBuffer* buffer)
   {panic(mv_string("Hedron not supported on this build"));}
 void command_bind_pipeline(HedronCommandBuffer* buffer, HedronPipeline* pipeline)
   {panic(mv_string("Hedron not supported on this build"));}
+void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer)
+  {panic(mv_string("Hedron not supported on this build"));}
+void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format)
+  {panic(mv_string("Hedron not supported on this build"));}
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface)
   {panic(mv_string("Hedron not supported on this build"));}
 void command_draw(HedronCommandBuffer *buffer, uint32_t vertex_count, uint32_t instance_cont, uint32_t first_vertex, uint32_t first_instance)
   {panic(mv_string("Hedron not supported on this build"));}
-HedronSemaphore* create_semaphore()
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_semaphore(HedronSemaphore* semaphore)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronFence* create_fence()
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void wait_for_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void reset_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void wait_for_device()
-  {panic(mv_string("Hedron not supported on this build"));}
-uint32_t acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore)
+void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
   {panic(mv_string("Hedron not supported on this build"));}
 
 #endif

@@ -67,29 +67,29 @@ Allocator set_std_temp_allocator(Allocator al) {
 
 void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // realloc : Proc (Address U64) Address
-    build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
 #if ABI == SYSTEM_V_64
     // realloc (ptr = rdi, size = rsi)
     // copy size into RDX
-    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
-    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
     // realloc (ptr = RCX, size = RDX)
-    build_unary_op(ass, Pop, reg(RDX, sz_64), a, point);
-    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 #endif
 
     generate_c_call(realloc, ass, a, point);
 
-    build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void *relic_malloc(uint64_t size) {
@@ -99,66 +99,66 @@ void *relic_malloc(uint64_t size) {
 
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // malloc : Proc (U64) Address
-    build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
-    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 #endif
 
     generate_c_call(relic_malloc, ass, a, point);
 
-    build_unary_op(ass, Pop, reg(R9, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
-    build_unary_op(ass, Push, reg(R9, sz_64), a, point);
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // free : Proc (Address) Unit
-    build_unary_op(ass, Pop, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
 #if ABI == SYSTEM_V_64
     // free (dest = rdi)
     // copy address into RDI
-    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
     // free (addr = rcx)
     // copy address into RCX
-    build_unary_op(ass, Pop, reg(RCX, sz_64), a, point);
-    build_unary_op(ass, Push, reg(RAX, sz_64), a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 #endif
 
     generate_c_call(free, ass, a, point);
 
-    build_nullary_op(ass, Ret, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
 void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Pop return address (we don't need it)
-    build_binary_op(ass, Add, reg(RSP, sz_64), imm8(8), a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
 
     // panic : All [A] Proc (String) A
 #if ABI == SYSTEM_V_64
     // panic (str.memsize = rdi, str.bytes = rsi)
     // 
     // copy address into RDI
-    build_unary_op(ass, Pop, reg(RDI, sz_64), a, point);
-    build_unary_op(ass, Pop, reg(RSI, sz_64), a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 
 #elif ABI == WIN_64
     // panic (&str = rcx)
     // copy address into RCX
-    build_binary_op(ass, Mov, reg(RCX, sz_64), reg(RSP, sz_64), a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
 #endif
     generate_c_call(panic, ass, a, point);
 }

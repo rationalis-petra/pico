@@ -23,6 +23,10 @@ typedef struct {
 // Note: this destructively mutates the type
 UnifyResult unify(PiType* lhs, PiType* rhs, Allocator* a);
 
+// Add a substitution to a uvar - when the uvar is resolved, the substitutions
+// are applied.
+void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a);
+
 // Return true if and only if the type has uninstantiated unification variables
 bool has_unification_vars_p(PiType type);
 
@@ -32,8 +36,8 @@ bool has_unification_vars_p(PiType type);
 void squash_type(PiType* type, Allocator* a);
 
 PiType* mk_uvar(Allocator* a);
-PiType* mk_uvar_integral(Allocator* a);
-PiType* mk_uvar_floating(Allocator* a);
+PiType* mk_uvar_integral(Allocator* a, Range range);
+PiType* mk_uvar_floating(Allocator* a, Range range);
 
 UnifyResult add_field_constraint(UVarType* uvar, Range range, Symbol field, PiType* field_ty, Allocator* a);
 UnifyResult add_variant_constraint(UVarType* uvar, Range range, Symbol field, PtrArray types, Allocator* a);
