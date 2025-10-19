@@ -705,7 +705,7 @@ void gen_mk_sealed_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
     build_unary_op(Push, reg(R11, sz_64), ass, a, point);
 
     build_binary_op(Sub, reg(RSP, sz_64), imm32(32), ass, a, point);
-    build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)mk_exists_ty), ass, a, point);
+    build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)mk_sealed_ty), ass, a, point);
     build_unary_op(Call, reg(RAX, sz_64), ass, a, point);
 
     build_binary_op(Add, reg(RSP, sz_64), imm32(32 + 8), ass, a, point);

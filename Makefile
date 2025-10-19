@@ -37,7 +37,7 @@ ifneq ($(shell echo -e "$(CURRENT_GCC_VERSION)\n$(MIN_GCC_VERSION)" | sort -V | 
 	DUMMY := $(warning GCC version is out of date - require at least $(MIN_GCC_VERSION) but have $(CURRENT_GCC_VERSION). It is very likely that the build will fail)
 endif
 
-ifeq (HEDRON, "YES")
+ifeq ($(HEDRON), YES)
 ifeq ($(OS), Windows_NT)
 ifeq ($(wildcard $(VULKAN_DIR)), )
 	DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedro or install the Vulkan SDK and point VULKAN_DIR at it)
