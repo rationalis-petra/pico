@@ -508,7 +508,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     }
     case TSealed: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("(Sealed "), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("(sealed "), a), &nodes);
 
         /* PtrArray impls = mk_ptr_array(type->sealed.implicits.len, a); */
         /* for (size_t i = 0; i < type->sealed.implicits.len; i++) { */
@@ -516,12 +516,15 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         /* } */
         /* push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(impls, a), a), &nodes); */
 
+        size_t offset = 0;
         PtrArray args = mk_ptr_array(type->sealed.vars.len, a);
         for (size_t i = 0; i < type->sealed.vars.len; i++) {
-            push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
+            void** pval = (void**)(val + offset);
+            push_ptr(pretty_ptr(*pval, a), &args);
+            offset += REGISTER_SIZE;
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, a), &nodes);
+        push_ptr(pretty_pi_value(val + offset, type->sealed.body, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -1174,8 +1177,23 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TAll:
         *out = ADDRESS_SIZE;
         return Ok;
-    case TSealed:
-        panic(mv_string("pi_maybe_size_of not implemented for sort: Sealed."));
+    case TSealed: {
+        size_t total = (REGISTER_SIZE * type.sealed.vars.len) + (ADDRESS_SIZE * type.sealed.implicits.len); 
+        size_t align = 8;
+        {
+            size_t tmp_align;
+            Result_t res = pi_maybe_align_of(*type.sealed.body, &tmp_align);
+            if (res != Ok) return res;
+            total = pi_size_align(total, tmp_align);
+            align = align > tmp_align ? align : tmp_align;
+            size_t body_size;
+            res = pi_maybe_size_of(*type.sealed.body, &body_size);
+            if (res != Ok) return res;
+            total += body_size;
+        }
+        *out = pi_size_align(total, align);
+        return Ok;
+    }
     case TCApp:
         panic(mv_string("pi_maybe_size_of not implemented for sort: TCApp."));
     case TFam:
@@ -1915,8 +1933,17 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
     }
     case TAll:
         panic(mv_string("Not implemented: comparing values of type All"));
-    case TSealed:
-        panic(mv_string("Not implemented: comparing values of type Sealed"));
+    case TSealed: {
+        size_t offset = 0;
+        for (size_t i = 0; i < type->sealed.vars.len; i++) {
+            uint64_t lhs_tinfo = *(uint64_t*)(lhs + offset);
+            uint64_t rhs_tinfo = *(uint64_t*)(rhs + offset);
+            if (lhs_tinfo != rhs_tinfo) return false;
+            offset += REGISTER_SIZE;
+        }
+
+        return pi_value_eql(type->sealed.body, lhs + offset, rhs + offset, a);
+    }
     case TFam: {
         panic(mv_string("Not implemented: comparing values of type Family"));
     }

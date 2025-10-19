@@ -29,8 +29,12 @@ typedef enum {
     // stack stores an index into the variable stack. 
     SAIndexed,
 
-    // This is a type variable 
+    // This is a type variable - specifically, type a literal type variable
+    // for generating code to produce type literals, such as 'All [A] Proc [A] A'
     SATypeVar,
+
+    // Inaccessible locals are used in type generation, in particular, if you
+    // are generating a type literal, it cannot reference run-time variables!
     SAInaccessibleLocal,
     SASentinel,
     SALabel,
@@ -403,6 +407,19 @@ void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
     push_saddr(value, &locals->vars);
 }
 
+void address_bind_relative_type(Symbol s, size_t offset, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+
+    push_symbol(s, &locals->types);
+
+    size_t stack_offset = locals->stack_head;
+    SAddr value = (SAddr){};
+    value.type = SADirect;
+    value.symbol = s;
+    value.stack_offset = stack_offset + offset;
+    push_saddr(value, &locals->vars);
+}
+
 void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
@@ -419,6 +436,14 @@ void address_pop_n(size_t n, AddressEnv* env) {
     for (size_t i = 0; i < n; i++) {
         pop_saddr(&locals->vars);
     }
+}
+
+void address_pop_n_types(size_t n, AddressEnv* env) {
+    LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
+    for (size_t i = 0; i < n; i++) {
+        pop_saddr(&locals->vars);
+    }
+    locals->types.len -= n;
 }
 
 void address_pop(AddressEnv* env) {

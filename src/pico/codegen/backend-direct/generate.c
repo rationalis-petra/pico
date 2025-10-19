@@ -448,7 +448,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Structs and Enums are passed by value, and have variable size.
-            } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum) {
+            } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum || indistinct_type.sort == TSealed) {
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
@@ -797,18 +797,67 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 // Pop value from variable stack
                 build_binary_op(Add, reg(VSTACK_HEAD, sz_64), imm32(out_size), ass, a, point);
             } else {
-                panic(mv_string("not implemented: Calling with value on caller varstack and callee static stack"));
+                not_implemented(mv_string("Calling with value on caller varstack and callee static stack"));
             }
         }
 
         break;
     }
     case SSeal: {
-        not_implemented(mv_string("Poly Direct Codegen for Seal"));
+        // Generating a sealed type is relatively simple: 
+        // 1. Generate the underlying value
+        // 2. Generate the types (in reverse order)
+        // This will naturally place a seal on the stack, which is effectively 
+        // a struct prepended by the sealed type descriptors.
+        if (is_variable_in(syn.seal.body->ptype, env)) {
+            not_implemented(mv_string("Polymorphic seal"));
+        } else {
+            generate_i(*syn.seal.body, env, target, links, a, point);
+            if (syn.seal.implicits.len > 0)
+                not_implemented(mv_string("Codegen for Seal with implicits"));
+            for (size_t i = 0; i < syn.seal.types.len; i++) {
+                size_t idx = syn.seal.types.len - (i + 1);
+                PiType* type = ((Syntax*)syn.seal.types.data[idx])->type_val;
+                generate_pi_type(type, env, ass, a, point);
+            }
+        }
         break; 
     }
     case SUnseal: {
-        not_implemented(mv_string("Poly Direct Codegen for Unseal"));
+        // Generate sealed type, then bind types/values, and finally generate
+        // code for body. As with any binding expression, resultant value must
+        // then be copied up the stack.
+        if (is_variable_in(syn.unseal.sealed->ptype, env)) {
+            not_implemented(mv_string("Polymorphic unseal"));
+        } else {
+            generate_i(*syn.unseal.sealed, env, target, links, a, point);
+            if (syn.unseal.implicits.len > 0)
+                not_implemented(mv_string("Codegen for Unseal with implicits"));
+
+            size_t offset = 0; 
+            for (size_t i = 0; i < syn.unseal.types.len; i++) {
+                address_bind_relative_type(syn.unseal.types.data[i], offset, env);
+                offset += REGISTER_SIZE;
+            }
+            address_bind_relative(syn.unseal.binder, offset, env);
+            generate_i(*syn.unseal.body, env, target, links, a, point);
+            address_pop(env);
+            address_pop_n_types(syn.unseal.types.len + 1, env);
+
+            // Finally, copy the resultant value (body) up the stack.
+            size_t mv_size = pi_stack_size_of(*syn.unseal.sealed->ptype);
+            if (is_variable_in(syn.unseal.body->ptype, env)) {
+                build_unary_op(Pop, reg(RAX, sz_64),  ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imm32(mv_size), ass, a, point);
+                build_unary_op(Push, reg(RAX, sz_64),  ass, a, point);
+                data_stack_shrink(env, mv_size);
+            } else {
+                size_t data_sz = pi_stack_size_of(*syn.unseal.body->ptype);
+                generate_stack_move(mv_size, 0, data_sz, ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imm32(mv_size), ass, a, point);
+                data_stack_shrink(env, mv_size);
+            }
+        }
         break; 
     }
     case SStructure: {

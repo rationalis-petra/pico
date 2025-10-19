@@ -654,7 +654,11 @@ bool has_unification_vars_p(PiType type) {
     case TAll:
         return has_unification_vars_p(*type.binder.body);
     case TSealed: {
-        panic(mv_string("not implemented; unify for sealed type"));
+        for (size_t i = 0; i < type.sealed.implicits.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.sealed.implicits.data[i]))
+                return true;
+        }
+        return has_unification_vars_p(*(PiType*)type.sealed.body);
     }
     case TCApp: {
         for (size_t i = 0; i < type.app.args.len; i++) {
@@ -740,6 +744,13 @@ void squash_type(PiType* type, Allocator* a) {
     case TAll: 
     case TFam: {
         squash_type(type->binder.body, a);
+        break;
+    }
+    case TSealed: {
+        for (size_t i = 0; i < type->sealed.implicits.len; i++) {
+            squash_type(type->sealed.implicits.data[i], a);
+        }
+        squash_type(type->sealed.body, a);
         break;
     }
     case TNamed: {

@@ -183,6 +183,25 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
         test_pass(log);
     }
 }
+void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
+    Allocator* std = get_std_allocator();
+    if (!pi_value_eql(type, val, data, std)) {
+        Allocator arena = mk_arena_allocator(4096, std);
+        Allocator* a = &arena;
+        FormattedOStream* os = get_fstream(log);
+        write_fstring(mv_string("Expected: "), os);
+        Document* doc = pretty_pi_value(data, type, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\nGot: "), os);
+        doc = pretty_pi_value(val, type, a);
+        write_doc_formatted(doc, 120, os);
+        delete_doc(doc, a);
+        write_fstring(mv_string("\n"), os);
+        test_fail(log);
+        release_arena_allocator(arena);
+    }
+}
 
 void top_eql(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
@@ -193,6 +212,19 @@ void top_eql(void *data, TestLog *log) {
 void test_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_eql,
+        .on_top = top_eql,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    run_toplevel_internal(string, module, context.env, callbacks, expected_val,
+                          context.log, context.target, context.a);
+    clear_not_implemented_hook();
+}
+
+void assert_toplevel_eq(const char *string, void *expected_val, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_assert_eql,
         .on_top = top_eql,
         .on_pi_error = fail_pi_error,
         .on_error = fail_error,
@@ -232,6 +264,28 @@ void expr_stdout(PiType* type, void* val, void* data, TestLog* log) {
     }
 }
 
+void expr_assert_stdout(PiType* type, void* val, void* data, TestLog* log) {
+    if (type->sort != TPrim || type->prim != Unit) {
+        test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
+        test_fail(log);
+    } else {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        StdoutData vals = *(StdoutData*)data;
+        String actual = *current_string(vals.stream, a);
+        if (string_cmp(actual, vals.expected) != 0) {
+            FormattedOStream* os = get_fstream(log);
+            write_fstring(mv_string("Expected: "), os);
+            write_fstring(vals.expected, os);
+            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(actual, os);
+            write_fstring(mv_string("\n"), os);
+            test_fail(log);
+        }
+        release_arena_allocator(arena);
+    }
+}
+
 void top_stdout(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
     write_fstring(mv_string("Did not evaluate to a value."), os);
@@ -241,6 +295,30 @@ void top_stdout(void *data, TestLog *log) {
 void test_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_stdout,
+        .on_top = top_stdout,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    OStream* out = mk_string_ostream(context.a);
+    StdoutData data = (StdoutData) {
+        .stream = out,
+        .expected = mv_string(expected_stdout),
+    };
+
+    OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
+    set_std_ostream(old);
+
+    delete_ostream(out, context.a);
+}
+
+void assert_toplevel_stdout(const char *string, const char *expected_stdout, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = expr_assert_stdout,
         .on_top = top_stdout,
         .on_pi_error = fail_pi_error,
         .on_error = fail_error,
@@ -291,6 +369,29 @@ void expr_mem(PiType* type, void* val, void* data, TestLog* log) {
     }
 }
 
+void assert_expr_mem(PiType* type, void* val, void* data, TestLog* log) {
+    if (type->sort != TPrim || type->prim != Unit) {
+        test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
+        test_fail(log);
+    } else {
+        Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+        Allocator* a = &arena;
+        MemData vals = *(MemData*)data;
+        if (memcmp(vals.actual, vals.expected, vals.memsize) != 0) {
+            FormattedOStream* os = get_fstream(log);
+            write_fstring(mv_string("Expected: "), os);
+            write_fstring(string_hex_mem(vals.expected, vals.memsize, a), os);
+            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(string_hex_mem(vals.actual, vals.memsize, a), os);
+            write_fstring(mv_string("\n"), os);
+            test_fail(log);
+        } else {
+            test_pass(log);
+        }
+        release_arena_allocator(arena);
+    }
+}
+
 void top_mem(void *data, TestLog *log) {
     FormattedOStream* os = get_fstream(log);
     write_fstring(mv_string("Did not evaluate to a value."), os);
@@ -300,6 +401,31 @@ void top_mem(void *data, TestLog *log) {
 void test_toplevel_mem(const char *string, const void *expected, const void* actual, size_t memsize, Module *module, TestContext context) {
     Callbacks callbacks = (Callbacks) {
         .on_expr = expr_mem,
+        .on_top = top_mem,
+        .on_pi_error = fail_pi_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    OStream* out = mk_string_ostream(context.a);
+    MemData data = (MemData) {
+        .expected = expected,
+        .actual = actual,
+        .memsize = memsize,
+    };
+
+    OStream* old = set_std_ostream(out);
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    run_toplevel_internal(string, module, context.env, callbacks, &data, context.log, context.target, context.a);
+    clear_not_implemented_hook();
+    set_std_ostream(old);
+
+    delete_ostream(out, context.a);
+}
+
+void assert_toplevel_mem(const char *string, const void *expected, const void* actual, size_t memsize, Module *module, TestContext context) {
+    Callbacks callbacks = (Callbacks) {
+        .on_expr = assert_expr_mem,
         .on_top = top_mem,
         .on_pi_error = fail_pi_error,
         .on_error = fail_error,

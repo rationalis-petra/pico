@@ -9,6 +9,7 @@
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define ASSERT_EQ(str) assert_toplevel_eq(str, &expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
@@ -154,7 +155,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = -75;
         TEST_EQ("((all [A] proc [(x A)] x) -75)");
     }
-
 
     // -------------------------------------------------------------------------
     //
@@ -559,6 +559,48 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(sta);
         TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
+    }
+
+
+    // ---------------------------------------------------------------
+    //
+    //      Sealing
+    //
+    // ---------------------------------------------------------------
+    //
+    // The sealing tests are after load/store, as load/store are
+    // necessary to test sealing/unsealing
+    //
+    // ---------------------------------------------------------------
+
+    if (test_start(log, mv_string("seal-val"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct {uint64_t tinfo; void* address; } SID;
+        SID expected = {.tinfo = 0x800000080000008, .address = start};
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.p Address])");
+        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+    }
+
+    if (test_start(log, mv_string("unseal-trivial"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        typedef struct {uint64_t tinfo; void* address; } SID;
+        SID expected = {.tinfo = 0x800000080000008, .address = start};
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.p Address])");
+        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+    }
+
+    if (test_start(log, mv_string("unseal-load/store"))) {
+        Allocator sta = mk_static_allocator(mem, 128);
+        uint64_t expected = 16823;
+
+        set_std_current_allocator(sta);
+        RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
+        RUN("(def sl seq [let! dest malloc 8] [let! src malloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
+        TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");
     }
 
     set_std_current_allocator(old);

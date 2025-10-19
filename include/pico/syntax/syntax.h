@@ -171,6 +171,7 @@ typedef struct {
 
 typedef struct {
     Syntax* sealed;
+    Symbol binder;
     SymbolArray types;
     SymbolArray implicits;
     Syntax* body;

@@ -9,6 +9,7 @@
 #include "pico/analysis/unify.h"
 #include "pico/analysis/typecheck.h"
 #include "pico/values/ctypes.h"
+#include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/core.h"
@@ -501,11 +502,63 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SSeal: {
-        not_implemented(mv_string("typecheck of seal"));
+        untyped->ptype = eval_type(untyped->seal.type, env, ctx);
+        PiType* sealed_type = unwrap_type(untyped->ptype, a);
+
+        if (sealed_type->sort != TSealed) {
+            err.range = untyped->seal.type->range;
+            err.message = mv_cstr_doc("Must use sealed type to seal a value.", a);
+            throw_pi_error(point, err);
+        }
+
+        if (sealed_type->sealed.vars.len != untyped->seal.types.len) {
+            err.message = mv_cstr_doc("Incorrect number of type arguments provided to a seal.", a);
+            throw_pi_error(point, err);
+        }
+
+        // Substitute a uvar in in for the sealed type:
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
+        for (size_t i = 0; i < sealed_type->sealed.vars.len; i++) {
+            PiType* ty = eval_type(untyped->seal.types.data[i], env, ctx);
+            sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
+        }
+
+        if (sealed_type->sealed.implicits.len > 0) {
+            not_implemented(mv_string("Sealing with implicits."));
+        }
+        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+
+        type_check_i(untyped->seal.body, body_type, env, ctx);
         break;
     }
     case SUnseal: {
-        not_implemented(mv_string("typecheck of unseal"));
+        type_infer_i(untyped->unseal.sealed, env, ctx);
+        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, a);
+        if (sealed_type->sort != TSealed) {
+            err.range = untyped->unseal.sealed->range;
+            err.message = mv_cstr_doc("When unsealing, the unsealed value must have a 'Sealed' type.", a);
+            throw_pi_error(point, err);
+        }
+
+        if (sealed_type->sealed.vars.len != untyped->unseal.types.len) {
+            err.message = mv_cstr_doc("Number of type parameeters in unseal does not match those in the sealed type.", a);
+            throw_pi_error(point, err);
+        }
+
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
+        for (size_t i = 0; i < sealed_type->sealed.vars.len; i++) {
+            PiType* ty = mem_alloc(sizeof(PiType), a);
+            *ty = (PiType) {.sort = TVar, .var = untyped->unseal.types.data[i]};
+            sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
+
+            type_qvar(untyped->unseal.types.data[i], ty, env);
+        }
+        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+        type_var(untyped->unseal.binder, var_ty, env);
+        type_infer_i(untyped->unseal.body, env, ctx);
+        untyped->ptype = untyped->unseal.body->ptype;
+
+        pop_types(env, 1 + sealed_type->sealed.vars.len);
         break;
     }
     case SConstructor: {
@@ -1703,11 +1756,27 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SSeal: {
-        not_implemented(mv_string("post-unify of seal"));
+        if (syn->seal.implicits.len > 0) {
+            panic(mv_string("not implemented: post-unify for seal with > 0 implicits"));
+        }
+        post_unify(syn->seal.body, env, a, point);
         break;
     }
     case SUnseal: {
-        not_implemented(mv_string("post-unify of unseal"));
+        SymPtrAssoc type_binds = mk_sym_ptr_assoc(syn->unseal.types.len, a);
+        for (size_t i = 0; i < syn->unseal.types.len; i++) {
+            Symbol arg = syn->unseal.types.data[i];
+
+            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            *arg_ty = (PiType) {.sort = TVar, .var = arg,};
+
+            sym_ptr_bind(arg, arg_ty, &type_binds);
+            type_qvar(arg, arg_ty, env);
+        }
+        PiType* var_ty = pi_type_subst(syn->unseal.sealed->ptype->sealed.body, type_binds, a);
+        type_var(syn->unseal.binder, var_ty, env);
+        post_unify(syn->unseal.body, env, a, point);
+        pop_types(env, syn->all.args.len + 1);
         break;
     }
     case SConstructor:  {
@@ -2021,11 +2090,22 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SSeal: {
-        not_implemented(mv_string("post-unify of seal"));
+        squash_types(typed->seal.body, a, point);
+
+        for (size_t i = 0; i < typed->seal.types.len; i++) {
+            squash_types(typed->seal.types.data[i], a, point);
+        }
+
+        for (size_t i = 0; i < typed->seal.implicits.len; i++) {
+            squash_types(typed->seal.implicits.data[i], a, point);
+        }
         break;
     }
     case SUnseal: {
-        not_implemented(mv_string("post-unify of unseal"));
+        squash_types(typed->unseal.sealed, a, point);
+
+        // TODO (BUG!): ensure that there are no free types in typed->unseal.body->ptype
+        squash_types(typed->unseal.body, a, point);
         break;
     }
     case SConstructor: {

@@ -512,17 +512,34 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
     }
     case FUnseal: {
         if (raw.branch.nodes.len < 3) {
-            err.message = mv_cstr_doc("Not enough terms provided to unpack", a);
+            err.message = mv_cstr_doc("Not enough terms provided to unseal", a);
             throw_pi_error(point, err);
         }
-        Syntax* sealed = abstract_expr_i(raw.branch.nodes.data[1], env, a, point);
+        Syntax* sealed; 
+        Symbol binder;
+        {
+
+            RawTree raw_binder = raw.branch.nodes.data[1];
+            if (raw_binder.type != RawBranch
+                || raw_binder.branch.hint != HSpecial
+                || raw_binder.branch.nodes.len != 2
+                || !is_symbol(raw_binder.branch.nodes.data[0])) {
+
+                err.range = raw_binder.range;
+                err.message = mv_cstr_doc("Unseal binding form expected here, i.e. (unseal [var sealed-val] ...)", a);
+                throw_pi_error(point, err);
+            }
+            
+            binder = raw_binder.branch.nodes.data[0].atom.symbol;
+            sealed = abstract_expr_i(raw_binder.branch.nodes.data[1], env, a, point);
+        }
 
         SymbolArray types = mk_symbol_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
             if (!get_symbol_list(&types, raw_types) || raw_types.branch.hint != HSpecial) {
                 err.range = raw_types.range;
-                err.message = mv_cstr_doc("Not enought terms provided to unpack", a);
+                err.message = mv_cstr_doc("Invalid type binding provided to unseal", a);
                 throw_pi_error(point, err);
             }
         }
@@ -535,14 +552,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
                 body_idx++;
                 if (!get_symbol_list(&types, raw_implicits)) {
                     err.range = raw_implicits.range;
-                    err.message = mv_cstr_doc("Malformed implicit list in unpack", a);
+                    err.message = mv_cstr_doc("Malformed implicit list in unseal", a);
                     throw_pi_error(point, err);
                 }
             }
         }
 
         if (body_idx == raw.branch.nodes.len) {
-            err.message = mv_cstr_doc("Unpack lacking a body", a);
+            err.message = mv_cstr_doc("Unseal lacking a body", a);
             throw_pi_error(point, err);
         }
 
@@ -557,6 +574,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, ShadowEnv* env, Allocator* a, Pi
             .ptype = NULL,
             .range = raw.range,
             .unseal.sealed = sealed,
+            .unseal.binder = binder,
             .unseal.types = types,
             .unseal.implicits = implicits,
             .unseal.body = body,

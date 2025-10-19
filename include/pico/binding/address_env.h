@@ -103,10 +103,27 @@ bool is_variable_in(PiType* type, AddressEnv* env);
 //  bind values associated with specific forms/values (e.g. enums/structs)
 //------------------------------------------------------------------------------
 
+// When generating type-literals (e.g. All [A] Proc [A] A), the variables 'A'
+// must generate code to produce corresponding TVars. Addrss_bind_type is used for
+// this purpose
 void address_bind_type(Symbol s, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RSP in the
+// local environment. 'S' may be any static (runtime) value but NOT a runtime type
+// Note: The binding actually happens relative to $RBP, so lookups remain 
+//   valid even after binding happens
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RSP in the
+// local environment. 'S' may be any static (runtime) type but NOT a runtime value
+void address_bind_relative_type(Symbol s, size_t offset, AddressEnv* env);
+
+// Indicate that symbol 's' exists at offset 'offset' from $RBP in the
+// local environment, and that this binding is to a pointer on the variable stack
 void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env);
+
 void address_pop_n(size_t n, AddressEnv* env);
+void address_pop_n_types(size_t n, AddressEnv* env);
 void address_pop(AddressEnv* env);
 
 // Bind and unbind enum vars: 
