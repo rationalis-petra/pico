@@ -3,7 +3,10 @@
 #if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #include <string.h> // for memset, TODO: remove?
 
+#include "platform/window/window.h"
+#include "platform/window/internal.h"
 #include "platform/window/xdg-shell-protocol.h"
+
 #include <unistd.h>
 #include <fcntl.h> // for O_ constants
 #include <sys/mman.h>
@@ -215,7 +218,7 @@ struct wl_display *get_wl_display() {
     return wl_display;
 }
 
-int init_window_system(Allocator* a) {
+int pl_init_window_system(Allocator* a) {
     wsa = a;
     wl_display = wl_display_connect(NULL);
     if (!wl_display) return 1;
@@ -226,11 +229,11 @@ int init_window_system(Allocator* a) {
     return 0;
 }
 
-void teardown_window_system() {
+void pl_teardown_window_system() {
     wl_display_disconnect(wl_display);
 }
 
-PlWindow *create_window(String name, int width, int height) {
+PlWindow *pl_create_window(String name, int width, int height) {
     PlWindow* window = mem_alloc(sizeof(PlWindow), wsa);
     *window = (PlWindow) {
         .width = width,
@@ -261,7 +264,7 @@ PlWindow *create_window(String name, int width, int height) {
     return window;
 }
 
-void destroy_window(PlWindow *window) {
+void pl_destroy_window(PlWindow *window) {
     if (window->buffer) {
         wl_buffer_destroy(window->buffer);
     }
@@ -282,11 +285,11 @@ void destroy_window(PlWindow *window) {
     wl_display_dispatch(wl_display);
 }
 
-bool window_should_close(PlWindow *window) {
+bool pl_window_should_close(PlWindow *window) {
     return window->should_close;
 }
 
-WinMessageArray poll_events(PlWindow* window, Allocator* a) {
+WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     wl_display_dispatch_pending(wl_display);
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
