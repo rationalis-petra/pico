@@ -17,7 +17,7 @@ void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
                                        "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
                                     mk_voidptr_ctype(a));
 
-    convert_c_fn(create_window, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(pl_create_window, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, a);
 }
@@ -25,7 +25,7 @@ void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoi
 void build_destroy_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
 
-    convert_c_fn(destroy_window, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(pl_destroy_window, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, a);
 }
@@ -34,14 +34,14 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, Er
     CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a),
                                  mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
-    convert_c_fn(window_should_close, &fn_ctype, type, ass, a, point);
+    convert_c_fn(pl_window_should_close, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, a);
 }
 
-WinMessageArray relic_poll_events(Window* window) {
+WinMessageArray relic_poll_events(PlWindow* window) {
     Allocator a = get_std_current_allocator();
-    return poll_events(window, &a);
+    return pl_poll_events(window, &a);
 }
 
 void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {

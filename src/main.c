@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
-    if (init_window_system(stdalloc)) {
+    if (pl_init_window_system(stdalloc)) {
         write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
     if (is_hedron_supported()) {
@@ -321,7 +321,7 @@ int main(int argc, char** argv) {
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
-    teardown_window_system();
+    pl_teardown_window_system();
 
     if (is_hedron_supported()) {
         teardown_hedron();

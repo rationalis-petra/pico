@@ -4,17 +4,17 @@
 #include "data/meta/array_header.h"
 #include "data/string.h"
 
-typedef struct Window Window;
+typedef struct PlWindow PlWindow;
 
 // Initialize the window system
 // returns zero on success, exit code on failure
-int init_window_system(Allocator* a);
-void teardown_window_system();
+int pl_init_window_system(Allocator* a);
+void pl_teardown_window_system();
 
-Window* create_window(String name, int width, int height);
-void destroy_window(Window* window);
+PlWindow* pl_create_window(String name, int width, int height);
+void pl_destroy_window(PlWindow* window);
 
-bool window_should_close(Window* window);
+bool pl_window_should_close(PlWindow* window);
 
 
 typedef enum : uint64_t {
@@ -49,6 +49,6 @@ typedef struct {
 
 ARRAY_HEADER(WinMessage, wm, WinMessage);
 
-WinMessageArray poll_events(Window* window, Allocator* a);
+WinMessageArray pl_poll_events(PlWindow* window, Allocator* a);
 
 #endif

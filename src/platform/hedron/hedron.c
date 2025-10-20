@@ -7,7 +7,9 @@
 
 #ifdef USE_VULKAN
 
-#if OS_FAMILY == UNIX
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+#define VK_USE_PLATFORM_XLIB_KHR
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #elif OS_FAMILY == WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -97,7 +99,9 @@ static Allocator* hd_alloc;
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
-#if OS_FAMILY == UNIX
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
     VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 #elif OS_FAMILY == WINDOWS
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
@@ -572,10 +576,20 @@ void cleanup_swap_chain(HedronSurface *surface) {
     vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
 }
 
-HedronSurface *create_window_surface(struct Window *window) {
+HedronSurface *create_window_surface(struct PlWindow *window) {
     VkSurfaceKHR surface;
 
-#if OS_FAMILY == UNIX 
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+    VkXlibSurfaceCreateInfoKHR create_info = (VkXlibSurfaceCreateInfoKHR){
+        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+        .dpy = get_x11_display(),
+        .window = window->x11_window,
+    };
+
+    VkResult result = vkCreateXlibSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
+    if (result != VK_SUCCESS) return NULL;
+
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
     VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
     create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
     create_info.display = get_wl_display();
@@ -1263,7 +1277,7 @@ int init_hedron(Allocator*)
   {panic(mv_string("Hedron not supported on this build"));}
 void teardown_hedron()
   {panic(mv_string("Hedron not supported on this build"));}
-HedronSurface *create_window_surface(struct Window * win)
+HedronSurface *create_window_surface(struct PlWindow* win)
   {panic(mv_string("Hedron not supported on this build"));}
 void resize_window_surface(HedronSurface* surface, Extent extent)
   {panic(mv_string("Hedron not supported on this build"));}

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 // forward-declaration of window (platform/window/window.h)
-struct Window;
+struct PlWindow;
 
 typedef struct {
     uint32_t width;
@@ -30,7 +30,7 @@ int init_hedron(Allocator* a);
 void teardown_hedron();
 
 // Window System Interaction Surfaces 
-HedronSurface* create_window_surface(struct Window* window);
+HedronSurface* create_window_surface(struct PlWindow* window);
 void resize_window_surface(HedronSurface* surface, Extent extent);
 void destroy_window_surface(HedronSurface*);
 
