@@ -2,6 +2,8 @@
 
 #if (OS_FAMILY == WINDOWS)
 
+#include "platform/window/window.h"
+#include "platform/window/internal.h"
 #include <windows.h>
 
 static Allocator* wsa = NULL;
@@ -68,7 +70,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-int init_window_system(Allocator* a) {
+int pl_init_window_system(Allocator* a) {
     wsa = a;
     app_handle = GetModuleHandle(NULL);
 
@@ -79,11 +81,11 @@ int init_window_system(Allocator* a) {
     return app_handle ? 0 : 1;
 }
 
-void teardown_window_system() {
+void pl_teardown_window_system() {
     // Dummy method
 }
 
-PlWindow *create_window(String name, int width, int height) {
+PlWindow* pl_create_window(String name, int width, int height) {
     PlWindow *win = mem_alloc(sizeof(PlWindow), wsa);
     HWND window = CreateWindowEx(0, // styles (optional)
                                  wind_class_name,
@@ -103,17 +105,17 @@ PlWindow *create_window(String name, int width, int height) {
     }
 }
 
-void destroy_window(PlWindow *window) {
+void pl_destroy_window(PlWindow *window) {
     sdelete_wm_array(window->messages);
     DestroyWindow(window->impl);
     mem_free(window, wsa);
 }
 
-bool window_should_close(PlWindow *window) {
+bool pl_window_should_close(PlWindow *window) {
     return window->should_close;
 }
 
-WinMessageArray poll_events(PlWindow* window, Allocator* a) {
+WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     MSG msg;
         while (PeekMessage(&msg, window->impl,  0, 0, PM_REMOVE))  {
         TranslateMessage(&msg);
