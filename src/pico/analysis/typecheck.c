@@ -1099,7 +1099,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         SymPtrAssoc labels = mk_sym_ptr_assoc(untyped->labels.terms.len, a);
         for (size_t i = 0; i < untyped->labels.terms.len; i++) {
             SynLabelBranch* branch = untyped->labels.terms.data[i].val;
-            PtrArray* arr = mem_alloc(sizeof(PtrArray*), a);
+            PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
             *arr = mk_ptr_array(branch->args.len, a);
             for (size_t i = 0; i < branch->args.len; i++) {
                 SymPtrACell arg = branch->args.data[i];
