@@ -2,6 +2,8 @@
 #define __PICO_BINDING_TYPE_ENV_H
 
 #include "platform/memory/allocator.h"
+
+#include "pico/data/client/addr_list.h"
 #include "pico/binding/environment.h"
 #include "pico/syntax/syntax.h"
 
@@ -50,7 +52,7 @@ TypeEnv* mk_type_env(Environment* env, Allocator* a);
 // No delete, as we expect allocation via an arena allocator
 
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env);
-InstanceEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env);
+InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env);
 
 void type_var (Symbol var, PiType* type, TypeEnv* env);
 void type_qvar (Symbol var, PiType* type, TypeEnv* env);

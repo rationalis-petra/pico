@@ -35,7 +35,8 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
     Environment* env = env_from_module(module, &point, a);
 
-    ParseResult res = parse_rawtree(cin, a);
+    PiAllocator pia = convert_to_pallocator(a);
+    ParseResult res = parse_rawtree(cin, &pia, a);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
     }
@@ -54,7 +55,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     TopLevel abs = abstract(res.result, env, a, &pi_point);
 
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = a, .point = &pi_point, .target = target,
+        .a = a, .pia = &pia, .point = &pi_point, .target = target, 
     };
     type_check(&abs, env, ctx);
 

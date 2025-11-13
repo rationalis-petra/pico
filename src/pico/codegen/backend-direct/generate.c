@@ -706,7 +706,11 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         build_binary_op(Mov, reg(R15, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
         size_t static_arg_size = 0;
 
-        SymbolArray type_vars = syn.all_application.function->ptype->binder.vars;
+        SymbolPiList type_vars = syn.all_application.function->ptype->binder.vars;
+        SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
+        for (size_t i = 0; i < type_vars.len; i++) {
+            push_symbol(type_vars.data[i], &ctype_vars);
+        }
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
             PiType* type = ((Syntax*)syn.all_application.types.data[i])->type_val;
             generate_pi_type(type, env, ass, a, point);
@@ -723,7 +727,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             generate_i(*arg, env, target, links, a, point);
 
             // The argument is variable for for the callee
-            if (is_variable_for(argty, type_vars)) {
+            if (is_variable_for(argty, ctype_vars)) {
                 // Is it also variable in our context?
                 // if not, we need to move to variable stack, otherwise can keep here.
                 static_arg_size += ADDRESS_SIZE;
@@ -750,7 +754,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             generate_i(*arg, env, target, links, a, point);
 
             // The argument is variable for for the callee
-            if (is_variable_for(argty, type_vars)) {
+            if (is_variable_for(argty, ctype_vars)) {
                 // Is it also variable in our context?
                 // if not, we need to move to variable stack, otherwise can keep here.
                 static_arg_size += ADDRESS_SIZE;
@@ -782,7 +786,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         data_stack_shrink(env, static_arg_size);
 
         PiType* ty = fn_ty->sort == TProc ? fn_ty->proc.ret : fn_ty;
-        bool callee_varstack = is_variable_for(ty, type_vars);
+        bool callee_varstack = is_variable_for(ty, ctype_vars);
         bool caller_varstack = is_variable_in(syn.ptype, env);
 
         data_stack_grow(env, caller_varstack ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));

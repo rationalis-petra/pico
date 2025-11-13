@@ -1,7 +1,6 @@
 #include "data/meta/array_impl.h"
 
 #include "platform/machine_info.h"
-#include "platform/signals.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
@@ -316,8 +315,8 @@ void generate_c_call(void* cfn, Assembler* ass, Allocator* a, ErrorPoint* point)
 }
 
 void* tmp_malloc(uint64_t memsize) {
-    Allocator a = get_std_temp_allocator();
-    return mem_alloc(memsize, &a);
+    PiAllocator a = get_std_temp_allocator();
+    return call_alloc(memsize, &a);
 }
 
 void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -337,8 +336,8 @@ void generate_tmp_malloc(Location dest, Location mem_size, Assembler* ass, Alloc
 }
 
 void* perm_malloc(uint64_t memsize) {
-    Allocator a = get_std_perm_allocator();
-    return mem_alloc(memsize, &a);
+    PiAllocator a = get_std_perm_allocator();
+    return call_alloc(memsize, &a);
 }
 
 void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -358,15 +357,16 @@ void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allo
 }
 
 PiType* internal_type_app(PiType* val, PiType** args_rev, size_t num_args) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
     // make args correct way round!
-    void** args = mem_alloc(sizeof(void*) * num_args, &a);
+    void** args = call_alloc(sizeof(void*) * num_args, &pia);
     for (size_t i = 0; i < num_args; i++){
         args[i] = args_rev[(num_args - 1) - i];
     }
     PiType fam = *val;
     PtrArray arr = (PtrArray){.data = (void**)args, .len = num_args, .size = num_args};
-    return type_app (fam, arr, &a);
+    Allocator a = convert_to_callocator(&pia);
+    return type_app (fam, arr, &pia, &a);
 }
 
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -389,15 +389,15 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
 }
 
 void* mk_struct_ty(size_t len, void* data) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TStruct,
         .structure.fields.data = data,
         .structure.fields.len = len,
         .structure.fields.capacity = len,
-        .structure.fields.gpa = a,
+        .structure.fields.gpa = pia,
     };
     return ty;
 }
@@ -421,15 +421,15 @@ void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler*
 }
 
 void* mk_proc_ty(size_t len, void** data, void* ret) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TProc,
         .proc.args.data = data,
         .proc.args.len = len,
         .proc.args.size = len,
-        .proc.args.gpa = a,
+        .proc.args.gpa = pia,
         .proc.ret = ret,
     };
     return ty;
@@ -455,24 +455,24 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     }
 }
 
-void* mk_enum_ty(size_t len, uint64_t* shape, SymPtrCell* data) {
-    Allocator a = get_std_temp_allocator();
+void* mk_enum_ty(size_t len, uint64_t* shape, SymAddrPiCell* data) {
+    PiAllocator pia = get_std_temp_allocator();
 
-    SymPtrAMap variants = mk_sym_ptr_amap(len, &a);
+    SymAddrPiAMap variants = mk_sym_addr_piamap(len, &pia);
     for (size_t i = 0; i < len; i++) {
-        PtrArray* arr = mem_alloc(sizeof(PtrArray), &a);
+        AddrPiList* arr = call_alloc(sizeof(PtrArray), &pia);
         uint64_t num_vals = shape[i];
 
-        *arr = (PtrArray) {
+        *arr = (AddrPiList) {
             .data = data[i].val,
             .len = num_vals,
             .size = num_vals,
-            .gpa = a,
+            .gpa = pia,
         };
-        sym_ptr_insert(data[i].key, arr, &variants);
+        sym_addr_insert(data[i].key, arr, &variants);
     }
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TEnum,
         .enumeration.variants = variants,
@@ -510,9 +510,9 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
 }
 
 void* mk_reset_ty(PiType* in, PiType* out) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TReset,
         .reset.in = in,
@@ -540,9 +540,9 @@ void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 
 void* mk_dynamic_ty(PiType* dynamic) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TDynamic,
         .dynamic = dynamic,
@@ -566,9 +566,9 @@ void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_type_var(Symbol var) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TVar,
         .var = var,
@@ -599,15 +599,15 @@ void gen_mk_type_var(Symbol var, Assembler* ass, Allocator* a, ErrorPoint* point
 }
 
 void* mk_forall_ty(size_t len, Symbol* syms, PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TAll,
         .binder.vars.data = syms,
         .binder.vars.len = len,
         .binder.vars.size = len,
-        .binder.vars.gpa = a,
+        .binder.vars.gpa = pia,
         .binder.body = body,
     };
     return ty;
@@ -640,20 +640,20 @@ void gen_mk_forall_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint
 }
 
 void* mk_sealed_ty(size_t len, Symbol* syms, size_t nimplicits, void** implicits, PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TSealed,
         .sealed.vars.data = syms,
         .sealed.vars.len = len,
         .sealed.vars.size = len,
-        .sealed.vars.gpa = a,
+        .sealed.vars.gpa = pia,
 
         .sealed.implicits.data = implicits,
         .sealed.implicits.len = nimplicits,
         .sealed.implicits.size = nimplicits,
-        .sealed.implicits.gpa = a,
+        .sealed.implicits.gpa = pia,
 
         .sealed.body = body,
     };
@@ -722,15 +722,15 @@ void gen_mk_sealed_ty(SymbolArray syms, Location nvars, Assembler* ass, Allocato
 }
 
 void* mk_fam_ty(size_t len, Symbol* syms, PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TFam,
         .binder.vars.data = syms,
         .binder.vars.len = len,
         .binder.vars.size = len,
-        .binder.vars.gpa = a,
+        .binder.vars.gpa = pia,
         .binder.body = body,
     };
     return ty;
@@ -761,9 +761,9 @@ void gen_mk_fam_ty(SymbolArray syms, Assembler* ass, Allocator* a, ErrorPoint* p
 }
 
 void* mk_c_ty(CType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TCType,
         .c_type = *body,
@@ -788,9 +788,9 @@ void gen_mk_c_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_named_ty(Symbol name, PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TNamed,
         .named.name = name,
@@ -821,9 +821,9 @@ void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_distinct_ty(PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TDistinct,
         .distinct.type = body,
@@ -849,10 +849,10 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void* mk_opaque_ty(PiType* body) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
     Module* current = get_std_current_module();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TDistinct,
         .distinct.type = body,
@@ -879,9 +879,9 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
 
 void* mk_trait_ty(size_t sym_len, Symbol* syms, size_t field_len, void* data) {
-    Allocator a = get_std_temp_allocator();
+    PiAllocator pia = get_std_temp_allocator();
 
-    PiType* ty = mem_alloc(sizeof(PiType), &a);
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TTrait,
         .trait.id = distinct_id(),
@@ -889,12 +889,12 @@ void* mk_trait_ty(size_t sym_len, Symbol* syms, size_t field_len, void* data) {
         .trait.vars.data = syms,
         .trait.vars.len = sym_len,
         .trait.vars.size = sym_len,
-        .trait.vars.gpa = a,
+        .trait.vars.gpa = pia,
 
         .trait.fields.data = data,
         .trait.fields.len = field_len,
         .trait.fields.capacity = field_len,
-        .trait.fields.gpa = a,
+        .trait.fields.gpa = pia,
     };
     return ty;
 }
@@ -928,7 +928,7 @@ void gen_mk_trait_ty(SymbolArray syms, Location dest, Location nfields, Location
 }
 
 
-void add_tree_children(RawTreeArray trees, U8Array *arr) {
+void add_tree_children(RawTreePiList trees, U8Array *arr) {
     for (size_t i = 0; i < trees.len; i++) {
         RawTree tree = trees.data[i];
         // TODO (BUG FEAT): set self .data = NULL, .gpa = NULL, as memory is now static/comptime
@@ -938,7 +938,7 @@ void add_tree_children(RawTreeArray trees, U8Array *arr) {
     }
 }
 
-void backlink_children(const size_t field_offset, size_t base_id, size_t* head, RawTreeArray trees, Target target, InternalLinkData* links) {
+void backlink_children(const size_t field_offset, size_t base_id, size_t* head, RawTreePiList trees, Target target, InternalLinkData* links) {
     for (size_t i = 0; i < trees.len; i++) {
         RawTree tree = trees.data[i];
         size_t current_idx = base_id + sizeof(RawTree) * i;

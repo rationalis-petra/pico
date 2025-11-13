@@ -6,6 +6,7 @@
 #include "platform/signals.h"
 #include "platform/memory/arena.h"
 
+#include "pico/data/client/allocator.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/meta/meta.h"
@@ -20,47 +21,61 @@ void set_exit_callback(jump_buf* buf) { m_buf = buf; }
 
 static uint64_t std_current_allocator; 
 static uint64_t std_perm_allocator; 
-//static uint64_t std_region_allocator; 
+static uint64_t std_region_allocator; 
 //static uint64_t std_comptime_allocator; 
 static uint64_t std_temp_allocator; 
-Allocator get_std_current_allocator() {
-    Allocator** data = get_dynamic_memory();
-    Allocator* dyn = data[std_current_allocator]; 
+PiAllocator get_std_current_allocator() {
+    PiAllocator** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_current_allocator]; 
     return *dyn;
 }
 
-Allocator set_std_current_allocator(Allocator al) {
+PiAllocator set_std_current_allocator(PiAllocator al) {
     void** data = get_dynamic_memory();
-    Allocator* dyn = data[std_current_allocator]; 
-    Allocator old = *dyn;
+    PiAllocator* dyn = data[std_current_allocator]; 
+    PiAllocator old = *dyn;
     *dyn = al;
     return old;
 }
 
-Allocator get_std_perm_allocator() {
-    Allocator** data = get_dynamic_memory();
-    Allocator* dyn = data[std_perm_allocator]; 
+PiAllocator get_std_perm_allocator() {
+    PiAllocator** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_perm_allocator]; 
     return *dyn;
 }
 
-Allocator set_std_perm_allocator(Allocator al) {
+PiAllocator set_std_perm_allocator(PiAllocator al) {
     void** data = get_dynamic_memory();
-    Allocator* dyn = data[std_perm_allocator]; 
-    Allocator old = *dyn;
+    PiAllocator* dyn = data[std_perm_allocator]; 
+    PiAllocator old = *dyn;
     *dyn = al;
     return old;
 }
 
-Allocator get_std_temp_allocator() {
+PiAllocator get_std_temp_allocator() {
     void** data = get_dynamic_memory();
-    Allocator* dyn = data[std_temp_allocator]; 
+    PiAllocator* dyn = data[std_temp_allocator]; 
     return *dyn;
 }
 
-Allocator set_std_temp_allocator(Allocator al) {
+PiAllocator set_std_temp_allocator(PiAllocator al) {
     void** data = get_dynamic_memory();
-    Allocator* dyn = data[std_temp_allocator]; 
-    Allocator old = *dyn;
+    PiAllocator* dyn = data[std_temp_allocator]; 
+    PiAllocator old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+PiAllocator get_std_region_allocator() {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_region_allocator]; 
+    return *dyn;
+}
+
+PiAllocator set_std_region_allocator(PiAllocator al) {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_region_allocator]; 
+    PiAllocator old = *dyn;
     *dyn = al;
     return old;
 }
@@ -93,8 +108,8 @@ void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 }
 
 void *relic_malloc(uint64_t size) {
-    Allocator a = get_std_current_allocator();
-    return mem_alloc(size, &a);
+    PiAllocator a = get_std_current_allocator();
+    return call_alloc(size, &a);
 }
 
 void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -163,13 +178,13 @@ void build_panic_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     generate_c_call(panic, ass, a, point);
 }
 
-PiType* build_panic_fn_ty(Allocator* a) {
-    PiType* proc_ty = mk_proc_type(a, 1, mk_string_type(a), mk_var_type(a, "A"));
+PiType* build_panic_fn_ty(PiAllocator* pia) {
+    PiType* proc_ty = mk_proc_type(pia, 1, mk_string_type(pia), mk_var_type(pia, "A"));
 
-    SymbolArray types = mk_symbol_array(1, a);
-    push_symbol(string_to_symbol(mv_string("A")), &types);
+    SymbolPiList types = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &types);
 
-    PiType* out_ty = mem_alloc(sizeof(PiType), a);
+    PiType* out_ty = call_alloc(sizeof(PiType), pia);
     *out_ty =  (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
     return out_ty;
 }
@@ -199,7 +214,7 @@ typedef struct {
     RawTree to;
 } ForRange;
 
-bool mk_condition(ForRange range, RawTree* out, Allocator *a) {
+bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
     const char* comparator = NULL;
     if (range.type != Then) {
         switch (range.type) {
@@ -210,7 +225,7 @@ bool mk_condition(ForRange range, RawTree* out, Allocator *a) {
         default: panic(mv_string("unrecognised comparator"));
         }
     
-        RawTreeArray proj_nodes = mk_rawtree_array(3, a);
+        RawTreePiList proj_nodes = mk_rawtree_list(3, pia);
         push_rawtree(atom_symbol("."), &proj_nodes);
         push_rawtree(atom_symbol(comparator), &proj_nodes);
         push_rawtree(atom_symbol("u64"), &proj_nodes);
@@ -221,7 +236,7 @@ bool mk_condition(ForRange range, RawTree* out, Allocator *a) {
             .branch.nodes = proj_nodes,
         };
 
-        RawTreeArray comp_nodes = mk_rawtree_array(3, a);
+        RawTreePiList comp_nodes = mk_rawtree_list(3, pia);
         push_rawtree(proj, &comp_nodes);
         push_rawtree(range.name, &comp_nodes);
         push_rawtree(range.to, &comp_nodes);
@@ -236,7 +251,7 @@ bool mk_condition(ForRange range, RawTree* out, Allocator *a) {
     return false;
 }
 
-MacroResult loop_macro(RawTreeArray nodes) {
+MacroResult loop_macro(RawTreePiList nodes) {
     // TODO (BUGS):
     //   non-hygenic: labels loop-exit and loop-continue
     //   
@@ -249,17 +264,17 @@ MacroResult loop_macro(RawTreeArray nodes) {
     //   (c2)
     //   (c3)
     // )
-    Allocator a = get_std_current_allocator();
+    PiAllocator pico_allocator = get_std_current_allocator();
+    PiAllocator* pia = &pico_allocator;
 
-    RawTreeArray loop_body_nodes = mk_rawtree_array(nodes.len + 1, &a);
+    RawTreePiList loop_body_nodes = mk_rawtree_list(nodes.len + 1, pia);
     push_rawtree(atom_symbol("seq"), &loop_body_nodes);
 
     // We push a 'null' rawtree because this will later be assigned to the
     // loop-check 
     push_rawtree((RawTree){}, &loop_body_nodes);
-    PtrArray loop_fors = mk_ptr_array(2, &a);
-    //PtrArray loop_gfors = mk_ptr_array(2, &a);
-    PtrArray loop_whiles = mk_ptr_array(2, &a);
+    AddrPiList loop_fors = mk_addr_list(2, pia);
+    AddrPiList loop_whiles = mk_addr_list(2, pia);
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
@@ -312,9 +327,9 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
                     range.to = branch.branch.nodes.data[5];
 
-                    ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+                    ForRange* rp = call_alloc(sizeof(ForRange), pia);
                     *rp = range;
-                    push_ptr(rp, &loop_fors);
+                    push_addr(rp, &loop_fors);
                 } else if (eq_symbol(&branch.branch.nodes.data[2], string_to_symbol(mv_string("from")))) {
                     range.from = branch.branch.nodes.data[3];
 
@@ -345,9 +360,9 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
                     range.to = branch.branch.nodes.data[5];
 
-                    ForRange* rp = mem_alloc(sizeof(ForRange), &a);
+                    ForRange* rp = call_alloc(sizeof(ForRange), pia);
                     *rp = range;
-                    push_ptr(rp, &loop_fors);
+                    push_addr(rp, &loop_fors);
                 } else {
                     return (MacroResult) {
                         .result_type = Left,
@@ -358,8 +373,8 @@ MacroResult loop_macro(RawTreeArray nodes) {
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("while")))) {
                 RawTree *raw_term = (branch.branch.nodes.len == 2)
                     ? &branch.branch.nodes.data[1]
-                    : raw_slice(&branch, 1, &a);
-                push_ptr(raw_term, &loop_whiles);
+                    : raw_slice(&branch, 1, pia);
+                push_addr(raw_term, &loop_whiles);
             } else {
                 return (MacroResult) {
                     .result_type = Left,
@@ -372,11 +387,11 @@ MacroResult loop_macro(RawTreeArray nodes) {
         }
     }
 
-    RawTreeArray start_go_to_nodes = mk_rawtree_array(2 + loop_fors.len, &a);
+    RawTreePiList start_go_to_nodes = mk_rawtree_list(2 + loop_fors.len, pia);
     push_rawtree(atom_symbol("go-to"), &start_go_to_nodes);
     push_rawtree(atom_symbol("loop-continue"), &start_go_to_nodes);
 
-    RawTreeArray continue_go_to_nodes = mk_rawtree_array(2 + loop_fors.len, &a);
+    RawTreePiList continue_go_to_nodes = mk_rawtree_list(2 + loop_fors.len, pia);
     push_rawtree(atom_symbol("go-to"), &continue_go_to_nodes);
     push_rawtree(atom_symbol("loop-continue"), &continue_go_to_nodes);
 
@@ -394,25 +409,24 @@ MacroResult loop_macro(RawTreeArray nodes) {
     if (loop_fors.len > 0) {
         for (size_t i = 0; i < loop_fors.len; i++) {
             RawTree new_condition;
-            if (mk_condition(*(ForRange*)loop_fors.data[i], &new_condition, &a)) {
+            if (mk_condition(*(ForRange*)loop_fors.data[i], &new_condition, pia)) {
                 if (!cond_initialized) {
                     cond_initialized = true;
                     loop_condition = new_condition;
                     continue;
                 }
             }
-            RawTreeArray and_fn_nodes = mk_rawtree_array(3, &a);
+            RawTreePiList and_fn_nodes = mk_rawtree_list(3, pia);
             push_rawtree(atom_symbol("."), &and_fn_nodes);
             push_rawtree(atom_symbol("and"), &and_fn_nodes);
-            push_rawtree(atom_symbol("bool"), &and_fn_nodes);
+            push_rawtree(atom_symbol("bool"),&and_fn_nodes);
             RawTree and = (RawTree) {
                 .type = RawBranch,
                 .branch.hint = HExpression,
                 .branch.nodes = and_fn_nodes,
             };
 
-            RawTreeArray and_nodes = mk_rawtree_array(3, &a);
-
+            RawTreePiList and_nodes = mk_rawtree_list(3, pia);
             push_rawtree(and, &and_nodes);
             push_rawtree(loop_condition, &and_nodes);
             push_rawtree(new_condition, &and_nodes);
@@ -432,7 +446,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
         }
         for (size_t i = start_idx; i < loop_whiles.len; i++) {
             RawTree new_condition = *(RawTree*)loop_whiles.data[i];
-            RawTreeArray and_fn_nodes = mk_rawtree_array(3, &a);
+            RawTreePiList and_fn_nodes = mk_rawtree_list(3, pia);
             push_rawtree(atom_symbol("."), &and_fn_nodes);
             push_rawtree(atom_symbol("and"), &and_fn_nodes);
             push_rawtree(atom_symbol("bool"), &and_fn_nodes);
@@ -442,7 +456,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
                 .branch.nodes = and_fn_nodes,
             };
 
-            RawTreeArray and_nodes = mk_rawtree_array(3, &a);
+            RawTreePiList and_nodes = mk_rawtree_list(3, pia);
 
             push_rawtree(and, &and_nodes);
             push_rawtree(loop_condition, &and_nodes);
@@ -455,7 +469,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
         }
     }
 
-    RawTreeArray loop_body_arg_nodes = mk_rawtree_array(loop_fors.len, &a);
+    RawTreePiList loop_body_arg_nodes = mk_rawtree_list(loop_fors.len, pia);
     
     for (size_t i = 0; i < loop_fors.len; i++) {
         ForRange* fr = loop_fors.data[i];
@@ -468,7 +482,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
 
             // Increment or decrement appropriately
             // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
-            RawTreeArray func_nodes = mk_rawtree_array(3, &a);
+            RawTreePiList func_nodes = mk_rawtree_list(3, pia);
             push_rawtree(atom_symbol("."), &func_nodes);
             push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
             push_rawtree(atom_symbol("u64"), &func_nodes);
@@ -478,7 +492,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
                 .branch.nodes = func_nodes,
             };
 
-            RawTreeArray call_nodes = mk_rawtree_array(4, &a);
+            RawTreePiList call_nodes = mk_rawtree_list(4, pia);
             push_rawtree(func_term, &call_nodes);
             push_rawtree(fr->name, &call_nodes);
 
@@ -504,11 +518,11 @@ MacroResult loop_macro(RawTreeArray nodes) {
         .branch.nodes = loop_body_arg_nodes,
     };
 
-    RawTreeArray loop_body_label_nodes = mk_rawtree_array(3, &a);
+    RawTreePiList loop_body_label_nodes = mk_rawtree_list(3, pia);
     push_rawtree(atom_symbol("loop-continue"), &loop_body_label_nodes);
     push_rawtree(loop_body_args, &loop_body_label_nodes);
 
-    RawTreeArray unit_nodes = mk_rawtree_array(2, &a);
+    RawTreePiList unit_nodes = mk_rawtree_list(2, pia);
     push_rawtree(atom_symbol(":"), &unit_nodes);
     push_rawtree(atom_symbol("unit"), &unit_nodes);
     RawTree unit_term = (RawTree) {
@@ -517,7 +531,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
         .branch.nodes = unit_nodes,
     };
 
-    RawTreeArray labels_nodes = mk_rawtree_array(4, &a);
+    RawTreePiList labels_nodes = mk_rawtree_list(4, pia);
     RawTree labels_atom = (RawTree) {
         .type = RawAtom,
         .atom.type = ASymbol,
@@ -533,12 +547,12 @@ MacroResult loop_macro(RawTreeArray nodes) {
     push_rawtree(start_go_to, &labels_nodes);
 
     // TODO: Add if (condition) (go-to continue ...) (go-to exit ...) 
-    RawTreeArray if_nodes = mk_rawtree_array(4, &a);
+    RawTreePiList if_nodes = mk_rawtree_list(4, pia);
     push_rawtree(atom_symbol("if"), &if_nodes);
     push_rawtree(loop_condition, &if_nodes);
     push_rawtree(unit_term, &if_nodes);
 
-    RawTreeArray goto_exit_nodes = mk_rawtree_array(2, &a);
+    RawTreePiList goto_exit_nodes = mk_rawtree_list(2, pia);
     push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
     push_rawtree(atom_symbol("exit"), &goto_exit_nodes);
     RawTree goto_exit = (RawTree) {
@@ -576,7 +590,7 @@ MacroResult loop_macro(RawTreeArray nodes) {
     };
     push_rawtree(loop_body_label, &labels_nodes);
 
-    RawTreeArray loop_exit_nodes = mk_rawtree_array(2, &a);
+    RawTreePiList loop_exit_nodes = mk_rawtree_list(2, pia);
 
     push_rawtree(atom_symbol("exit"), &loop_exit_nodes);
     push_rawtree(unit_term, &loop_exit_nodes);
@@ -587,12 +601,6 @@ MacroResult loop_macro(RawTreeArray nodes) {
     };
     push_rawtree(loop_exit, &labels_nodes);
 
-    return (MacroResult) {
-        .result_type = Right,
-        .term.type = RawBranch,
-        .term.branch.hint = HExpression,
-        .term.branch.nodes = labels_nodes,
-    };
     // Now, construct the loop expression
     // each for-variable must
     // (labels (go-to loop-body initial-val-1 initial-val-2 ...)
@@ -602,15 +610,21 @@ MacroResult loop_macro(RawTreeArray nodes) {
     //       )
     //    [exit :unit]])
     
+    return (MacroResult) {
+        .result_type = Right,
+        .term.type = RawBranch,
+        .term.branch.hint = HExpression,
+        .term.branch.nodes = labels_nodes,
+    };
 }
 
-void build_loop_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
+void build_loop_macro(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "nodes", mk_list_ctype(pia), mk_macro_result_ctype(pia));
 
     convert_c_fn(loop_macro, &fn_ctype, type, ass, a, point); 
 }
 
-MacroResult ann_macro(RawTreeArray nodes) {
+MacroResult ann_macro(RawTreePiList nodes) {
     if (nodes.len < 3) {
         return (MacroResult) {
             .result_type = Left,
@@ -619,8 +633,8 @@ MacroResult ann_macro(RawTreeArray nodes) {
         };
     }
 
-    Allocator a = get_std_current_allocator();
-    RawTreeArray decl_nodes = mk_rawtree_array(3, &a);
+    PiAllocator pia = get_std_current_allocator();
+    RawTreePiList decl_nodes = mk_rawtree_list(3, &pia);
     push_rawtree((RawTree) {
             .type = RawAtom,
             .atom.type = ASymbol,
@@ -629,8 +643,8 @@ MacroResult ann_macro(RawTreeArray nodes) {
 
     push_rawtree(nodes.data[1], &decl_nodes);
 
-    RawTreeArray field_nodes = mk_rawtree_array(2, &a);
-    RawTreeArray proj_nodes = mk_rawtree_array(2, &a);
+    RawTreePiList field_nodes = mk_rawtree_list(2, &pia);
+    RawTreePiList proj_nodes = mk_rawtree_list(2, &pia);
 
     // push '.type'
     push_rawtree((RawTree) {
@@ -657,7 +671,7 @@ MacroResult ann_macro(RawTreeArray nodes) {
         tree = &nodes.data[2];
     } else {
         const size_t drop = 2;
-        tree = mem_alloc(sizeof(RawTree), &a);
+        tree = call_alloc(sizeof(RawTree), &pia);
         *tree = (RawTree) {
             .type = RawBranch,
             .range.start = nodes.data[drop].range.start,
@@ -686,8 +700,8 @@ MacroResult ann_macro(RawTreeArray nodes) {
     };
 }
 
-void build_ann_macro(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "nodes", mk_list_ctype(a), mk_macro_result_ctype(a));
+void build_ann_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "nodes", mk_list_ctype(pia), mk_macro_result_ctype(pia));
 
     convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
 }
@@ -722,27 +736,23 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
 
     Allocator arena = mk_arena_allocator(4096, a);
     a = &arena;
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
+    PiAllocator* pia = &pico_arena;
     
-    // uint64_t dyn_curr_package = mk_dynamic_var(sizeof(void*), &base); 
-    std_perm_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator);
-    typep = mk_dynamic_type(a,
-                            mk_named_type(a, "Allocator",
-                                mk_struct_type(a, 4,
-                                                 "alloc", mk_prim_type(a, Address),
-                                                 "realloc", mk_prim_type(a, Address),
-                                                 "free", mk_prim_type(a, Address),
-                                                 "ctx", mk_prim_type(a, Address))));
+    typep = mk_dynamic_type(pia, get_allocator_type());
+    PiAllocator pico_default_allocator = convert_to_pallocator(default_allocator);
+    std_perm_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator);
     sym = string_to_symbol(mv_string("perm-allocator"));
     add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
 
-    std_current_allocator = mk_dynamic_var(sizeof(Allocator), default_allocator); 
+    std_current_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator); 
     sym = string_to_symbol(mv_string("current-allocator"));
     add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
 
-    Allocator nul_alloc = (Allocator){.malloc = NULL, .realloc = NULL, .free= NULL};
-    std_temp_allocator = mk_dynamic_var(sizeof(Allocator), &nul_alloc); 
+    PiAllocator nul_alloc = (PiAllocator){};
+    std_temp_allocator = mk_dynamic_var(sizeof(PiAllocator), &nul_alloc); 
 
-    typep = mk_dynamic_type(a, mk_prim_type(a, Address));
+    typep = mk_dynamic_type(pia, mk_prim_type(pia, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
     add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
     clear_assembler(ass);
@@ -752,7 +762,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     Segments prepped;
 
     // exit : Proc [] Unit
-    typep = mk_proc_type(a, 0, mk_prim_type(a, Unit));
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
     build_exit_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("exit"));
     fn_segments.code = get_instructions(ass);
@@ -761,7 +771,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     clear_assembler(ass);
 
     // panic : All [A] Proc [String] A
-    typep = build_panic_fn_ty(a);
+    typep = build_panic_fn_ty(pia);
     build_panic_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("panic"));
     fn_segments.code = get_instructions(ass);
@@ -770,7 +780,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     clear_assembler(ass);
 
     // malloc : Proc [U64] Address
-    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address));
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
     build_malloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("malloc"));
     fn_segments.code = get_instructions(ass);
@@ -779,9 +789,9 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     clear_assembler(ass);
 
     // realloc : Proc (Address U64) Address
-    typep = mk_proc_type(a, 2, mk_prim_type(a, Address),
-                        mk_prim_type(a, UInt_64),
-                        mk_prim_type(a, Address));
+    typep = mk_proc_type(pia, 2, mk_prim_type(pia, Address),
+                        mk_prim_type(pia, UInt_64),
+                        mk_prim_type(pia, Address));
     build_realloc_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("realloc"));
     fn_segments.code = get_instructions(ass);
@@ -790,7 +800,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     clear_assembler(ass);
 
     // realloc : Proc [String] Unit
-    typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, Unit));
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
     build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
     fn_segments.code = get_instructions(ass);
@@ -798,20 +808,20 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
-    PiType* macro_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
+    PiType* syntax_array = mk_app_type(pia, get_list_type(), get_syntax_type());
+    PiType* macro_proc = mk_proc_type(pia, 1, syntax_array, get_macro_result_type());
 
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax
-    typep = mk_prim_type(a, TMacro);
-    build_loop_macro(macro_proc, ass, a, &point);
+    typep = mk_prim_type(pia, TMacro);
+    build_loop_macro(macro_proc, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("loop"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_prim_type(a, TMacro);
-    build_ann_macro(macro_proc, ass, a, &point);
+    typep = mk_prim_type(pia, TMacro);
+    build_ann_macro(macro_proc, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("ann"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);

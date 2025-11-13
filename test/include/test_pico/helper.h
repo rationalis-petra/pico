@@ -11,6 +11,7 @@ typedef struct {
     Environment *env;
     TestLog *log;
     Allocator *a;
+    PiAllocator *pia;
     Target target;
 } TestContext;
 

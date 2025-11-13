@@ -48,6 +48,9 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
+    PiAllocator* pia = &pico_arena;
+
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     clear_assembler(target.target);
@@ -69,7 +72,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    ParseResult res = parse_rawtree(cin, &arena);
+    ParseResult res = parse_rawtree(cin, pia, &arena);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
     }
@@ -87,7 +90,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &arena, .point = &pi_point, .target = target,
+        .a = &arena, .pia = pia, .point = &pi_point, .target = target,
     };
     type_check(&abs, env, ctx);
 
@@ -489,7 +492,9 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
+    PiAllocator* pia = &pico_arena;
     IStream* cin = mk_capturing_istream(sin, &arena);
 
     Target gen_target = {
@@ -509,7 +514,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    ParseResult res = parse_rawtree(cin, &arena);
+    ParseResult res = parse_rawtree(cin, pia, &arena);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
     }
@@ -528,7 +533,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
     TopLevel abs = abstract(res.result, env, &arena, &pi_point);
 
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &arena, .point = &pi_point, .target = gen_target,
+        .a = &arena, .pia = pia, .point = &pi_point, .target = gen_target,
     };
     type_check(&abs, env, ctx);
 

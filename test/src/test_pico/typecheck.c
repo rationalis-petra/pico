@@ -16,6 +16,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
     Allocator exalloc = mk_executable_allocator(a);
     Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator parena = convert_to_pallocator(&arena);
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
@@ -54,7 +55,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     };
 
     if (test_start(log, mv_string("UVar through all"))) {
-        PiType* expected = mk_prim_type(&arena, Int_64);
+        PiType* expected = mk_prim_type(&parena, Int_64);
         TEST_TYPE("((all [A] -28) {Unit})");
     }
 
@@ -66,56 +67,51 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     /* } */
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
-        PiType* expected = mk_prim_type(&arena, Int_64);
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
+        PiType* expected = mk_prim_type(&parena, Int_64);
         TEST_TYPE("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Default struct from field constraints"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
         PiType *expected =
-            mk_proc_type(&arena, 1,
-                         mk_struct_type(&arena, 2, "x", mk_prim_type(&arena, Int_64),
-                                        "y", mk_prim_type(&arena, Int_64)), mk_prim_type(&arena, Int_64));
+            mk_proc_type(&parena, 1,
+                         mk_struct_type(&parena, 2, "x", mk_prim_type(&parena, Int_64),
+                                        "y", mk_prim_type(&parena, Int_64)), mk_prim_type(&parena, Int_64));
         TEST_TYPE("(proc [point] (i64.+ point.x point.y))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
         PiType *expected =
-            mk_proc_type(&arena, 1,
-                         mk_enum_type(&arena, 2, "left", 1, mk_prim_type(&arena, UInt_64),
-                                      "right", 1, mk_prim_type(&arena, Address)), mk_prim_type(&arena, UInt_64));
+            mk_proc_type(&parena, 1,
+                         mk_enum_type(&parena, 2, "left", 1, mk_prim_type(&parena, UInt_64),
+                                      "right", 1, mk_prim_type(&parena, Address)), mk_prim_type(&parena, UInt_64));
         TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("enum from variant constraints"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
-        PiType *expected = mk_proc_type(&arena, 1, mk_prim_type(&arena, Bool),
-                                        mk_enum_type(&arena, 2,
-                                                     "left", 1, mk_prim_type(&arena, Int_64),
-                                                     "right", 1, mk_prim_type(&arena, Address)));
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
+        PiType *expected = mk_proc_type(&parena, 1, mk_prim_type(&parena, Bool),
+                                        mk_enum_type(&parena, 2,
+                                                     "left", 1, mk_prim_type(&parena, Int_64),
+                                                     "right", 1, mk_prim_type(&parena, Address)));
         TEST_TYPE("(proc [which] if which (:left 10) (:right (malloc 8)))") ;
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("declaration"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
-        PiType *expected = mk_proc_type(&arena, 1, mk_prim_type(&arena, UInt_64),
-                                        mk_prim_type(&arena, UInt_64));
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
+        PiType *expected = mk_proc_type(&parena, 1, mk_prim_type(&parena, UInt_64),
+                                        mk_prim_type(&parena, UInt_64));
         RUN("(declare id [.type Proc [U64] U64])");
         RUN("(def id proc [x] x)");
         TEST_TYPE("id");
@@ -123,9 +119,8 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     }
 
     if (test_start(log, mv_string("kinds-1"))) {
-        // TODO (BUG): this leaks - set current allocator?
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
         PiType ty = (PiType){.sort = TKind, .kind.nargs = 1};
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");

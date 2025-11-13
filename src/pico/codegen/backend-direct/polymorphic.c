@@ -335,7 +335,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
     }
 }
 
-void generate_offset_of(Regname dest, Symbol field, SymPtrAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
+void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
     build_unary_op(Push, imm8(0), ass, a, point);
     for (size_t i = 0; i < fields.len; i++) {
         if (i != 0) {

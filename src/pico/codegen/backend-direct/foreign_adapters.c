@@ -1008,7 +1008,8 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         }
         return true;
     }
-
+    case TSealed:
+        return true;
 
     case TReset:
     case TResumeMark:
@@ -1020,7 +1021,6 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     case TCType:
     case TVar:
     case TAll:
-    case TSealed:
     case TCApp:
     case TFam:
     case TKind:

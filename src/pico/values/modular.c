@@ -11,6 +11,7 @@
 #include "pico/values/modular.h"
 #include "pico/syntax/header.h"
 #include "pico/data/sym_sarr_amap.h"
+#include "pico/data/sym_ptr_amap.h"
 
 /* Module and package implementation details
  * Modules
@@ -137,9 +138,10 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allo
 }
 
 void delete_decl(ModuleDecl decl, Allocator* a) {
+    PiAllocator pia = convert_to_pallocator(a);
     switch (decl.sort) {
     case DeclType:
-        delete_pi_type_p(decl.type, a);
+        delete_pi_type_p(decl.type, &pia);
     }
 }
 
@@ -153,15 +155,16 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
     } else {
+        PiAllocator pia = convert_to_pallocator(module->allocator);
         if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
-            delete_pi_type_p(entry.value, module->allocator);
+            delete_pi_type_p(entry.value, &pia);
         } else if (entry.type.sort == TTraitInstance) {
             mem_free(*(void**)entry.value, module->allocator);
             mem_free(entry.value, module->allocator);
         } else {
             mem_free(entry.value, module->allocator);
         }
-        delete_pi_type(entry.type, module->allocator);
+        delete_pi_type(entry.type, &pia);
     }
 
     if (entry.declarations) {
@@ -270,7 +273,8 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
 
     if (type.sort == TKind || type.sort == TConstraint) {
         PiType* t_val = *(PiType**)data; 
-        entry.value = copy_pi_type_p(t_val, module->allocator);
+        PiAllocator pia = convert_to_pallocator(module->allocator);
+        entry.value = copy_pi_type_p(t_val, &pia);
     } else {
         if (type.sort == TTraitInstance) {
             size_t total = 0;
@@ -320,7 +324,8 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
         entry.backlinks = NULL;
     }
 
-    entry.type = copy_pi_type(type, module->allocator);
+    PiAllocator pia = convert_to_pallocator(module->allocator);
+    entry.type = copy_pi_type(type, &pia);
 
     // Free a previous definition (if it exists!)
     entry_insert(symbol, entry, &module->entries);
@@ -332,9 +337,10 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
 
 ModuleDecl copy_decl(ModuleDecl decl, Allocator *a) {
     ModuleDecl out = (ModuleDecl) {.sort = decl.sort};
+    PiAllocator pia = convert_to_pallocator(a);
     switch (decl.sort) {
     case DeclType:
-        out.type = copy_pi_type_p(decl.type, a);
+        out.type = copy_pi_type_p(decl.type, &pia);
         break;
     }
     return out;

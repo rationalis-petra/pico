@@ -5,7 +5,9 @@
 #include "data/result.h"
 #include "components/pretty/document.h"
 
-#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/client/addr_list.h"
+#include "pico/data/client/symbol_list.h"
+#include "pico/data/client/sym_addr_piamap.h"
 #include "pico/data/sym_ptr_assoc.h"
 #include "pico/data/symbol_array.h"
 #include "pico/values/ctypes.h"
@@ -83,22 +85,22 @@ typedef struct {
 
 typedef struct {
     ArraySort sort; 
-    PtrArray dimensions;
+    AddrPiList dimensions;
     PiType* element_type; 
 } ArrayType;
 
 typedef struct {
-    PtrArray args;
-    PtrArray implicits;
+    AddrPiList args;
+    AddrPiList implicits;
     PiType* ret;
 } ProcType;
 
 typedef struct {
-    SymPtrAMap fields;
+    SymAddrPiAMap fields;
 } StructType;
 
 typedef struct {
-    SymPtrAMap variants;
+    SymAddrPiAMap variants;
 } EnumType;
 
 typedef struct {
@@ -108,36 +110,36 @@ typedef struct {
 
 typedef struct {
     uint64_t id;
-    SymbolArray vars;
-    SymPtrAMap fields; 
+    SymbolPiList vars;
+    SymAddrPiAMap fields; 
 } TraitType; 
 
 typedef struct {
     uint64_t instance_of;
-    PtrArray args; 
-    SymPtrAMap fields; 
+    AddrPiList args; 
+    SymAddrPiAMap fields; 
 } TraitInstance; 
 
 typedef struct {
-    PtrArray args;
+    AddrPiList args;
     PiType* fam;
 } TAppType;
 
 typedef struct {
-    SymbolArray vars;
+    SymbolPiList vars;
     PiType* body;
 } TypeBinder;
 
 typedef struct {
-    SymbolArray vars;
-    PtrArray implicits;
+    SymbolPiList vars;
+    AddrPiList implicits;
     PiType* body;
 } SealedType;
 
 typedef struct {
     Symbol name;
     PiType* type;
-    PtrArray* args;
+    AddrPiList* args;
 } NamedType;
 
 typedef struct {
@@ -145,7 +147,7 @@ typedef struct {
     PiType* type;
     uint64_t id;
     void* source_module;
-    PtrArray* args;
+    AddrPiList* args;
 } DistinctType;
 
 typedef struct {
@@ -193,7 +195,7 @@ struct PiType {
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
 Document* pretty_type(PiType* type, Allocator* a);
 
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Allocator* a);
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
 bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
 
@@ -212,11 +214,11 @@ size_t pi_stack_size_of(PiType type);
 Result_t pi_maybe_stack_size_of(PiType type, size_t* out);
 
 // Resource Management
-void delete_pi_type(PiType t, Allocator* a);
-void delete_pi_type_p(PiType* t, Allocator* a);
+void delete_pi_type(PiType t, PiAllocator* pia);
+void delete_pi_type_p(PiType* t, PiAllocator* pia);
 
-PiType copy_pi_type(PiType t, Allocator* a);
-PiType* copy_pi_type_p(PiType* t, Allocator* a);
+PiType copy_pi_type(PiType t, PiAllocator* pia);
+PiType* copy_pi_type_p(PiType* t, PiAllocator* pia);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
@@ -229,7 +231,7 @@ bool is_narrower(PiType* wide, PiType* narrow);
 // Recursively extracts the inner type from distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 
 // (wrapped) named type within the type, then contine descending.
-PiType* unwrap_type(PiType *ty, Allocator* a);
+PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a);
 
 // Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);
@@ -237,55 +239,55 @@ PiType* strip_type(PiType* ty);
 // type_app: apply the arguments (args) to a type family (fam)
 //  Memory guarantes: both the arguments (args) and famiy are untouched, and can
 //  be safely deleted etc. without affecting the returned type.
-PiType* type_app (PiType family, PtrArray args, Allocator* a);
+PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 
 // Generators 
-PiType* mk_prim_type(Allocator* a, PrimType t);
-PiType* mk_dynamic_type(Allocator* a, PiType* t);
+PiType* mk_prim_type(PiAllocator* pia, PrimType t);
+PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
-PiType* mk_proc_type(Allocator* a, size_t nargs, ...);
+PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
-PiType* mk_struct_type(Allocator* a, size_t nfields, ...);
+PiType* mk_struct_type(PiAllocator* pia, size_t nfields, ...);
 
 // Sample usage: mk_trait_type(a, 1, "A", 2
 //   "val", mk_var_type(a, "A"),
 //   "mon", mk_proc_type(a, 2, mk_var_type(a, "A"), mk_var_type(a, "A"), mk_var_type(a, "A")))
-PiType* mk_trait_type(Allocator* a, size_t nfields, ...);
+PiType* mk_trait_type(PiAllocator* pia, size_t nfields, ...);
 
 // Sample usage: mk_enum_type(a, 3,
 //   "Pair", 2, mk_prim_type(Int_64), mk_prim_type(Int_64),
 //   "Singleton", 1, mk_prim_type(Int_64),
 //   "None", 0)
-PiType* mk_enum_type(Allocator* a, size_t nfields, ...);
+PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...);
 
 // Sample usage: mk_distinct_type(a, "List", ...)
-PiType* mk_named_type(Allocator* a, const char* name, PiType* inner);
+PiType* mk_named_type(PiAllocator* pia, const char* name, PiType* inner);
 
 // Sample usage: mk_distinct_type(a, mk_prim_type(Address))
-PiType* mk_distinct_type(Allocator* a, PiType* inner);
+PiType* mk_distinct_type(PiAllocator* pia, PiType* inner);
 
 // Sample usage: mk_opaque_type(a, mod, mk_prim_type(Address))
-PiType* mk_opaque_type(Allocator* a, void* module, PiType* inner);
+PiType* mk_opaque_type(PiAllocator* pia, void* module, PiType* inner);
 
-PiType* mk_var_type(Allocator* a, const char* name);
+PiType* mk_var_type(PiAllocator* pia, const char* name);
 
 // Sample usage: mk_all_type(a, 2, "A", "B", mk_prim_type(Address));
-PiType* mk_all_type(Allocator* a, size_t nsymbols, ...);
+PiType* mk_all_type(PiAllocator* pia, size_t nsymbols, ...);
 
 // Sample usage: mk_sealed_type(a, 2, "A", "B", 1, addable, mk_prim_type(Address));
-PiType* mk_sealed_type(Allocator* a, size_t nsymbols, ...);
+PiType* mk_sealed_type(PiAllocator* pia, size_t nsymbols, ...);
 
 // Sample usage: mk_distinct_type(a, vars, mk_prim_type(Address))
-PiType* mk_type_family(Allocator* a, SymbolArray vars, PiType* body);
+PiType* mk_type_family(PiAllocator* pia, SymbolPiList vars, PiType* body);
 
 // Sample usage: mk_app_type(a, array_type, int_type);
-PiType* mk_app_type(Allocator* a, PiType* fam, ...);
+PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
 
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
-PiType* mk_string_type(Allocator* a);
+PiType* mk_string_type(PiAllocator* pia);
 
 
 #endif

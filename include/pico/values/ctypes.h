@@ -1,13 +1,14 @@
 #ifndef __PICO_VALUES_CTYPES_H
 #define __PICO_VALUES_CTYPES_H
 
-#include "data/meta/assoc_header.h"
-#include "pico/data/name_i64_assoc.h"
-#include "pico/data/name_ptr_amap.h"
+#include "pico/data/client/allocator.h"
+#include "pico/data/client/meta/amap_header.h"
+#include "pico/data/client/name_i64_piamap.h"
+#include "pico/data/client/name_addr_piamap.h"
 
 typedef struct CType CType;
 
-ASSOC_HEADER_NOCELL(Name, CType, name_ctype, NameCType)
+PICO_AMAP_HEADER_NOCELL(Name, CType, name_ctype, NameCType)
 
 typedef enum : uint64_t {
     CSVoid,
@@ -44,23 +45,23 @@ typedef struct {
 typedef struct {
     uint64_t named_tag;
     Name name;
-    NameCTypeAssoc args;
+    NameCTypePiAMap args;
     CType* ret;
 } CProc;
 
 typedef struct {
     uint64_t named_tag;
     Name name; 
-    NameCTypeAssoc fields;
+    NameCTypePiAMap fields;
 } CStruct;
 
 typedef struct {
     CPrimInt base;
-    NameI64Assoc vals;
+    NameI64PiAMap vals;
 } CEnum;
 
 typedef struct {
-    NamePtrAMap fields;
+    NameAddrPiAMap fields;
 } CUnion;
 
 typedef struct {
@@ -80,7 +81,7 @@ struct CType {
     };
 };
 
-ASSOC_HEADER_CELL(Name, CType, name_cty, NameCType)
+PICO_AMAP_HEADER_CELL(Name, CType, name_cty, NameCType)
 
 Document* pretty_cprimint(CPrimInt prim, Allocator* a);
 Document* pretty_ctype(CType* type, Allocator* a);
@@ -90,34 +91,34 @@ size_t c_size_of(CType type);
 size_t c_align_of(CType type);
 
 // Resource Management
-void delete_c_type(CType t, Allocator* a);
-void delete_c_type_p(CType* t, Allocator* a);
+void delete_c_type(CType t, PiAllocator* a);
+void delete_c_type_p(CType* t, PiAllocator* a);
 
-CType copy_c_type(CType t, Allocator* a);
-CType* copy_c_type_p(CType* t, Allocator* a);
+CType copy_c_type(CType t, PiAllocator* a);
+CType* copy_c_type_p(CType* t, PiAllocator* a);
 
 // Misc. and utility
 // Utilities for generating or manipulating types
-CType mk_voidptr_ctype(Allocator* a);
+CType mk_voidptr_ctype(PiAllocator* a);
 
 CType mk_primint_ctype(CPrimInt t);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
-CType mk_fn_ctype(Allocator* a, size_t nargs, ...);
+CType mk_fn_ctype(PiAllocator* a, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
-CType mk_struct_ctype(Allocator* a, size_t nfields, ...);
+CType mk_struct_ctype(PiAllocator* a, size_t nfields, ...);
  
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
-CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...);
+CType mk_enum_ctype(PiAllocator* a, CPrimInt store, size_t nfields, ...);
 
 // Sample usage: mk_union_type(a, 3, )
-CType mk_union_ctype(Allocator* a, size_t nfields, ...);
+CType mk_union_ctype(PiAllocator* a, size_t nfields, ...);
 
 // Ctypes used within our data/* libraries 
-CType mk_string_ctype(Allocator* a);
-CType mk_allocator_ctype(Allocator* a);
-CType mk_list_ctype(Allocator* a);
+CType mk_string_ctype(PiAllocator* a);
+CType mk_allocator_ctype(PiAllocator* a);
+CType mk_list_ctype(PiAllocator* a);
 
 void init_ctypes();
 

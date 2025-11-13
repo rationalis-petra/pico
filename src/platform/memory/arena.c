@@ -97,21 +97,25 @@ void arena_free(void* ptr, void* ctx) { }
 
 Allocator mk_arena_allocator(size_t blocksize, Allocator* a) {
     ArenaContext* ctx = mem_alloc(sizeof(ArenaContext), a);
-    ctx->memory_blocks = mk_block_array(10, a);
-    ctx->blocksize = blocksize;
-    ctx->internal_allocator = a;
+    *ctx = (ArenaContext) {
+        .memory_blocks = mk_block_array(10, a),
+        .blocksize = blocksize,
+        .internal_allocator = a,
+    };
 
-    ArenaBlock initial_block;
-    initial_block.data = mem_alloc(ctx->blocksize, ctx->internal_allocator);
-    initial_block.bmp = 0;
+    ArenaBlock initial_block = {
+        .data = mem_alloc(ctx->blocksize, ctx->internal_allocator),
+        .bmp = 0,
+    };
     push_block(initial_block, &ctx->memory_blocks);
+
+    static AllocatorVTable arena_vtable = {
+        .malloc = &arena_malloc,
+        .realloc = &arena_realloc,
+        .free = &arena_free,
+    };
     
-    Allocator arena;
-    arena.malloc = &arena_malloc;
-    arena.realloc = &arena_realloc;
-    arena.free = &arena_free;
-    arena.ctx = ctx;
-    return arena;
+    return (Allocator) {.vtable = &arena_vtable, .ctx = ctx};
 }
 
 void delete_block(ArenaBlock block, Allocator* a) {

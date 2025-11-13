@@ -40,9 +40,12 @@ bool examine_struct(Struct4Words st) {
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
 void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environment* env, Target target, Allocator *a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
     TestContext context = (TestContext) {
         .env = env,
         .a = a,
+        .pia = pia,
         .log = log,
         .target = target,
     };
@@ -62,10 +65,10 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
             test_fail(log);
         }
 
-        CType ctype = mk_fn_ctype(a, 1, "4word-struct", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
+        CType ctype = mk_fn_ctype(pia, 1, "4word-struct", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                   mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}));
 
-        PiType* ptype = mk_proc_type(a, 1, mk_prim_type(a, Int_64), mk_prim_type(a, Int_64));
+        PiType* ptype = mk_proc_type(pia, 1, mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64));
         convert_c_fn(foreign_add_10, &ctype, ptype, ass, a, &point); 
 
         Symbol sym = string_to_symbol(mv_string("foreign-add-10"));
@@ -73,8 +76,8 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         prepped = prep_target(module, fn_segments, ass, NULL);
         add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
-        delete_pi_type_p(ptype, a);
-        delete_c_type(ctype, a);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
         
         refresh_env(env, a);
         int64_t expected = -90;
@@ -88,20 +91,20 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
             test_fail(log);
         }
 
-        CType struct_ctype = mk_struct_ctype(a, 4, 
+        CType struct_ctype = mk_struct_ctype(pia, 4, 
                                                     "a", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "b", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "c", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "d", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}));
-        CType ctype = mk_fn_ctype(a, 1, "4word-struct", struct_ctype,
+        CType ctype = mk_fn_ctype(pia, 1, "4word-struct", struct_ctype,
                                   mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
-        PiType* struct_type = mk_struct_type(a, 4,
-                                                   "a", mk_prim_type(a, Int_64),
-                                                   "b", mk_prim_type(a, Int_64),
-                                                   "c", mk_prim_type(a, Int_64),
-                                                   "d", mk_prim_type(a, Int_64));
-        PiType* ptype = mk_proc_type(a, 1, struct_type, mk_prim_type(a, Bool));
+        PiType* struct_type = mk_struct_type(pia, 4,
+                                                   "a", mk_prim_type(pia, Int_64),
+                                                   "b", mk_prim_type(pia, Int_64),
+                                                   "c", mk_prim_type(pia, Int_64),
+                                                   "d", mk_prim_type(pia, Int_64));
+        PiType* ptype = mk_proc_type(pia, 1, struct_type, mk_prim_type(pia, Bool));
         convert_c_fn(examine_struct, &ctype, ptype, ass, a, &point); 
 
         Symbol sym = string_to_symbol(mv_string("examine-4word-struct"));
@@ -109,8 +112,8 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         prepped = prep_target(module, fn_segments, ass, NULL);
         add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
-        delete_pi_type_p(ptype, a);
-        delete_c_type(ctype, a);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
         
         refresh_env(env, a);
         bool expected = true;
@@ -124,20 +127,20 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
             test_fail(log);
         }
 
-        CType struct_ctype = mk_struct_ctype(a, 4, 
+        CType struct_ctype = mk_struct_ctype(pia, 4, 
                                                     "a", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "b", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "c", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}),
                                                     "d", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed}));
-        CType ctype = mk_fn_ctype(a, 2, "4word-struct", struct_ctype, "arg2", copy_c_type(struct_ctype, a),
+        CType ctype = mk_fn_ctype(pia, 2, "4word-struct", struct_ctype, "arg2", copy_c_type(struct_ctype, pia),
                                   mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
-        PiType* struct_type = mk_struct_type(a, 4,
-                                                   "a", mk_prim_type(a, Int_64),
-                                                   "b", mk_prim_type(a, Int_64),
-                                                   "c", mk_prim_type(a, Int_64),
-                                                   "d", mk_prim_type(a, Int_64));
-        PiType* ptype = mk_proc_type(a, 2, struct_type, copy_pi_type_p(struct_type, a), mk_prim_type(a, Bool));
+        PiType* struct_type = mk_struct_type(pia, 4,
+                                                   "a", mk_prim_type(pia, Int_64),
+                                                   "b", mk_prim_type(pia, Int_64),
+                                                   "c", mk_prim_type(pia, Int_64),
+                                                   "d", mk_prim_type(pia, Int_64));
+        PiType* ptype = mk_proc_type(pia, 2, struct_type, copy_pi_type_p(struct_type, pia), mk_prim_type(pia, Bool));
         convert_c_fn(examine_two_structs, &ctype, ptype, ass, a, &point); 
 
         Symbol sym = string_to_symbol(mv_string("examine-two-4word-structs"));
@@ -145,8 +148,8 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         prepped = prep_target(module, fn_segments, ass, NULL);
         add_def(module, sym, *ptype, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
-        delete_pi_type_p(ptype, a);
-        delete_c_type(ctype, a);
+        delete_pi_type_p(ptype, pia);
+        delete_c_type(ctype, pia);
         
         refresh_env(env, a);
         bool expected = true;

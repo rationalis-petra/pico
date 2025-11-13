@@ -2,9 +2,9 @@
 #include "pico/values/array.h"
 
 void free_array(Array* arr) {
-    Allocator perm = get_std_perm_allocator();
-    mem_free(arr->data, &perm);
-    mem_free(arr->shape.data, &perm);
+    PiAllocator perm = get_std_perm_allocator();
+    call_free(arr->data, &perm);
+    call_free(arr->shape.data, &perm);
 }
 
 Document* recursive_array_doc(const size_t depth, const size_t elem_size, size_t* index, Array arr, PrettyElem pelem, Allocator* a) { 

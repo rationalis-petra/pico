@@ -365,7 +365,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     // -------------------------------------------------------------------------
 
     void* mem = mem_alloc(128, a);
-    Allocator old = get_std_current_allocator();
+    PiAllocator old = get_std_current_allocator();
     void* start;
     {
         Allocator sta = mk_static_allocator(mem, 128);
@@ -375,9 +375,10 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("test-multi-poly-call"))) {
         // Test to ensure that polymorphic calls preserve the stack for a future call
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = -67;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
         TEST_MEM("(seq [let! addr (malloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
     }

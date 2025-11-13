@@ -38,10 +38,14 @@ Allocator mk_static_allocator(void* memory, size_t size) {
         .remainder = size - sizeof(StaticContext),
     };
 
-    return (Allocator) {
+    static AllocatorVTable static_vtable = {
         .malloc = static_malloc,
         .realloc = static_realloc,
         .free = static_free,
+    };
+
+    return (Allocator) {
+        .vtable = &static_vtable,
         .ctx = context,
     };
 }

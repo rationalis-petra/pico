@@ -1,6 +1,9 @@
 #include "platform/signals.h"
 #include "platform/window/window.h"
 
+#include "pico/data/client/allocator.h"
+#include "pico/data/client/meta/list_header.h"
+#include "pico/data/client/meta/list_impl.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
@@ -11,48 +14,61 @@ static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
 
-void build_create_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 3, "name", mk_string_ctype(a),
+PICO_LIST_HEADER(WinMessage, msg, WinMessage);
+PICO_LIST_COMMON_IMPL(WinMessage, msg, WinMessage);
+
+void build_create_window_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 3, "name", mk_string_ctype(pia),
                                        "width", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
                                        "height", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified}),
-                                    mk_voidptr_ctype(a));
+                                    mk_voidptr_ctype(pia));
 
     convert_c_fn(pl_create_window, &fn_ctype, type, ass, a, point); 
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-void build_destroy_window_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), (CType){.sort = CSVoid});
+void build_destroy_window_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
 
     convert_c_fn(pl_destroy_window, &fn_ctype, type, ass, a, point); 
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-void build_window_should_close_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a),
+void build_window_should_close_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia),
                                  mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}));
 
     convert_c_fn(pl_window_should_close, &fn_ctype, type, ass, a, point);
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-WinMessageArray relic_poll_events(PlWindow* window) {
-    Allocator a = get_std_current_allocator();
-    return pl_poll_events(window, &a);
+WinMessagePiList relic_poll_events(PlWindow* window) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    WinMessageArray arr = pl_poll_events(window, &a);
+    return (WinMessagePiList) {
+        .data = arr.data,
+        .len = arr.len,
+        .size = arr.size,
+        .gpa = pia,
+    };
 }
 
-void build_poll_events_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1, "window", mk_voidptr_ctype(a), mk_list_ctype(a));
+void build_poll_events_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_list_ctype(pia));
 
     convert_c_fn(relic_poll_events, &fn_ctype, type, ass, a, point);
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
 void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -85,63 +101,63 @@ void add_window_module(Assembler *ass, Module *platform, Allocator *a) {
     };
 
     // The window type is simple an opaque pointer (address)
-    typep = mk_opaque_type(a, module, mk_prim_type(a, Address));
+    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Window"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def(sym, module);
     window_ty = e->value;
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     // Message Type
     
-    typep = mk_enum_type(a, 1,
-                         "resize", 2, mk_prim_type(a, UInt_32), mk_prim_type(a, UInt_32));
+    typep = mk_enum_type(pia, 1,
+                         "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Message"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def(sym, module);
     window_message_ty = e->value;
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 3, mk_string_type(a), mk_prim_type(a, Int_32), mk_prim_type(a, Int_32), copy_pi_type_p(window_ty, a));
-    build_create_window_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 3, mk_string_type(pia), mk_prim_type(pia, Int_32), mk_prim_type(pia, Int_32), copy_pi_type_p(window_ty, pia));
+    build_create_window_fn(typep, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("create-window"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Unit));
-    build_destroy_window_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Unit));
+    build_destroy_window_fn(typep, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("destroy-window"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 1, copy_pi_type_p(window_ty, a), mk_prim_type(a, Bool));
-    build_window_should_close_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Bool));
+    build_window_should_close_fn(typep, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("should-close"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     //typep = mk_proc_type(a, 0, copy_pi_type_p(window_message_ty, a));
-    typep = mk_proc_type(a, 1,  copy_pi_type_p(window_ty, a), mk_app_type(a, get_list_type(), window_message_ty));
-    build_poll_events_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_list_type(), window_message_ty));
+    build_poll_events_fn(typep, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("poll-events"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);

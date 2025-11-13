@@ -13,9 +13,12 @@
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
     TestContext context = (TestContext) {
         .env = env,
         .a = a,
+        .pia = pia,
         .log = log,
         .target = target,
     };
@@ -501,7 +504,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // -----------------------------------------------------
     
     void* mem = mem_alloc(128, a);
-    Allocator old = get_std_current_allocator();
+    PiAllocator old = get_std_current_allocator();
     void* start;
     {
         Allocator sta = mk_static_allocator(mem, 128);
@@ -510,26 +513,29 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("test-load-i64"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         *(int64_t*)start = 8;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         uint64_t expected = 8;
         TEST_EQ("(let [addr malloc (size-of I64)] (load {I64} addr))");
     }
 
     if (test_start(log, mv_string("test-load-i8"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         *(int8_t*)start = -5;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         int8_t expected = -5;
         TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
     }
 
     if (test_start(log, mv_string("test-load-struct"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct { int64_t x; int64_t y; } IPr;
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         IPr expected = {.x = 25, .y = -5};
         *(IPr*)(start) = expected;
         TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
@@ -537,27 +543,30 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("test-store-i8"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int8_t expected = -5;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
         TEST_MEM("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = 197231987;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         TEST_MEM("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct { int64_t x; int64_t y; } IPr;
         IPr expected = {.x = -123, .y = 9713};
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
     }
 
@@ -575,29 +584,32 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("seal-val"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
         SID expected = {.tinfo = 0x800000080000008, .address = start};
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
         TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-trivial"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
         SID expected = {.tinfo = 0x800000080000008, .address = start};
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
         TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-load/store"))) {
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         uint64_t expected = 16823;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
         RUN("(def sl seq [let! dest malloc 8] [let! src malloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
         TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");

@@ -11,8 +11,8 @@ PiType* get_symbol_type();
 PiType* get_syntax_type();
 PiType* get_macro_result_type();
 
-CType mk_syntax_ctype(Allocator* a);
-CType mk_macro_result_ctype(Allocator* a);
+CType mk_syntax_ctype(PiAllocator* a);
+CType mk_macro_result_ctype(PiAllocator* a);
 
 
 //                Refl

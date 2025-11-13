@@ -1,5 +1,5 @@
 #include <stdarg.h>
-#include "data/meta/assoc_impl.h"
+#include "pico/data/client/meta/amap_impl.h"
 #include "platform/machine_info.h"
 #include "platform/signals.h"
 #include "components/pretty/document.h"
@@ -7,7 +7,8 @@
 
 #include "pico/values/ctypes.h"
 
-ASSOC_IMPL(Name, CType, name_ctype, NameCType);
+// #define PICO_AMAP_IMPL(key_t, val_t, fprefix, tprefix)
+PICO_AMAP_IMPL(Name, CType, name_ctype, NameCType);
 
 Document* pretty_cprim(CPrimInt prim, Allocator* a) {
     PtrArray nodes = mk_ptr_array(2, a);
@@ -401,7 +402,7 @@ size_t c_align_of(CType type) {
 }
 
 // Resource Management
-void delete_c_type(CType t, Allocator* a) {
+void delete_c_type(CType t, PiAllocator* pia) {
     switch(t.sort) {
     case CSVoid:
     case CSPrimInt:
@@ -409,42 +410,42 @@ void delete_c_type(CType t, Allocator* a) {
     case CSDouble:
         break;
     case CSCEnum:
-        sdelete_name_i64_assoc(t.enumeration.vals);
+        sdelete_name_i64_piamap(t.enumeration.vals);
         break;
     case CSProc:
         for (size_t i = 0; i < t.proc.args.len; i++) {
-            delete_c_type(t.proc.args.data[i].val, a);
+            delete_c_type(t.proc.args.data[i].val, pia);
         }
-        sdelete_name_ctype_assoc(t.proc.args);
-        delete_c_type_p(t.proc.ret, a);
+        sdelete_name_ctype_piamap(t.proc.args);
+        delete_c_type_p(t.proc.ret, pia);
         break;
     case CSStruct:
         for (size_t i = 0; i < t.structure.fields.len; i++) {
-            delete_c_type(t.structure.fields.data[i].val, a);
+            delete_c_type(t.structure.fields.data[i].val, pia);
         }
-        sdelete_name_ctype_assoc(t.structure.fields);
+        sdelete_name_ctype_piamap(t.structure.fields);
         break;
     case CSUnion:
         for (size_t i = 0; i < t.cunion.fields.len; i++) {
             CType* ty = t.cunion.fields.data[i].val;
-            delete_c_type_p(ty, a);
+            delete_c_type_p(ty, pia);
         }
-        sdelete_name_ptr_amap(t.cunion.fields);
+        sdelete_name_addr_piamap(t.cunion.fields);
         break;
     case CSPtr:
-        delete_c_type_p(t.ptr.inner, a);
+        delete_c_type_p(t.ptr.inner, pia);
         break;
     case CSIncomplete:
         break;
     }
 }
 
-void delete_c_type_p(CType* t, Allocator* a) {
-    delete_c_type(*t, a);
-    mem_free(t, a);
+void delete_c_type_p(CType* t, PiAllocator* pia) {
+    delete_c_type(*t, pia);
+    call_free(t, pia);
 }
 
-CType copy_c_type(CType t, Allocator* a) {
+CType copy_c_type(CType t, PiAllocator* pia) {
     CType out = t;
     switch(t.sort) {
     case CSPrimInt:
@@ -453,29 +454,29 @@ CType copy_c_type(CType t, Allocator* a) {
     case CSVoid:
         break;
     case CSCEnum:
-        out.enumeration.vals = scopy_name_i64_assoc(t.enumeration.vals, a);
+        out.enumeration.vals = scopy_name_i64_piamap(t.enumeration.vals, pia);
         break;
     case CSProc:
-        out.proc.args = scopy_name_ctype_assoc(t.proc.args, a);
+        out.proc.args = scopy_name_ctype_piamap(t.proc.args, pia);
         for (size_t i = 0; i < t.proc.args.len; i++) {
-            out.proc.args.data[i].val = copy_c_type(t.proc.args.data[i].val, a);
+            out.proc.args.data[i].val = copy_c_type(t.proc.args.data[i].val, pia);
         }
-        out.proc.ret = copy_c_type_p(t.proc.ret, a);
+        out.proc.ret = copy_c_type_p(t.proc.ret, pia);
         break;
     case CSStruct:
-        out.structure.fields = scopy_name_ctype_assoc(t.structure.fields, a);
+        out.structure.fields = scopy_name_ctype_piamap(t.structure.fields, pia);
         for (size_t i = 0; i < t.structure.fields.len; i++) {
-            out.structure.fields.data[i].val = copy_c_type(t.structure.fields.data[i].val, a);
+            out.structure.fields.data[i].val = copy_c_type(t.structure.fields.data[i].val, pia);
         }
         break;
     case CSUnion:
-        out.cunion.fields = scopy_name_ptr_amap(t.cunion.fields, a);
+        out.cunion.fields = scopy_name_addr_piamap(t.cunion.fields, pia);
         for (size_t i = 0; i < t.cunion.fields.len; i++) {
-            out.cunion.fields.data[i].val = copy_c_type_p(t.cunion.fields.data[i].val, a);
+            out.cunion.fields.data[i].val = copy_c_type_p(t.cunion.fields.data[i].val, pia);
         }
         break;
     case CSPtr:
-        out.ptr.inner = copy_c_type_p(t.ptr.inner, a);
+        out.ptr.inner = copy_c_type_p(t.ptr.inner, pia);
         break;
     case CSIncomplete:
         break;
@@ -483,16 +484,16 @@ CType copy_c_type(CType t, Allocator* a) {
     return out;
 }
 
-CType* copy_c_type_p(CType* t, Allocator* a) {
-    CType* ty = mem_alloc(sizeof(CType), a);
-    *ty = copy_c_type(*t, a);
+CType* copy_c_type_p(CType* t, PiAllocator* pia) {
+    CType* ty = call_alloc(sizeof(CType), pia);
+    *ty = copy_c_type(*t, pia);
     return ty;
 }
 
 // Constructors and Utilities
 // --------------------------
-CType mk_voidptr_ctype(Allocator *a) {
-    CType* void_ty = mem_alloc(sizeof(CType), a);
+CType mk_voidptr_ctype(PiAllocator* pia) {
+    CType* void_ty = call_alloc(sizeof(CType), pia);
     *void_ty = (CType) {.sort = CSVoid};
     return (CType) {
         .sort = CSPtr,
@@ -508,18 +509,18 @@ CType mk_primint_ctype(CPrimInt t) {
 }
 
 // Sample usage: mk_proc_type(a, 2, n1, arg_1_ty, n2, arg_2_ty, n3, ret_ty)
-CType mk_fn_ctype(Allocator* a, size_t nargs, ...) {
+CType mk_fn_ctype(PiAllocator* pia, size_t nargs, ...) {
     va_list args;
     va_start(args, nargs);
 
-    NameCTypeAssoc pargs = mk_name_ctype_assoc(nargs, a);
+    NameCTypePiAMap pargs = mk_name_ctype_piamap(nargs, pia);
     for (size_t i = 0; i < nargs; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
         CType arg = va_arg(args, CType);
-        name_ctype_bind(name, arg, &pargs);
+        name_ctype_insert(name, arg, &pargs);
     }
 
-    CType* ret = mem_alloc(sizeof(CType), a);
+    CType* ret = call_alloc(sizeof(CType), pia);
     *ret = va_arg(args, CType);
     va_end(args);
 
@@ -532,14 +533,14 @@ CType mk_fn_ctype(Allocator* a, size_t nargs, ...) {
 }
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
-CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
+CType mk_struct_ctype(PiAllocator* pia, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    NameCTypeAssoc fields = mk_name_ctype_assoc(nfields, a);
+    NameCTypePiAMap fields = mk_name_ctype_piamap(nfields, pia);
     for (size_t i = 0; i < nfields; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
-        name_ctype_bind(name, va_arg(args, CType), &fields);
+        name_ctype_insert(name, va_arg(args, CType), &fields);
     }
 
     return (CType) {
@@ -550,18 +551,18 @@ CType mk_struct_ctype(Allocator* a, size_t nfields, ...) {
 }
 
 // Sample usage: mk_enum_type(a, CInt, 2, "true", 0, "false", 1)
-CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...) {
+CType mk_enum_ctype(PiAllocator* pia, CPrimInt store, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    NameI64Assoc vals = mk_name_i64_assoc(nfields, a);
+    NameI64PiAMap vals = mk_name_i64_piamap(nfields, pia);
     for (size_t i = 0; i < nfields; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
         int64_t arg = va_arg(args, int64_t);
-        name_i64_bind(name, arg, &vals);
+        name_i64_insert(name, arg, &vals);
     }
 
-    CType* ret = mem_alloc(sizeof(CType), a);
+    CType* ret = call_alloc(sizeof(CType), pia);
     *ret = va_arg(args, CType);
     va_end(args);
 
@@ -573,16 +574,16 @@ CType mk_enum_ctype(Allocator* a, CPrimInt store, size_t nfields, ...) {
 }
 
 // Sample usage: mk_union_type(a, 3, )
-CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
+CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
 
-    NamePtrAMap fields = mk_name_ptr_amap(nfields, a);
+    NameAddrPiAMap fields = mk_name_addr_piamap(nfields, pia);
     for (size_t i = 0; i < nfields; i++) {
         Name name = string_to_name(mv_string(va_arg(args, const char*)));
-        CType* arg = mem_alloc(sizeof(CType), a);
+        CType* arg = call_alloc(sizeof(CType), pia);
         *arg = va_arg(args, CType);
-        name_ptr_insert(name, arg, &fields);
+        name_addr_insert(name, arg, &fields);
     }
 
     return (CType) {
@@ -591,26 +592,32 @@ CType mk_union_ctype(Allocator* a, size_t nfields, ...) {
     };
 }
 
-CType mk_string_ctype(Allocator *a) {
-    return mk_struct_ctype(a, 2,
+CType mk_string_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 2,
                     "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                    "bytes", mk_voidptr_ctype(a));
+                    "bytes", mk_voidptr_ctype(pia));
 }
 
-CType mk_allocator_ctype(Allocator *a) {
-    return mk_struct_ctype(a, 4,
-                           "malloc", mk_voidptr_ctype(a),
-                           "realloc", mk_voidptr_ctype(a),
-                           "free", mk_voidptr_ctype(a),
-                           "context", mk_voidptr_ctype(a));
+CType mk_allocator_vtable_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 3,
+                           "alloc", mk_voidptr_ctype(pia),
+                           "realloc", mk_voidptr_ctype(pia),
+                           "free", mk_voidptr_ctype(pia));
 }
 
-CType mk_list_ctype(Allocator *a) {
-    return mk_struct_ctype(a, 4,
-                           "data", mk_voidptr_ctype(a),
+CType mk_allocator_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 3,
+                           "type_data", mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned}),
+                           "vtable", mk_voidptr_ctype(pia),
+                           "context", mk_voidptr_ctype(pia));
+}
+
+CType mk_list_ctype(PiAllocator* pia) {
+    return mk_struct_ctype(pia, 4,
+                           "data", mk_voidptr_ctype(pia),
                            "len", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
                            "capacity", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                           "allocator", mk_allocator_ctype(a));
+                           "allocator", mk_allocator_ctype(pia));
 }
 
 CType c_size_type;

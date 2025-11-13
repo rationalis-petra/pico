@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <inttypes.h>
 #include "platform/memory/std_allocator.h"
 #include "platform/signals.h"
@@ -8,12 +7,12 @@
 #include "pico/stdlib/num.h"
 #include "pico/codegen/codegen.h"
 
-PiType* mk_binop_type(Allocator* a, PrimType a1, PrimType a2, PrimType r) {
-    return mk_proc_type(a, 2, mk_prim_type(a, a1), mk_prim_type(a, a2), mk_prim_type(a, r));
+PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
+    return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
 }
 
-PiType* mk_unop_type(Allocator* a, PrimType arg, PrimType r) {
-    return mk_proc_type(a, 1, mk_prim_type(a, arg), mk_prim_type(a, r));
+PiType* mk_unop_type(PiAllocator* pia, PrimType arg, PrimType r) {
+    return mk_proc_type(pia, 1, mk_prim_type(pia, arg), mk_prim_type(pia, r));
 }
 
 void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -87,56 +86,66 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
 }
 
 String relic_u64_to_string(uint64_t u64) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_u64(u64, &a);
 }
 
 String relic_u32_to_string(uint32_t u32) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_u32(u32, &a);
 }
 
 String relic_u16_to_string(uint16_t u16) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_u16(u16, &a);
 }
 
 String relic_u8_to_string(uint8_t u8) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_u8(u8, &a);
 }
 
 String relic_i64_to_string(int64_t i64) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_i64(i64, &a);
 }
 
 String relic_i32_to_string(int32_t i32) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_i32(i32, &a);
 }
 
 String relic_i16_to_string(int16_t i16) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_i16(i16, &a);
 }
 
 String relic_i8_to_string(int8_t i8) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_u8(i8, &a);
 }
 
 String relic_f32_to_string(float32_t f32) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_f32(f32, &a);
 }
 
 String relic_f64_to_string(float64_t f64) {
-    Allocator a = get_std_current_allocator();
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
     return string_f64(f64, &a);
 }
 
-void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType argty;
     void* cfn;
     switch (prim) {
@@ -184,14 +193,17 @@ void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, Allocator* 
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
     }
 
-    CType c_type = mk_fn_ctype(a, 1, "num", argty, mk_string_ctype(a));
+    CType c_type = mk_fn_ctype(pia, 1, "num", argty, mk_string_ctype(pia));
 
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 
-    delete_c_type(c_type, a);
+    delete_c_type(c_type, pia);
 }
 
 void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -224,7 +236,7 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     Segments prepped;
 
     build_binary_fn(ass, Add, sz, a, &point);
-    typep = mk_binop_type(a, prim, prim, prim);
+    typep = mk_binop_type(pia, prim, prim, prim);
     sym = string_to_symbol(mv_string("+"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -258,10 +270,10 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
-    typep = mk_binop_type(a, prim, prim, Bool);
+    typep = mk_binop_type(pia, prim, prim, Bool);
     sym = string_to_symbol(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -302,17 +314,17 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, prim), mk_string_type(a));
-    build_to_string_fn(typep, prim, ass, a, &point);
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
+    build_to_string_fn(typep, prim, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
     sdelete_u8_array(fn_segments.data);
 
     Result r = add_module_def(num, string_to_symbol(name), module);
@@ -320,6 +332,9 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
 }
 
 void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -345,7 +360,7 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
 
-    typep = mk_binop_type(a, Bool, Bool, Bool);
+    typep = mk_binop_type(pia, Bool, Bool, Bool);
 
     build_binary_fn(ass, And, sz_8, a, &point);
     sym = string_to_symbol(mv_string("and"));
@@ -360,16 +375,16 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_unop_type(a, Bool, Bool);
+    typep = mk_unop_type(pia, Bool, Bool);
     build_not_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("not"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     sdelete_u8_array(fn_segments.data);
 
@@ -378,6 +393,9 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
 }
 
 void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
+    PiAllocator pico_allocator = convert_to_pallocator(a);
+    PiAllocator* pia = &pico_allocator;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -404,21 +422,21 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     Segments prepped;
     LocationSize sz = prim == Float_64 ? sz_64 : sz_32;
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, prim), mk_string_type(a));
-    build_to_string_fn(typep, prim, ass, a, &point);
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
+    build_to_string_fn(typep, prim, ass, pia, a, &point);
     sym = string_to_symbol(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     BinaryOp add_op = prim == Float_64 ? AddSD : AddSS;
     BinaryOp sub_op = prim == Float_64 ? SubSD : SubSS;
     BinaryOp mul_op = prim == Float_64 ? MulSD : MulSS;
     BinaryOp div_op = prim == Float_64 ? DivSD : DivSS;
 
-    typep = mk_binop_type(a, prim, prim, prim);
+    typep = mk_binop_type(pia, prim, prim, prim);
 
     build_binary_float_fn(ass, add_op, sz, a, &point);
     sym = string_to_symbol(mv_string("+"));
@@ -448,7 +466,7 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     sdelete_u8_array(fn_segments.data);
 

@@ -324,6 +324,7 @@ void exec_free(void* ptr, void* ctx) {
     // possibly log error & crash??
 }
 
+
 Allocator mk_executable_allocator(Allocator* a) {
     exec_context* ctx = mem_alloc(sizeof(exec_context), a); 
     ctx->blocksize = platform_pagesize();
@@ -334,12 +335,16 @@ Allocator mk_executable_allocator(Allocator* a) {
     ctx->large_blocks_end = NULL;
     ctx->metadata_allocator = a;
 
-    Allocator out =
-        { .ctx = ctx
-        , .malloc = &exec_alloc
-        , .free = &exec_free
-        , .realloc = &exec_realloc
-        };
+    static AllocatorVTable exec_vtable = {
+        .malloc = &exec_alloc,
+        .free = &exec_free,
+        .realloc = &exec_realloc
+    };
+
+    Allocator out = {
+        .vtable = &exec_vtable,
+        .ctx = ctx
+    };
     return out;
 }
 

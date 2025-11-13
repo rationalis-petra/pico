@@ -19,7 +19,7 @@
 // forward declarations
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx);
 void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
-void post_unify(Syntax* untyped, TypeEnv* env, Allocator* a, PiErrorPoint* point);
+void post_unify(Syntax* untyped, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErrorPoint* point);
 PiType* eval_type(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 
 // Check a toplevel expression
@@ -35,11 +35,11 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         if (ty != NULL) {
             check_against = ty;
         } else {
-            check_against = mk_uvar(ctx.a);
+            check_against = mk_uvar(ctx.pia);
         }
         type_var(top->def.bind, check_against, t_env);
         type_check_expr(term, *check_against, t_env, ctx);
-        post_unify(term, t_env, ctx.a, ctx.point);
+        post_unify(term, t_env, ctx.pia, ctx.a, ctx.point);
         pop_type(t_env);
         break;
     }
@@ -86,7 +86,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     case TLExpr: {
         Syntax* term = top->expr;
         type_infer_expr(term, t_env, ctx);
-        post_unify(term, t_env, ctx.a, ctx.point);
+        post_unify(term, t_env, ctx.pia, ctx.a, ctx.point);
         break;
     }
     }
@@ -97,7 +97,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx);
 void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx);
-void squash_types(Syntax* untyped, Allocator* a, PiErrorPoint* point);
+void squash_types(Syntax* untyped, PiAllocator* pia, Allocator* a, PiErrorPoint* point);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
 void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* point);
@@ -107,12 +107,12 @@ void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* 
 // -----------------------------------------------------------------------------
 void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i (untyped, env, ctx);
-    squash_types(untyped, ctx.a, ctx.point);
+    squash_types(untyped, ctx.pia, ctx.a, ctx.point);
 }
 
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx) {
     type_check_i (untyped, &type, env, ctx);
-    squash_types(untyped, ctx.a, ctx.point);
+    squash_types(untyped, ctx.pia, ctx.a, ctx.point);
 }
 
 // -----------------------------------------------------------------------------
@@ -146,7 +146,7 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContex
 
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i(untyped, env, ctx);
-    UnifyResult out = unify(type, untyped->ptype, ctx.a);
+    UnifyResult out = unify(type, untyped->ptype, ctx.pia, ctx.a);
     check_result_out(out, untyped->range, ctx.a, ctx.point);
 }
 
@@ -163,35 +163,35 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     switch (untyped->type) {
     case SLitUntypedIntegral:
         untyped->type = SLitTypedIntegral;
-        untyped->ptype = mk_uvar_integral(a, untyped->range);
+        untyped->ptype = mk_uvar_integral(ctx.pia, untyped->range);
         break;
     case SLitTypedIntegral:
-        untyped->ptype = mk_prim_type(a, untyped->integral.type);
+        untyped->ptype = mk_prim_type(ctx.pia, untyped->integral.type);
         break;
     case SLitUntypedFloating:
         untyped->type = SLitTypedFloating;
-        untyped->ptype = mk_uvar_floating(a, untyped->range);
+        untyped->ptype = mk_uvar_floating(ctx.pia, untyped->range);
         break;
     case SLitTypedFloating:
-        untyped->ptype = mk_prim_type(a, untyped->integral.type);
+        untyped->ptype = mk_prim_type(ctx.pia, untyped->integral.type);
         break;
     case SLitArray: {
-        PiType* element_type = mk_uvar(a);
+        PiType* element_type = mk_uvar(ctx.pia);
         for (size_t i = 0; i < untyped->array_lit.subterms.len; i++) {
             type_check_i(untyped->array_lit.subterms.data[i], element_type, env, ctx);
         }
-        PtrArray dimensions = mk_ptr_array(untyped->array_lit.shape.len, a);
+        AddrPiList dimensions = mk_addr_list(untyped->array_lit.shape.len, ctx.pia);
         for (size_t i = 0; i < untyped->array_lit.shape.len; i++) {
-            ArrayDimType* dim = mem_alloc(sizeof(ArrayDimType), a);
+            ArrayDimType* dim = call_alloc(sizeof(ArrayDimType), ctx.pia);
             *dim = (ArrayDimType) {
                 .is_any = false,
                 .value = untyped->array_lit.shape.data[i],
             };
-            push_ptr(dim, &dimensions);
+            push_addr(dim, &dimensions);
 
         }
 
-        PiType* array_type = mem_alloc(sizeof(PiType), a);
+        PiType* array_type = call_alloc(sizeof(PiType), ctx.pia);
         *array_type = (PiType) {
             .sort = TArray,
             .array.sort = Fixed,
@@ -202,13 +202,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SLitBool:
-        untyped->ptype = mk_prim_type(a, Bool);
+        untyped->ptype = mk_prim_type(ctx.pia, Bool);
         break;
     case SLitUnit:
-        untyped->ptype = mk_prim_type(a, Unit);
+        untyped->ptype = mk_prim_type(ctx.pia, Unit);
         break;
     case SLitString:
-        untyped->ptype = mk_string_type(a);
+        untyped->ptype = mk_string_type(ctx.pia);
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
@@ -243,10 +243,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // as 'proc' does NOT support closures!
 
         // give each arg a unification variable type. 
-        PiType* proc_ty = mem_alloc(sizeof(PiType), a);
+        PiType* proc_ty = call_alloc(sizeof(PiType), ctx.pia);
         proc_ty->sort = TProc;
-        proc_ty->proc.implicits = mk_ptr_array(untyped->procedure.implicits.len, a);
-        proc_ty->proc.args = mk_ptr_array(untyped->procedure.args.len, a);
+        proc_ty->proc.implicits = mk_addr_list(untyped->procedure.implicits.len, ctx.pia);
+        proc_ty->proc.args = mk_addr_list(untyped->procedure.args.len, ctx.pia);
         untyped->ptype = proc_ty;
 
         for (size_t i = 0; i < untyped->procedure.implicits.len; i++) {
@@ -259,10 +259,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     throw_pi_error(point, err);
                 }
             } else  {
-                aty = mk_uvar(a);
+                aty = mk_uvar(ctx.pia);
             }
             type_var(arg.key, aty, env);
-            push_ptr(aty, &proc_ty->proc.implicits);
+            push_addr(aty, &proc_ty->proc.implicits);
         }
 
         for (size_t i = 0; i < untyped->procedure.args.len; i++) {
@@ -271,10 +271,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             if (arg.val) {
                 aty = eval_type(arg.val, env, ctx);
             } else  {
-                aty = mk_uvar(a);
+                aty = mk_uvar(ctx.pia);
             }
             type_var(arg.key, aty, env);
-            push_ptr(aty, &proc_ty->proc.args);
+            push_addr(aty, &proc_ty->proc.args);
         }
 
         type_infer_i(untyped->procedure.body, env, ctx); 
@@ -284,10 +284,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SAll: {
         // Give each arg type Type.
-        PiType* all_ty = mem_alloc(sizeof(PiType), a);
+        PiType* all_ty = call_alloc(sizeof(PiType), ctx.pia);
         untyped->ptype = all_ty;
         all_ty->sort = TAll;
-        all_ty->binder.vars = mk_symbol_array(untyped->all.args.len, a);
+        all_ty->binder.vars = mk_sym_list(untyped->all.args.len, ctx.pia);
 
         for (size_t i = 0; i < untyped->all.args.len; i++) {
             Symbol arg = untyped->all.args.data[i];
@@ -296,7 +296,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
             type_qvar(arg, arg_ty, env);
-            push_symbol(arg, &all_ty->binder.vars);
+            push_sym(arg, &all_ty->binder.vars);
         }
 
         type_infer_i(untyped->all.body, env, ctx); 
@@ -308,11 +308,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Macro inner type: 
         // proc [Array Syntax] Syntax
         // where syntax = ...
-        PiType* syntax_array = mk_app_type(a, get_list_type(), get_syntax_type());
-        PiType* transformer_proc = mk_proc_type(a, 1, syntax_array, get_macro_result_type());
+        PiType* syntax_array = mk_app_type(ctx.pia, get_list_type(), get_syntax_type());
+        PiType* transformer_proc = mk_proc_type(ctx.pia, 1, syntax_array, get_macro_result_type());
 
         type_check_i(untyped->transformer, transformer_proc, env, ctx);
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType) {
             .sort = TPrim,
             .prim = TMacro,
@@ -325,10 +325,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         PiType fn_type = *untyped->application.function->ptype;
         if (fn_type.sort == TUVar) {
             // fill in structure 
-            PiType* ret = mk_uvar(a);
-            PtrArray args = mk_ptr_array(16, a);
+            PiType* ret = mk_uvar(ctx.pia);
+            AddrPiList args = mk_addr_list(16, ctx.pia);
             for (size_t i = 0; i < untyped->application.args.len; i++) {
-                push_ptr(mk_uvar(a), &args);
+                push_addr(mk_uvar(ctx.pia), &args);
             };
 
             fn_type.sort = TProc;
@@ -364,7 +364,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             *kind = (PiType){.sort = TKind, .kind.nargs = 0};
             for (size_t i = 0; i < fn_type.binder.vars.len; i++) {
                 Syntax* syn = mem_alloc(sizeof(Syntax), a);
-                *syn = (Syntax) {.type = SCheckedType, .ptype = kind, .type_val = mk_uvar(a),};
+                *syn = (Syntax) {.type = SCheckedType, .ptype = kind, .type_val = mk_uvar(ctx.pia),};
                 push_ptr(syn, &types);
             }
 
@@ -467,7 +467,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 throw_pi_error(point, err);
             }
             
-            PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, a);
+            PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, ctx.pia, a);
             untyped->ptype = ret_type;
         } else {
             // Check that all type args are actually types!
@@ -479,7 +479,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             }
         
             // Bind the vars in the all type to specific types!
-            PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+            PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, ctx.pia, a);
             if (proc_type->proc.args.len != untyped->all_application.args.len) {
                 PtrArray nodes = mk_ptr_array(4, a);
                 push_ptr(mk_str_doc(mv_string("Incorrect number of value arguments to all function - expected: "), a), &nodes);
@@ -496,14 +496,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                              env, ctx);
             }
 
-            PiType* ret_type = pi_type_subst(proc_type->proc.ret, type_binds, a);
+            PiType* ret_type = pi_type_subst(proc_type->proc.ret, type_binds, ctx.pia, a);
             untyped->ptype = ret_type;
         }
         break;
     }
     case SSeal: {
         untyped->ptype = eval_type(untyped->seal.type, env, ctx);
-        PiType* sealed_type = unwrap_type(untyped->ptype, a);
+        PiType* sealed_type = unwrap_type(untyped->ptype, ctx.pia, a);
 
         if (sealed_type->sort != TSealed) {
             err.range = untyped->seal.type->range;
@@ -526,14 +526,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         if (sealed_type->sealed.implicits.len > 0) {
             not_implemented(mv_string("Sealing with implicits."));
         }
-        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.pia, a);
 
         type_check_i(untyped->seal.body, body_type, env, ctx);
         break;
     }
     case SUnseal: {
         type_infer_i(untyped->unseal.sealed, env, ctx);
-        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, a);
+        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, ctx.pia, a);
         if (sealed_type->sort != TSealed) {
             err.range = untyped->unseal.sealed->range;
             err.message = mv_cstr_doc("When unsealing, the unsealed value must have a 'Sealed' type.", a);
@@ -547,13 +547,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
         for (size_t i = 0; i < sealed_type->sealed.vars.len; i++) {
-            PiType* ty = mem_alloc(sizeof(PiType), a);
+            PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
             *ty = (PiType) {.sort = TVar, .var = untyped->unseal.types.data[i]};
             sym_ptr_bind(sealed_type->sealed.vars.data[i], ty, &type_binds);
 
             type_qvar(untyped->unseal.types.data[i], ty, env);
         }
-        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, a);
+        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.pia, a);
         type_var(untyped->unseal.binder, var_ty, env);
         type_infer_i(untyped->unseal.body, env, ctx);
         untyped->ptype = untyped->unseal.body->ptype;
@@ -565,7 +565,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped->variant.enum_type) {
             untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
-            PiType* enum_type = unwrap_type(untyped->ptype, a);
+            PiType* enum_type = unwrap_type(untyped->ptype, ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
                 err.message = mv_cstr_doc("Variant must be of enum type.", a);
@@ -600,10 +600,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 throw_pi_error(point, err);
             }
         } else {
-            untyped->ptype = mk_uvar(a);
-            PtrArray types = mk_ptr_array(0, a);
+            untyped->ptype = mk_uvar(ctx.pia);
+            AddrPiList types = mk_addr_list(0, ctx.pia);
 
-            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, a);
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, ctx.pia, a);
             check_result_out(out, untyped->range, a, point);
         }
         break;
@@ -612,7 +612,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped->variant.enum_type) {
             untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
-            PiType* enum_type = unwrap_type(untyped->ptype, a);
+            PiType* enum_type = unwrap_type(untyped->ptype, ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
                 err.message = mv_cstr_doc("Variant must be of enum type.", a);
@@ -651,14 +651,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 throw_pi_error(point, err);
             }
         } else {
-            untyped->ptype = mk_uvar(a);
-            PtrArray types = mk_ptr_array(untyped->variant.args.len, a);
+            untyped->ptype = mk_uvar(ctx.pia);
+            AddrPiList types = mk_addr_list(untyped->variant.args.len, ctx.pia);
 
             for (size_t i = 0; i < untyped->variant.args.len; i++) {
                 type_infer_i(untyped->variant.args.data[i], env, ctx);
-                push_ptr(((Syntax*)untyped->variant.args.data[i])->ptype, &types);
+                push_addr(((Syntax*)untyped->variant.args.data[i])->ptype, &types);
             }
-            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, a);
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, ctx.pia, a);
             check_result_out(out, untyped->range, a, point);
         }
         break;
@@ -667,10 +667,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck the input 
         type_infer_i(untyped->match.val, env, ctx);
 
-        PiType* enum_type = unwrap_type(untyped->match.val->ptype, a); 
+        PiType* enum_type = unwrap_type(untyped->match.val->ptype, ctx.pia, a); 
         if (enum_type->sort == TEnum) {
             // Typecheck each variant, ensure they are the same
-            PiType* out_ty = mk_uvar(a);
+            PiType* out_ty = mk_uvar(ctx.pia);
             untyped->ptype = out_ty;
             U8Array used_indices = mk_u8_array(untyped->match.clauses.len, a);
             for (size_t i = 0; i < untyped->match.clauses.len; i++)
@@ -729,31 +729,31 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // TODO (FEAT): Adjust this so there is room for re-ordering! 
             //   possibly placing constraints on the enum, but constraining it
             //   to only have the provided fields?? a special unification??
-            PiType* enum_type = mem_alloc(sizeof(PiType), a);
+            PiType* enum_type = call_alloc(sizeof(PiType), ctx.pia);
             *enum_type = (PiType) {
                 .sort = TEnum,
-                .enumeration.variants = mk_sym_ptr_amap(untyped->match.clauses.len, a),
+                .enumeration.variants = mk_sym_addr_piamap(untyped->match.clauses.len, ctx.pia),
             };
 
-            PiType* out_ty = mk_uvar(a);
+            PiType* out_ty = mk_uvar(ctx.pia);
             untyped->ptype = out_ty;
             for (size_t i = 0; i < untyped->match.clauses.len; i++) {
                 SynClause* clause = untyped->match.clauses.data[i];
 
-                PtrArray types = mk_ptr_array(clause->vars.len, a);
+                AddrPiList types = mk_addr_list(clause->vars.len, ctx.pia);
                 for (size_t j = 0; j < clause->vars.len; j++) {
                     Symbol arg = clause->vars.data[j];
-                    PiType* aty = mk_uvar(a);
-                    push_ptr(aty, &types);
+                    PiType* aty = mk_uvar(ctx.pia);
+                    push_addr(aty, &types);
                     type_var(arg, aty, env);
                 }
 
                 type_check_i(clause->body, out_ty, env, ctx);
                 pop_types(env, types.len);
 
-                PtrArray* to_insert = mem_alloc(sizeof(PtrArray), a);
+                AddrPiList* to_insert = mem_alloc(sizeof(AddrPiList), a);
                 *to_insert = types;
-                sym_ptr_insert(clause->tagname, to_insert, &enum_type->enumeration.variants);
+                sym_addr_insert(clause->tagname, to_insert, &enum_type->enumeration.variants);
             }
             type_check_i(untyped->match.val, enum_type, env, ctx);
         } else {
@@ -778,7 +778,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 all_fields_required = false;
             }
 
-            PiType* struct_type = unwrap_type(untyped->ptype, a);
+            PiType* struct_type = unwrap_type(untyped->ptype, ctx.pia, ctx.a);
 
             if (struct_type->sort != TStruct) {
                 PtrArray nodes = mk_ptr_array(2, a);
@@ -828,7 +828,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         } else {
             PiType struct_type = (PiType) {
                 .sort = TStruct,
-                .structure.fields = mk_sym_ptr_amap(untyped->structure.fields.len, a),
+                .structure.fields = mk_sym_addr_piamap(untyped->structure.fields.len, ctx.pia),
             };
             for (size_t i = 0; i < untyped->structure.fields.len; i++) {
                 // TODO (FEATURE): allow the inference algorithm to later
@@ -836,16 +836,16 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
                 type_infer_i(cell.val, env, ctx);
-                sym_ptr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
+                sym_addr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
             }
-            untyped->ptype = mem_alloc(sizeof(PiType), a);
+            untyped->ptype = call_alloc(sizeof(PiType), ctx.pia);
             *untyped->ptype = struct_type;
         }
         break;
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, ctx);
-        PiType source_type = *unwrap_type(untyped->projector.val->ptype, a);
+        PiType source_type = *unwrap_type(untyped->projector.val->ptype, ctx.pia, a);
 
         if (source_type.sort == TStruct) {
             // search for field
@@ -876,8 +876,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             untyped->ptype = ret_ty;
 
         } else if (source_type.sort == TUVar) {
-            untyped->ptype = mk_uvar(a);
-            UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, a);
+            untyped->ptype = mk_uvar(ctx.pia);
+            UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, ctx.pia, a);
             check_result_out(out, untyped->range, a, point);
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
@@ -890,13 +890,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SInstance: {
         // Output type
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         untyped->ptype = ty;
 
-        PiType* constraint_ty = mem_alloc(sizeof(PiType), a);
+        PiType* constraint_ty = call_alloc(sizeof(PiType), ctx.pia);
         *constraint_ty = (PiType) {.sort = TConstraint, .constraint.nargs = 0};
 
-        PiType* ty_ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty_ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
 
         for (size_t i = 0; i < untyped->instance.params.len; i++) {
@@ -910,7 +910,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             if (arg.val) {
                 aty = eval_type(arg.val, env, ctx);
             } else  {
-                aty = mk_uvar(a);
+                aty = mk_uvar(ctx.pia);
             }
             type_var(arg.key, aty, env);
         }
@@ -944,7 +944,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     case SDynamic: {
         type_infer_i(untyped->dynamic, env, ctx);
         PiType* inner_type = untyped->dynamic->ptype; 
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType) {
             .sort = TDynamic,
             .dynamic = inner_type,
@@ -970,15 +970,15 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             throw_pi_error(point, err);
         }
         type_check_i(untyped->dynamic_set.new_val, dyn_type->dynamic, env, ctx);
-        untyped->ptype = mk_prim_type(a, Unit);
+        untyped->ptype = mk_prim_type(ctx.pia, Unit);
         break;
     }
     case SDynamicLet: {
         for (size_t i = 0; i < untyped->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = untyped->dyn_let_expr.bindings.data[i];
 
-            PiType* dyn_ty = mem_alloc(sizeof(PiType), a);
-            PiType* val_ty = mk_uvar(a);
+            PiType* dyn_ty = call_alloc(sizeof(PiType), ctx.pia);
+            PiType* val_ty = mk_uvar(ctx.pia);
             *dyn_ty = (PiType) {
                 .sort = TDynamic,
                 .dynamic = val_ty,
@@ -1007,11 +1007,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SIf: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType) {.sort = TPrim,.prim = Bool};
         type_check_i(untyped->if_expr.condition, t, env, ctx);
 
-        PiType* out_type = mk_uvar(a);
+        PiType* out_type = mk_uvar(ctx.pia);
         type_check_i(untyped->if_expr.true_branch, out_type, env, ctx);
 
         type_check_i(untyped->if_expr.false_branch, out_type, env, ctx);
@@ -1031,7 +1031,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             // TODO (FEATURE): another type of defaulted uvar - unit!
-            PiType* t = mk_uvar(a);
+            PiType* t = mk_uvar(ctx.pia);
             untyped->ptype = t;
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
@@ -1046,22 +1046,22 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // A = expression type
         // in = reset (argument) type 
         // out = continuation (argument) type 
-        PiType* tya = mk_uvar(a);
+        PiType* tya = mk_uvar(ctx.pia);
 
-        PiType* tyin = mk_uvar(a);
-        PiType* tyout = mk_uvar(a);
+        PiType* tyin = mk_uvar(ctx.pia);
+        PiType* tyout = mk_uvar(ctx.pia);
 
         untyped->ptype = tya;
         untyped->with_reset.in_arg_ty = tyin;
         untyped->with_reset.cont_arg_ty = tyout;
-        PiType* reset_ty = mem_alloc(sizeof(PiType), a);
+        PiType* reset_ty = call_alloc(sizeof(PiType), ctx.pia);
         *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
 
         type_var(untyped->with_reset.point_sym, reset_ty, env);
         type_check_i(untyped->with_reset.expr, tya, env, ctx);
         pop_type(env);
 
-        PiType* mark_ty = mem_alloc(sizeof(PiType), a);
+        PiType* mark_ty = call_alloc(sizeof(PiType), ctx.pia);
         *mark_ty = (PiType) {.sort = TResumeMark};
 
         // continuation 
@@ -1072,11 +1072,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SResetTo: {
-        PiType* tyin = mk_uvar(a);
-        PiType* tyout = mk_uvar(a);
+        PiType* tyin = mk_uvar(ctx.pia);
+        PiType* tyout = mk_uvar(ctx.pia);
         untyped->ptype = tyout;
 
-        PiType* reset_ty = mem_alloc(sizeof(PiType), a);
+        PiType* reset_ty = call_alloc(sizeof(PiType), ctx.pia);
         *reset_ty = (PiType) {.sort = TReset, .reset.in = tyin, .reset.out = tyout};
 
         type_check_i(untyped->reset_to.point, reset_ty, env, ctx);
@@ -1094,7 +1094,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // within the expr and within any body. Therefore, we must bind all
         // label symbols with their argument types into the environment before
         // checking any sub expression. This is what ethe below loop does.
-        PiType* ty = mk_uvar(a);
+        PiType* ty = mk_uvar(ctx.pia);
         untyped->ptype = ty;
         SymPtrAssoc labels = mk_sym_ptr_assoc(untyped->labels.terms.len, a);
         for (size_t i = 0; i < untyped->labels.terms.len; i++) {
@@ -1107,7 +1107,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 if (arg.val) {
                     aty = eval_type(arg.val, env, ctx);
                 } else  {
-                    aty = mk_uvar(a);
+                    aty = mk_uvar(ctx.pia);
                     branch->args.data[i].val = aty;
                 }
                 push_ptr(aty, arr);
@@ -1149,7 +1149,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         pop_types(env, num_binds);
         if (untyped->sequence.elements.len == 0) {
-            PiType* t = mem_alloc(sizeof(PiType), a);
+            PiType* t = call_alloc(sizeof(PiType), ctx.pia);
             *t = (PiType) {.sort = TPrim, .prim = Unit};
             untyped->ptype = t;
         } else {
@@ -1231,23 +1231,23 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SSizeOf: {
         eval_type(untyped->size, env, ctx);
-        PiType* out = mem_alloc(sizeof(PiType), a);
+        PiType* out = call_alloc(sizeof(PiType), ctx.pia);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
         untyped->ptype = out; 
         break;
     }
     case SAlignOf: {
         eval_type(untyped->size, env, ctx);
-        PiType* out = mem_alloc(sizeof(PiType), a);
+        PiType* out = call_alloc(sizeof(PiType), ctx.pia);
         *out = (PiType){.sort = TPrim, .prim = UInt_64};
         untyped->ptype = out; 
         break;
     }
     case SOffsetOf: {
         eval_type(untyped->offset_of.body, env, ctx);
-        PiType* out = mem_alloc(sizeof(PiType), a);
+        PiType* out = call_alloc(sizeof(PiType), ctx.pia);
 
-        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, a);
+        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, ctx.pia, ctx.a);
         if (struct_type->sort != TStruct) {
             err.range = untyped->offset_of.body->range;
             err.message = mv_cstr_doc("Unsupported operand: taking offset of non-struct type.",a);
@@ -1274,7 +1274,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         panic(mv_string("Unsupported operation: inferring type of module"));
     }
     case SProcType: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
@@ -1288,7 +1288,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SStructType: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
@@ -1299,7 +1299,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SEnumType: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
@@ -1314,7 +1314,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SResetType: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
@@ -1323,7 +1323,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SDynamicType: {
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TKind, .kind.nargs = 0};
         untyped->ptype = t;
 
@@ -1332,7 +1332,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SAllType: {
         // For now, assume that each type has the kind Type (i.e. is not a family)
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
         untyped->ptype = ty;
 
@@ -1346,7 +1346,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SSealedType: {
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
         untyped->ptype = ty;
 
@@ -1355,7 +1355,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg, ty, env);
         }
 
-        PiType* t = mem_alloc(sizeof(PiType), a);
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
         *t = (PiType){.sort = TConstraint, .kind.nargs = 0};
         untyped->ptype = t;
         for (size_t i = 0; i < untyped->sealed_type.implicits.len; i++) {
@@ -1369,11 +1369,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case STypeFamily: {
         // For now, assume that each type has the kind Type (i.e. is not a family)
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TKind, .kind.nargs = untyped->bind_type.bindings.len};
         untyped->ptype = ty;
 
-        PiType* aty = mem_alloc(sizeof(PiType), a);
+        PiType* aty = call_alloc(sizeof(PiType), ctx.pia);
         *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
         for (size_t i = 0; i < untyped->bind_type.bindings.len; i++) {
             Symbol arg = untyped->bind_type.bindings.data[i];
@@ -1389,13 +1389,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         PiType* c_type = get_c_type();
         type_check_i(untyped->c_type, c_type, env, ctx);
 
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TKind, .kind.nargs = 0};
         untyped->ptype = ty;
         break;
     }
     case SNamedType: {
-        PiType* self_type = mk_uvar(a);
+        PiType* self_type = mk_uvar(ctx.pia);
         
         type_var(untyped->named_type.name, self_type, env);
         type_check_i(untyped->named_type.body, self_type, env, ctx);
@@ -1418,11 +1418,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case STraitType: {
-        PiType* ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TConstraint, .constraint.nargs = untyped->trait.vars.len};
         untyped->ptype = ty;
 
-        PiType* aty = mem_alloc(sizeof(PiType), a);
+        PiType* aty = call_alloc(sizeof(PiType), ctx.pia);
         *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
         for (size_t i = 0; i < untyped->trait.vars.len; i++) {
             Symbol arg = untyped->trait.vars.data[i];
@@ -1565,19 +1565,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case STypeOf: {
         type_infer_i(untyped->type_of, env, ctx);
-        untyped->ptype = mem_alloc(sizeof(PiType), a);
+        untyped->ptype = call_alloc(sizeof(PiType), ctx.pia);
         *untyped->ptype = (PiType) {.sort = TKind, .kind.nargs = 0};
         break;
     }
     case SDescribe: {
-        /* TypeEntry te = type_env_lookup(untyped->to_describe, env); */
-        /* if (te.type == TENotFound) { */
-        /*     String* sym = symbol_to_string(untyped->to_describe); */
-        /*     err.range = untyped->range; */
-        /*     err.message = mv_str_doc(string_cat(mv_string("Couldn't find value of variable to describe: "), *sym, a), a); */
-        /*     throw_pi_error(point, err); */
-        /* } */
-        untyped->ptype = mk_string_type(a);
+        untyped->ptype = mk_string_type(ctx.pia);
         break;
     }
     case SQuote: {
@@ -1600,7 +1593,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 // This includes
 // - Instantiating implicits
 // - Checking that widen and narrow widen and narrow their arguments, respectively
-void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
+void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     err.range = syn->range;
     switch (syn->type) {
@@ -1616,7 +1609,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     case SLitArray: {
         for (size_t i = 0; i < syn->array_lit.subterms.len; i++) {
-            post_unify(syn->array_lit.subterms.data[i], env, a, point);
+            post_unify(syn->array_lit.subterms.data[i], env, pia, a, point);
         }
         break;
     }
@@ -1631,7 +1624,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
             SymPtrACell arg = syn->procedure.args.data[i];
             type_var(arg.key, arg.val, env);
         }
-        post_unify(syn->procedure.body, env, a, point);
+        post_unify(syn->procedure.body, env, pia, a, point);
         pop_types(env, syn->procedure.args.len + syn->procedure.implicits.len);
         break;
     }
@@ -1639,23 +1632,23 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         for (size_t i = 0; i < syn->all.args.len; i++) {
             Symbol arg = syn->all.args.data[i];
 
-            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            PiType* arg_ty = call_alloc(sizeof(PiType), pia);
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
             type_qvar(arg, arg_ty, env);
         }
-        post_unify(syn->all.body, env, a, point);
+        post_unify(syn->all.body, env, pia, a, point);
         pop_types(env, syn->all.args.len);
         break;
     }
     case SMacro: {
-        post_unify(syn->transformer, env, a, point);
+        post_unify(syn->transformer, env, pia, a, point);
         break;
     }
     case SApplication: {
-        post_unify(syn->application.function, env, a, point);
+        post_unify(syn->application.function, env, pia, a, point);
         for (size_t i = 0; i < syn->application.args.len; i++) {
-            post_unify(syn->application.args.data[i], env, a, point);
+            post_unify(syn->application.args.data[i], env, pia, a, point);
         }
 
         if (syn->application.implicits.len != 0) {
@@ -1699,9 +1692,9 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SAllApplication: {
-        post_unify(syn->all_application.function, env, a, point);
+        post_unify(syn->all_application.function, env, pia, a, point);
         for (size_t i = 0; i < syn->all_application.args.len; i++) {
-            post_unify(syn->all_application.args.data[i], env, a, point);
+            post_unify(syn->all_application.args.data[i], env, pia, a, point);
         }
 
         if (syn->all_application.implicits.len != 0) {
@@ -1719,7 +1712,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
             sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
         }
         // TODO (BUG): this type probably wants unwrapping
-        PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, a);
+        PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, pia, a);
 
         // Early exit if we don't need to do any instantiation.
         if (proc_type->sort != TProc) return;
@@ -1759,7 +1752,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         if (syn->seal.implicits.len > 0) {
             panic(mv_string("not implemented: post-unify for seal with > 0 implicits"));
         }
-        post_unify(syn->seal.body, env, a, point);
+        post_unify(syn->seal.body, env, pia, a, point);
         break;
     }
     case SUnseal: {
@@ -1767,25 +1760,25 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         for (size_t i = 0; i < syn->unseal.types.len; i++) {
             Symbol arg = syn->unseal.types.data[i];
 
-            PiType* arg_ty = mem_alloc(sizeof(PiType), a);
+            PiType* arg_ty = call_alloc(sizeof(PiType), pia);
             *arg_ty = (PiType) {.sort = TVar, .var = arg,};
 
             sym_ptr_bind(arg, arg_ty, &type_binds);
             type_qvar(arg, arg_ty, env);
         }
-        PiType* var_ty = pi_type_subst(syn->unseal.sealed->ptype->sealed.body, type_binds, a);
+        PiType* var_ty = pi_type_subst(syn->unseal.sealed->ptype->sealed.body, type_binds, pia, a);
         type_var(syn->unseal.binder, var_ty, env);
-        post_unify(syn->unseal.body, env, a, point);
+        post_unify(syn->unseal.body, env, pia, a, point);
         pop_types(env, syn->all.args.len + 1);
         break;
     }
     case SConstructor:  {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(syn->ptype, a);
+        PiType* enum_type = unwrap_type(syn->ptype, pia, a);
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymPtrCell cell = enum_type->enumeration.variants.data[i];
+            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
             if (symbol_eq(cell.key, syn->variant.tagname)) {
                 found_variant = true;
                 syn->variant.tag = i;
@@ -1799,11 +1792,11 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     }
     case SVariant: {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(syn->ptype, a);
+        PiType* enum_type = unwrap_type(syn->ptype, pia, a);
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
-            SymPtrCell cell = enum_type->enumeration.variants.data[i];
+            SymAddrPiCell cell = enum_type->enumeration.variants.data[i];
             if (symbol_eq(cell.key, syn->variant.tagname)) {
                 found_variant = true;
                 syn->variant.tag = i;
@@ -1814,36 +1807,36 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
             panic(mv_string("Unable to find variant tag in post-unify."));
         }
         for (size_t i = 0; i < syn->variant.args.len; i++) {
-            post_unify(syn->variant.args.data[i], env, a, point);
+            post_unify(syn->variant.args.data[i], env, pia, a, point);
         }
         break;
     }
     case SMatch: {
-        post_unify(syn->match.val, env, a, point);
+        post_unify(syn->match.val, env, pia, a, point);
 
         for (size_t i = 0; i < syn->match.clauses.len; i++) {
             SynClause* clause = syn->match.clauses.data[i];
 
             // TODO BUG: bind types/vars from clause
-            post_unify(clause->body, env, a, point);
+            post_unify(clause->body, env, pia, a, point);
         }
         break;
     }
     case SStructure: {
         if (syn->structure.base) {
-            post_unify(syn->structure.base, env, a, point);
+            post_unify(syn->structure.base, env, pia, a, point);
         }
         for (size_t i = 0; i < syn->structure.fields.len; i++) {
-            post_unify(syn->structure.fields.data[i].val, env, a, point);
+            post_unify(syn->structure.fields.data[i].val, env, pia, a, point);
         }
         break;
     }
     case SProjector: {
-        post_unify(syn->projector.val, env, a, point);
+        post_unify(syn->projector.val, env, pia, a, point);
         break;
     }
     case SInstance: {
-        PiType* ty_ty = mem_alloc(sizeof(PiType), a);
+        PiType* ty_ty = call_alloc(sizeof(PiType), pia);
         *ty_ty = (PiType) {.sort = TKind, .constraint.nargs = 0};
 
         for (size_t i = 0; i < syn->instance.params.len; i++) {
@@ -1859,7 +1852,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         for (size_t i = 0; i < syn->ptype->instance.fields.len; i++) {
             Syntax** field_syn = (Syntax**)sym_ptr_lookup(syn->ptype->instance.fields.data[i].key, syn->instance.fields);
             if (field_syn) {
-                post_unify(*field_syn, env, a, point);
+                post_unify(*field_syn, env, pia, a, point);
             } else {
                 err.message = mv_cstr_doc("Trait instance is missing a field", a);
                 throw_pi_error(point, err);
@@ -1870,93 +1863,93 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         break;
     }
     case SDynamic:
-        post_unify(syn->dynamic, env, a, point);
+        post_unify(syn->dynamic, env, pia, a, point);
         break;
     case SDynamicUse:
-        post_unify(syn->use, env, a, point);
+        post_unify(syn->use, env, pia, a, point);
         break;
     case SDynamicSet:
-        post_unify(syn->dynamic_set.dynamic, env, a, point);
-        post_unify(syn->dynamic_set.new_val, env, a, point);
+        post_unify(syn->dynamic_set.dynamic, env, pia, a, point);
+        post_unify(syn->dynamic_set.new_val, env, pia, a, point);
         break;
 
     // Control Flow & Binding
     case SDynamicLet:
         for (size_t i = 0; i < syn->dyn_let_expr.bindings.len; i++) {
             DynBinding* b = syn->dyn_let_expr.bindings.data[i];
-            post_unify(b->var, env, a, point);
-            post_unify(b->expr, env, a, point);
+            post_unify(b->var, env, pia, a, point);
+            post_unify(b->expr, env, pia, a, point);
         }
-        post_unify(syn->dyn_let_expr.body, env, a, point);
+        post_unify(syn->dyn_let_expr.body, env, pia, a, point);
         break;
     case SLet:
         // TODO BUG: update environment 
         for (size_t i = 0; i < syn->let_expr.bindings.len; i++) {
-            post_unify(syn->let_expr.bindings.data[i].val, env, a, point);
+            post_unify(syn->let_expr.bindings.data[i].val, env, pia, a, point);
         }
-        post_unify(syn->let_expr.body, env, a, point);
+        post_unify(syn->let_expr.body, env, pia, a, point);
         break;
     case SIf:
-        post_unify(syn->if_expr.condition, env, a, point);
-        post_unify(syn->if_expr.true_branch, env, a, point);
-        post_unify(syn->if_expr.false_branch, env, a, point);
+        post_unify(syn->if_expr.condition, env, pia, a, point);
+        post_unify(syn->if_expr.true_branch, env, pia, a, point);
+        post_unify(syn->if_expr.false_branch, env, pia, a, point);
         break;
     case SLabels:
-        post_unify(syn->labels.entry, env, a, point);
+        post_unify(syn->labels.entry, env, pia, a, point);
         for (size_t i = 0; i < syn->labels.terms.len; i++) {
             SynLabelBranch* branch = syn->labels.terms.data[i].val;
-            post_unify(branch->body, env, a, point);
+            post_unify(branch->body, env, pia, a, point);
         }
         break;
     case SGoTo:
         for (size_t i = 0; i < syn->go_to.args.len; i++) {
-            post_unify(syn->go_to.args.data[i], env, a, point);
+            post_unify(syn->go_to.args.data[i], env, pia, a, point);
         }
         break;
     case SSequence:
         for (size_t i = 0; i < syn->sequence.elements.len; i++) {
             SeqElt* elt = syn->sequence.elements.data[i];
-            post_unify(elt->expr, env, a, point);
+            post_unify(elt->expr, env, pia, a, point);
         }
         break;
     case SWithReset:
         // TODO BUG: update environment 
-        post_unify(syn->with_reset.expr, env, a, point);
-        post_unify(syn->with_reset.handler, env, a, point);
+        post_unify(syn->with_reset.expr, env, pia, a, point);
+        post_unify(syn->with_reset.handler, env, pia, a, point);
         break;
     case SResetTo:
-        post_unify(syn->reset_to.point, env, a, point);
-        post_unify(syn->reset_to.arg, env, a, point);
+        post_unify(syn->reset_to.point, env, pia, a, point);
+        post_unify(syn->reset_to.arg, env, pia, a, point);
         break;
 
     // Special
     case SIs:
-        post_unify(syn->is.val, env, a, point);
-        post_unify(syn->is.type, env, a, point);
+        post_unify(syn->is.val, env, pia, a, point);
+        post_unify(syn->is.type, env, pia, a, point);
         break;
     case SInTo:
-        post_unify(syn->into.val, env, a, point);
-        post_unify(syn->into.type, env, a, point);
+        post_unify(syn->into.val, env, pia, a, point);
+        post_unify(syn->into.type, env, pia, a, point);
         break;
     case SOutOf:
-        post_unify(syn->out_of.val, env, a, point);
-        post_unify(syn->out_of.type, env, a, point);
+        post_unify(syn->out_of.val, env, pia, a, point);
+        post_unify(syn->out_of.type, env, pia, a, point);
         break;
     case SName:
-        post_unify(syn->name.val, env, a, point);
-        post_unify(syn->name.type, env, a, point);
+        post_unify(syn->name.val, env, pia, a, point);
+        post_unify(syn->name.type, env, pia, a, point);
         break;
     case SWiden:
-        post_unify(syn->widen.val, env, a, point);
-        post_unify(syn->widen.type, env, a, point);
+        post_unify(syn->widen.val, env, pia, a, point);
+        post_unify(syn->widen.type, env, pia, a, point);
         if (!is_wider(syn->widen.val->ptype, syn->widen.type->type_val)) {
             err.message = mv_cstr_doc("This widening is invalid", a);
             throw_pi_error(point, err);
         }
         break;
     case SNarrow:
-        post_unify(syn->narrow.val, env, a, point);
-        post_unify(syn->narrow.type, env, a, point);
+        post_unify(syn->narrow.val, env, pia, a, point);
+        post_unify(syn->narrow.type, env, pia, a, point);
         if (!is_narrower(syn->narrow.val->ptype, syn->narrow.type->type_val)) {
             PtrArray docs = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("This narrowing is invalid - cannot narrow from type:", a), &docs);
@@ -1968,14 +1961,14 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
         }
         break;
     case SUnName:
-        post_unify(syn->unname, env, a, point);
+        post_unify(syn->unname, env, pia, a, point);
         break;
     case SSizeOf:
     case SAlignOf:
-        post_unify(syn->size, env, a, point);
+        post_unify(syn->size, env, pia, a, point);
         break;
     case SOffsetOf:
-        post_unify(syn->offset_of.body, env, a, point);
+        post_unify(syn->offset_of.body, env, pia, a, point);
         break;
     case SModule:
         panic(mv_string("instantiate implicits not implemented for module"));
@@ -1995,7 +1988,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case STypeFamily:
         break;
     case SLiftCType:
-        post_unify(syn->c_type, env, a, point);
+        post_unify(syn->c_type, env, pia, a, point);
         break;
     case SCheckedType:
         // TODO (INVESTIGATE FEATURE): check that it is OK to do nothing? (no implicits in types, right?)
@@ -2005,15 +1998,15 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
     case SAnnotation:
         panic(mv_string("instantiate implicits not implemented for a annotation"));
     case SReinterpret:
-        post_unify(syn->reinterpret.type, env, a, point);
-        post_unify(syn->reinterpret.body, env, a, point);
+        post_unify(syn->reinterpret.type, env, pia, a, point);
+        post_unify(syn->reinterpret.body, env, pia, a, point);
         break;
     case SConvert:
-        post_unify(syn->convert.type, env, a, point);
-        post_unify(syn->convert.body, env, a, point);
+        post_unify(syn->convert.type, env, pia, a, point);
+        post_unify(syn->convert.body, env, pia, a, point);
         break;
     case STypeOf: {
-        post_unify(syn->type_of, env, a, point);
+        post_unify(syn->type_of, env, pia, a, point);
         break;
     }
     case SDescribe: 
@@ -2026,7 +2019,7 @@ void post_unify(Syntax* syn, TypeEnv* env, Allocator* a, PiErrorPoint* point) {
 // This function recursively descends into a term and squashes all types.
 // In this case, to squash a type removes all unification vars from 
 // the type. (see squash_type in unify.h)
-void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
+void squash_types(Syntax* typed, PiAllocator* pia, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     err.range = typed->range;
     switch (typed->type) {
@@ -2042,237 +2035,237 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
         break;
     case SLitArray: {
         for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
-            squash_types(typed->array_lit.subterms.data[i], a, point);
+            squash_types(typed->array_lit.subterms.data[i], pia, a, point);
         }
         break;
     }
     case SProcedure: {
         // squash body
         // TODO (BUG): Need to squash types of annotated arguments!
-        squash_types(typed->procedure.body, a, point);
+        squash_types(typed->procedure.body, pia, a, point);
         break;
     }
     case SAll: {
         // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
-        squash_types(typed->all.body, a, point);
+        squash_types(typed->all.body, pia, a, point);
         break;
     }
     case SMacro: { 
-        squash_types(typed->transformer, a, point);
+        squash_types(typed->transformer, pia, a, point);
         break;
     }
     case SApplication: {
-        squash_types(typed->application.function, a, point);
+        squash_types(typed->application.function, pia, a, point);
         
         for (size_t i = 0; i < typed->application.implicits.len; i++) {
-            squash_types(typed->application.implicits.data[i], a, point);
+            squash_types(typed->application.implicits.data[i], pia, a, point);
         }
 
         for (size_t i = 0; i < typed->application.args.len; i++) {
-            squash_types(typed->application.args.data[i], a, point);
+            squash_types(typed->application.args.data[i], pia, a, point);
         }
         break;
     }
     case SAllApplication: {
-        squash_types(typed->application.function, a, point);
+        squash_types(typed->application.function, pia, a, point);
 
         for (size_t i = 0; i < typed->all_application.types.len; i++) {
-            squash_types(typed->all_application.types.data[i], a, point);
+            squash_types(typed->all_application.types.data[i], pia, a, point);
         }
 
         for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
-            squash_types(typed->all_application.implicits.data[i], a, point);
+            squash_types(typed->all_application.implicits.data[i], pia, a, point);
         }
         
         for (size_t i = 0; i < typed->all_application.args.len; i++) {
-            squash_types(typed->all_application.args.data[i], a, point);
+            squash_types(typed->all_application.args.data[i], pia, a, point);
         }
         break;
     }
     case SSeal: {
-        squash_types(typed->seal.body, a, point);
+        squash_types(typed->seal.body, pia, a, point);
 
         for (size_t i = 0; i < typed->seal.types.len; i++) {
-            squash_types(typed->seal.types.data[i], a, point);
+            squash_types(typed->seal.types.data[i], pia, a, point);
         }
 
         for (size_t i = 0; i < typed->seal.implicits.len; i++) {
-            squash_types(typed->seal.implicits.data[i], a, point);
+            squash_types(typed->seal.implicits.data[i], pia, a, point);
         }
         break;
     }
     case SUnseal: {
-        squash_types(typed->unseal.sealed, a, point);
+        squash_types(typed->unseal.sealed, pia, a, point);
 
         // TODO (BUG!): ensure that there are no free types in typed->unseal.body->ptype
-        squash_types(typed->unseal.body, a, point);
+        squash_types(typed->unseal.body, pia, a, point);
         break;
     }
     case SConstructor: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, a, point);
+            squash_types(typed->variant.enum_type, pia, a, point);
         }
         break;
     }
     case SVariant: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, a, point);
+            squash_types(typed->variant.enum_type, pia, a, point);
         }
         
         for (size_t i = 0; i < typed->variant.args.len; i++) {
-            squash_types(typed->variant.args.data[i], a, point);
+            squash_types(typed->variant.args.data[i], pia, a, point);
         }
         break;
     }
     case SMatch: {
-        squash_types(typed->match.val, a, point);
+        squash_types(typed->match.val, pia, a, point);
 
         for (size_t i = 0; i < typed->match.clauses.len; i++) {
             SynClause* clause = (SynClause*)typed->match.clauses.data[i];
-            squash_types(clause->body, a, point);
+            squash_types(clause->body, pia, a, point);
         }
         break;
     }
     case SStructure: {
         if (typed->structure.base) {
-            squash_types(typed->structure.base, a, point);
+            squash_types(typed->structure.base, pia, a, point);
         }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
-            squash_types(syn, a, point);
+            squash_types(syn, pia, a, point);
         }
         break;
     }
     case SProjector:
-        squash_types(typed->projector.val, a, point);
+        squash_types(typed->projector.val, pia, a, point);
         break;
     case SInstance:
-        squash_types(typed->instance.constraint, a, point);
+        squash_types(typed->instance.constraint, pia, a, point);
 
         for (size_t i = 0; i < typed->instance.implicits.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, a, point);
+            squash_types(syn, pia, a, point);
         }
 
         for (size_t i = 0; i < typed->instance.fields.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, a, point);
+            squash_types(syn, pia, a, point);
         }
         break;
     case SDynamic:
-        squash_types(typed->dynamic, a, point);
+        squash_types(typed->dynamic, pia, a, point);
         break;
     case SDynamicUse:
-        squash_types(typed->use, a, point);
+        squash_types(typed->use, pia, a, point);
         break;
     case SDynamicSet:
-        squash_types(typed->dynamic_set.dynamic, a, point);
-        squash_types(typed->dynamic_set.new_val, a, point);
+        squash_types(typed->dynamic_set.dynamic, pia, a, point);
+        squash_types(typed->dynamic_set.new_val, pia, a, point);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
-            squash_types(dbind->var, a, point);
-            squash_types(dbind->expr, a, point);
+            squash_types(dbind->var, pia, a, point);
+            squash_types(dbind->expr, pia, a, point);
         }
-        squash_types(typed->dyn_let_expr.body, a, point);
+        squash_types(typed->dyn_let_expr.body, pia, a, point);
         break;
     case SLet:
         for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
-            squash_types(typed->let_expr.bindings.data[i].val, a, point);
+            squash_types(typed->let_expr.bindings.data[i].val, pia, a, point);
         }
-        squash_types(typed->let_expr.body, a, point);
+        squash_types(typed->let_expr.body, pia, a, point);
         break;
     case SIf: {
-        squash_types(typed->if_expr.condition, a, point);
-        squash_types(typed->if_expr.true_branch, a, point);
-        squash_types(typed->if_expr.false_branch, a, point);
+        squash_types(typed->if_expr.condition, pia, a, point);
+        squash_types(typed->if_expr.true_branch, pia, a, point);
+        squash_types(typed->if_expr.false_branch, pia, a, point);
         break;
     }
     case SLabels:
-        squash_types(typed->labels.entry, a, point);
+        squash_types(typed->labels.entry, pia, a, point);
         for (size_t i = 0; i < typed->labels.terms.len; i++) {
             SynLabelBranch* branch = typed->labels.terms.data[i].val;
-            squash_types(branch->body, a, point);
+            squash_types(branch->body, pia, a, point);
         }
         break;
     case SGoTo:
         for (size_t i = 0; i < typed->go_to.args.len; i++) {
-            squash_types(typed->go_to.args.data[i], a, point);
+            squash_types(typed->go_to.args.data[i], pia, a, point);
         }
         break;
     case SWithReset:
-        squash_types(typed->with_reset.expr, a, point);
-        squash_types(typed->with_reset.handler, a, point);
+        squash_types(typed->with_reset.expr, pia, a, point);
+        squash_types(typed->with_reset.handler, pia, a, point);
 
         if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
-            squash_type(typed->with_reset.in_arg_ty, a);
+            squash_type(typed->with_reset.in_arg_ty, pia, a);
         } else {
             err.message = mv_cstr_doc("reset argument type not instantiated", a);
             throw_pi_error(point, err);
         }
         if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
-            squash_type(typed->with_reset.cont_arg_ty, a);
+            squash_type(typed->with_reset.cont_arg_ty, pia, a);
         } else {
             err.message = mv_cstr_doc("resume argument type not instantiated", a);
             throw_pi_error(point, err);
         }
         break;
     case SResetTo:
-        squash_types(typed->reset_to.point, a, point);
-        squash_types(typed->reset_to.arg, a, point);
+        squash_types(typed->reset_to.point, pia, a, point);
+        squash_types(typed->reset_to.arg, pia, a, point);
         break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.elements.len; i++) {
             SeqElt* elt = typed->sequence.elements.data[i];
-            squash_types(elt->expr, a, point);
+            squash_types(elt->expr, pia, a, point);
         }
         break;
     case SIs:
-        squash_type(typed->is.type->type_val, a);
-        squash_types(typed->is.val, a, point);
+        squash_type(typed->is.type->type_val, pia, a);
+        squash_types(typed->is.val, pia, a, point);
         break;
     case SInTo:
-        squash_type(typed->into.type->type_val, a);
-        squash_types(typed->into.val, a, point);
+        squash_type(typed->into.type->type_val, pia, a);
+        squash_types(typed->into.val, pia, a, point);
         break;
     case SOutOf:
-        squash_type(typed->out_of.type->type_val, a);
-        squash_types(typed->out_of.val, a, point);
+        squash_type(typed->out_of.type->type_val, pia, a);
+        squash_types(typed->out_of.val, pia, a, point);
         break;
     case SName:
-        squash_type(typed->name.type->type_val, a);
-        squash_types(typed->name.val, a, point);
+        squash_type(typed->name.type->type_val, pia, a);
+        squash_types(typed->name.val, pia, a, point);
         break;
     case SUnName:
-        squash_types(typed->unname, a, point);
+        squash_types(typed->unname, pia, a, point);
         break;
     case SWiden:
-        squash_type(typed->widen.type->type_val, a);
-        squash_types(typed->widen.val, a, point);
+        squash_type(typed->widen.type->type_val, pia, a);
+        squash_types(typed->widen.val, pia, a, point);
         break;
     case SNarrow:
-        squash_type(typed->narrow.type->type_val, a);
-        squash_types(typed->narrow.val, a, point);
+        squash_type(typed->narrow.type->type_val, pia, a);
+        squash_types(typed->narrow.val, pia, a, point);
         break;
     case SSizeOf:
     case SAlignOf:
-        squash_types(typed->size, a, point);
+        squash_types(typed->size, pia, a, point);
         break;
     case SOffsetOf:
-        squash_types(typed->offset_of.body, a, point);
+        squash_types(typed->offset_of.body, pia, a, point);
         break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {
-            squash_types(typed->proc_type.args.data[i], a, point);
+            squash_types(typed->proc_type.args.data[i], pia, a, point);
         }
 
-        squash_types(typed->proc_type.return_type, a, point);
+        squash_types(typed->proc_type.return_type, pia, a, point);
         break;
     }
     case SStructType: {
         for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
-            squash_types(typed->struct_type.fields.data[i].val, a, point);
+            squash_types(typed->struct_type.fields.data[i].val, pia, a, point);
         }
         break;
     }
@@ -2281,59 +2274,59 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
             PtrArray* args = typed->enum_type.variants.data[i].val;
 
             for (size_t j = 0; j < args->len; j++) {
-                squash_types(args->data[j], a, point);
+                squash_types(args->data[j], pia, a, point);
             }
         }
         break;
     }
     case SResetType: {
-        squash_types(typed->reset_type.in, a, point);
-        squash_types(typed->reset_type.out, a, point);
+        squash_types(typed->reset_type.in, pia, a, point);
+        squash_types(typed->reset_type.out, pia, a, point);
         break;
     }
     case SDynamicType: {
-        squash_types(typed->dynamic_type, a, point);
+        squash_types(typed->dynamic_type, pia, a, point);
         break;
     }
     case SAllType:
-        squash_types(typed->bind_type.body, a, point);
+        squash_types(typed->bind_type.body, pia, a, point);
         break;
     case SSealedType:
-        squash_types(typed->sealed_type.body, a, point);
+        squash_types(typed->sealed_type.body, pia, a, point);
         break;
     case STypeFamily:
-        squash_types(typed->bind_type.body, a, point);
+        squash_types(typed->bind_type.body, pia, a, point);
         break;
     case SLiftCType:
-        squash_types(typed->c_type, a, point);
+        squash_types(typed->c_type, pia, a, point);
         break;
     case SNamedType:
-        squash_types(typed->named_type.body, a, point);
+        squash_types(typed->named_type.body, pia, a, point);
         break;
     case SDistinctType:
-        squash_types(typed->distinct_type, a, point);
+        squash_types(typed->distinct_type, pia, a, point);
         break;
     case SOpaqueType:
-        squash_types(typed->opaque_type, a, point);
+        squash_types(typed->opaque_type, pia, a, point);
         break;
     case STraitType:
         for (size_t i = 0; i < typed->trait.fields.len; i++) {
-            squash_types(typed->trait.fields.data[i].val, a, point);
+            squash_types(typed->trait.fields.data[i].val, pia, a, point);
         }
         break;
     case SCheckedType:
-        squash_type(typed->type_val, a);
+        squash_type(typed->type_val, pia, a);
         break;
     case SReinterpret:
-        squash_types(typed->reinterpret.type, a, point);
-        squash_types(typed->reinterpret.body, a, point);
+        squash_types(typed->reinterpret.type, pia, a, point);
+        squash_types(typed->reinterpret.body, pia, a, point);
         break;
     case SConvert:
-        squash_types(typed->convert.type, a, point);
-        squash_types(typed->convert.body, a, point);
+        squash_types(typed->convert.type, pia, a, point);
+        squash_types(typed->convert.body, pia, a, point);
         break;
     case STypeOf: {
-        squash_types(typed->type_of, a, point);
+        squash_types(typed->type_of, pia, a, point);
         break;
     }
     case SDescribe:
@@ -2347,10 +2340,10 @@ void squash_types(Syntax* typed, Allocator* a, PiErrorPoint* point) {
 
     // has_unification_vars only returns true if those vars don't go anywhere!
     if (!has_unification_vars_p(*typed->ptype)) {
-        squash_type(typed->ptype, a);
+        squash_type(typed->ptype, pia, a);
     }
     else {
-        squash_type(typed->ptype, a);
+        squash_type(typed->ptype, pia, a);
 
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), a), &nodes);
@@ -2369,8 +2362,8 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     Target gen_target = ctx.target;
     clear_target(gen_target);
 
-    squash_types(typed, a, point);
-    post_unify(typed, env, a, point);
+    squash_types(typed, ctx.pia, a, point);
+    post_unify(typed, env, ctx.pia, a, point);
     
     // Catch error here; so can cleanup after self before further unwinding.
     ErrorPoint cleanup_point;

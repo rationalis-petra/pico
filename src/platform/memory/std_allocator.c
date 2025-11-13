@@ -29,15 +29,17 @@ void std_free(void* location, void* ctx) {
 }
 #pragma GCC diagnostic pop
 
+static AllocatorVTable std_vtable = {
+    .malloc = std_malloc,
+    .realloc = std_realloc,
+    .free = std_free,
+};
+
+static Allocator std_alloc = {
+    .vtable = &std_vtable,
+    .ctx = NULL,
+};
+
 Allocator* get_std_allocator() {
-    static bool std_init = false; 
-    static Allocator out;
-    if (!std_init) {
-        out.malloc = std_malloc;
-        out.realloc = std_realloc;
-        out.free = std_free;
-        out.ctx = NULL;
-        std_init = true;
-    }
-    return &out;
+    return &std_alloc;
 }

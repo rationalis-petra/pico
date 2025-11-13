@@ -69,8 +69,8 @@ endif
 
 ## Platform specifics and configuration
 ##-------------------------------------
-RELEASE_FLAGS := -Ofast -Werror
-DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT
+RELEASE_FLAGS := -Ofast -Werror -g
+DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT -g3 -gdwarf-2 
 
 ifeq ($(WINDOW_SYSTEM), X11)
   DEBUG_FLAGS := $(DEBUG_FLAGS) -DWINDOW_SYSTEM=1 -lX11
@@ -122,7 +122,7 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -g -std=$(C_VERSION) -D_GNU_SOURCE
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -std=$(C_VERSION) -D_GNU_SOURCE
 
 # The warnings we want 
 CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereference -Wcast-align 

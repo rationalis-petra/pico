@@ -19,6 +19,6 @@ typedef struct ParseResult {
     };
 } ParseResult;
 
-ParseResult parse_rawtree(IStream* is, Allocator* a);
+ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a);
 
 #endif

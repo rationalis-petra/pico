@@ -17,14 +17,17 @@ void debug_break() {
 #endif
 }
 
-void build_debug_break_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 0, (CType){.sort = CSVoid});
+void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
 
     convert_c_fn(debug_break, &fn_ctype, type, ass, a, point); 
 }
 
 void add_debug_module(Target target, Package* base, Allocator* a) {
     Allocator arena = mk_arena_allocator(8096, a);
+    PiAllocator pico_allocator = convert_to_pallocator(&arena);
+    PiAllocator* pia = &pico_allocator;
+
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -78,8 +81,8 @@ void add_debug_module(Target target, Package* base, Allocator* a) {
     Segments prepped;
 
     PiType* typep;
-    typep = mk_proc_type(&arena, 0, mk_prim_type(&arena, Unit));
-    build_debug_break_fn(typep, target.target, &arena, &point);
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
+    build_debug_break_fn(typep, target.target, pia, &arena, &point);
     sym = string_to_symbol(mv_string("debug-break"));
     fn_segments.code = get_instructions(target.target);
     prepped = prep_target(module, fn_segments, target.target, NULL);

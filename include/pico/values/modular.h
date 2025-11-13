@@ -7,6 +7,7 @@
 #include "components/assembler/assembler.h"
 #include "components/assembler/link_data.h"
 
+#include "pico/data/client/addr_list.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
@@ -27,7 +28,7 @@ typedef struct {
 
 typedef struct {
     uint64_t id;
-    PtrArray args;
+    AddrPiList args;
     Symbol src_sym;
     Module* src;
 } InstanceSrc;

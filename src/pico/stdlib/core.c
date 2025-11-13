@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "platform/signals.h"
+#include "platform/memory/arena.h"
 #include "platform/machine_info.h"
 
 #include "pico/codegen/backend-direct/internal.h"
@@ -31,11 +32,16 @@ PiType* get_pair_type() {
     return pair_type;
 }
 
-PiType build_store_fn_ty(Allocator* a) {
-    PiType* proc_ty  = mk_proc_type(a, 2, mk_prim_type(a, Address), mk_var_type(a, "A"), mk_prim_type(a, Unit));
+static PiType* allocator_type;
+PiType* get_allocator_type() {
+    return allocator_type;
+}
 
-    SymbolArray types = mk_symbol_array(1, a);
-    push_symbol(string_to_symbol(mv_string("A")), &types);
+PiType build_store_fn_ty(PiAllocator* pia) {
+    PiType* proc_ty  = mk_proc_type(pia, 2, mk_prim_type(pia, Address), mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
+
+    SymbolPiList types = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -88,11 +94,11 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(Ret, ass, a, point);
 }
 
-PiType build_load_fn_ty(Allocator* a) {
-    PiType* proc_ty = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_var_type(a, "A"));
+PiType build_load_fn_ty(PiAllocator* pia) {
+    PiType* proc_ty = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_var_type(pia, "A"));
 
-    SymbolArray types = mk_symbol_array(1, a);
-    push_symbol(string_to_symbol(mv_string("A")), &types);
+    SymbolPiList types = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &types);
 
     return (PiType) {.sort = TAll, .binder.vars = types, .binder.body = proc_ty};
 }
@@ -187,6 +193,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     PiType type_val;
     PiType* type_data = &type_val;
     ErrorPoint point;
+    Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator pia = convert_to_pallocator(&arena);
     if (catch_error(point)) {
         panic(point.error_message);
     }
@@ -466,162 +474,189 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     // as some core types 
     {
         PiType *type_val;
-        SymbolArray vars;
+        SymbolPiList vars;
         ModuleEntry* e;
 
         // Ptr Type 
-        vars = mk_symbol_array(1, a);
-        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_sym_list(1, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_named_type(a, "Ptr", mk_type_family(a,
+        type_val = mk_named_type(&pia, "Ptr", mk_type_family(&pia,
                                                           vars,
-                                                          mk_prim_type(a, Address)));
+                                                          mk_prim_type(&pia, Address)));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Ptr"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, a);
+        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         ptr_type = e->value;
 
         // Allocator Type
-        PiType *alloc_type = mk_named_type(
-            a, "Allocator",
-            mk_struct_type(a, 4, 
-                           "alloc", mk_prim_type(a, Address),
-                           "realloc", mk_prim_type(a, Address),
-                           "free", mk_prim_type(a, Address),
-                           "ctx", mk_prim_type(a, Address)));
-        type_data = alloc_type;
-        sym = string_to_symbol(mv_string("Allocator"));
-        type.kind.nargs = 0;
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-
-        // Array Type 
-        // Make a ptr
-        vars = mk_symbol_array(1, a);
-        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_sym_list(1, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
+
+        PiType *alloc_fn_type = mk_proc_type(&pia, 2,
+                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_prim_type(&pia, UInt_64),
+                         mk_prim_type(&pia, Address));
+        PiType *realloc_fn_type = mk_proc_type(&pia, 3,
+                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_prim_type(&pia, Address),
+                         mk_prim_type(&pia, UInt_64),
+                         mk_prim_type(&pia, Address));
+        PiType *free_fn_type = mk_proc_type(&pia, 2,
+                         mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
+                         mk_prim_type(&pia, Address),
+                         mk_prim_type(&pia, Address));
+        type_val = mk_named_type(&pia, "AllocTable",
+                                 mk_type_family(&pia, vars,
+                                                mk_struct_type(&pia, 3,
+                                                               "alloc", alloc_fn_type,
+                                                               "realloc", realloc_fn_type,
+                                                               "free", free_fn_type)));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("AllocTable"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, &pia);
+        e = get_def(sym, module);
+        PiType* vtable_type = e->value;
+
+        // Allocator Type
+        type_val = mk_named_type(&pia, "Allocator", mk_sealed_type(&pia,
+                                                                1, "A", 0,
+                                                                
+                                                      mk_struct_type(&pia, 2,
+                                                                     "vtable", mk_app_type(&pia, ptr_type, mk_app_type(&pia, vtable_type, mk_var_type(&pia, "A"))),
+                                                                     "context", mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")))));
+        type.kind.nargs = 0;
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Allocator"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+        delete_pi_type_p(type_val, &pia);
+
+        e = get_def(sym, module);
+        allocator_type = e->value;
+
+        // List Type 
+        // Make a ptr
+        type.kind.nargs = 1;
+        vars = mk_sym_list(1, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
         type_val = 
-            mk_named_type(a, "List",
-                          mk_type_family(a,
+            mk_named_type(&pia, "List",
+                          mk_type_family(&pia,
                                          vars,
-                                         mk_struct_type(a, 4,
-                                                        "data", mk_prim_type(a, Address),
-                                                        "len", mk_prim_type(a, UInt_64),
-                                                        "capacity", mk_prim_type(a, UInt_64),
-                                                        "gpa", alloc_type)));
+                                         mk_struct_type(&pia, 4,
+                                                        "data", mk_prim_type(&pia, Address),
+                                                        "len", mk_prim_type(&pia, UInt_64),
+                                                        "capacity", mk_prim_type(&pia, UInt_64),
+                                                        "gpa", copy_pi_type_p(allocator_type, &pia))));
         type_data = type_val;
         sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, a);
+        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         list_type = e->value;
         
         // Maybe Type 
-        vars = mk_symbol_array(1, a);
-        push_symbol(string_to_symbol(mv_string("A")), &vars);
+        vars = mk_sym_list(1, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
         type.kind.nargs = 1;
-        type_val = mk_named_type(a, "Maybe", mk_type_family(a,
+        type_val = mk_named_type(&pia, "Maybe", mk_type_family(&pia,
                                                       vars,
-                                                      mk_enum_type(a, 2,
-                                                                   "some", 1, mk_var_type(a, "A"),
+                                                      mk_enum_type(&pia, 2,
+                                                                   "some", 1, mk_var_type(&pia, "A"),
                                                                    "none", 0)));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Maybe"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, a);
+        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         maybe_type = e->value;
 
         // Either Type 
-        vars = mk_symbol_array(2, a);
-        push_symbol(string_to_symbol(mv_string("A")), &vars);
-        push_symbol(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_sym_list(2, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
+        push_sym(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
-        type_val = mk_named_type(a, "Either", mk_type_family(a,
+        type_val = mk_named_type(&pia, "Either", mk_type_family(&pia,
                                                              vars,
-                                                             mk_enum_type(a, 2,
-                                                                          "left", 1, mk_var_type(a, "A"),
-                                                                          "right", 1, mk_var_type(a, "B"))));
+                                                             mk_enum_type(&pia, 2,
+                                                                          "left", 1, mk_var_type(&pia, "A"),
+                                                                          "right", 1, mk_var_type(&pia, "B"))));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Either"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, a);
+        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         either_type = e->value;
 
         // Pair Type 
-        vars = mk_symbol_array(2, a);
-        push_symbol(string_to_symbol(mv_string("A")), &vars);
-        push_symbol(string_to_symbol(mv_string("B")), &vars);
+        vars = mk_sym_list(2, &pia);
+        push_sym(string_to_symbol(mv_string("A")), &vars);
+        push_sym(string_to_symbol(mv_string("B")), &vars);
         type.kind.nargs = 2;
 
-        type_val = mk_named_type(a, "Pair", mk_type_family(a,
+        type_val = mk_named_type(&pia, "Pair", mk_type_family(&pia,
                                                       vars,
-                                                      mk_struct_type(a, 2,
-                                                                   "_1", mk_var_type(a, "A"),
-                                                                   "_2", mk_var_type(a, "B"))));
+                                                      mk_struct_type(&pia, 2,
+                                                                   "_1", mk_var_type(&pia, "A"),
+                                                                   "_2", mk_var_type(&pia, "B"))));
         type_data = type_val;
         sym = string_to_symbol(mv_string("Pair"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, a);
+        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         pair_type = e->value;
-
     }
 
     // Unit value
 
-    /* type_data = type_val; */
-    /* sym = string_to_symbol(mv_string("unit")); */
-    /* add_def(module, sym, type, &type_data, null_segments, NULL); */
-    /* e = get_def(sym, module); */
-    /* syntax_type = e->value; */
-
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
     Segments prepped;
 
-    type = build_store_fn_ty(a);
+    type = build_store_fn_ty(&pia);
     build_store_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("store"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type(type, &pia);
 
-    type = build_load_fn_ty(a);
+    type = build_load_fn_ty(&pia);
     build_load_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("load"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, a);
+    delete_pi_type(type, &pia);
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, Address), mk_prim_type(a, UInt_64));
+    typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, Address), mk_prim_type(&pia, UInt_64));
     build_nop_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("address-to-num"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, &pia);
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_64), mk_prim_type(a, Address));
+    typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, Address));
     build_nop_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("num-to-address"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, &pia);
 
     add_module(string_to_symbol(mv_string("core")), module, base);
 
@@ -630,5 +665,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     // Note: we do NOT delete the 'fn_segments.code' because it is the
     // assembler, and needs to be used later!
     sdelete_u8_array(fn_segments.data);
+    release_arena_allocator(arena);
 }
 

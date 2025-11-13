@@ -27,6 +27,7 @@ void* call_alloc(size_t size, PiAllocator* pa);
 void* call_realloc(void* data, size_t size, PiAllocator* pa);
 void call_free(void* data, PiAllocator* pa);
 
-Allocator convert_allocator(PiAllocator* pa);
+Allocator convert_to_callocator(PiAllocator* pa);
+PiAllocator convert_to_pallocator(Allocator* ca);
 
 #endif

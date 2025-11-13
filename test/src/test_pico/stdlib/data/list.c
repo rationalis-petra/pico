@@ -11,6 +11,7 @@
 
 void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator* a) {
     Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator parena = convert_to_pallocator(&arena);
     TestContext context = (TestContext) {
         .env = env,
         .a = &arena,
@@ -44,8 +45,8 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     }
 
     if (test_start(log, mv_string("each-print"))) {
-        Allocator current_old = get_std_current_allocator();
-        set_std_current_allocator(arena);
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(parena);
         char* expected = "01234";
         RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))");
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
@@ -55,9 +56,9 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("map-add-1"))) {
         RUN("(def list-2 list.map (proc [x] i64.+ 1 x) list-1)");
 
-        Allocator current_old = get_std_current_allocator();
+        PiAllocator current_old = get_std_current_allocator();
         char* expected = "12345";
-        set_std_current_allocator(arena);
+        set_std_current_allocator(parena);
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-2)");
         set_std_current_allocator(current_old);
     }
@@ -68,9 +69,9 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         RUN("(list.push 13 list-3)");
         RUN("(list.push 14 list-3)");
 
-        Allocator current_old = get_std_current_allocator();
+        PiAllocator current_old = get_std_current_allocator();
         char* expected = "121314";
-        set_std_current_allocator(arena);
+        set_std_current_allocator(parena);
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) (use list-3))");
         set_std_current_allocator(current_old);
     }

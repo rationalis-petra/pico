@@ -1,9 +1,9 @@
 #include "platform/memory/executable.h"
+#include "platform/memory/std_allocator.h"
 #include "components/assembler/assembler.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/extra.h"
 #include "pico/stdlib/meta/meta.h"
 
 #include "test_pico/parse/parse.h"

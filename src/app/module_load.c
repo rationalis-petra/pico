@@ -20,6 +20,9 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Allocator iter_arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
 
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
+    PiAllocator pico_iter_arena = convert_to_pallocator(&iter_arena);
+
     Target target = (Target) {
         .target = mk_assembler(current_cpu_feature_flags(), &exec),
         .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
@@ -43,7 +46,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     if (catch_error(pi_point)) goto on_pi_error;
 
     // Step 3: Parse Module header, get the result (ph_res)
-    ParseResult ph_res = parse_rawtree(cin, &arena);
+    ParseResult ph_res = parse_rawtree(cin, &pico_arena, &arena);
     if (ph_res.type == ParseNone) goto on_noparse;
 
     if (ph_res.type == ParseFail) {
@@ -82,7 +85,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
         reset_arena_allocator(iter_arena);
         refresh_env(env, &iter_arena);
 
-        ParseResult res = parse_rawtree(cin, &iter_arena);
+        ParseResult res = parse_rawtree(cin, &pico_iter_arena, &iter_arena);
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
@@ -113,7 +116,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &iter_arena, .point = &pi_point, .target = target
+            .a = &iter_arena, .pia = &pico_arena, .point = &pi_point, .target = target
         };
         type_check(&abs, env, ctx);
 
@@ -169,6 +172,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
 
 void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, Allocator* a) {
     Allocator arena = mk_arena_allocator(16384, a);
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
@@ -197,7 +201,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         reset_arena_allocator(arena);
         Environment* env = env_from_module(current, &point, &arena);
 
-        ParseResult res = parse_rawtree(cin, &arena);
+        ParseResult res = parse_rawtree(cin, &pico_arena, &arena);
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
@@ -228,7 +232,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &arena, .point = &pi_point, .target = target
+            .a = &arena, .pia = &pico_arena, .point = &pi_point, .target = target
         };
         type_check(&abs, env, ctx);
 

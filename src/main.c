@@ -43,6 +43,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator arena = mk_arena_allocator(4096, a);
+    PiAllocator pico_arena = convert_to_pallocator(&arena);
 
     cin = mk_capturing_istream(cin, &arena);
     reset_bytecount(cin);
@@ -72,7 +73,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
         write_fstring(mv_string(" > "), cout);
     }
 
-    ParseResult res = parse_rawtree(cin, &arena);
+    ParseResult res = parse_rawtree(cin, &pico_arena, &arena);
 
     if (res.type == ParseNone) {
         write_fstring(mv_string("\n"), cout);
