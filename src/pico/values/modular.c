@@ -85,9 +85,9 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
 }
 
 void delete_package(Package* package) {
-    Allocator* a = &package->root_module->allocator;
+    PiAllocator pia = package->root_module->pico_allocator;
     delete_module(package->root_module);
-    mem_free(package, a);
+    call_free(package, &pia);
 }
 
 Result add_module(Symbol symbol, Module* module, Package* package) {

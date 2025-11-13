@@ -24,7 +24,7 @@ void add_show_module(Target target, Module *abs, Allocator *alloc) {
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(alloc);
     Module* module = mk_module(header, get_package(abs), NULL, pico_module_allocator);
     delete_module_header(header);
 
