@@ -22,7 +22,8 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     };
     *target.data_aux = mk_u8_array(256, a);
 
-    base = mk_package(string_to_name(mv_string("base")), a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    base = mk_package(string_to_name(mv_string("base")), pico_module_allocator);
     add_core_module(ass, base, a);
     add_num_module(ass, base, a);
     add_meta_module(ass, base, a);

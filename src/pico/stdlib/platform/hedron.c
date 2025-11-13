@@ -314,7 +314,8 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(platform), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 

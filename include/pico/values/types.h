@@ -5,7 +5,7 @@
 #include "data/result.h"
 #include "components/pretty/document.h"
 
-#include "pico/data/client/addr_list.h"
+#include "pico/data/client/list.h"
 #include "pico/data/client/symbol_list.h"
 #include "pico/data/client/sym_addr_piamap.h"
 #include "pico/data/sym_ptr_assoc.h"

@@ -680,7 +680,7 @@ uint32_t num_swapchain_images(HedronSurface* surface) {
     return surface->num_images;
 }
 
-HedronShaderModule* create_shader_module(U8Array code) {
+HedronShaderModule* create_shader_module(U8PiList code) {
     VkShaderModuleCreateInfo create_info = (VkShaderModuleCreateInfo){};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     // TODO: check if code.len % 4 == 0??
@@ -703,7 +703,7 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface) {
+HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescriptionPiList adesc, AddrPiList shaders, HedronSurface* surface) {
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }

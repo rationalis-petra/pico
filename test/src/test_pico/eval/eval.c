@@ -35,7 +35,8 @@ void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
     if (catch_error(point)) {
         panic(mv_string("Error in tests: test_pico/eval/eval.c"));
     }
-    Module* module = mk_module(header, base, NULL, a);
+    PiAllocator pia = convert_to_pallocator(a);
+    Module* module = mk_module(header, base, NULL, pia);
     Environment* env = env_from_module(module, &point, a);
     delete_module_header(header);
 

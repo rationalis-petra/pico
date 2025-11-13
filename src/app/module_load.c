@@ -14,8 +14,11 @@
 #include "pico/stdlib/meta/meta.h"
 
 
-void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Package* package, Module* parent, Allocator* a) {
+void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Package* package, Module* parent, PiAllocator pia) {
     // Step 1: Setup necessary state
+    Allocator c_allocator = convert_to_callocator(&pia);
+    Allocator* a = &c_allocator;
+    
     Allocator arena = mk_arena_allocator(16384, a);
     Allocator iter_arena = mk_arena_allocator(16384, a);
     Allocator exec = mk_executable_allocator(a);
@@ -67,7 +70,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
-    module = mk_module(*header, package, parent, a);
+    module = mk_module(*header, package, parent, pia);
     if (parent) {
         add_module_def(parent, header->name, module);
     } else {

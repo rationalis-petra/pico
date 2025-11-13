@@ -216,7 +216,8 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 
@@ -347,7 +348,8 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 
@@ -408,7 +410,8 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 
@@ -487,7 +490,8 @@ void add_num_module(Assembler* ass, Package* base, Allocator* a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, base, NULL, pico_module_allocator);
     delete_module_header(header);
 
     add_bool_module(ass, module, a);

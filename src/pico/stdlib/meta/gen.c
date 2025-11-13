@@ -153,7 +153,8 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(base), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 

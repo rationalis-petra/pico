@@ -14,7 +14,8 @@ void add_data_module(Target target, Package* base, Allocator* a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, base, NULL, pico_module_allocator);
     delete_module_header(header);
 
     add_list_module(target, module, a);

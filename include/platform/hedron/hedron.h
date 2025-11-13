@@ -1,7 +1,7 @@
 #ifndef __PLATFORM_HEDRON_HEDRON_H
 #define __PLATFORM_HEDRON_HEDRON_H
 
-#include "data/array.h"
+#include "pico/data/client/list.h"
 #include "platform/memory/allocator.h"
 #include <stdbool.h>
 
@@ -36,7 +36,7 @@ void destroy_window_surface(HedronSurface*);
 
 uint32_t num_swapchain_images(HedronSurface*);
 
-HedronShaderModule* create_shader_module(U8Array code);
+HedronShaderModule* create_shader_module(U8PiList code);
 void destroy_shader_module(HedronShaderModule* module);
 
 typedef enum : uint64_t {Vertex, Instance} InputRate;
@@ -55,10 +55,10 @@ typedef struct {
     uint32_t offset; 
 } AttributeDescription;
 
-ARRAY_HEADER_TYPE(BindingDescription, BindingDescription)
-ARRAY_HEADER_TYPE(AttributeDescription, AttributeDescription)
+PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
+PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
 
-HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface);
+HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescriptionPiList adesc, AddrPiList shaders, HedronSurface* surface);
 void destroy_pipeline(HedronPipeline* pipeline);
 
 // -------------------------------------------

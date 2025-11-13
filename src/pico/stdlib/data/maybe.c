@@ -19,7 +19,8 @@ void add_maybe_module(Target target, Module *data, Allocator *alloc) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL, alloc);
+    PiAllocator pico_module_allocator = convert_to_pallocator(alloc);
+    Module* module = mk_module(header, get_package(data), NULL, pico_module_allocator);
     delete_module_header(header);
 
     ErrorPoint point;

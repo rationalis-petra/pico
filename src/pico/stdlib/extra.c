@@ -719,7 +719,8 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* default_allocato
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, base, NULL, pico_module_allocator);
     delete_module_header(header);
 
     PiType* typep;

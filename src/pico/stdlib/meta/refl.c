@@ -70,7 +70,7 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     Package* current_package = get_current_package();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
     Module* parent = module.is_none ? NULL : module.module;
-    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, &a);
+    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, pia);
     delete_istream(sfile, &a);
     delete_formatted_ostream(os, &a);
     return (Result) {.type = Ok};
@@ -139,7 +139,8 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL, a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    Module* module = mk_module(header, get_package(base), NULL, pico_module_allocator);
     delete_module_header(header);
     Symbol sym;
 
