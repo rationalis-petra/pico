@@ -107,14 +107,34 @@ void* pi_alloc_adapter() {
           "ret\n"
           );
 #elif ABI == WIN_64
-    __asm(
-          "pop %rcx\n"
-          "pop %rax\n"
-          "mov (%rax), %rcx\n"
-          "sub $32, %rsp"
-          "call *%rcx\n"
-          "add $32, %rsp"
-          "pop %rax\n"
+    __asm("mov 8(%rsp),  %rcx\n"
+          "mov 16(%rsp), %rax\n"  // allocator
+          "mov (%rax),   %r11\n"  // vtable
+          "mov (%r11),   %r9\n"   // alloc
+          "mov 8(%rax),  %rdx\n"  // context
+
+          // ALIGN STACK
+          // Get the bottom byte of RSP (store in RAX), which is the info we
+          // need to perform (16-byte) alignment.
+          // current rsp should have rsp % 16 == 8
+          "mov %rsp, %r10\n"
+          "and $0x8, %r10\n"
+          "add $0x8, %r10\n"
+          "and $0x8, %r10\n"
+          "sub %r10, %rsp\n"
+          "push %r10\n"
+
+          "sub $0x20, %rsp\n"
+          "call *%r9\n"
+          "add $0x20, %rsp\n"
+          "pop %r10\n"
+          "add %r10, %rsp\n"
+
+          // return - get return address
+          "mov (%rsp), %rcx\n"  // ret addr
+          "add $0x18, %rsp\n"    // pop values
+          "push %rax\n"
+          "push %rcx\n"
           "ret\n"
           );
 #else
@@ -154,16 +174,36 @@ void* pi_realloc_adapter() {
       "ret\n"
         );
 #elif ABI == WIN_64
-    __asm(
-          "pop %rcx\n"
-          "pop %rax\n"
-          "mov (%rax), %rcx\n"
-          "sub $32, %rsp"
-          "call %rcx\n"
-          "add $32, %rsp"
-          "pop %rax\n"
-          "ret\n"
-          );
+  __asm(
+      "mov 0x8(%rsp),  %rdx  \n" // size
+      "mov 0x10(%rsp), %rcx  \n" // data
+      "mov 0x18(%rsp), %rax  \n" // allocator (context)
+      "mov (%rax), %r11      \n" // vtable
+      "mov 0x8(%r11), %r9    \n" // realloc
+      "mov 0x8(%rax), %r8   \n" // context
+
+      // ALIGN THE STACK
+      // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
+      "mov %rsp, %r10 \n"
+      "and $0x8, %r10  \n"
+      "add $0x8, %r10  \n"
+      "and $0x8, %r10  \n"
+      "sub %r10, %rsp \n"
+      "push %r10       \n"
+
+      "sub $0x20, %rsp \n"
+      "call *%r9\n"
+      "add $0x20, %rsp \n"
+      "pop %r10\n"
+      "add %r10, %rsp\n"
+
+      // return - get return address
+      "mov (%rsp), %rcx\n"    // ret addr
+      "add $0x20, %rsp\n"     // pop values
+      "push %rax\n"
+      "push %rcx\n"
+      "ret\n"
+        );
 #else
 #error "Unknown calling convention"
 #endif
@@ -198,14 +238,31 @@ void pi_free_adapter() {
         "ret\n"
         );
 #elif ABI == WIN_64
-  __asm(
-        "pop %rcx\n"
-        "pop %rax\n"
-        "mov (%rax), %rcx\n"
-        "sub $32, %rsp"
-        "call *%rcx\n"
-        "add $32, %rsp"
-        "pop %rax\n"
+  __asm("mov 8(%rsp),  %rcx\n"   // address
+        "mov 16(%rsp), %rax\n"   // allocator
+        "mov (%rax),   %r11\n"   // vtable
+        "mov 16(%r11), %r9\n"   // alloc
+        "mov 8(%rax),  %rdx\n"  // context
+
+        // ALIGN THE STACK
+        // Step 1. Ensure there is at least 8 bytes of space (to store the offset)
+        "mov %rsp, %r10 \n"
+        "and $0x8, %r10 \n"
+        "add $0x8, %r10 \n"
+        "and $0x8, %r10 \n"
+        "sub %r10, %rsp \n"
+        "push %r10      \n"
+
+        "sub $0x20, %rsp\n"
+        "call *%r9\n"
+        "add $0x20, %rsp\n"
+        "pop %r10\n"
+        "add %r10, %rsp\n"
+
+        // return - get return address
+        "mov (%rsp), %rcx\n"  // ret addr
+        "add $0x18, %rsp\n"   // pop values
+        "push %rcx\n"
         "ret\n"
         );
 #else
