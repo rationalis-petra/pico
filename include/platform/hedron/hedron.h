@@ -40,7 +40,6 @@ HedronShaderModule* create_shader_module(U8PiList code);
 void destroy_shader_module(HedronShaderModule* module);
 
 typedef enum : uint64_t {Vertex, Instance} InputRate;
-typedef enum : uint64_t {Float_1, Float_2, Float_3} VertexFormat;
 
 typedef struct {
     uint32_t binding;
@@ -48,6 +47,7 @@ typedef struct {
     InputRate input_rate; 
 } BindingDescription;
 
+typedef enum : uint64_t {Float_1, Float_2, Float_3} VertexFormat;
 typedef struct {
     uint32_t binding;
     uint32_t location;
@@ -55,10 +55,23 @@ typedef struct {
     uint32_t offset; 
 } AttributeDescription;
 
+typedef enum : uint64_t { UniformBuffer } DesciptorType;
+typedef enum : uint64_t { VertexShader } ShaderType;
+
+typedef struct {
+    DesciptorType type;
+    ShaderType shader_type; 
+} DescriptorBinding;
+
 PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
 PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
+PICO_LIST_HEADER_TYPE(DescriptorBinding, DescriptorBinding)
 
-HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescriptionPiList adesc, AddrPiList shaders, HedronSurface* surface);
+HedronPipeline *create_pipeline(DescriptorBindingPiList binddesc,
+                                BindingDescriptionPiList bdesc,
+                                AttributeDescriptionPiList adesc,
+                                AddrPiList shaders,
+                                HedronSurface* surface);
 void destroy_pipeline(HedronPipeline* pipeline);
 
 // -------------------------------------------
@@ -118,7 +131,6 @@ ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphor
 
 typedef struct HedronCommandPool HedronCommandPool;
 typedef struct HedronCommandBuffer HedronCommandBuffer;
-
 
 HedronCommandPool* create_command_pool();
 void destroy_command_pool();

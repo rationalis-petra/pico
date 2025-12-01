@@ -15,6 +15,9 @@ static PiType* input_rate_ty;
 static PiType* input_format_ty;
 static PiType* binder_desc_ty;
 static PiType* attribute_desc_ty;
+static PiType* descriptor_sort_ty;
+static PiType* stage_sort_ty;
+static PiType* descriptor_binding_ty;
 
 static PiType* buffer_ty;
 static PiType* buffer_sort_ty;
@@ -66,7 +69,8 @@ void build_destroy_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* p
 }
 
 void build_create_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 4,
+    CType fn_ctype = mk_fn_ctype(pia, 5,
+                                 "resource_describe", mk_list_ctype(pia),
                                  "binder_describe", mk_list_ctype(pia),
                                  "attrib_describe", mk_list_ctype(pia),
                                  "shaders", mk_list_ctype(pia),
@@ -407,6 +411,35 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     input_format_ty = e->value;
     delete_pi_type_p(typep, pia);
 
+    typep = mk_enum_type(pia, 1, "uniform-buffer", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("DecriptorType"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    descriptor_sort_ty = e->value;
+    delete_pi_type_p(typep, pia);
+
+    typep = mk_enum_type(pia, 1, "vertex-shader", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("StageType"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    stage_sort_ty = e->value;
+    delete_pi_type_p(typep, pia);
+
+    typep = mk_struct_type(pia, 2,
+                           "type", copy_pi_type_p(descriptor_sort_ty, pia),
+                           "stage-type", copy_pi_type_p(stage_sort_ty, pia));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("DescriptorBinding"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    descriptor_binding_ty = e->value;
+    delete_pi_type_p(typep, pia);
+
     typep = mk_struct_type(pia, 4,
                            "binding", mk_prim_type(pia, UInt_32),
                            "location", mk_prim_type(pia, UInt_32),
@@ -534,7 +567,8 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(pia, 4,
+    typep = mk_proc_type(pia, 5,
+                         mk_app_type(pia, get_list_type(), descriptor_binding_ty),
                          mk_app_type(pia, get_list_type(), binder_desc_ty),
                          mk_app_type(pia, get_list_type(), attribute_desc_ty),
                          mk_app_type(pia, get_list_type(), shader_module_ty),

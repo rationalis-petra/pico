@@ -127,7 +127,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &arena, .point = &pi_point, .target = gen_target,
+        .a = &arena, .pia = &pico_arena, .point = &pi_point, .target = gen_target,
     };
     type_check(&abs, env, ctx);
 

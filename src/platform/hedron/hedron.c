@@ -58,8 +58,10 @@ struct HedronShaderModule {
     VkShaderModule module;
 };
 
+
 struct HedronPipeline {
     VkPipelineLayout layout;
+    VkDescriptorSetLayout descriptor_set_layout;
     VkPipeline pipeline;
 };
 
@@ -703,7 +705,45 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescriptionPiList adesc, AddrPiList shaders, HedronSurface* surface) {
+VkDescriptorSetLayout create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
+    VkDescriptorSetLayoutBinding* bindings = mem_alloc(sizeof(VkDescriptorSetLayoutBinding) * bdesc.len, hd_alloc);
+    for (size_t i = 0; i < bdesc.len; i++) {
+        VkDescriptorSetLayoutBinding layoutBinding = {};
+        layoutBinding.binding = 0;
+        if (bdesc.data[i].type == UniformBuffer) {
+            layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        if (bdesc.data[i].shader_type == VertexShader) {
+            layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        }
+        layoutBinding.descriptorCount = 1;
+        layoutBinding.pImmutableSamplers = NULL; // Optional
+        bindings[i] = layoutBinding;
+    }
+
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = bdesc.len;
+    layoutInfo.pBindings = bindings;
+
+    VkDescriptorSetLayout descriptorSetLayout;
+    if (vkCreateDescriptorSetLayout(logical_device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
+        panic(mv_string("failed to create descriptor set layout!"));
+    }
+
+    mem_free(bindings, hd_alloc);
+    return descriptorSetLayout;
+}
+
+HedronPipeline *create_pipeline(DescriptorBindingPiList setdesc,
+                                BindingDescriptionPiList bdesc,
+                                AttributeDescriptionPiList adesc,
+                                AddrPiList shaders,
+                                HedronSurface* surface) {
+    VkDescriptorSetLayout descriptorSetLayout = create_descriptor_set_layout(setdesc);
+
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }
@@ -861,8 +901,8 @@ HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescrip
 
     VkPipelineLayoutCreateInfo pipeline_layout_info = (VkPipelineLayoutCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = NULL,
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = NULL,
     };
@@ -902,13 +942,15 @@ HedronPipeline* create_pipeline(BindingDescriptionPiList bdesc, AttributeDescrip
     *pipeline = (HedronPipeline) {
         .pipeline = vk_pipeline,
         .layout = pipeline_layout,
+        .descriptor_set_layout = descriptorSetLayout,
     };
     return pipeline;
 }
 
 void destroy_pipeline(HedronPipeline *pipeline) {
-    vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
     vkDestroyPipeline(logical_device, pipeline->pipeline, NULL);
+    vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
+    vkDestroyDescriptorSetLayout(logical_device, pipeline->descriptor_set_layout, NULL);
     mem_free(pipeline, hd_alloc);
 }
 
