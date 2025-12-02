@@ -851,6 +851,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TDistinct:  {
+        // Opaque types whose innter types are named should print as name-only! 
+        if (type->distinct.source_module && type->distinct.type->sort == TNamed) {
+            return mv_str_doc(symbol_to_string(type->distinct.type->named.name, a), a);
+        }
+
+        // 'Default' path
         PtrArray nodes = mk_ptr_array(6, a);
         if (type->distinct.source_module) {
             push_ptr(mk_str_doc(mv_string("Opaque #" ), a), &nodes);

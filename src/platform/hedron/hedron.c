@@ -710,7 +710,7 @@ VkDescriptorSetLayout create_descriptor_set_layout(DescriptorBindingPiList bdesc
     for (size_t i = 0; i < bdesc.len; i++) {
         VkDescriptorSetLayoutBinding layoutBinding = {};
         layoutBinding.binding = 0;
-        if (bdesc.data[i].type == UniformBuffer) {
+        if (bdesc.data[i].type == UniformBufferDesc) {
             layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         }
 
@@ -990,6 +990,8 @@ HedronBuffer *create_buffer(BufferType type, uint64_t size) {
     case VertexBuffer: buffer_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         break;
     case IndexBuffer: buffer_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        break;
+    case UniformBuffer: buffer_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         break;
     }
 

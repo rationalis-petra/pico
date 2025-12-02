@@ -502,21 +502,27 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
 
         // Now, push registers onto stack
-        size_t current_return_register = return_classes.len - 1;
+        size_t current_int_return_register = return_classes.len - 1;
         const Regname return_integer_registers[2] = {RAX, RDX};
+        size_t current_float_return_register = return_classes.len - 1;
+        const Regname return_float_registers[2] = {XMM0, XMM1};
         if (return_classes.len > 2) panic(mv_string("Generating foreign adapter for System-V: Expected at most 2 return classes"));
         for (size_t ctr = 0; ctr < return_classes.len; ctr++) {
             size_t i = return_classes.len - (ctr + 1);
             switch (return_classes.data[i]) {
             case SysVInteger: {
-                Regname next_reg = return_integer_registers[current_return_register--];
+                Regname next_reg = return_integer_registers[current_int_return_register--];
                 // Push from registers into memory
                 build_unary_op(Push, reg(next_reg, sz_64), ass,a, point);
                 break;
             }
-            case SysVSSE:
-                panic(mv_string("Not yet implemented: passing arg of class SSE"));
+            case SysVSSE: {
+                Regname next_reg = return_float_registers[current_float_return_register--];
+                // Push from registers into memory
+                build_binary_op(Sub, reg(RSP, sz_64), imm8(8), ass,a, point);
+                build_binary_op(MovSD, rref8(RSP, 0, sz_64), reg(next_reg, sz_64), ass,a, point);
                 break;
+            }
             case SysVSSEUp:
                 panic(mv_string("Not yet implemented: passing arg of class SSE UP"));
                 break;

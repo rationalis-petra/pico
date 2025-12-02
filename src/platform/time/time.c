@@ -1,4 +1,4 @@
-#include "platform/profiling/profiling.h"
+#include "platform/time/time.h"
 #include "platform/machine_info.h"
 
 double time_to_double(PerfTime time, TimeUnit unit) {
@@ -38,6 +38,24 @@ PerfTime time_diff(PerfTime start, PerfTime end) {
 PerfTime query_performance_timer() {
     struct timespec time;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time);
+    return (PerfTime) {
+        .time_sec = time.tv_sec,
+        .time_ns = time.tv_nsec,
+    };
+}
+
+PerfTime query_mono_timer() {
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return (PerfTime) {
+        .time_sec = time.tv_sec,
+        .time_ns = time.tv_nsec,
+    };
+}
+
+PerfTime query_realtime() {
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
     return (PerfTime) {
         .time_sec = time.tv_sec,
         .time_ns = time.tv_nsec,

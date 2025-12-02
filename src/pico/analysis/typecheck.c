@@ -1570,6 +1570,33 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SDescribe: {
+        TypeEntry entry = type_env_lookup(untyped->to_describe.data[0], env);
+        //EnvEntry entry = env_lookup(syn.to_describe.data[0], base);
+        for (size_t i = 1; i < untyped->to_describe.len; i++) {
+            if (entry.type == TENotFound) {
+                err.message = mv_cstr_doc("Unknown symbol in path to describe.", a);
+                throw_pi_error(point, err);
+            }
+
+            if (entry.is_module) {
+                ModuleEntry* mentry = get_def(untyped->to_describe.data[i], entry.module);
+                if (mentry) {
+                    entry.is_module = mentry->is_module;
+                    entry.module = mentry->value;
+                    entry.ptype = &mentry->type;
+                } else {
+                    err.message = mv_cstr_doc("Unknown symbol in path to describe.", a);
+                    throw_pi_error(point, err);
+                }
+            } else {
+                err.message = mv_cstr_doc("Expected module when describing.", a);
+                throw_pi_error(point, err);
+            }
+        }
+        if (entry.type == TENotFound) {
+            err.message = mv_cstr_doc("Unknown symbol in path to describe.", a);
+            throw_pi_error(point, err);
+        }
         untyped->ptype = mk_string_type(ctx.pia);
         break;
     }

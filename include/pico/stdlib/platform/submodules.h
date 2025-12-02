@@ -25,5 +25,7 @@ void add_hedron_module(Assembler* ass, Module* platform, Allocator* a);
 void add_terminal_module(Assembler* ass, Module* platform, Allocator* a);
 void add_filesystem_module(Assembler* ass, Module* platform, Allocator* a);
 void add_window_module(Assembler* ass, Module* platform, Allocator* a);
+void add_time_module(Assembler* ass, Module* platform, Allocator* a);
+void add_time_module(Assembler* ass, Module* platform, Allocator* a);
 
 #endif

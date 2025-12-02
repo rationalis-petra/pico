@@ -338,7 +338,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
         .data = mk_u8_array(0, a),
     };
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Surface",mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Surface"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -347,7 +347,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     surface_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "ShaderModule",mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("ShaderModule"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -356,7 +356,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     shader_module_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Pipeline",mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Pipeline"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -365,9 +365,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     pipeline_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_enum_type(pia, 2,
-                         "vertex", 0,
-                         "instance", 0);
+    typep = mk_enum_type(pia, 3, "vertex", 0, "instance", 0, "uniform", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("InputRate"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -462,7 +460,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     buffer_sort_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Buffer", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Buffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -471,7 +469,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     buffer_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandPool", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -480,7 +478,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     command_pool_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandBuffer", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandBuffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -489,7 +487,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     command_buffer_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Semaphore", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Semaphore"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -498,7 +496,7 @@ void add_hedron_module(Assembler *ass, Module *platform, Allocator *a) {
     semaphore_ty = e->value;
     delete_pi_type_p(typep, pia);
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Fence", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Fence"));
     add_def(module, sym, type, &typep, null_segments, NULL);

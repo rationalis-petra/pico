@@ -55,7 +55,7 @@ typedef struct {
     uint32_t offset; 
 } AttributeDescription;
 
-typedef enum : uint64_t { UniformBuffer } DesciptorType;
+typedef enum : uint64_t { UniformBufferDesc } DesciptorType;
 typedef enum : uint64_t { VertexShader } ShaderType;
 
 typedef struct {
@@ -83,6 +83,7 @@ void destroy_pipeline(HedronPipeline* pipeline);
 typedef enum {
     VertexBuffer = 0,
     IndexBuffer = 1,
+    UniformBuffer = 2,
 } BufferType;
 
 typedef enum {
