@@ -1,10 +1,169 @@
+#include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/memory/arena.h"
 #include "platform/memory/platform.h"
 
 #include "pico/data/client/allocator.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
+#include "pico/stdlib/core.h"
 #include "pico/stdlib/platform/submodules.h"
+#include "pico/codegen/backend-direct/internal.h"
+
+//   Memory Allocators
+// -----------------------------------------------------------------------------
+
+static uint64_t std_current_allocator; 
+static uint64_t std_perm_allocator; 
+static uint64_t std_region_allocator; 
+//static uint64_t std_comptime_allocator; 
+static uint64_t std_temp_allocator; 
+PiAllocator get_std_current_allocator() {
+    PiAllocator** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_current_allocator]; 
+    return *dyn;
+}
+
+PiAllocator set_std_current_allocator(PiAllocator al) {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_current_allocator]; 
+    PiAllocator old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+PiAllocator get_std_perm_allocator() {
+    PiAllocator** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_perm_allocator]; 
+    return *dyn;
+}
+
+PiAllocator set_std_perm_allocator(PiAllocator al) {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_perm_allocator]; 
+    PiAllocator old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+PiAllocator get_std_temp_allocator() {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_temp_allocator]; 
+    return *dyn;
+}
+
+PiAllocator set_std_temp_allocator(PiAllocator al) {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_temp_allocator]; 
+    PiAllocator old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+PiAllocator get_std_region_allocator() {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_region_allocator]; 
+    return *dyn;
+}
+
+PiAllocator set_std_region_allocator(PiAllocator al) {
+    void** data = get_dynamic_memory();
+    PiAllocator* dyn = data[std_region_allocator]; 
+    PiAllocator old = *dyn;
+    *dyn = al;
+    return old;
+}
+
+//   Allocation Functions
+// -----------------------------------------------------------------------------
+
+void* relic_realloc(void* address, uint64_t size) {
+    PiAllocator a = get_std_current_allocator();
+    return call_alloc(size, &a);
+}
+
+void build_realloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // realloc : Proc (Address U64) Address
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+#if ABI == SYSTEM_V_64
+    // realloc (ptr = rdi, size = rsi)
+    // copy size into RDX
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+#elif ABI == WIN_64
+    // realloc (ptr = RCX, size = RDX)
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+#endif
+
+    generate_c_call(relic_realloc, ass, a, point);
+
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+
+    build_nullary_op(Ret, ass, a, point);
+}
+
+void* relic_malloc(uint64_t size) {
+    PiAllocator a = get_std_current_allocator();
+    return call_alloc(size, &a);
+}
+
+void build_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // malloc : Proc (U64) Address
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+#elif ABI == WIN_64
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+#endif
+
+    generate_c_call(relic_malloc, ass, a, point);
+
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+
+    build_nullary_op(Ret, ass, a, point);
+}
+
+void relic_free(void* address) {
+    PiAllocator a = get_std_current_allocator();
+    call_free(address, &a);
+}
+
+void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // free : Proc (Address) Unit
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+#if ABI == SYSTEM_V_64
+    // free (dest = rdi)
+    // copy address into RDI
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+#elif ABI == WIN_64
+    // free (addr = rcx)
+    // copy address into RCX
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+#endif
+
+    generate_c_call(relic_free, ass, a, point);
+
+    build_nullary_op(Ret, ass, a, point);
+}
 
 void build_platform_alloc_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType memblk = mk_struct_ctype(pia, 2,
@@ -16,8 +175,6 @@ void build_platform_alloc_fn(PiType* type, Assembler* ass, PiAllocator* pia, All
                                  memblk);
 
     convert_c_fn(platform_allocate, &fn_ctype, type, ass, a, point); 
-
-    delete_c_type(fn_ctype, pia);
 }
 
 void build_platform_free_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -27,12 +184,13 @@ void build_platform_free_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
     CType fn_ctype = mk_fn_ctype(pia, 1, "block", memblk, (CType){.sort = CSVoid});
 
     convert_c_fn(platform_free, &fn_ctype, type, ass, a, point); 
-
-    delete_c_type(fn_ctype, pia);
 }
 
-void add_memory_module(Assembler *ass, Module *platform, Allocator *a) {
-    PiAllocator pico_allocator = convert_to_pallocator(a);
+void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* default_allocator, Allocator *module_allocator) {
+    Allocator arena = mk_arena_allocator(16384, module_allocator);
+    Allocator* a = &arena;
+
+    PiAllocator pico_allocator = convert_to_pallocator(&arena);
     PiAllocator* pia = &pico_allocator;
 
     Imports imports = (Imports) {
@@ -47,9 +205,8 @@ void add_memory_module(Assembler *ass, Module *platform, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(module_allocator);
     Module* module = mk_module(header, get_package(platform), NULL, pico_module_allocator);
-    delete_module_header(header);
     Symbol sym;
 
     PiType kind;
@@ -72,15 +229,15 @@ void add_memory_module(Assembler *ass, Module *platform, Allocator *a) {
     sym = string_to_symbol(mv_string("MemBlock"));
     add_def(module, sym, kind, &typep, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
+    //  Paged Allocation 
+    // -------------------------------------------------------------------------
     uint32_t flag_val = 1; // ARead
     typep = mk_prim_type(pia, UInt_32);
     kind = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("read"));
     add_def(module, sym, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     flag_val = 2; // AWrite
     typep = mk_prim_type(pia, UInt_32);
@@ -88,7 +245,6 @@ void add_memory_module(Assembler *ass, Module *platform, Allocator *a) {
     sym = string_to_symbol(mv_string("write"));
     add_def(module, sym, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     flag_val = 4; // AExecute
     typep = mk_prim_type(pia, UInt_32);
@@ -96,31 +252,79 @@ void add_memory_module(Assembler *ass, Module *platform, Allocator *a) {
     sym = string_to_symbol(mv_string("execute"));
     add_def(module, sym, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     PiType* memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 2, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_32), memblk);
     build_platform_alloc_fn(typep, ass, pia, a, &point);
-    sym = string_to_symbol(mv_string("allocate"));
+    sym = string_to_symbol(mv_string("paged-allocate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 1, memblk, mk_prim_type(pia, Unit));
     build_platform_free_fn(typep, ass, pia, a, &point);
+    sym = string_to_symbol(mv_string("paged-free"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    //  Allocators
+    // -------------------------------------------------------------------------
+    typep = mk_dynamic_type(pia, get_allocator_type());
+    PiAllocator pico_default_allocator = convert_to_pallocator(default_allocator);
+    std_perm_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator);
+    sym = string_to_symbol(mv_string("perm-allocator"));
+    add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
+
+    std_current_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator); 
+    sym = string_to_symbol(mv_string("current-allocator"));
+    add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
+
+    PiAllocator nul_alloc = (PiAllocator){};
+    std_temp_allocator = mk_dynamic_var(sizeof(PiAllocator), &nul_alloc); 
+
+    typep = mk_dynamic_type(pia, mk_prim_type(pia, Address));
+    sym = string_to_symbol(mv_string("temp-allocator"));
+    add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
+    clear_assembler(ass);
+
+
+    //  Allocation Functions
+    // -------------------------------------------------------------------------
+    // malloc : Proc [U64] Address
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
+    build_malloc_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("malloc"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // realloc : Proc (Address U64) Address
+    typep = mk_proc_type(pia, 2, mk_prim_type(pia, Address),
+                        mk_prim_type(pia, UInt_64),
+                        mk_prim_type(pia, Address));
+    build_realloc_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("realloc"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // realloc : Proc [String] Unit
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
+    build_free_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
+
+    release_arena_allocator(arena);
     Result r = add_module_def(platform, string_to_symbol(mv_string("memory")), module);
     if (r.type == Err) panic(r.error_message);
-    sdelete_u8_array(fn_segments.data);
-    sdelete_u8_array(null_segments.data);
-    sdelete_u8_array(null_segments.code);
 }

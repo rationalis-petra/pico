@@ -1,7 +1,7 @@
 #include <string.h>
 #include "platform/memory/static.h"
 
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"

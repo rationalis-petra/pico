@@ -12,12 +12,28 @@ IStream* get_std_istream();
 OStream* set_std_ostream(OStream* current);
 OStream* get_std_ostream();
 
+// Allocators from the memory module.
+PiAllocator get_std_current_allocator();
+PiAllocator set_std_current_allocator(PiAllocator al);
+
+PiAllocator get_std_perm_allocator();
+PiAllocator set_std_perm_allocator(PiAllocator al);
+
+PiAllocator get_std_temp_allocator();
+PiAllocator set_std_temp_allocator(PiAllocator al);
+
+PiAllocator get_std_comptime_allocator();
+PiAllocator set_std_comptime_allocator(PiAllocator al);
+
+PiAllocator get_std_region_allocator();
+PiAllocator set_std_region_allocator(PiAllocator al);
+
 // Computation
-void add_memory_module(Assembler* ass, Module* platform, Allocator* a);
 // commented out modules are yet to be implemented
 //void add_profiling_module(Assembler* ass, Module* platform, Allocator* a);
 //void add_machine_info_module(Assembler* ass, Module* platform, Allocator* a);
 void add_hedron_module(Assembler* ass, Module* platform, Allocator* a);
+void add_platform_memory_module(Assembler* ass, Module* platform, Allocator* default_allocator, Allocator* a);
 
 // IO (terminal, filesystem)
 // commented out modules are yet to be implemented
@@ -25,7 +41,6 @@ void add_hedron_module(Assembler* ass, Module* platform, Allocator* a);
 void add_terminal_module(Assembler* ass, Module* platform, Allocator* a);
 void add_filesystem_module(Assembler* ass, Module* platform, Allocator* a);
 void add_window_module(Assembler* ass, Module* platform, Allocator* a);
-void add_time_module(Assembler* ass, Module* platform, Allocator* a);
 void add_time_module(Assembler* ass, Module* platform, Allocator* a);
 
 #endif

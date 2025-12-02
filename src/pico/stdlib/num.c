@@ -1,9 +1,8 @@
 #include <inttypes.h>
-#include "platform/memory/std_allocator.h"
 #include "platform/signals.h"
 #include "data/stringify.h"
 
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/num.h"
 #include "pico/codegen/codegen.h"
 

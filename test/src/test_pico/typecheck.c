@@ -3,7 +3,7 @@
 #include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/binding/environment.h"
 
 #include "test_pico/helper.h"
@@ -21,12 +21,13 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(3, a),
+        .clauses = mk_import_clause_array(8, a),
     };
     add_import_all(&imports.clauses, a, 1, "core");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,

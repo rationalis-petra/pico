@@ -24,6 +24,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 2, "abs", "numeric");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
+    add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,

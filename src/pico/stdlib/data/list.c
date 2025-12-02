@@ -15,6 +15,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 2, "meta", "gen");
+    add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,

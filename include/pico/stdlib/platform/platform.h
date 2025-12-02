@@ -3,6 +3,6 @@
 
 #include "pico/values/modular.h"
 
-void add_platform_module(Assembler* ass, Package* base, Allocator* a);
+void add_platform_module(Assembler* ass, Package* base, Allocator* default_allocator, Allocator* a);
 
 #endif

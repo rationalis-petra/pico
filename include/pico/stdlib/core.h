@@ -9,6 +9,7 @@ PiType* get_maybe_type();
 PiType* get_pair_type();
 PiType* get_either_type();
 
+PiType* get_allocator_vtable_type();
 PiType* get_allocator_type();
 
 void add_core_module(Assembler* ass, Package* base, Allocator* a);

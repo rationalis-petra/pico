@@ -30,14 +30,16 @@ Package* base_package(Assembler* ass, Allocator* a, Allocator* default_allocator
     add_debug_module(target, base, a);
 
     // Extra happens AFTER meta, as extra has `loop` - a macro!
-    add_extra_module(ass, base, default_allocator, a);
+    add_extra_module(ass, base, a);
 
-    // abs and data happen after extra, as they rely on allocators present in 'extra'  
+    add_platform_module(ass, base, default_allocator, a);
+
+    // abs and data happen after platform, as they depend on allocators present
+    // in 'platform.memory'
     add_data_module(target, base, a);
     add_abs_module(target, base, a);
     add_foreign_module(ass, base, a);
 
-    add_platform_module(ass, base, a);
 
     add_user_module(base, a);
 

@@ -6,7 +6,7 @@
 
 #include "pico/data/error.h"
 #include "pico/values/values.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"

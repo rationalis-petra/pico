@@ -37,6 +37,11 @@ PiType* get_allocator_type() {
     return allocator_type;
 }
 
+static PiType* allocator_vtable_type;
+PiType* get_allocator_vtable_type() {
+    return allocator_vtable_type;
+}
+
 PiType build_store_fn_ty(PiAllocator* pia) {
     PiType* proc_ty  = mk_proc_type(pia, 2, mk_prim_type(pia, Address), mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
 
@@ -511,25 +516,25 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
                          mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")),
                          mk_prim_type(&pia, Address),
                          mk_prim_type(&pia, Address));
-        type_val = mk_named_type(&pia, "AllocTable",
+        type_val = mk_named_type(&pia, "AllocVTable",
                                  mk_type_family(&pia, vars,
                                                 mk_struct_type(&pia, 3,
                                                                "alloc", alloc_fn_type,
                                                                "realloc", realloc_fn_type,
                                                                "free", free_fn_type)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("AllocTable"));
+        sym = string_to_symbol(mv_string("AllocVTable"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
         delete_pi_type_p(type_val, &pia);
         e = get_def(sym, module);
-        PiType* vtable_type = e->value;
+        allocator_vtable_type = e->value;
 
         // Allocator Type
         type_val = mk_named_type(&pia, "Allocator", mk_sealed_type(&pia,
                                                                 1, "A", 0,
                                                                 
                                                       mk_struct_type(&pia, 2,
-                                                                     "vtable", mk_app_type(&pia, ptr_type, mk_app_type(&pia, vtable_type, mk_var_type(&pia, "A"))),
+                                                                     "vtable", mk_app_type(&pia, ptr_type, mk_app_type(&pia, allocator_vtable_type, mk_var_type(&pia, "A"))),
                                                                      "context", mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")))));
         type.kind.nargs = 0;
         type_data = type_val;

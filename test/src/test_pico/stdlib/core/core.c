@@ -2,7 +2,7 @@
 #include "platform/memory/static.h"
 
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
