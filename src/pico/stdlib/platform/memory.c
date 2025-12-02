@@ -165,6 +165,35 @@ void build_free_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(Ret, ass, a, point);
 }
 
+void* relic_temp_malloc(uint64_t size) {
+    PiAllocator a = get_std_temp_allocator();
+    return call_alloc(size, &a);
+}
+
+void build_temp_malloc_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    // malloc : Proc (U64) Address
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+
+#if ABI == SYSTEM_V_64
+    // memcpy (dest = rdi, src = rsi, size = rdx)
+    // copy size into RDX
+    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+
+#elif ABI == WIN_64
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+#endif
+
+    generate_c_call(relic_temp_malloc, ass, a, point);
+
+    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+
+    build_nullary_op(Ret, ass, a, point);
+}
+
 void build_platform_alloc_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType memblk = mk_struct_ctype(pia, 2,
                                    "data", mk_voidptr_ctype(pia),
@@ -323,6 +352,14 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
+    // malloc : Proc [U64] Address
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
+    build_temp_malloc_fn(ass, a, &point);
+    sym = string_to_symbol(mv_string("temp-malloc"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     release_arena_allocator(arena);
     Result r = add_module_def(platform, string_to_symbol(mv_string("memory")), module);
