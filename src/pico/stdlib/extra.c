@@ -4,7 +4,6 @@
 #include "platform/machine_info.h"
 #include "platform/signals.h"
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 
 #include "pico/data/client/allocator.h"
 #include "pico/stdlib/core.h"
@@ -569,22 +568,21 @@ void build_ann_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator*
     convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
 }
 
-void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
+void add_extra_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("extra")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pico_module_allocator);
-    delete_module_header(header);
+    Module* module = mk_module(header, base, NULL, *module_allocator);
 
     PiType* typep;
     Symbol sym;
@@ -593,23 +591,16 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
         panic(point.error_message);
     }
 
-    Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
-    };
-
-    Allocator arena = mk_arena_allocator(4096, a);
-    a = &arena;
-    PiAllocator pico_arena = convert_to_pallocator(&arena);
-    PiAllocator* pia = &pico_arena;
+    PiAllocator pico_region = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_region;
     
     // C Wrappers!
-    Segments fn_segments = {.data = mk_u8_array(0, a),};
+    Segments fn_segments = {.data = mk_u8_array(0, &ra),};
     Segments prepped;
 
     // exit : Proc [] Unit
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
-    build_exit_fn(ass, a, &point);
+    build_exit_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("exit"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -618,7 +609,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
 
     // panic : All [A] Proc [String] A
     typep = build_panic_fn_ty(pia);
-    build_panic_fn(ass, a, &point);
+    build_panic_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("panic"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -630,7 +621,7 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
 
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax
     typep = mk_prim_type(pia, TMacro);
-    build_loop_macro(macro_proc, ass, pia, a, &point);
+    build_loop_macro(macro_proc, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("loop"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -638,17 +629,13 @@ void add_extra_module(Assembler* ass, Package* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_prim_type(pia, TMacro);
-    build_ann_macro(macro_proc, ass, pia, a, &point);
+    build_ann_macro(macro_proc, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("ann"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    add_module(string_to_symbol(mv_string("extra")), module, base);
-
-    sdelete_u8_array(null_segments.code);
-    sdelete_u8_array(null_segments.data);
-    sdelete_u8_array(fn_segments.data);
-    release_arena_allocator(arena);
+    Result r =add_module(string_to_symbol(mv_string("extra")), module, base);
+    if (r.type == Err) panic(r.error_message);
 }

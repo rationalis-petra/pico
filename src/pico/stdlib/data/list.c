@@ -1,34 +1,30 @@
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/submodules.h"
 
-void add_list_module(Target target, Module *data, Allocator *alloc) {
-    Allocator arena = mk_arena_allocator(16384, alloc);
-    Allocator* a = &arena;
+void add_list_module(Target target, Module *data, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, a),
+        .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
-    add_import_all(&imports.clauses, a, 2, "meta", "gen");
-    add_import_all(&imports.clauses, a, 2, "platform", "memory");
+    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 1, "extra");
+    add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
+    add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("list")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(alloc);
-    Module* module = mk_module(header, get_package(data), NULL, pico_module_allocator);
-    reset_arena_allocator(arena);
+    Module* module = mk_module(header, get_package(data), NULL, *module_allocator);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -49,7 +45,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  [.len U64]\n"
         "  [.capacity U64]\n"
         "  [.gpa Allocator])\n";
-    compile_toplevel(mk_list_type, module, target, &point, &pi_point, a);
+    compile_toplevel(mk_list_type, module, target, &point, &pi_point, region);
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
@@ -59,19 +55,19 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    [.capacity capacity]\n"
         "    [.len len]\n"
         "    [.data (malloc (u64.* (size-of A) capacity))]))";
-    compile_toplevel(mk_list_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(mk_list_fn, module, target, &point, &pi_point, region);
     
     // TODO (BUG): use list allocator
     const char *mk_free_fn = 
         "(def free-list all [A] proc [(list (List A))]\n"
         "  (free list.data))";
-    compile_toplevel(mk_free_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(mk_free_fn, module, target, &point, &pi_point, region);
 
     const char *elt_fn =
         "(def elt all [A] proc [idx (arr (List A))]\n"
         "  (load {A} (num-to-address (u64.+ (u64.* idx (size-of A))\n"
         "                                   (address-to-num arr.data)))))";
-    compile_toplevel(elt_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(elt_fn, module, target, &point, &pi_point, region);
 
     const char *eset_fn = 
         "(def eset all [A] proc [idx (val A) (arr (List A))]\n"
@@ -79,13 +75,13 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    (num-to-address (u64.+ (u64.* idx (size-of A))\n"
         "                           (address-to-num arr.data)))\n"
         "    val))";
-    compile_toplevel(eset_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(eset_fn, module, target, &point, &pi_point, region);
 
     const char *each_fn =
         "(def each all [A] proc [(fn (Proc [A] Unit)) (lst (List A))]\n"
         "  (loop [for i from 0 below lst.len]\n"
         "    (seq (fn (elt i lst)) :unit)))";
-    compile_toplevel(each_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(each_fn, module, target, &point, &pi_point, region);
 
     const char *map_fn =
         "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
@@ -93,7 +89,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    (loop [for i from 0 below lst.len]\n"
         "      (eset i (fn (elt i lst)) new-list))\n"
         "      new-list)))";
-    compile_toplevel(map_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(map_fn, module, target, &point, &pi_point, region);
 
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
@@ -138,7 +134,7 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "  (eset (u64.+ 1 terms.len) local-sym new-terms)\n"
         "  \n"
         "  (:right (Syntax:node ar :special new-terms)))\n";
-    compile_toplevel(list_macro, module, target, &point, &pi_point, a);
+    compile_toplevel(list_macro, module, target, &point, &pi_point, region);
 
     // Imperative Interface
     const char *list_push_fn =
@@ -147,16 +143,15 @@ void add_list_module(Target target, Module *data, Allocator *alloc) {
         "    (if (u64.< lst.len lst.capacity)\n"
         "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented\")))";
-    compile_toplevel(list_push_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
 
     const char *list_pop_fn =
         "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
         "  [let! old (use lst)]\n"
         "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
         "  (elt (u64.- old.len 1) old))\n";
-    compile_toplevel(list_pop_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(list_pop_fn, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
     if (r.type == Err) panic(r.error_message);
-    release_arena_allocator(arena);
 }

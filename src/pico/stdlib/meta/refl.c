@@ -1,11 +1,9 @@
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 
 #include "pico/values/modular.h"
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/submodules.h"
 
@@ -126,22 +124,21 @@ void build_run_script_fun(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
 }
 
 
-void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
+void add_refl_module(Assembler* ass, Module* base,  PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("refl")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, get_package(base), NULL, pico_module_allocator);
-    delete_module_header(header);
+    Module* module = mk_module(header, get_package(base), NULL, *module_allocator);
     Symbol sym;
 
     PiType type;
@@ -152,14 +149,12 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
     }
 
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
     // Now that we have setup appropriately, override the allocator
-    Allocator arena = mk_arena_allocator(16384, a);
-    a = &arena;
-    PiAllocator pia = convert_to_pallocator(&arena);
+    PiAllocator pia = convert_to_pallocator(&ra);
 
     // ------------------------------------------------------------------------
     // Types 
@@ -194,13 +189,13 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
     sym = string_to_symbol(mv_string("current-package"));
     add_def(module, sym, *typep, &std_current_module, null_segments, NULL);
 
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
     Segments prepped;    // load-module : Proc [String] Unit
     typep = mk_proc_type(&pia, 2,
                          mk_string_type(&pia),
                          mk_app_type(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
-    build_load_module_fun(typep, ass, &pia, a, &point);
+    build_load_module_fun(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("load-module"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -212,7 +207,7 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
                          mk_string_type(&pia),
                          mk_app_type(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
-    build_run_script_fun(typep, ass, &pia, a, &point);
+    build_run_script_fun(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("run-script"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -220,11 +215,4 @@ void add_refl_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     add_module_def(base, string_to_symbol(mv_string("refl")), module);
-
-    sdelete_u8_array(null_segments.code);
-    sdelete_u8_array(null_segments.data);
-    // Note: we do NOT delete the 'fn_segments.code' because it is the
-    // assembler, and needs to be used later!
-    sdelete_u8_array(fn_segments.data);
-    release_arena_allocator(arena);
 }

@@ -44,27 +44,37 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     delete_module_header(header);
 
     if (suite_start(log, mv_string("literals"))) {
-        run_pico_eval_literals_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_literals_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("proc"))) {
-        run_pico_eval_proc_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_proc_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("polymorphic"))) {
-        run_pico_eval_polymorphic_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_polymorphic_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("modular"))) {
-        run_pico_eval_modular_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_modular_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("foreign-adapter"))) {
-        run_pico_eval_foreign_adapter_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_foreign_adapter_tests(log, module, env, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 

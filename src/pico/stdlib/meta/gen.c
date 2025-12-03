@@ -140,21 +140,21 @@ void build_get_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocato
     convert_c_fn(get_range, &fn_ctype, type, ass, a, point); 
 }
 
-void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
+void add_gen_module(Assembler* ass, Module* base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("gen")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, get_package(base), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(base), NULL, *module_allocator);
     delete_module_header(header);
     Symbol sym;
 
@@ -173,14 +173,12 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     type.prim = TFormer;
 
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
     // Now that we have setup appropriately, override the allocator
-    Allocator arena = mk_arena_allocator(4096, a);
-    a = &arena;
-    PiAllocator pia = convert_to_pallocator(a);
+    PiAllocator pia = convert_to_pallocator(&ra);
 
     // ------------------------------------------------------------------------
     // Term Formers
@@ -283,11 +281,11 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
         .kind.nargs = 0,
     };
 
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
     Segments prepped;
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), mk_prim_type(&pia, UInt_64));
-    build_mk_name_fn(typep, ass, &pia, a, &point);
+    build_mk_name_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("mk-name"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -295,7 +293,7 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
-    build_mk_symbol_fn(typep, ass, &pia, a, &point);
+    build_mk_symbol_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("mk-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -303,7 +301,7 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
-    build_mk_unique_symbol_fn(typep, ass, &pia, a, &point);
+    build_mk_unique_symbol_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("mk-unique-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -311,7 +309,7 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
-    build_mk_unique_symbol_fn(typep, ass, &pia, a, &point);
+    build_mk_unique_symbol_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("mk-unique-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -319,7 +317,7 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 2, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, UInt_64), copy_pi_type_p(range_type, &pia));
-    build_range_fn(typep, ass, &pia, a, &point);
+    build_range_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -327,7 +325,7 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, get_syntax_type(), copy_pi_type_p(range_type, &pia));
-    build_get_range_fn(typep, ass, &pia, a, &point);
+    build_get_range_fn(typep, ass, &pia, &ra, &point);
     sym = string_to_symbol(mv_string("get-range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -341,5 +339,4 @@ void add_gen_module(Assembler* ass, Module* base, Allocator* a) {
     // Note: we do NOT delete the 'fn_segments.code' because it is the
     // assembler, and needs to be used later!
     sdelete_u8_array(fn_segments.data);
-    release_arena_allocator(arena);
 }

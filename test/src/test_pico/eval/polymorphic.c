@@ -1,4 +1,3 @@
-#include <string.h>
 #include "platform/memory/static.h"
 
 #include "pico/stdlib/platform/submodules.h"
@@ -6,19 +5,20 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &ra)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
-void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
 
     };
+    Allocator ra = ra_to_gpa(region);
 
     // -------------------------------------------------------------------------
     //
@@ -364,7 +364,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    void* mem = mem_alloc(128, a);
+    void* mem = mem_alloc(128, &ra);
     PiAllocator old = get_std_current_allocator();
     void* start;
     {
@@ -384,5 +384,4 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     }
 
     set_std_current_allocator(old);
-    mem_free(mem, a);
 }

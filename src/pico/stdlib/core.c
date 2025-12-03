@@ -176,22 +176,21 @@ void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(Ret, ass, a, point);
 }
 
-void add_core_module(Assembler* ass, Package* base, Allocator* a) {
+void add_core_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("core")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pico_module_allocator);
-    delete_module_header(header);
+    Module* module = mk_module(header, base, NULL, *module_allocator);
     Symbol sym;
 
     PiType type;
@@ -199,8 +198,7 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     PiType type_val;
     PiType* type_data = &type_val;
     ErrorPoint point;
-    Allocator arena = mk_arena_allocator(16384, a);
-    PiAllocator pia = convert_to_pallocator(&arena);
+    PiAllocator pia = convert_to_pallocator(&ra);
     if (catch_error(point)) {
         panic(point.error_message);
     }
@@ -211,8 +209,8 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
     type.prim = TFormer;
 
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
     // ------------------------------------------------------------------------
@@ -493,7 +491,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("Ptr"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         ptr_type = e->value;
@@ -525,7 +522,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("AllocVTable"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
         e = get_def(sym, module);
         allocator_vtable_type = e->value;
 
@@ -540,7 +536,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("Allocator"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         allocator_type = e->value;
@@ -562,7 +557,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         list_type = e->value;
@@ -579,7 +573,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("Maybe"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         maybe_type = e->value;
@@ -598,7 +591,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("Either"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         either_type = e->value;
@@ -617,7 +609,6 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("Pair"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        delete_pi_type_p(type_val, &pia);
 
         e = get_def(sym, module);
         pair_type = e->value;
@@ -625,52 +616,42 @@ void add_core_module(Assembler* ass, Package* base, Allocator* a) {
 
     // Unit value
 
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a),};
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
     Segments prepped;
 
     type = build_store_fn_ty(&pia);
-    build_store_fn(ass, a, &point);
+    build_store_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("store"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, &pia);
 
     type = build_load_fn_ty(&pia);
-    build_load_fn(ass, a, &point);
+    build_load_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("load"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type(type, &pia);
 
     typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, Address), mk_prim_type(&pia, UInt_64));
-    build_nop_fn(ass, a, &point);
+    build_nop_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("address-to-num"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, &pia);
 
     typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, Address));
-    build_nop_fn(ass, a, &point);
+    build_nop_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("num-to-address"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, &pia);
 
-    add_module(string_to_symbol(mv_string("core")), module, base);
-
-    sdelete_u8_array(null_segments.code);
-    sdelete_u8_array(null_segments.data);
-    // Note: we do NOT delete the 'fn_segments.code' because it is the
-    // assembler, and needs to be used later!
-    sdelete_u8_array(fn_segments.data);
-    release_arena_allocator(arena);
+    Result r = add_module(string_to_symbol(mv_string("core")), module, base);
+    if (r.type == Err) panic(r.error_message);
 }
 

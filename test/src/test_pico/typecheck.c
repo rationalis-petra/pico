@@ -10,7 +10,7 @@
 #include "test_pico/typecheck.h"
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
-#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, log, a)
+#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
@@ -54,7 +54,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
 
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
     };

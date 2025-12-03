@@ -3,16 +3,17 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &ra)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 
-void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
     };
+    Allocator ra = ra_to_gpa(region);
 
     if (test_start(log, mv_string("simple-def"))) {
         int64_t expected = 197823;

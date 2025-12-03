@@ -1,6 +1,4 @@
 #include "platform/signals.h"
-#include "platform/memory/executable.h"
-#include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/meta/meta.h"

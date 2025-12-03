@@ -114,22 +114,21 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
 
 }
 
-void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
+void add_foreign_module(Assembler* ass, Package *base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("extra")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pico_module_allocator);
-    delete_module_header(header);
+    Module* module = mk_module(header, base, NULL, *module_allocator);
 
     PiType type;
     PiType* typep;
@@ -140,15 +139,13 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     }
 
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
     // Now that we have setup appropriately, override the allocator
-    Allocator arena = mk_arena_allocator(16384, a);
-    a = &arena;
-    PiAllocator pico_allocator = convert_to_pallocator(&arena);
-    PiAllocator* pia = &pico_allocator;
+    PiAllocator pico_region = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_region;
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
     TermFormer former = FReinterpretRelic;
@@ -222,7 +219,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
         exported_c_type = e->value;
     }
 
-    Segments fn_segments = {.data = mk_u8_array(0, a),};
+    Segments fn_segments = {.data = mk_u8_array(0, &ra),};
     Segments prepped;
     PiType* type_data;
 
@@ -237,7 +234,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
 
     PiType* str = mk_string_type(pia);
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_app_type(pia, get_either_type(), str, copy_pi_type_p(dynlib_ty, pia)));
-    build_dynlib_open_fn(typep, ass, pia, a, &point);
+    build_dynlib_open_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -245,7 +242,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(dynlib_ty, pia), mk_prim_type(pia, Unit));
-    build_dynlib_close_fn(typep, ass, pia, a, &point);
+    build_dynlib_close_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("dynlib-close"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -255,7 +252,7 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     str = mk_string_type(pia);
     typep = mk_proc_type(pia, 2, dynlib_ty, mk_string_type(pia),
                          mk_app_type(pia, get_either_type(), str, mk_prim_type(pia, Address)));
-    build_dynlib_symbol_fn(typep, ass, pia, a, &point);
+    build_dynlib_symbol_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("dynlib-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -342,10 +339,6 @@ void add_foreign_module(Assembler* ass, Package *base, Allocator* a) {
     c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
     add_def(module, sym, *typep, cdata, null_segments, NULL);
 
-    add_module(string_to_symbol(mv_string("foreign")), module, base);
-    sdelete_u8_array(null_segments.code);
-    sdelete_u8_array(null_segments.data);
-
-    sdelete_u8_array(fn_segments.data);
-    release_arena_allocator(arena);
+    Result r = add_module(string_to_symbol(mv_string("foreign")), module, base);
+    if (r.type == Err) panic(r.error_message);
 }

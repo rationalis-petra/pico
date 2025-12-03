@@ -154,7 +154,7 @@ void fail_error(String err, TestLog* log) {
 }
 
 void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
-    ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
     display_error(err, cin, get_fstream(log), NULL, &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
@@ -165,7 +165,7 @@ void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
 void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
     Allocator* std = get_std_allocator();
     if (!pi_value_eql(type, val, data, std)) {
-        ArenaAllocator* arena = mk_arena_allocator(4096, std);
+        ArenaAllocator* arena = make_arena_allocator(4096, std);
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
@@ -186,7 +186,7 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
 void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
     Allocator* std = get_std_allocator();
     if (!pi_value_eql(type, val, data, std)) {
-        ArenaAllocator* arena = mk_arena_allocator(4096, std);
+        ArenaAllocator* arena = make_arena_allocator(4096, std);
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
@@ -249,7 +249,7 @@ void expr_stdout(PiType* type, void* val, void* data, TestLog* log) {
         test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
         test_fail(log);
     } else {
-        ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+        ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
         Allocator gpa = aa_to_gpa(arena);
         StdoutData vals = *(StdoutData*)data;
         String actual = *current_string(vals.stream, &gpa);
@@ -273,7 +273,7 @@ void expr_assert_stdout(PiType* type, void* val, void* data, TestLog* log) {
         test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
         test_fail(log);
     } else {
-        ArenaAllocator* arena = mk_arena_allocator(512, get_std_allocator());
+        ArenaAllocator* arena = make_arena_allocator(512, get_std_allocator());
         Allocator gpa = aa_to_gpa(arena);
         StdoutData vals = *(StdoutData*)data;
         String actual = *current_string(vals.stream, &gpa);
@@ -357,7 +357,7 @@ void expr_mem(PiType* type, void* val, void* data, TestLog* log) {
         test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
         test_fail(log);
     } else {
-        ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+        ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
         Allocator gpa = aa_to_gpa(arena);
         MemData vals = *(MemData*)data;
         if (memcmp(vals.actual, vals.expected, vals.memsize) != 0) {
@@ -380,7 +380,7 @@ void assert_expr_mem(PiType* type, void* val, void* data, TestLog* log) {
         test_log_error(log, mv_string("stdout tests expecte expressions to have unit type"));
         test_fail(log);
     } else {
-        ArenaAllocator* arena = mk_arena_allocator(1024, get_std_allocator());
+        ArenaAllocator* arena = make_arena_allocator(1024, get_std_allocator());
         Allocator gpa = aa_to_gpa(arena);
         MemData vals = *(MemData*)data;
         if (memcmp(vals.actual, vals.expected, vals.memsize) != 0) {
@@ -466,7 +466,7 @@ void log_error(String err, TestLog* log) {
 
 void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
     // TODO: improve the test log error to take in a document 
-    ArenaAllocator* arena = mk_arena_allocator(256, get_std_allocator());
+    ArenaAllocator* arena = make_arena_allocator(256, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
     display_error(err, cin, get_fstream(log), NULL, &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
@@ -597,7 +597,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 void type_eql(PiType* type, void* data, TestLog* log) {
     Allocator* std = get_std_allocator();
     if (!pi_type_eql(type, data, std)) {
-        ArenaAllocator* arena = mk_arena_allocator(4096, std);
+        ArenaAllocator* arena = make_arena_allocator(4096, std);
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);

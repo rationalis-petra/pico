@@ -19,12 +19,14 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Allocator c_allocator = convert_to_callocator(&pia);
     Allocator* a = &c_allocator;
     
-    Allocator arena = mk_arena_allocator(16384, a);
-    Allocator iter_arena = mk_arena_allocator(16384, a);
+    ArenaAllocator* arena = mk_arena_allocator(16384, a);
+    ArenaAllocator* iter_arena = mk_arena_allocator(16384, a);
+    Allocator aa = aa_to_gpa(arena);
+    Allocator ia = aa_to_gpa(iter_arena);
     Allocator exec = mk_executable_allocator(a);
 
-    PiAllocator pico_arena = convert_to_pallocator(&arena);
-    PiAllocator pico_iter_arena = convert_to_pallocator(&iter_arena);
+    PiAllocator pico_arena = convert_to_pallocator(&aa);
+    PiAllocator pico_iter_arena = convert_to_pallocator(&ia);
 
     Target target = (Target) {
         .target = mk_assembler(current_cpu_feature_flags(), &exec),
@@ -37,7 +39,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Module* volatile module = NULL;
     Module* volatile old_module = NULL;
 
-    IStream* cin = mk_capturing_istream(in, &arena);
+    IStream* cin = mk_capturing_istream(in, &aa);
     reset_bytecount(cin);
 
     // Step 2:
@@ -49,7 +51,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     if (catch_error(pi_point)) goto on_pi_error;
 
     // Step 3: Parse Module header, get the result (ph_res)
-    ParseResult ph_res = parse_rawtree(cin, &pico_arena, &arena);
+    ParseResult ph_res = parse_rawtree(cin, &pico_arena, &aa);
     if (ph_res.type == ParseNone) goto on_noparse;
 
     if (ph_res.type == ParseFail) {
@@ -64,7 +66,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     // Step 3: check / abstract module header
     // • module_header header = parse_module_header
     // Note: volatile is to protect from clobbering by longjmp
-    header = abstract_header(ph_res.result, &arena, &pi_point);
+    header = abstract_header(ph_res.result, &aa, &pi_point);
 
     // Step 4:
     //  • Create new module
@@ -83,12 +85,12 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
-    Environment* env = env_from_module(module, &point, &arena);
+    Environment* env = env_from_module(module, &point, &aa);
     while (next_iter) {
         reset_arena_allocator(iter_arena);
-        refresh_env(env, &iter_arena);
+        refresh_env(env, &ia);
 
-        ParseResult res = parse_rawtree(cin, &pico_iter_arena, &iter_arena);
+        ParseResult res = parse_rawtree(cin, &pico_iter_arena, &ia);
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
@@ -110,7 +112,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &iter_arena, &pi_point);
+        TopLevel abs = abstract(res.result, env, &ia, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -119,7 +121,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &iter_arena, .pia = &pico_arena, .point = &pi_point, .target = target
+            .a = &ia, .pia = &pico_arena, .point = &pi_point, .target = target
         };
         type_check(&abs, env, ctx);
 
@@ -129,13 +131,13 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
 
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
-        LinkData links = generate_toplevel(abs, env, target, &iter_arena, &point);
+        LinkData links = generate_toplevel(abs, env, target, &ia, &point);
 
         // -------------------------------------------------------------------------
         // Evaluation
         // -------------------------------------------------------------------------
 
-        pico_run_toplevel(abs, target, links, module, &iter_arena, &point);
+        pico_run_toplevel(abs, target, links, module, &ia, &point);
     }
     return;
 
@@ -146,8 +148,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
  cleanup:
     if (old_module) set_std_current_module(old_module);
     uncapture_istream(cin);
-    release_arena_allocator(arena);
-    release_arena_allocator(iter_arena);
+    delete_arena_allocator(arena);
+    delete_arena_allocator(iter_arena);
     release_executable_allocator(exec);
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
@@ -164,8 +166,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     
  on_error_generic:
     if (old_module) set_std_current_module(old_module);
-    release_arena_allocator(arena);
-    release_arena_allocator(iter_arena);
+    delete_arena_allocator(arena);
+    delete_arena_allocator(iter_arena);
     release_executable_allocator(exec);
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
@@ -174,8 +176,9 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
 
 
 void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, Allocator* a) {
-    Allocator arena = mk_arena_allocator(16384, a);
-    PiAllocator pico_arena = convert_to_pallocator(&arena);
+    ArenaAllocator* arena = mk_arena_allocator(16384, a);
+    Allocator aa = aa_to_gpa(arena);
+    PiAllocator pico_arena = convert_to_pallocator(&aa);
     Allocator exec = mk_executable_allocator(a);
 
     Target target = (Target) {
@@ -202,9 +205,9 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         target.data_aux->len = 0;
 
         reset_arena_allocator(arena);
-        Environment* env = env_from_module(current, &point, &arena);
+        Environment* env = env_from_module(current, &point, &aa);
 
-        ParseResult res = parse_rawtree(cin, &pico_arena, &arena);
+        ParseResult res = parse_rawtree(cin, &pico_arena, &aa);
         if (res.type == ParseNone) goto on_exit;
 
         if (res.type == ParseFail) {
@@ -213,12 +216,12 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
                 .error = res.error,
             };
             display_error(multi, cin, serr, filename, a);
-            release_arena_allocator(arena);
+            delete_arena_allocator(arena);
             return;
         }
         if (res.type != ParseSuccess) {
             write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
-            release_arena_allocator(arena);
+            delete_arena_allocator(arena);
             return;
         }
 
@@ -226,7 +229,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &arena, &pi_point);
+        TopLevel abs = abstract(res.result, env, &aa, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -235,7 +238,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &arena, .pia = &pico_arena, .point = &pi_point, .target = target
+            .a = &aa, .pia = &pico_arena, .point = &pi_point, .target = target
         };
         type_check(&abs, env, ctx);
 
@@ -245,13 +248,13 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
 
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
-        LinkData links = generate_toplevel(abs, env, target, &arena, &point);
+        LinkData links = generate_toplevel(abs, env, target, &aa, &point);
 
         // -------------------------------------------------------------------------
         // Evaluation
         // -------------------------------------------------------------------------
 
-        pico_run_toplevel(abs, target, links, current, &arena, &point);
+        pico_run_toplevel(abs, target, links, current, &aa, &point);
     }
 
  on_exit:
@@ -260,12 +263,12 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
     uncapture_istream(cin);
-    release_arena_allocator(arena);
+    delete_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, serr, filename, &arena);
+    display_error(pi_point.multi, cin, serr, filename, &aa);
     goto on_error_generic;
 
  on_error:
@@ -279,7 +282,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
     sdelete_u8_array(*target.data_aux);
     mem_free(target.data_aux, a);
     uncapture_istream(cin);
-    release_arena_allocator(arena);
+    delete_arena_allocator(arena);
     release_executable_allocator(exec);
     return;
 }

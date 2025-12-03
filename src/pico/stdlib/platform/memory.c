@@ -215,27 +215,24 @@ void build_platform_free_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
     convert_c_fn(platform_free, &fn_ctype, type, ass, a, point); 
 }
 
-void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* default_allocator, Allocator *module_allocator) {
-    Allocator arena = mk_arena_allocator(16384, module_allocator);
-    Allocator* a = &arena;
-
-    PiAllocator pico_allocator = convert_to_pallocator(&arena);
-    PiAllocator* pia = &pico_allocator;
+void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* default_allocator, PiAllocator *module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_region = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_region;
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("memory")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(module_allocator);
-    Module* module = mk_module(header, get_package(platform), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
     Symbol sym;
 
     PiType kind;
@@ -246,10 +243,10 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     }
 
     Segments prepped;
-    Segments fn_segments = {.data = mk_u8_array(0, a),};
+    Segments fn_segments = {.data = mk_u8_array(0, &ra),};
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
     
@@ -284,7 +281,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     PiType* memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 2, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_32), memblk);
-    build_platform_alloc_fn(typep, ass, pia, a, &point);
+    build_platform_alloc_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("paged-allocate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -293,7 +290,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 1, memblk, mk_prim_type(pia, Unit));
-    build_platform_free_fn(typep, ass, pia, a, &point);
+    build_platform_free_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("paged-free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -325,7 +322,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     // -------------------------------------------------------------------------
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
-    build_malloc_fn(ass, a, &point);
+    build_malloc_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("malloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -336,7 +333,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     typep = mk_proc_type(pia, 2, mk_prim_type(pia, Address),
                         mk_prim_type(pia, UInt_64),
                         mk_prim_type(pia, Address));
-    build_realloc_fn(ass, a, &point);
+    build_realloc_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("realloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -345,7 +342,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     // realloc : Proc [String] Unit
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
-    build_free_fn(ass, a, &point);
+    build_free_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -354,14 +351,13 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
-    build_temp_malloc_fn(ass, a, &point);
+    build_temp_malloc_fn(ass, &ra, &point);
     sym = string_to_symbol(mv_string("temp-malloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    release_arena_allocator(arena);
     Result r = add_module_def(platform, string_to_symbol(mv_string("memory")), module);
     if (r.type == Err) panic(r.error_message);
 }

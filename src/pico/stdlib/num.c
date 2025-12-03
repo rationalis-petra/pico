@@ -195,8 +195,6 @@ void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator
     CType c_type = mk_fn_ctype(pia, 1, "num", argty, mk_string_ctype(pia));
 
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
-
-    delete_c_type(c_type, pia);
 }
 
 void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
@@ -217,7 +215,6 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     };
     PiAllocator pico_module_allocator = convert_to_pallocator(a);
     Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
-    delete_module_header(header);
     Symbol sym;
 
     PiType* typep;
@@ -270,7 +267,6 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, Bool);
@@ -314,7 +310,6 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
     build_to_string_fn(typep, prim, ass, pia, a, &point);
@@ -323,9 +318,6 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    delete_pi_type_p(typep, pia);
-    sdelete_u8_array(fn_segments.data);
 
     Result r = add_module_def(num, string_to_symbol(name), module);
     if (r.type == Err) panic(r.error_message);
@@ -349,7 +341,6 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     };
     PiAllocator pico_module_allocator = convert_to_pallocator(a);
     Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
-    delete_module_header(header);
     Symbol sym;
 
     PiType* typep;
@@ -376,7 +367,6 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     typep = mk_unop_type(pia, Bool, Bool);
     build_not_fn(ass, a, &point);
@@ -385,9 +375,6 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
-
-    sdelete_u8_array(fn_segments.data);
 
     Result r = add_module_def(num, string_to_symbol(mv_string("bool")), module);
     if (r.type == Err) panic(r.error_message);
@@ -411,7 +398,6 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     };
     PiAllocator pico_module_allocator = convert_to_pallocator(a);
     Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
-    delete_module_header(header);
     Symbol sym;
 
     PiType* typep;
@@ -431,7 +417,6 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     BinaryOp add_op = prim == Float_64 ? AddSD : AddSS;
     BinaryOp sub_op = prim == Float_64 ? SubSD : SubSS;
@@ -468,45 +453,42 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    delete_pi_type_p(typep, pia);
-
-    sdelete_u8_array(fn_segments.data);
-
     Result r = add_module_def(num, string_to_symbol(name), module);
     if (r.type == Err) panic(r.error_message);
 }
 
-void add_num_module(Assembler* ass, Package* base, Allocator* a) {
+void add_num_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("core")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
+    PiAllocator pico_module_allocator = convert_to_pallocator(&ra);
     Module* module = mk_module(header, base, NULL, pico_module_allocator);
-    delete_module_header(header);
 
-    add_bool_module(ass, module, a);
+    add_bool_module(ass, module, &ra);
 
-    add_integral_module(mv_string("u8"), sz_8, false, ass, module, a);
-    add_integral_module(mv_string("u16"), sz_16, false, ass, module, a);
-    add_integral_module(mv_string("u32"), sz_32, false, ass, module, a);
-    add_integral_module(mv_string("u64"), sz_64, false, ass, module, a);
+    add_integral_module(mv_string("u8"), sz_8, false, ass, module, &ra);
+    add_integral_module(mv_string("u16"), sz_16, false, ass, module, &ra);
+    add_integral_module(mv_string("u32"), sz_32, false, ass, module, &ra);
+    add_integral_module(mv_string("u64"), sz_64, false, ass, module, &ra);
 
-    add_integral_module(mv_string("i8"), sz_8, true, ass, module, a);
-    add_integral_module(mv_string("i16"), sz_16, true, ass, module, a);
-    add_integral_module(mv_string("i32"), sz_32, true, ass, module, a);
-    add_integral_module(mv_string("i64"), sz_64, true, ass, module, a);
+    add_integral_module(mv_string("i8"), sz_8, true, ass, module, &ra);
+    add_integral_module(mv_string("i16"), sz_16, true, ass, module, &ra);
+    add_integral_module(mv_string("i32"), sz_32, true, ass, module, &ra);
+    add_integral_module(mv_string("i64"), sz_64, true, ass, module, &ra);
 
-    add_float_module(mv_string("f32"), Float_32, ass, module, a);
-    add_float_module(mv_string("f64"), Float_64, ass, module, a);
+    add_float_module(mv_string("f32"), Float_32, ass, module, &ra);
+    add_float_module(mv_string("f64"), Float_64, ass, module, &ra);
 
-    add_module(string_to_symbol(mv_string("num")), module, base);
+    Result r =add_module(string_to_symbol(mv_string("num")), module, base);
+    if (r.type == Err) panic(r.error_message);
 }

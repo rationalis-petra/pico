@@ -14,14 +14,15 @@
 
 #include "pico/stdlib/helpers.h"
 
-void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a) {
+void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     clear_target(target);
 
-    IStream* sin = mk_string_istream(mv_string(string), a);
+    IStream* sin = mk_string_istream(mv_string(string), &ra);
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    IStream* cin = mk_capturing_istream(sin, a);
+    IStream* cin = mk_capturing_istream(sin, &ra);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -33,10 +34,10 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    Environment* env = env_from_module(module, &point, a);
+    Environment* env = env_from_module(module, &point, &ra);
 
-    PiAllocator pia = convert_to_pallocator(a);
-    ParseResult res = parse_rawtree(cin, &pia, a);
+    PiAllocator pia = convert_to_pallocator(&ra);
+    ParseResult res = parse_rawtree(cin, &pia, &ra);
     if (res.type == ParseNone) {
         throw_error(&point, mv_string("Parse Returned None!"));
     }
@@ -52,31 +53,31 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     //  Process Term: abstract, typecheck, & evaluate
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, a, &pi_point);
+    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = a, .pia = &pia, .point = &pi_point, .target = target, 
+        .a = &ra, .pia = &pia, .point = &pi_point, .target = target, 
     };
     type_check(&abs, env, ctx);
 
     clear_target(target);
-    LinkData links = generate_toplevel(abs, env, target, a, &point);
-    pico_run_toplevel(abs, target, links, module, a, &point);
+    LinkData links = generate_toplevel(abs, env, target, &ra, &point);
+    pico_run_toplevel(abs, target, links, module, &ra, &point);
 
-    delete_istream(sin, a);
+    delete_istream(sin, &ra);
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, get_formatted_stdout(), NULL, a);
-    delete_istream(sin, a);
+    display_error(pi_point.multi, cin, get_formatted_stdout(), NULL, &ra);
+    delete_istream(sin, &ra);
     throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));
 
  on_error:
-    delete_istream(sin, a);
+    delete_istream(sin, &ra);
     throw_error(final_point, point.error_message);
 
  on_exit:
-    delete_istream(sin, a);
+    delete_istream(sin, &ra);
     throw_error(final_point, mv_string("Startup compiled definition not exepcted to exit!"));
 }
 

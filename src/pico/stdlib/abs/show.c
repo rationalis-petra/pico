@@ -1,31 +1,28 @@
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 
 #include "pico/stdlib/abs/submodules.h"
 #include "pico/stdlib/helpers.h"
 
-void add_show_module(Target target, Module *abs, Allocator *alloc) {
-    Allocator arena = mk_arena_allocator(16384, alloc);
-    Allocator* a = &arena;
+void add_show_module(Target target, Module *abs, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, a),
+        .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
-    add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 2, "data", "string");
+    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 2, "data", "string");
 
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("show")),
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(alloc);
-    Module* module = mk_module(header, get_package(abs), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(abs), NULL, *module_allocator);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -101,5 +98,4 @@ void add_show_module(Target target, Module *abs, Allocator *alloc) {
 
     Result r = add_module_def(abs, string_to_symbol(mv_string("show")), module);
     if (r.type == Err) panic(r.error_message);
-    release_arena_allocator(arena);
 }

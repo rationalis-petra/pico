@@ -1,6 +1,8 @@
 #ifndef __PICO_STDLIB_FOREIGN_H
 #define __PICO_STDLIB_FOREIGN_H
 
+#include "platform/memory/region.h"
+
 #include "pico/values/modular.h"
 #include "pico/data/error.h"
 #include "pico/eval/call.h"
@@ -10,7 +12,7 @@
 // compile_toplevel("(def i64-addable instance Addable [I64] [.zero 0] [.add +])", 
 //                  ass, i64, point, a)
 // All memory allocated is free'd, 
-void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, Allocator *a);
+void compile_toplevel(const char *string, Module *module, Target target, ErrorPoint *final_point, PiErrorPoint *final_pi_point, RegionAllocator* region);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);

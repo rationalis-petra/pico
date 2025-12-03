@@ -18,11 +18,17 @@ static Package* base = NULL;
 void run_pico_tests(TestLog* log, Allocator* a) {
     Allocator* stdalloc = get_std_allocator();
     Allocator exec = mk_executable_allocator(stdalloc);
+    RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
 
     if (!base) {
+        RegionAllocator* subregion = make_subregion(region); 
         Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exec);
-        base = base_package(ass_base, stdalloc, stdalloc);
+        PiAllocator module_allocator = convert_to_pallocator(stdalloc);
+
+        base = base_package(ass_base, stdalloc, &module_allocator, subregion);
+
         delete_assembler(ass_base);
+        release_subregion(subregion);
     }
 
     Target target = (Target) {
@@ -43,17 +49,21 @@ void run_pico_tests(TestLog* log, Allocator* a) {
     }
 
     if (suite_start(log, mv_string("typecheck"))) {
-        run_pico_typecheck_tests(log, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_typecheck_tests(log, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("eval"))) {
-        run_pico_eval_tests(log, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_eval_tests(log, target, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("stdlib"))) {
-        run_pico_stdlib_tests(log, target, a);
+        run_pico_stdlib_tests(log, target, stdalloc);
         suite_end(log);
     }
 
