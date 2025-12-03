@@ -1,4 +1,5 @@
 #include "platform/signals.h"
+#include "platform/memory/region.h"
 #include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
@@ -7,9 +8,10 @@
 #include "test_pico/eval/eval.h"
 #include "test_pico/eval/components.h"
 
-void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
+void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator gpa = ra_to_gpa(region);
+    Allocator* a = &gpa;
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
@@ -68,5 +70,4 @@ void run_pico_eval_tests(TestLog* log, Target target, Allocator* a) {
 
     delete_env(env, a);
     delete_module(module);
-    release_arena_allocator(arena);
 }

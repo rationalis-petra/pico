@@ -1,6 +1,8 @@
 #ifndef __TEST_PICO_HELPER_H
 #define __TEST_PICO_HELPER_H
 
+#include "platform/memory/region.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/values/modular.h"
 #include "pico/binding/environment.h"
@@ -10,7 +12,7 @@
 typedef struct {
     Environment *env;
     TestLog *log;
-    Allocator *a;
+    RegionAllocator *region;
     PiAllocator *pia;
     Target target;
 } TestContext;
@@ -24,7 +26,7 @@ void assert_toplevel_stdout(const char *string, const char *expected, Module *mo
 void test_toplevel_mem(const char *string, const void *exepcted, const void*actual, size_t memsize, Module *module, TestContext context);
 void assert_toplevel_mem(const char *string, const void *exepcted, const void*actual, size_t memsize, Module *module, TestContext context);
 
-void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestLog* log, Allocator* a);
+void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestContext context);
 void run_toplevel(const char *string, Module *module, TestContext context);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);

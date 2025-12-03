@@ -7,17 +7,17 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
-#define ASSERT_EQ(str) assert_toplevel_eq(str, &expected, module, context)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
-void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
-    PiAllocator pico_allocator = convert_to_pallocator(a);
+void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
+    Allocator gpa = ra_to_gpa(region);
+    PiAllocator pico_allocator = convert_to_pallocator(&gpa);
     PiAllocator* pia = &pico_allocator;
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .pia = pia,
         .log = log,
         .target = target,
@@ -503,18 +503,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
     
-    void* mem = mem_alloc(128, a);
-    PiAllocator old = get_std_current_allocator();
-    void* start;
-    {
-        Allocator sta = mk_static_allocator(mem, 128);
-        start = mem_alloc(8, &sta);
-    }
+#define SETUP_MEM(type) void* mem = mem_alloc(128, &gpa); type* start; { Allocator sta = mk_static_allocator(mem, 128); start = mem_alloc(8, &sta); }
 
+    PiAllocator old = get_std_current_allocator(); 
     if (test_start(log, mv_string("test-load-i64"))) {
+        SETUP_MEM(int64_t);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
-        *(int64_t*)start = 8;
+        *start = 8;
 
         set_std_current_allocator(psta);
         uint64_t expected = 8;
@@ -522,9 +518,10 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("test-load-i8"))) {
+        SETUP_MEM(int8_t);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
-        *(int8_t*)start = -5;
+        *start = -5;
 
         set_std_current_allocator(psta);
         int8_t expected = -5;
@@ -532,16 +529,18 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("test-load-struct"))) {
+        typedef struct { int64_t x; int64_t y; } IPr;
+        SETUP_MEM(IPr);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
-        typedef struct { int64_t x; int64_t y; } IPr;
         set_std_current_allocator(psta);
         IPr expected = {.x = 25, .y = -5};
-        *(IPr*)(start) = expected;
+        *start = expected;
         TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
     }
 
     if (test_start(log, mv_string("test-store-i8"))) {
+        SETUP_MEM(void)
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         int8_t expected = -5;
@@ -552,6 +551,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = 197231987;
@@ -561,6 +561,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct { int64_t x; int64_t y; } IPr;
@@ -583,6 +584,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // ---------------------------------------------------------------
 
     if (test_start(log, mv_string("seal-val"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
@@ -594,6 +596,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("unseal-trivial"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
@@ -605,6 +608,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("unseal-load/store"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
         PiAllocator psta = convert_to_pallocator(&sta);
         uint64_t expected = 16823;
@@ -616,5 +620,4 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     set_std_current_allocator(old);
-    mem_free(mem, a);
 }

@@ -11,7 +11,6 @@
 
 void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     // Setup
-    Allocator arena = mk_arena_allocator(16384, a);
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
@@ -47,53 +46,72 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     set_std_current_module(module);
     delete_module_header(header);
 
+    RegionAllocator* region = make_region_allocator(16384, true, a);
     if (suite_start(log, mv_string("core"))) {
-        run_pico_stdlib_core_type_tests(log, module, env, target, a);
-        run_pico_stdlib_core_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_stdlib_core_type_tests(log, module, env, target, region);
+        run_pico_stdlib_core_tests(log, module, env, target, subregion);
         suite_end(log);
+        release_subregion(subregion);
     }
 
     if (suite_start(log, mv_string("num"))) {
-        run_pico_stdlib_num_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_stdlib_num_tests(log, module, env, target, subregion);
         suite_end(log);
+        release_subregion(subregion);
     }
 
     if (suite_start(log, mv_string("meta"))) {
         if (suite_start(log, mv_string("gen"))) {
-            run_pico_stdlib_meta_gen_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_meta_gen_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         if (suite_start(log, mv_string("refl"))) {
-            run_pico_stdlib_meta_refl_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_meta_refl_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         suite_end(log);
     }
 
     if (suite_start(log, mv_string("extra"))) {
-        run_pico_stdlib_extra_tests(log, module, env, target, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_stdlib_extra_tests(log, module, env, target, subregion);
         suite_end(log);
+        release_subregion(subregion);
     }
 
     if (suite_start(log, mv_string("abs"))) {
         if (suite_start(log, mv_string("numeric"))) {
-            run_pico_stdlib_abs_numeric_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_abs_numeric_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         suite_end(log);
     }
     if (suite_start(log, mv_string("data"))) {
         if (suite_start(log, mv_string("pair"))) {
-            run_pico_stdlib_data_pair_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_data_pair_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         if (suite_start(log, mv_string("either"))) {
-            run_pico_stdlib_data_either_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_data_either_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         if (suite_start(log, mv_string("list"))) {
-            run_pico_stdlib_data_list_tests(log, module, env, target, a);
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_data_list_tests(log, module, env, target, subregion);
             suite_end(log);
+            release_subregion(subregion);
         }
         suite_end(log);
     }
@@ -101,5 +119,5 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     set_std_current_module(old_current);
     delete_env(env, a);
     delete_module(module);
-    release_arena_allocator(arena);
+    delete_region_allocator(region);
 }

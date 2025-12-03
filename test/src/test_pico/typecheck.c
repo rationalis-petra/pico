@@ -1,6 +1,6 @@
 #include "platform/signals.h"
 #include "platform/memory/executable.h"
-#include "platform/memory/arena.h"
+#include "platform/memory/region.h"
 
 #include "pico/stdlib/stdlib.h"
 #include "pico/stdlib/platform/submodules.h"
@@ -12,11 +12,14 @@
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
 #define TEST_TYPE(str) test_typecheck_eq(str, expected, env, log, a)
 
-void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
+void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
-    Allocator exalloc = mk_executable_allocator(a);
-    Allocator arena = mk_arena_allocator(16384, a);
-    PiAllocator parena = convert_to_pallocator(&arena);
+    Allocator gpa = ra_to_gpa(region);
+    Allocator* a = &gpa;
+
+    Allocator exalloc = mk_executable_allocator(&gpa);
+
+    PiAllocator pregion = convert_to_pallocator(&gpa);
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Package* base = get_base_package();
 
@@ -57,7 +60,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     };
 
     if (test_start(log, mv_string("UVar through all"))) {
-        PiType* expected = mk_prim_type(&parena, Int_64);
+        PiType* expected = mk_prim_type(&pregion, Int_64);
         TEST_TYPE("((all [A] -28) {Unit})");
     }
 
@@ -70,50 +73,50 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
-        PiType* expected = mk_prim_type(&parena, Int_64);
+        set_std_current_allocator(pregion);
+        PiType* expected = mk_prim_type(&pregion, Int_64);
         TEST_TYPE("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Default struct from field constraints"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         PiType *expected =
-            mk_proc_type(&parena, 1,
-                         mk_struct_type(&parena, 2, "x", mk_prim_type(&parena, Int_64),
-                                        "y", mk_prim_type(&parena, Int_64)), mk_prim_type(&parena, Int_64));
+            mk_proc_type(&pregion, 1,
+                         mk_struct_type(&pregion, 2, "x", mk_prim_type(&pregion, Int_64),
+                                        "y", mk_prim_type(&pregion, Int_64)), mk_prim_type(&pregion, Int_64));
         TEST_TYPE("(proc [point] (i64.+ point.x point.y))");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("Un-annotated variant in match"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         PiType *expected =
-            mk_proc_type(&parena, 1,
-                         mk_enum_type(&parena, 2, "left", 1, mk_prim_type(&parena, UInt_64),
-                                      "right", 1, mk_prim_type(&parena, Address)), mk_prim_type(&parena, UInt_64));
+            mk_proc_type(&pregion, 1,
+                         mk_enum_type(&pregion, 2, "left", 1, mk_prim_type(&pregion, UInt_64),
+                                      "right", 1, mk_prim_type(&pregion, Address)), mk_prim_type(&pregion, UInt_64));
         TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("enum from variant constraints"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
-        PiType *expected = mk_proc_type(&parena, 1, mk_prim_type(&parena, Bool),
-                                        mk_enum_type(&parena, 2,
-                                                     "left", 1, mk_prim_type(&parena, Int_64),
-                                                     "right", 1, mk_prim_type(&parena, Address)));
+        set_std_current_allocator(pregion);
+        PiType *expected = mk_proc_type(&pregion, 1, mk_prim_type(&pregion, Bool),
+                                        mk_enum_type(&pregion, 2,
+                                                     "left", 1, mk_prim_type(&pregion, Int_64),
+                                                     "right", 1, mk_prim_type(&pregion, Address)));
         TEST_TYPE("(proc [which] if which (:left 10) (:right (malloc 8)))") ;
         set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("declaration"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
-        PiType *expected = mk_proc_type(&parena, 1, mk_prim_type(&parena, UInt_64),
-                                        mk_prim_type(&parena, UInt_64));
+        set_std_current_allocator(pregion);
+        PiType *expected = mk_proc_type(&pregion, 1, mk_prim_type(&pregion, UInt_64),
+                                        mk_prim_type(&pregion, UInt_64));
         RUN("(declare id [.type Proc [U64] U64])");
         RUN("(def id proc [x] x)");
         TEST_TYPE("id");
@@ -122,7 +125,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
 
     if (test_start(log, mv_string("kinds-1"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         PiType ty = (PiType){.sort = TKind, .kind.nargs = 1};
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");
@@ -133,5 +136,4 @@ void run_pico_typecheck_tests(TestLog* log, Target target, Allocator* a) {
     delete_module(module);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
-    release_arena_allocator(arena);
 }

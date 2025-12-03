@@ -1,23 +1,20 @@
-#include "platform/memory/arena.h"
-
 #include "pico/stdlib/platform/submodules.h"
 
-#include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 
-void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator* a) {
-    Allocator arena = mk_arena_allocator(16384, a);
-    PiAllocator parena = convert_to_pallocator(&arena);
+void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = &arena,
+        .region = region,
         .log = log,
         .target = target,
     };
+    Allocator gpa = ra_to_gpa(region);
+    PiAllocator pregion = convert_to_pallocator(&gpa);
 
     RUN("(def list-1 (list.mk-list {I64} 5 10))");
     if (test_start(log, mv_string("list-len"))) {
@@ -46,7 +43,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("each-print"))) {
         PiAllocator current_old = get_std_current_allocator();
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         char* expected = "01234";
         RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))");
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
@@ -58,7 +55,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
 
         PiAllocator current_old = get_std_current_allocator();
         char* expected = "12345";
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-2)");
         set_std_current_allocator(current_old);
     }
@@ -71,7 +68,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
 
         PiAllocator current_old = get_std_current_allocator();
         char* expected = "121314";
-        set_std_current_allocator(parena);
+        set_std_current_allocator(pregion);
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) (use list-3))");
         set_std_current_allocator(current_old);
     }
@@ -80,6 +77,4 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     RUN("(free list-1.data)");
     RUN("(free list-2.data)");
     RUN("(free (use list-3).data)");
-
-    release_arena_allocator(arena);
 }

@@ -1,3 +1,4 @@
 build/*
 scratch/*
 gmon.out
+*.~undo-tree~

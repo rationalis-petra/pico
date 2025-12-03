@@ -11,6 +11,6 @@ Allocator aa_to_gpa(ArenaAllocator* arena);
 
 void reset_arena_allocator(ArenaAllocator* a);
 
-void release_arena_allocator(ArenaAllocator* a);
+void delete_arena_allocator(ArenaAllocator* a);
 
 #endif

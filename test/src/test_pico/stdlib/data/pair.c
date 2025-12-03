@@ -5,17 +5,17 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
-    Allocator arena = mk_arena_allocator(16384, a);
+void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
     };
+    Allocator gpa = ra_to_gpa(region);
 
     typedef struct {
         int64_t x;
@@ -57,6 +57,4 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* 
         EnumPoint expected = (EnumPoint) {.tag = 0, .x = 1432, .y = -120938};
         TEST_EQ("(:some (pair.pair {I32 I32} 1432 -120938))");
     }
-
-    release_arena_allocator(arena);
 }

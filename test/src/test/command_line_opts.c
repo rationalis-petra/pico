@@ -60,21 +60,22 @@ TestCommand parse_test_command(StringArray args) {
 
     String subcommand = args.data[0];
     TestCommand out;
-    Allocator arena = mk_arena_allocator(4096, get_std_allocator());
+    ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+    Allocator gpa = aa_to_gpa(arena);
     if (string_cmp(subcommand, mv_string("all")) == 0) {
         out = (TestCommand) {
             .type = CAll,
-            .opts = parse_test_opts(args, 1, &arena),
+            .opts = parse_test_opts(args, 1, &gpa),
         };
     } else if (string_cmp(subcommand, mv_string("except")) == 0) {
         out = (TestCommand) {
             .type = CExcept,
-            .opts = parse_test_opts(args, 1, &arena),
+            .opts = parse_test_opts(args, 1, &gpa),
         };
     } else if (string_cmp(subcommand, mv_string("only")) == 0) {
         out = (TestCommand) {
             .type = COnly,
-            .opts = parse_test_opts(args, 1, &arena),
+            .opts = parse_test_opts(args, 1, &gpa),
         };
     } else {
         out = (TestCommand) {
@@ -82,6 +83,6 @@ TestCommand parse_test_command(StringArray args) {
             .error_message = mv_string("Unrecognized subcommand name!"),
         };
     }
-    release_arena_allocator(arena);
+    delete_arena_allocator(arena);
     return out;
 }
