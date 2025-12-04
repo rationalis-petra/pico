@@ -80,4 +80,22 @@ PerfTime query_performance_timer() {
     };
 }
 
+PerfTime query_mono_timer() {
+    uint64_t milliseconds = GetTickCount64();
+
+    return (PerfTime) {
+        .time_sec = (milliseconds / 1000),
+        .time_ns = (milliseconds % 1000) * 1E9,
+    };
+}
+
+PerfTime query_realtime() {
+    uint64_t milliseconds = GetTickCount64();
+
+    return (PerfTime) {
+        .time_sec = (milliseconds / 1000),
+        .time_ns = (milliseconds % 1000) * 1E9,
+    };
+}
+
 #endif
