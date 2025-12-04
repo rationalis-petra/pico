@@ -197,7 +197,7 @@ void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 }
 
-void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
+void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, PiAllocator* module_allocator, Allocator* a) {
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
@@ -213,8 +213,7 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(num), NULL, *module_allocator);
     Symbol sym;
 
     PiType* typep;
@@ -323,7 +322,7 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     if (r.type == Err) panic(r.error_message);
 }
 
-void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
+void add_bool_module(Assembler *ass, Module *num, PiAllocator* module_allocator, Allocator *a) {
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
@@ -339,8 +338,7 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(num), NULL, *module_allocator);
     Symbol sym;
 
     PiType* typep;
@@ -380,7 +378,7 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     if (r.type == Err) panic(r.error_message);
 }
 
-void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
+void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, PiAllocator* module_allocator, Allocator* a) {
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
@@ -396,8 +394,7 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(a);
-    Module* module = mk_module(header, get_package(num), NULL, pico_module_allocator);
+    Module* module = mk_module(header, get_package(num), NULL, *module_allocator);
     Symbol sym;
 
     PiType* typep;
@@ -471,23 +468,22 @@ void add_num_module(Assembler* ass, Package* base, PiAllocator* module_allocator
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pico_module_allocator = convert_to_pallocator(&ra);
-    Module* module = mk_module(header, base, NULL, pico_module_allocator);
+    Module* module = mk_module(header, base, NULL, *module_allocator);
 
-    add_bool_module(ass, module, &ra);
+    add_bool_module(ass, module, module_allocator, &ra);
 
-    add_integral_module(mv_string("u8"), sz_8, false, ass, module, &ra);
-    add_integral_module(mv_string("u16"), sz_16, false, ass, module, &ra);
-    add_integral_module(mv_string("u32"), sz_32, false, ass, module, &ra);
-    add_integral_module(mv_string("u64"), sz_64, false, ass, module, &ra);
+    add_integral_module(mv_string("u8"), sz_8, false, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("u16"), sz_16, false, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("u32"), sz_32, false, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("u64"), sz_64, false, ass, module, module_allocator, &ra);
 
-    add_integral_module(mv_string("i8"), sz_8, true, ass, module, &ra);
-    add_integral_module(mv_string("i16"), sz_16, true, ass, module, &ra);
-    add_integral_module(mv_string("i32"), sz_32, true, ass, module, &ra);
-    add_integral_module(mv_string("i64"), sz_64, true, ass, module, &ra);
+    add_integral_module(mv_string("i8"), sz_8, true, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("i16"), sz_16, true, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("i32"), sz_32, true, ass, module, module_allocator, &ra);
+    add_integral_module(mv_string("i64"), sz_64, true, ass, module, module_allocator, &ra);
 
-    add_float_module(mv_string("f32"), Float_32, ass, module, &ra);
-    add_float_module(mv_string("f64"), Float_64, ass, module, &ra);
+    add_float_module(mv_string("f32"), Float_32, ass, module, module_allocator, &ra);
+    add_float_module(mv_string("f64"), Float_64, ass, module, module_allocator, &ra);
 
     Result r =add_module(string_to_symbol(mv_string("num")), module, base);
     if (r.type == Err) panic(r.error_message);

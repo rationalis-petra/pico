@@ -31,13 +31,22 @@ RegionAllocator* make_region_allocator(size_t initial_regionsize, bool dynamic_r
 
     *region = (RegionAllocator) {
         .parent_region = NULL,
+        .child_regions = mk_ptr_array(8, a),
+
         .memory_allocated = 0,
         .blocksize = initial_regionsize,
         .blocks = mk_rblock_array(1, a),
         .gpa = a,
+
         .dynamic_regionsize = dynamic_regionsize,
         .in_use = true,
     };
+
+    RegionBlock rblock = {
+        .data = mem_alloc(initial_regionsize, a),
+        .bmp = 0,
+    };
+    push_rblock(rblock, &region->blocks);
 
     return region;
 }
@@ -139,7 +148,7 @@ RegionAllocator* make_subregion(RegionAllocator* region) {
         RegionAllocator* subregion = mem_alloc(sizeof(RegionAllocator), region->gpa);
 
         *subregion = (RegionAllocator) {
-            .parent_region = NULL,
+            .parent_region = region,
             .memory_allocated = 0,
             .blocksize = region->blocksize,
             .blocks = mk_rblock_array(1, region->gpa),
@@ -147,6 +156,12 @@ RegionAllocator* make_subregion(RegionAllocator* region) {
             .dynamic_regionsize = region->dynamic_regionsize,
             .in_use = true,
         };
+
+        RegionBlock rblock = {
+            .data = mem_alloc(region->blocksize, region->gpa),
+            .bmp = 0,
+        };
+        push_rblock(rblock, &subregion->blocks);
 
         push_ptr(subregion, &region->child_regions);
         return subregion;
@@ -160,6 +175,7 @@ void release_subregion(RegionAllocator* subregion) {
 
 void reset_subregion(RegionAllocator* subregion) {
     if (subregion->memory_allocated > subregion->blocksize) {
+        // TODO: only reset regionsize if dynamic regionsize is true.
         subregion->blocksize = subregion->memory_allocated;
         if (subregion->parent_region) {
             subregion->parent_region->blocksize = subregion->memory_allocated;
@@ -169,6 +185,11 @@ void reset_subregion(RegionAllocator* subregion) {
             RegionBlock block = subregion->blocks.data[i];
             mem_free(block.data, subregion->gpa);
         }
+        RegionBlock first_block = (RegionBlock) {
+            .data = mem_alloc(subregion->blocksize, subregion->gpa),
+            .bmp = 0,
+        };
+        subregion->blocks.data[0] = first_block;
         subregion->blocks.len = 1;
     } else {
         // No resizing needed, simply delete excess blocks and reset current block
