@@ -208,6 +208,7 @@ void delete_subregion(RegionAllocator* subregion) {
         mem_free(block.data, subregion->gpa);
     }
     mem_free(subregion->blocks.data, subregion->gpa);
+    mem_free(subregion, subregion->gpa);
 }
 
 void delete_region_allocator(RegionAllocator* region) {
@@ -218,7 +219,6 @@ void delete_region_allocator(RegionAllocator* region) {
     for (size_t i = 0; i < region->child_regions.len; i++) {
         RegionAllocator* subregion = region->child_regions.data[i];
         delete_subregion(subregion);
-        mem_free(subregion, region->gpa);
     }
     sdelete_ptr_array(region->child_regions);
 
