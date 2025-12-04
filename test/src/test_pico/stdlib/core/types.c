@@ -3,12 +3,12 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 
 void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
-    Allocator gpa = ra_to_gpa(region);
-    PiAllocator pico_region = convert_to_pallocator(&gpa);
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
 
     TestContext context = (TestContext) {

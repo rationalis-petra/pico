@@ -13,6 +13,7 @@ struct Environment {
     //  'implementation set' points to the relevant module.
     NamePtrAMap instances;
     Module* base;
+    Allocator* gpa;
 };
 
 // Helper function:
@@ -88,18 +89,18 @@ bool import_clause_valid(Environment *env, ImportClause clause) {
     return true;
 }
 
-void refresh_env(Environment* env, Allocator* a) {
+void refresh_env(Environment* env) {
     Module* module = env->base;
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_defined_symbols(module, a);
+    SymbolArray arr = get_defined_symbols(module, env->gpa);
     for (size_t i = 0; i < arr.len; i++ ) {
         name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
     }
     sdelete_symbol_array(arr);
 
     // Get all implicits
-    PtrArray instances = get_defined_instances(module, a);
+    PtrArray instances = get_defined_instances(module, env->gpa);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
         PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
@@ -107,8 +108,8 @@ void refresh_env(Environment* env, Allocator* a) {
         if (res) {
             p = *res;
         } else {
-            p = mem_alloc(sizeof(PtrArray), a);
-            *p = mk_ptr_array(8, a);
+            p = mem_alloc(sizeof(PtrArray), env->gpa);
+            *p = mk_ptr_array(8, env->gpa);
             // TODO: we know this isn't in the instances; could perhaps
             // speed up the process?
             name_ptr_insert(instance->id, p, &env->instances);
@@ -126,6 +127,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         .symbol_origins = mk_name_ptr_amap(128, a),
         .instances = mk_name_ptr_amap(128, a),
         .base = module,
+        .gpa = a,
     };
 
     // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 

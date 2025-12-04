@@ -5,7 +5,7 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &ra)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)

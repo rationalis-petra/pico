@@ -1,13 +1,10 @@
 #include <string.h>
 
-#include "data/stringify.h"
-
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
 #include "components/pretty/string_printer.h"
 
-#include "pico/data/error.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"

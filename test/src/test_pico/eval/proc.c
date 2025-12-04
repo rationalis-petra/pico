@@ -6,7 +6,7 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &ra)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
@@ -18,7 +18,6 @@ void run_pico_eval_proc_tests(TestLog *log, Module* module, Environment* env, Ta
         .log = log,
         .target = target,
     };
-    Allocator ra = ra_to_gpa(region);
 
     // Literals
     if (test_start(log, mv_string("const-return"))) {

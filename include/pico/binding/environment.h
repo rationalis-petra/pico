@@ -27,8 +27,8 @@ typedef struct EnvEntry {
 } EnvEntry;
 
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a);
-void refresh_env(Environment* env, Allocator* a);
 void delete_env(Environment* env, Allocator* a);
+void refresh_env(Environment* env);
 
 // This is used for import clauses in scripts. Determines if an import caluse
 // can be validly added to the current module (module of the environment)

@@ -1,19 +1,17 @@
-#include <string.h>
 #include "platform/memory/static.h"
 
-#include "pico/stdlib/core.h"
 #include "pico/stdlib/platform/submodules.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
-    Allocator gpa = ra_to_gpa(region);
-    PiAllocator pico_allocator = convert_to_pallocator(&gpa);
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_allocator = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_allocator;
     TestContext context = (TestContext) {
         .env = env,
@@ -503,7 +501,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
     
-#define SETUP_MEM(type) void* mem = mem_alloc(128, &gpa); type* start; { Allocator sta = mk_static_allocator(mem, 128); start = mem_alloc(8, &sta); }
+#define SETUP_MEM(type) void* mem = mem_alloc(128, &ra); type* start; { Allocator sta = mk_static_allocator(mem, 128); start = mem_alloc(8, &sta); }
 
     PiAllocator old = get_std_current_allocator(); 
     if (test_start(log, mv_string("test-load-i64"))) {

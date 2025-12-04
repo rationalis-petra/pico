@@ -78,7 +78,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);
         
-        refresh_env(env, &ra);
+        refresh_env(env);
         int64_t expected = -90;
         TEST_EQ("(foreign-add-10 -100)\n");
     }
@@ -114,7 +114,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);
         
-        refresh_env(env, &ra);
+        refresh_env(env);
         bool expected = true;
         TEST_EQ("(examine-4word-struct (struct [.a 0] [.b -1] [.c 2] [.d -3]) )\n") ;
     }
@@ -150,7 +150,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
         delete_pi_type_p(ptype, pia);
         delete_c_type(ctype, pia);
         
-        refresh_env(env, &ra);
+        refresh_env(env);
         bool expected = true;
         TEST_EQ("(examine-two-4word-structs \n"
                          "(struct [.a 0] [.b -1] [.c 2] [.d -3]) (struct [.a 0] [.b 1] [.c -2] [.d 3]))\n") ;

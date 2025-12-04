@@ -2,7 +2,7 @@
 
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &gpa)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 
@@ -13,8 +13,8 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         .log = log,
         .target = target,
     };
-    Allocator gpa = ra_to_gpa(region);
-    PiAllocator pregion = convert_to_pallocator(&gpa);
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pregion = convert_to_pallocator(&ra);
 
     RUN("(def list-1 (list.mk-list {I64} 5 10))");
     if (test_start(log, mv_string("list-len"))) {

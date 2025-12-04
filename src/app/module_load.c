@@ -88,7 +88,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Environment* env = env_from_module(module, &point, &aa);
     while (next_iter) {
         reset_arena_allocator(iter_arena);
-        refresh_env(env, &ia);
+        refresh_env(env);
 
         ParseResult res = parse_rawtree(cin, &pico_iter_arena, &ia);
         if (res.type == ParseNone) goto on_exit;
