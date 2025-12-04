@@ -203,10 +203,11 @@ void reset_subregion(RegionAllocator* subregion) {
 }
 
 void delete_subregion(RegionAllocator* subregion) {
-    for (size_t i = 1; i < subregion->blocks.len; i++) {
+    for (size_t i = 0; i < subregion->blocks.len; i++) {
         RegionBlock block = subregion->blocks.data[i];
         mem_free(block.data, subregion->gpa);
     }
+    mem_free(subregion->blocks.data, subregion->gpa);
 }
 
 void delete_region_allocator(RegionAllocator* region) {
@@ -219,8 +220,9 @@ void delete_region_allocator(RegionAllocator* region) {
         delete_subregion(subregion);
         mem_free(subregion, region->gpa);
     }
+    sdelete_ptr_array(region->child_regions);
 
-    mem_free(region, region->gpa);
+    delete_subregion(region);
 }
 
 /* Adapt the region allocator to a regular allocator interface,  

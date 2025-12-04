@@ -318,6 +318,7 @@ int main(int argc, char** argv) {
     }
 
     // Cleanup
+    delete_region_allocator(region);
     delete_package(base);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
