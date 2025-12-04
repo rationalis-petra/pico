@@ -15,16 +15,20 @@ typedef struct RegionAllocator RegionAllocator;
  */
 RegionAllocator* make_region_allocator(size_t initial_regionsize, bool dynamic_regionsize, Allocator* a);
 
+void* region_alloc(RegionAllocator* a, size_t memsize);
+
+RegionAllocator* make_subregion(RegionAllocator* a);
+
+void release_subregion(RegionAllocator* subregion);
+
+void reset_subregion(RegionAllocator* subregion);
+
+void delete_region_allocator(RegionAllocator* a);
+
 /* Adapt the region allocator to a regular allocator interface,  
  * for usage in containers etc.
  */
 Allocator ra_to_gpa(RegionAllocator* arena);
 
-RegionAllocator* make_subregion(RegionAllocator* a);
-
-void release_subregion(RegionAllocator* subregion);
-void reset_subregion(RegionAllocator* subregion);
-
-void delete_region_allocator(RegionAllocator* a);
 
 #endif

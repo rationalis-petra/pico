@@ -60,7 +60,7 @@ TestCommand parse_test_command(StringArray args) {
 
     String subcommand = args.data[0];
     TestCommand out;
-    ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
     if (string_cmp(subcommand, mv_string("all")) == 0) {
         out = (TestCommand) {

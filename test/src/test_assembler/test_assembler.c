@@ -8,7 +8,7 @@
 
 void run_assembler_tests(TestLog *log, Allocator *a) {
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
-    ArenaAllocator* arena = mk_arena_allocator(4096, a);
+    ArenaAllocator* arena = make_arena_allocator(4096, a);
     Allocator gpa = aa_to_gpa(arena);
 
     if (test_start(log, mv_string("asm-add-r64-imm8"))) { // Add RAX, 12

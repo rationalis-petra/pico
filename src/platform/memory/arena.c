@@ -1,5 +1,3 @@
-#include "platform/signals.h"
-
 #include "platform/memory/arena.h"
 #include "data/meta/array_header.h"
 #include "data/meta/array_impl.h"
@@ -9,17 +7,8 @@ typedef struct {
     size_t bmp;
 } ArenaBlock;
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-int compare_arena_block(ArenaBlock lhs, ArenaBlock rhs) {
-    // TODO: fill this out if we ever need to compare two arenas
-    // used by array_cmp_impl to implement find!
-    panic(mv_string("compare arena block not implemented!"));
-}
-#pragma GCC diagnostic pop
-
 ARRAY_HEADER(ArenaBlock, block, Block)
-ARRAY_CMP_IMPL(ArenaBlock, compare_arena_block, block, Block)
+ARRAY_COMMON_IMPL(ArenaBlock, block, Block)
 
 struct ArenaAllocator{
     size_t blocksize;
@@ -27,7 +16,7 @@ struct ArenaAllocator{
     Allocator* internal_allocator;
 };
 
-size_t align_padding(size_t size, size_t align) {
+static size_t align_padding(size_t size, size_t align) {
     size_t rem = size % align;
     size_t pad = rem == 0 ? 0 : align - rem;
     return pad;
@@ -35,9 +24,7 @@ size_t align_padding(size_t size, size_t align) {
 
 void* arena_malloc(ArenaAllocator* arena, size_t memsize) {
     size_t alloc_size = memsize + sizeof(size_t);
-    // TODO (BUG FEAT): ensure allocations are aligned! 
-
-    // if attempting to allocate more than a block of memory
+    // If attempting to allocate more than a block of memory
     // allocate a larger than usual block
     // the '+ sizeof(size_t)' accounts for the fact that all memory has a short
     // prefix that denotes it's storage location
@@ -112,6 +99,7 @@ ArenaAllocator* make_arena_allocator(size_t blocksize, Allocator* a) {
     };
     push_block(initial_block, &arena->memory_blocks);
 
+    return arena;
 }
 
 void delete_block(ArenaBlock block, Allocator* a) {
@@ -129,7 +117,7 @@ void reset_arena_allocator(ArenaAllocator* arena) {
     initial_block->bmp = 0;
 }
 
-void release_arena_allocator(ArenaAllocator* arena) {
+void delete_arena_allocator(ArenaAllocator* arena) {
     Allocator* ialloc = arena->internal_allocator;
 
     for (size_t i = 0; i < arena->memory_blocks.len; i++)

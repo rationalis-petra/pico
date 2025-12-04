@@ -19,8 +19,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Allocator c_allocator = convert_to_callocator(&pia);
     Allocator* a = &c_allocator;
     
-    ArenaAllocator* arena = mk_arena_allocator(16384, a);
-    ArenaAllocator* iter_arena = mk_arena_allocator(16384, a);
+    ArenaAllocator* arena = make_arena_allocator(16384, a);
+    ArenaAllocator* iter_arena = make_arena_allocator(16384, a);
     Allocator aa = aa_to_gpa(arena);
     Allocator ia = aa_to_gpa(iter_arena);
     Allocator exec = mk_executable_allocator(a);
@@ -176,7 +176,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
 
 
 void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, Allocator* a) {
-    ArenaAllocator* arena = mk_arena_allocator(16384, a);
+    ArenaAllocator* arena = make_arena_allocator(16384, a);
     Allocator aa = aa_to_gpa(arena);
     PiAllocator pico_arena = convert_to_pallocator(&aa);
     Allocator exec = mk_executable_allocator(a);

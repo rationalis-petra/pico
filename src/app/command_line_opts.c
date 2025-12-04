@@ -6,7 +6,7 @@
 static Command internal_parse_command(StringArray args, Allocator* a);
 
 Command parse_command(StringArray args) {
-    ArenaAllocator* arena = mk_arena_allocator(4096, get_std_allocator());
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator aa = aa_to_gpa(arena);
     Command cmd = internal_parse_command(args, &aa);
     delete_arena_allocator(arena);
