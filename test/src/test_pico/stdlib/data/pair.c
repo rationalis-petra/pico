@@ -11,7 +11,6 @@ void run_pico_stdlib_data_pair_tests(TestLog *log, Module* module, Environment* 
         .log = log,
         .target = target,
     };
-    Allocator gpa = ra_to_gpa(region);
 
     typedef struct {
         int64_t x;
