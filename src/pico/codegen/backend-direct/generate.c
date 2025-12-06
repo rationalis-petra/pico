@@ -2237,9 +2237,19 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             // TODO: throw error with range/report in typecheck phase?
             panic(mv_string("Can't generate code for polymorphic-narrow"));
         }
-        // TODO: if signed -ve => 0??
-        // TODO (BUG): appropriately narrow (sign-extend/double broaden)
         generate_i(*syn.narrow.val, env, target, links, a, point);
+        // TODO: bounds check?
+        // TODO: if signed -ve => 0??
+
+        // TODO (BUG): generate appropriate assembly to convert between floating
+        // point values
+        if (syn.ptype->sort == TPrim && syn.ptype->prim == Float_32 &&
+            syn.narrow.val->ptype->sort == TPrim &&
+            syn.narrow.val->ptype->prim == Float_64) {
+            build_binary_op(CvtSD2SS, reg(XMM0, sz_32), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(MovSS, rref8(RSP, 0, sz_32), reg(XMM0, sz_32), ass, a, point);
+        }
+        // point values!
         break;
     case SSizeOf: {
         generate_size_of(RAX, syn.size->type_val, env, ass, a, point);

@@ -112,6 +112,26 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("cvtst2ss-xmm32-xmm64"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF2, 0x0F, 0x5A, 0xDF , 0x90 };
+            build_binary_op(CvtSD2SS, reg(XMM3, sz_32), reg(XMM7, sz_64), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("cvtst2ss-xmm32-m64"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0xF2, 0x0F, 0x5A, 0x62, 0x08, 0x90 };
+            build_binary_op(CvtSD2SS, reg(XMM4, sz_32), rref8(RDX, 8, sz_64), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, a, log);
+            clear_assembler(ass);
+        }
+    }
+
     // TODO: add test for XMM{n} where n >= 8
 
     delete_assembler(ass);

@@ -221,7 +221,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         String message = string_ncat(a, 4,
                                      mv_string("convert_c_fun requires functions to have same number of args. \n     C Type had : "),
                                      string_u64(ctype->proc.args.len, a),
-                                     mv_string("\n Relic type had : "),
+                                     mv_string("\n Relic Type had : "),
                                      string_u64(ptype->proc.args.len, a));
         panic(message);
     }

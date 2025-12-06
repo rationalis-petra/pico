@@ -13,11 +13,11 @@ typedef struct {
     uint32_t height;
 } Extent;
 
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 //
 //   Context: Instances, Devices, Windows
 // 
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 
 typedef struct HedronSurface HedronSurface;
 typedef struct HedronShaderModule HedronShaderModule;
@@ -39,46 +39,12 @@ uint32_t num_swapchain_images(HedronSurface*);
 HedronShaderModule* create_shader_module(U8PiList code);
 void destroy_shader_module(HedronShaderModule* module);
 
-typedef enum : uint64_t {Vertex, Instance} InputRate;
 
-typedef struct {
-    uint32_t binding;
-    uint32_t stride;
-    InputRate input_rate; 
-} BindingDescription;
-
-typedef enum : uint64_t {Float_1, Float_2, Float_3} VertexFormat;
-typedef struct {
-    uint32_t binding;
-    uint32_t location;
-    VertexFormat format;
-    uint32_t offset; 
-} AttributeDescription;
-
-typedef enum : uint64_t { UniformBufferDesc } DesciptorType;
-typedef enum : uint64_t { VertexShader } ShaderType;
-
-typedef struct {
-    DesciptorType type;
-    ShaderType shader_type; 
-} DescriptorBinding;
-
-PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
-PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
-PICO_LIST_HEADER_TYPE(DescriptorBinding, DescriptorBinding)
-
-HedronPipeline *create_pipeline(DescriptorBindingPiList binddesc,
-                                BindingDescriptionPiList bdesc,
-                                AttributeDescriptionPiList adesc,
-                                AddrPiList shaders,
-                                HedronSurface* surface);
-void destroy_pipeline(HedronPipeline* pipeline);
-
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 //
 // Data contract (vertex/input formats, etc.)
 // 
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 
 typedef enum {
     VertexBuffer = 0,
@@ -98,11 +64,97 @@ void destroy_buffer(HedronBuffer* buffer);
 
 void set_buffer_data(HedronBuffer* buffer, void* data);
 
-// -----------------------------
+// Descriptor Sets
+// ----------------------------------
+
+typedef enum : uint64_t { UniformBufferDesc } DescriptorType;
+typedef enum : uint64_t { VertexShader } ShaderType;
+
+typedef struct {
+    DescriptorType type;
+    uint32_t descriptor_count;
+} HedronDescriptorPoolSize;
+
+typedef struct {
+    DescriptorType type;
+    ShaderType shader_type; 
+} DescriptorBinding;
+
+typedef struct HedronDescriptorSet HedronDescriptorSet;
+typedef struct HedronDescriptorSetLayout HedronDescriptorSetLayout;
+typedef struct HedronDescriptorPool HedronDescriptorPool;
+
+PICO_LIST_HEADER_TYPE(HedronDescriptorPoolSize, HedronDescriptorPoolSize);
+PICO_LIST_HEADER_TYPE(DescriptorBinding, DescriptorBinding);
+
+HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList binddesc);
+void destroy_descriptor_set_layout(HedronDescriptorSetLayout*);
+
+HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets);
+void destroy_descriptor_pool(HedronDescriptorPool* pool);
+
+// Descriptor sets are allocated from the descriptor pool, so don't need to be deallocated
+AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* descriptor_set_layout, HedronDescriptorPool* pool);
+
+
+typedef struct {
+    HedronBuffer* buffer;
+    uint32_t offset;
+    uint32_t range;
+} HedronDescriptorBufferInfo;
+
+typedef struct {
+    HedronDescriptorBufferInfo buffer_info;
+    DescriptorType descriptor_type;
+    HedronDescriptorSet* descriptor_set;
+} HedronWriteDescriptorSet;
+
+typedef struct {
+    HedronDescriptorBufferInfo buffer_info;
+} HedronCopyDescriptorSet;
+
+PICO_LIST_HEADER_TYPE(HedronWriteDescriptorSet, HedronWriteDescriptorSet);
+PICO_LIST_HEADER_TYPE(HedronCopyDescriptorSet, HedronCopyDescriptorSet);
+
+void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies);
+
+// ----------------------------------------------------------------------------
+// 
+//   Pipeline 
+//
+// ----------------------------------------------------------------------------
+
+typedef enum : uint64_t {Vertex, Instance} InputRate;
+
+typedef struct {
+    uint32_t binding;
+    uint32_t stride;
+    InputRate input_rate; 
+} BindingDescription;
+
+typedef enum : uint64_t {Float_1, Float_2, Float_3} VertexFormat;
+typedef struct {
+    uint32_t binding;
+    uint32_t location;
+    VertexFormat format;
+    uint32_t offset; 
+} AttributeDescription;
+
+PICO_LIST_HEADER_TYPE(BindingDescription, BindingDescription)
+PICO_LIST_HEADER_TYPE(AttributeDescription, AttributeDescription)
+
+HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,
+                                BindingDescriptionPiList bdesc,
+                                AttributeDescriptionPiList adesc,
+                                AddrPiList shaders,
+                                HedronSurface* surface);
+void destroy_pipeline(HedronPipeline* pipeline);
+
+// ----------------------------------------------------------------------------
 // 
 //     Synchronisation
 //
-// ----------------------------
+// ----------------------------------------------------------------------------
 
 typedef struct HedronSemaphore HedronSemaphore;
 typedef struct HedronFence HedronFence;
@@ -124,20 +176,21 @@ typedef struct {
 } ImageResult;
 ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore);
 
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 //
 //        Commands, Queues and Drawing
 // 
-// -------------------------------------------
+// ----------------------------------------------------------------------------
 
 typedef struct HedronCommandPool HedronCommandPool;
 typedef struct HedronCommandBuffer HedronCommandBuffer;
 
 HedronCommandPool* create_command_pool();
-void destroy_command_pool();
+void destroy_command_pool(HedronCommandPool* pool);
 
+// Command buffers are allocated from a pool, and are destroyed at the
+// point the pool is destroyed, so there is no function to release them
 HedronCommandBuffer* create_command_buffer(HedronCommandPool* pool);
-//void destroy_command_buffer(); 
 
 // Command buffer usage
 void queue_submit(HedronCommandBuffer *buffer, HedronFence *fence, HedronSemaphore* wait, HedronSemaphore* signal);
@@ -151,6 +204,7 @@ void reset_command_buffer(HedronCommandBuffer* buffer);
 void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surface, uint32_t image_index);
 void command_end_render_pass(HedronCommandBuffer* commands);
 
+void command_bind_descriptor_set(HedronCommandBuffer* commands, HedronPipeline* pipeline, HedronDescriptorSet* descriptor_set);
 void command_bind_pipeline(HedronCommandBuffer* commands, HedronPipeline* pipeline);
 void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer);
 void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format);

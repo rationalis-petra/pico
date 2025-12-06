@@ -1,7 +1,6 @@
 #include <string.h>
 
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 #include "platform/machine_info.h"
 
 #include "pico/codegen/backend-direct/internal.h"

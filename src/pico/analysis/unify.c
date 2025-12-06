@@ -125,9 +125,9 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, PiAll
     } else {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), a), &nodes);
-        push_ptr(pretty_type(lhs, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
         push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
-        push_ptr(pretty_type(rhs, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
 
         out = (UnifyResult) {
             .type = USimpleError,
@@ -259,9 +259,16 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs,
     }
     case TStruct: {
         if (lhs->structure.fields.len != rhs->structure.fields.len) {
+            PtrArray nodes = mk_ptr_array(5, a);
+            push_ptr(mv_cstr_doc("Unification failed: attempting to unify two different structures with differing number of fields.", a), &nodes);
+            push_ptr(mv_cstr_doc("The types are:", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+            push_ptr(mv_cstr_doc("and", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
+
             return (UnifyResult) {
                 .type = USimpleError,
-                .message = mv_cstr_doc("Unification failed: two different structures with differing number of fields.", a)
+                .message = mk_vsep_doc(nodes, a),
             };
         }
 

@@ -53,16 +53,31 @@ typedef struct {
     VkPresentModeKHR* present_modes;
 } SwapChainSupportDetails;
 
-
 struct HedronShaderModule {
     VkShaderModule module;
 };
 
-
 struct HedronPipeline {
     VkPipelineLayout layout;
-    VkDescriptorSetLayout descriptor_set_layout;
     VkPipeline pipeline;
+};
+
+struct HedronDescriptorSetLayout {
+    VkDescriptorSetLayout layout;
+};
+
+struct HedronBuffer {
+    VkBuffer vulkan_buffer;
+    VkDeviceMemory device_memory;
+    uint64_t size;
+};
+
+struct HedronDescriptorSet {
+    VkDescriptorSet vk_set;
+};
+
+struct HedronDescriptorPool {
+    VkDescriptorPool pool;
 };
 
 struct HedronCommandPool {
@@ -97,6 +112,7 @@ static VkInstance rl_vk_instance;
 static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 static VkDevice logical_device = VK_NULL_HANDLE;
 static Allocator* hd_alloc;
+static PiAllocator hd_pi_alloc;
 
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
@@ -317,6 +333,7 @@ bool is_hedron_supported() {
 
 int init_hedron(Allocator* a) {
     hd_alloc = a;
+    hd_pi_alloc = convert_to_pallocator(a);
     VkResult result = create_instance(a);
     if (result != VK_SUCCESS) return 1;
 
@@ -687,6 +704,7 @@ HedronShaderModule* create_shader_module(U8PiList code) {
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     // TODO: check if code.len % 4 == 0??
     create_info.codeSize = code.len;
+    // TODO: confirm alignment is ok?
     create_info.pCode = (uint32_t*)code.data;
 
     VkShaderModule shader_module;
@@ -705,7 +723,7 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-VkDescriptorSetLayout create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
+HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
     VkDescriptorSetLayoutBinding* bindings = mem_alloc(sizeof(VkDescriptorSetLayoutBinding) * bdesc.len, hd_alloc);
     for (size_t i = 0; i < bdesc.len; i++) {
         VkDescriptorSetLayoutBinding layoutBinding = {};
@@ -734,15 +752,136 @@ VkDescriptorSetLayout create_descriptor_set_layout(DescriptorBindingPiList bdesc
     }
 
     mem_free(bindings, hd_alloc);
-    return descriptorSetLayout;
+
+    HedronDescriptorSetLayout* layout = mem_alloc(sizeof(HedronDescriptorSetLayout), hd_alloc);
+    layout->layout = descriptorSetLayout;
+
+    return layout;
 }
 
-HedronPipeline *create_pipeline(DescriptorBindingPiList setdesc,
+void destroy_descriptor_set_layout(HedronDescriptorSetLayout* layout) {
+    vkDestroyDescriptorSetLayout(logical_device, layout->layout, NULL);
+    mem_free(layout, hd_alloc);
+}
+
+HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets) {
+    VkDescriptorPoolSize* pool_sizes = mem_alloc(sizeof(VkDescriptorPoolSize) * sizes.len, hd_alloc);
+    for (size_t i = 0; i < sizes.len; i++) {
+        HedronDescriptorPoolSize hd_psize = sizes.data[i];
+        
+        uint32_t type = 0;
+        switch (hd_psize.type) {
+        case UniformBufferDesc:
+            type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        pool_sizes[i] = (VkDescriptorPoolSize) {
+            .type = type,
+            .descriptorCount = hd_psize.descriptor_count,
+        };
+    }
+
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = pool_sizes,
+        .maxSets = max_sets,
+    };
+
+    VkDescriptorPool descriptorPool;
+    if (vkCreateDescriptorPool(logical_device, &pool_info, NULL, &descriptorPool) != VK_SUCCESS) {
+        panic(mv_string("failed to create descriptor pool!"));
+    }
+
+    HedronDescriptorPool* pool = mem_alloc(sizeof(VkDescriptorPool), hd_alloc);
+    pool->pool = descriptorPool;
+    return pool;
+}
+
+void destroy_descriptor_pool(HedronDescriptorPool *pool) {
+    vkDestroyDescriptorPool(logical_device, pool->pool, NULL);
+    mem_free(pool, hd_alloc);
+}
+
+AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* layout, HedronDescriptorPool *pool) {
+    VkDescriptorSetLayout* vk_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * set_count, hd_alloc);
+    for (size_t i =  0; i < set_count; i++) {
+        vk_layouts[i] = layout->layout;
+    }
+
+    VkDescriptorSetAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool->pool,
+        .descriptorSetCount = set_count,
+        .pSetLayouts = vk_layouts,
+    };
+
+    VkDescriptorSet* vk_descriptor_sets = mem_alloc(sizeof(VkDescriptorSet) * set_count, hd_alloc);
+    if (vkAllocateDescriptorSets(logical_device, &alloc_info, vk_descriptor_sets) != VK_SUCCESS) {
+        panic(mv_string("failed to allocate descriptor sets!"));
+    };
+
+    AddrPiList descriptor_sets = mk_addr_list(set_count, &hd_pi_alloc);
+    for (size_t i = 0; i < set_count; i++) {
+        HedronDescriptorSet* hd_set = mem_alloc(sizeof(HedronDescriptorSet), hd_alloc);
+        descriptor_sets.data[i] = hd_set;
+        hd_set->vk_set = vk_descriptor_sets[i];
+    }
+
+    mem_free(vk_layouts, hd_alloc);
+    mem_free(vk_descriptor_sets, hd_alloc);
+    return descriptor_sets;
+}
+
+void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
+    VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet), hd_alloc);
+
+    for (size_t i = 0; i < writes.len; i++) {
+        HedronWriteDescriptorSet descriptor_write = writes.data[i];
+        
+        uint32_t descriptor_type;
+        switch (descriptor_write.descriptor_type) {
+        case UniformBufferDesc:
+            descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
+
+        VkDescriptorBufferInfo buffer_info = {
+            .buffer = buffer->vulkan_buffer,
+            .offset = descriptor_write.buffer_info.offset,
+            .range = descriptor_write.buffer_info.range,
+        };
+
+        vk_writes[i] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptor_write.descriptor_set->vk_set,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = descriptor_type,
+            .descriptorCount = 1,
+            .pBufferInfo = &buffer_info,
+            .pImageInfo = NULL,
+            .pTexelBufferView = NULL,
+        };
+    }
+
+    if (copies.len > 0) {
+        panic(mv_string("update_descriptor_sets does not yet support descriptor set copies!"));
+    }
+
+    VkCopyDescriptorSet* vk_copies = mem_alloc(sizeof(VkCopyDescriptorSet), hd_alloc);
+
+    
+
+    vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
+}
+
+HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,
                                 BindingDescriptionPiList bdesc,
                                 AttributeDescriptionPiList adesc,
                                 AddrPiList shaders,
                                 HedronSurface* surface) {
-    VkDescriptorSetLayout descriptorSetLayout = create_descriptor_set_layout(setdesc);
 
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
@@ -899,10 +1038,16 @@ HedronPipeline *create_pipeline(DescriptorBindingPiList setdesc,
     colour_blending.blendConstants[2] = 0.0f; // Optional
     colour_blending.blendConstants[3] = 0.0f; // Optional
 
+    VkDescriptorSetLayout* vk_ds_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * descriptor_set_layouts.len, hd_alloc);
+    for (size_t i = 0; i < descriptor_set_layouts.len; i++) {
+        HedronDescriptorSetLayout* layout = descriptor_set_layouts.data[i];
+        vk_ds_layouts[i] = layout->layout;
+    }
+
     VkPipelineLayoutCreateInfo pipeline_layout_info = (VkPipelineLayoutCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptorSetLayout,
+        .setLayoutCount = descriptor_set_layouts.len,
+        .pSetLayouts = vk_ds_layouts,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = NULL,
     };
@@ -937,12 +1082,11 @@ HedronPipeline *create_pipeline(DescriptorBindingPiList setdesc,
         panic(mv_string("failed to create graphics pipeline!"));
     }
 
-
+    mem_free(vk_ds_layouts, hd_alloc);
     HedronPipeline *pipeline = mem_alloc(sizeof(HedronPipeline), hd_alloc);
     *pipeline = (HedronPipeline) {
         .pipeline = vk_pipeline,
         .layout = pipeline_layout,
-        .descriptor_set_layout = descriptorSetLayout,
     };
     return pipeline;
 }
@@ -950,17 +1094,9 @@ HedronPipeline *create_pipeline(DescriptorBindingPiList setdesc,
 void destroy_pipeline(HedronPipeline *pipeline) {
     vkDestroyPipeline(logical_device, pipeline->pipeline, NULL);
     vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
-    vkDestroyDescriptorSetLayout(logical_device, pipeline->descriptor_set_layout, NULL);
     mem_free(pipeline, hd_alloc);
 }
 
-// Buffers
-
-struct HedronBuffer {
-    VkBuffer vulkan_buffer;
-    VkDeviceMemory device_memory;
-    uint64_t size;
-};
 
 
 
@@ -1264,6 +1400,15 @@ void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surfa
 
 void command_end_render_pass(HedronCommandBuffer *buffer) {
     vkCmdEndRenderPass(buffer->buffer);
+}
+
+void command_bind_descriptor_set(HedronCommandBuffer *commands,
+                                 HedronPipeline *pipeline,
+                                 HedronDescriptorSet *descriptor_set) {
+  vkCmdBindDescriptorSets(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipeline->layout, 0,
+                          1, &descriptor_set->vk_set,
+                          0, NULL);
 }
 
 void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeline) {

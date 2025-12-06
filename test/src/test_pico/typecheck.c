@@ -108,7 +108,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
                                         mk_enum_type(&pregion, 2,
                                                      "left", 1, mk_prim_type(&pregion, Int_64),
                                                      "right", 1, mk_prim_type(&pregion, Address)));
-        TEST_TYPE("(proc [which] if which (:left 10) (:right (malloc 8)))") ;
+        TEST_TYPE("(proc [which] if which (:left 10) (:right (alloc 8)))") ;
         set_std_current_allocator(current_old);
     }
 

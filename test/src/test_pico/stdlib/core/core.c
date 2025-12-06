@@ -1,4 +1,5 @@
 #include "platform/memory/static.h"
+#include "data/float.h"
 
 #include "pico/stdlib/platform/submodules.h"
 
@@ -27,9 +28,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
 
-    if (test_start(log, mv_string("widen-u32-u64"))) {
+    if (test_start(log, mv_string("widen-u32->u64"))) {
         int64_t expected = 678;
         TEST_EQ("(widen (is 678 U32) U64)");
+    }
+
+    if (test_start(log, mv_string("narrow-f64->f32"))) {
+        float32_t expected = 1.0;
+        TEST_EQ("(narrow (is 1.0 F64) F32)");
     }
 
     // -------------------------------------------------------------------------
@@ -512,7 +518,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         uint64_t expected = 8;
-        TEST_EQ("(let [addr malloc (size-of I64)] (load {I64} addr))");
+        TEST_EQ("(let [addr alloc (size-of I64)] (load {I64} addr))");
     }
 
     if (test_start(log, mv_string("test-load-i8"))) {
@@ -523,7 +529,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         int8_t expected = -5;
-        TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
+        TEST_EQ("(let [addr alloc (size-of I8)] (load {I8} addr))");
     }
 
     if (test_start(log, mv_string("test-load-struct"))) {
@@ -534,7 +540,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         set_std_current_allocator(psta);
         IPr expected = {.x = 25, .y = -5};
         *start = expected;
-        TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
+        TEST_EQ("(let [addr alloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
     }
 
     if (test_start(log, mv_string("test-store-i8"))) {
@@ -544,8 +550,8 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int8_t expected = -5;
 
         set_std_current_allocator(psta);
-        RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
-        TEST_MEM("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
+        RUN("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
+        TEST_MEM("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -555,7 +561,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 197231987;
 
         set_std_current_allocator(psta);
-        TEST_MEM("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
+        TEST_MEM("(let [addr alloc (size-of I64)] (store {I64} addr 197231987))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
@@ -566,7 +572,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         IPr expected = {.x = -123, .y = 9713};
 
         set_std_current_allocator(psta);
-        TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
+        TEST_MEM("(let [addr alloc 16] (store addr (struct [.x -123] [.y 9713])))");
     }
 
 
@@ -590,7 +596,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-trivial"))) {
@@ -602,7 +608,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-load/store"))) {
@@ -613,7 +619,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
         set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
-        RUN("(def sl seq [let! dest malloc 8] [let! src malloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
+        RUN("(def sl seq [let! dest alloc 8] [let! src alloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
         TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");
     }
 

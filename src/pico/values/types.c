@@ -1040,7 +1040,10 @@ Document* pretty_type(PiType* type, Allocator* a) {
         .should_wrap = false,
         .show_named = true,
     };
-    return pretty_type_internal(type, ctx, a);
+    Document* pretty_type = pretty_type_internal(type, ctx, a);
+
+    DocStyle default_style = scolour(colour(220, 220, 220), dstyle);
+    return mv_style_doc(default_style, pretty_type, a);
 }
 
 size_t pi_size_align(size_t size, size_t align) {

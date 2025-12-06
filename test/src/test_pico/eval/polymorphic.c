@@ -380,7 +380,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
         set_std_current_allocator(psta);
         RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
-        TEST_MEM("(seq [let! addr (malloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+        TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
     }
 
     set_std_current_allocator(old);

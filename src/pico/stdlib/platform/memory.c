@@ -323,7 +323,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
     build_malloc_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("malloc"));
+    sym = string_to_symbol(mv_string("alloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -352,7 +352,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
     build_temp_malloc_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("temp-malloc"));
+    sym = string_to_symbol(mv_string("temp-alloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
