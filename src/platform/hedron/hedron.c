@@ -78,6 +78,8 @@ struct HedronDescriptorSet {
 
 struct HedronDescriptorPool {
     VkDescriptorPool pool;
+    HedronDescriptorSet* sets;
+    uint32_t num_sets;
 };
 
 struct HedronCommandPool {
@@ -792,14 +794,20 @@ HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList size
     if (vkCreateDescriptorPool(logical_device, &pool_info, NULL, &descriptorPool) != VK_SUCCESS) {
         panic(mv_string("failed to create descriptor pool!"));
     }
+    mem_free(pool_sizes, hd_alloc);
 
-    HedronDescriptorPool* pool = mem_alloc(sizeof(VkDescriptorPool), hd_alloc);
-    pool->pool = descriptorPool;
+    HedronDescriptorPool* pool = mem_alloc(sizeof(HedronDescriptorPool), hd_alloc);
+    *pool = (HedronDescriptorPool) {
+        .pool = descriptorPool,
+        .sets = mem_alloc(sizeof(HedronDescriptorSet) * max_sets, hd_alloc),
+        .num_sets = 0,
+    };
     return pool;
 }
 
 void destroy_descriptor_pool(HedronDescriptorPool *pool) {
     vkDestroyDescriptorPool(logical_device, pool->pool, NULL);
+    mem_free(pool->sets, hd_alloc);
     mem_free(pool, hd_alloc);
 }
 
@@ -823,10 +831,11 @@ AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* 
 
     AddrPiList descriptor_sets = mk_addr_list(set_count, &hd_pi_alloc);
     for (size_t i = 0; i < set_count; i++) {
-        HedronDescriptorSet* hd_set = mem_alloc(sizeof(HedronDescriptorSet), hd_alloc);
+        HedronDescriptorSet* hd_set = &pool->sets[pool->num_sets + i];
         descriptor_sets.data[i] = hd_set;
         hd_set->vk_set = vk_descriptor_sets[i];
     }
+    pool->num_sets += set_count;
 
     mem_free(vk_layouts, hd_alloc);
     mem_free(vk_descriptor_sets, hd_alloc);
@@ -872,9 +881,9 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
 
     VkCopyDescriptorSet* vk_copies = mem_alloc(sizeof(VkCopyDescriptorSet), hd_alloc);
 
-    
-
     vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
+    mem_free(vk_writes, hd_alloc);
+    mem_free(vk_copies, hd_alloc);
 }
 
 HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,

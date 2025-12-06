@@ -739,7 +739,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
 
     typep = mk_proc_type(pia, 1, descriptor_set_layout_ty, mk_prim_type(pia, Unit));
     build_destroy_descriptor_set_layout(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("destory-descriptor-set-layout"));
+    sym = string_to_symbol(mv_string("destroy-descriptor-set-layout"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -755,7 +755,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
 
     typep = mk_proc_type(pia, 1, descriptor_pool_ty, mk_prim_type(pia, Unit));
     build_destroy_descriptor_pool(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("destory-descriptor-pool"));
+    sym = string_to_symbol(mv_string("destroy-descriptor-pool"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -88,7 +88,7 @@ PICO_LIST_HEADER_TYPE(HedronDescriptorPoolSize, HedronDescriptorPoolSize);
 PICO_LIST_HEADER_TYPE(DescriptorBinding, DescriptorBinding);
 
 HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList binddesc);
-void destroy_descriptor_set_layout(HedronDescriptorSetLayout*);
+void destroy_descriptor_set_layout(HedronDescriptorSetLayout* layout);
 
 HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets);
 void destroy_descriptor_pool(HedronDescriptorPool* pool);
