@@ -2312,7 +2312,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                            , "r" (&input)
                            , "r" (&output)
                            , "c" (sizeof(MacroResult)) 
-                         : "r13", "r14", "r15");
+                         : "rbp", "r13", "r14", "r15");
 
     set_std_temp_allocator(old_temp_alloc);
     return output;
