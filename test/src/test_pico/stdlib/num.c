@@ -91,6 +91,16 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(f32.- 51.5 2.45)");
     }
 
+    if (test_start(log, mv_string("f32-div"))) {
+        float expected = 51.5 / 2.45;
+        TEST_EQ("(f32./ 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f32-mul"))) {
+        float expected = 51.5 * 2.45;
+        TEST_EQ("(f32.* 51.5 2.45)");
+    }
+
     if (test_start(log, mv_string("f64-add"))) {
         double expected = 51.5 + 2.45;
         TEST_EQ("(f64.+ 51.5 2.45)");
@@ -99,6 +109,16 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
     if (test_start(log, mv_string("f64-sub"))) {
         double expected = 51.5 - 2.45;
         TEST_EQ("(f64.- 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-div"))) {
+        double expected = 51.5 / 2.45;
+        TEST_EQ("(f64./ 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-mul"))) {
+        double expected = 51.5 * 2.45;
+        TEST_EQ("(f64.* 51.5 2.45)");
     }
 
     // -------------------------------------------------------------------------

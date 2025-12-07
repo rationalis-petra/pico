@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include "platform/signals.h"
 #include "data/stringify.h"
+#include "data/float.h"
 
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/num.h"
@@ -31,6 +32,12 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
+}
+
+void build_unary_float_fn(PiType* type, LocationSize sz, void* cfn, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType arg_type = sz == sz_64 ? (CType){.sort = CSFloat} : (CType){.sort = CSDouble};
+    CType fn_ctype = mk_fn_ctype(pia, 1, "x", arg_type, arg_type);
+    convert_c_fn(cfn, &fn_ctype, type, ass, a, point); 
 }
 
 void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
@@ -445,6 +452,21 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, P
 
     build_binary_float_fn(ass, div_op, sz, a, &point);
     sym = string_to_symbol(mv_string("/"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_prim_type(pia, prim));
+    sym = string_to_symbol(mv_string("sin"));
+    build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)sin_f64 : (void*)sin_f32, ass, pia, a, &point);
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    sym = string_to_symbol(mv_string("cos"));
+    build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)cos_f64 : (void*)cos_f32, ass, pia, a, &point);
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

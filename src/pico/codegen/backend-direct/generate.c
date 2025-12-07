@@ -656,6 +656,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 args_size += ADDRESS_SIZE;
                 
                 // Copy down the function itself & call
+                // TODO (BUG!!): This is returning 0x0 for division
                 build_binary_op(Mov, reg(RCX, sz_64), rref8(RBP, arg_base - args_size, sz_64), ass, a, point);
                 build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
                 data_stack_shrink(env, args_size);

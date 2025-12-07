@@ -194,7 +194,7 @@ void build_destroy_descriptor_set_layout(PiType* type, Assembler* ass, PiAllocat
 }
 
 void build_create_descriptor_pool(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 2, "sizes", mk_list_ctype(pia), mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 2, "sizes", mk_list_ctype(pia), "max-sets", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), mk_voidptr_ctype(pia));
     convert_c_fn(create_descriptor_pool, &fn_ctype, type, ass, a, point); 
 }
 

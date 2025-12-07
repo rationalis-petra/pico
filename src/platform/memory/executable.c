@@ -327,13 +327,15 @@ void exec_free(void* ptr, void* ctx) {
 
 Allocator mk_executable_allocator(Allocator* a) {
     exec_context* ctx = mem_alloc(sizeof(exec_context), a); 
-    ctx->blocksize = platform_pagesize();
-    ctx->small_blocks = mk_ptr_array(10, a);
-    ctx->medium_blocks = NULL;
-    ctx->medium_blocks_end = NULL;
-    ctx->large_blocks = NULL;
-    ctx->large_blocks_end = NULL;
-    ctx->metadata_allocator = a;
+    *ctx = (exec_context) {
+        .blocksize = platform_pagesize(),
+        .small_blocks = mk_ptr_array(10, a),
+        .medium_blocks = NULL,
+        .medium_blocks_end = NULL,
+        .large_blocks = NULL,
+        .large_blocks_end = NULL,
+        .metadata_allocator = a,
+    };
 
     static AllocatorVTable exec_vtable = {
         .malloc = &exec_alloc,

@@ -143,7 +143,7 @@ const char* required_validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
 #ifdef DEBUG
 const bool enable_validation = true;
 #else 
-const bool enable_validation = false;
+const bool enable_validation = true;
 #endif
 
 bool check_validation_layer_support(Allocator* a) {
@@ -844,6 +844,7 @@ AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* 
 
 void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
     VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet), hd_alloc);
+    VkDescriptorBufferInfo* vk_write_buffer_info = mem_alloc(sizeof(VkDescriptorBufferInfo), hd_alloc);
 
     for (size_t i = 0; i < writes.len; i++) {
         HedronWriteDescriptorSet descriptor_write = writes.data[i];
@@ -856,7 +857,7 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
 
         HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
 
-        VkDescriptorBufferInfo buffer_info = {
+        vk_write_buffer_info[i] = (VkDescriptorBufferInfo) {
             .buffer = buffer->vulkan_buffer,
             .offset = descriptor_write.buffer_info.offset,
             .range = descriptor_write.buffer_info.range,
@@ -869,7 +870,7 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
             .dstArrayElement = 0,
             .descriptorType = descriptor_type,
             .descriptorCount = 1,
-            .pBufferInfo = &buffer_info,
+            .pBufferInfo = vk_write_buffer_info + i,
             .pImageInfo = NULL,
             .pTexelBufferView = NULL,
         };
@@ -883,6 +884,7 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
 
     vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
     mem_free(vk_writes, hd_alloc);
+    mem_free(vk_write_buffer_info, hd_alloc);
     mem_free(vk_copies, hd_alloc);
 }
 

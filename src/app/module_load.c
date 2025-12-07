@@ -31,9 +31,9 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     Target target = (Target) {
         .target = mk_assembler(current_cpu_feature_flags(), &exec),
         .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
-        .data_aux = mem_alloc(sizeof(U8Array), a),
+        .data_aux = mem_alloc(sizeof(U8Array), &aa),
     };
-    *target.data_aux = mk_u8_array(256, a);
+    *target.data_aux = mk_u8_array(256, &aa);
 
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
@@ -100,12 +100,10 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
             };
             display_error(multi, cin, serr, filename, a);
             goto on_error_generic;
-            return;
         }
         if (res.type != ParseSuccess) {
             write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
             goto on_error_generic;
-            return;
         }
 
         // -------------------------------------------------------------------------
@@ -151,8 +149,6 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     delete_arena_allocator(arena);
     delete_arena_allocator(iter_arena);
     release_executable_allocator(exec);
-    sdelete_u8_array(*target.data_aux);
-    mem_free(target.data_aux, a);
     return;
 
  on_pi_error:
@@ -169,11 +165,8 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     delete_arena_allocator(arena);
     delete_arena_allocator(iter_arena);
     release_executable_allocator(exec);
-    sdelete_u8_array(*target.data_aux);
-    mem_free(target.data_aux, a);
     return;
 }
-
 
 void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, Allocator* a) {
     ArenaAllocator* arena = make_arena_allocator(16384, a);
@@ -184,9 +177,9 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
     Target target = (Target) {
         .target = mk_assembler(current_cpu_feature_flags(), &exec),
         .code_aux = mk_assembler(current_cpu_feature_flags(), &exec),
-        .data_aux = mem_alloc(sizeof(U8Array), a),
+        .data_aux = mem_alloc(sizeof(U8Array), &aa),
     };
-    *target.data_aux = mk_u8_array(256, a);
+    *target.data_aux = mk_u8_array(256, &aa);
 
     IStream* cin = mk_capturing_istream(in, a);
     reset_bytecount(cin);
@@ -216,13 +209,11 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
                 .error = res.error,
             };
             display_error(multi, cin, serr, filename, a);
-            delete_arena_allocator(arena);
-            return;
+            goto on_error_generic;
         }
         if (res.type != ParseSuccess) {
             write_fstring(mv_string("Parse Returned Invalid Result!\n"), serr);
-            delete_arena_allocator(arena);
-            return;
+            goto on_error_generic;
         }
 
         // -------------------------------------------------------------------------
@@ -258,10 +249,6 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
     }
 
  on_exit:
-    delete_assembler(target.target);
-    delete_assembler(target.code_aux);
-    sdelete_u8_array(*target.data_aux);
-    mem_free(target.data_aux, a);
     uncapture_istream(cin);
     delete_arena_allocator(arena);
     release_executable_allocator(exec);
@@ -274,13 +261,9 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
  on_error:
     write_fstring(point.error_message, serr);
     write_fstring(mv_string("\n"), serr);
- goto on_error_generic;
+    goto on_error_generic;
 
  on_error_generic:
-    delete_assembler(target.target);
-    delete_assembler(target.code_aux);
-    sdelete_u8_array(*target.data_aux);
-    mem_free(target.data_aux, a);
     uncapture_istream(cin);
     delete_arena_allocator(arena);
     release_executable_allocator(exec);

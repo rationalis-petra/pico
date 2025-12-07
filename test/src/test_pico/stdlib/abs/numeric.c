@@ -17,4 +17,14 @@ void run_pico_stdlib_abs_numeric_tests(TestLog *log, Module* module, Environment
         int64_t expected = 55;
         TEST_EQ("(+ 10 45)");
     }
+
+    if (test_start(log, mv_string("numeric-div"))) {
+        double expected = 3.0 / 4.5;
+        TEST_EQ("(/ 3.0 4.5)");
+    }
+
+    if (test_start(log, mv_string("numeric-mul"))) {
+        double expected = 3.0 * 4.5;
+        TEST_EQ("(* 3.0 4.5)");
+    }
 }
