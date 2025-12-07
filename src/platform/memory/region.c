@@ -165,7 +165,7 @@ RegionAllocator* make_subregion(RegionAllocator* region) {
         };
 
         RegionBlock rblock = {
-            .data = mem_alloc(region->blocksize, region->gpa),
+            .data = mem_alloc(region->child_blocksize, region->gpa),
             .bmp = 0,
         };
         push_rblock(rblock, &subregion->blocks);
