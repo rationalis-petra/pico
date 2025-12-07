@@ -143,7 +143,7 @@ const char* required_validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
 #ifdef DEBUG
 const bool enable_validation = true;
 #else 
-const bool enable_validation = true;
+const bool enable_validation = false;
 #endif
 
 bool check_validation_layer_support(Allocator* a) {
