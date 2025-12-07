@@ -85,7 +85,7 @@ PerfTime query_mono_timer() {
 
     return (PerfTime) {
         .time_sec = (milliseconds / 1000),
-        .time_ns = (milliseconds % 1000) * 1E9,
+        .time_ns = (milliseconds % 1000) * 1E6,
     };
 }
 
@@ -94,7 +94,7 @@ PerfTime query_realtime() {
 
     return (PerfTime) {
         .time_sec = (milliseconds / 1000),
-        .time_ns = (milliseconds % 1000) * 1E9,
+        .time_ns = (milliseconds % 1000) * 1E6,
     };
 }
 

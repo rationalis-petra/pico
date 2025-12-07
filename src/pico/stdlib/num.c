@@ -35,7 +35,7 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
 }
 
 void build_unary_float_fn(PiType* type, LocationSize sz, void* cfn, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType arg_type = sz == sz_64 ? (CType){.sort = CSFloat} : (CType){.sort = CSDouble};
+    CType arg_type = sz == sz_64 ? (CType){.sort = CSDouble} : (CType){.sort = CSFloat};
     CType fn_ctype = mk_fn_ctype(pia, 1, "x", arg_type, arg_type);
     convert_c_fn(cfn, &fn_ctype, type, ass, a, point); 
 }

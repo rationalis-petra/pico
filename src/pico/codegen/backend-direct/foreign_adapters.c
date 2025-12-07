@@ -740,13 +740,22 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         build_binary_op(Add, reg(RSP, sz_64), imm32(arg_offsets.data[0] - 0x8), ass, a, point);
 
         // Now, push result onto stack
-        if (return_arg_size > 0) {
-            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        if (return_arg_size > 0)
+        {
+            // Check if is floating or not
+            if (ctype->proc.ret->sort == CSFloat) {
+                build_binary_op(Sub, reg(RSP, sz_64), imm8(8), ass, a, point);
+                build_binary_op(MovSS, rref8(RSP, 0, sz_32), reg(XMM0, sz_32), ass, a, point);
+            } else if (ctype->proc.ret->sort == CSDouble) {
+                build_binary_op(Sub, reg(RSP, sz_64), imm8(8), ass, a, point);
+                build_binary_op(MovSD, rref8(RSP, 0, sz_64), reg(XMM0, sz_64), ass, a, point);
+            } else {
+                build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            }
         }
 
         // Push return address
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-
     }
     build_nullary_op(Ret, ass, a, point);
 

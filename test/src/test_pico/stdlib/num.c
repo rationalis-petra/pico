@@ -134,12 +134,12 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
     }
 
     if (test_start(log, mv_string("f64-sin"))) {
-        float expected = sin_f64(3.14159);
+        double expected = sin_f64(3.14159);
         TEST_EQ("(f64.sin 3.14159)");
     }
 
     if (test_start(log, mv_string("f64-cos"))) {
-        float expected = cos_f64(3.14159);
+        double expected = cos_f64(3.14159);
         TEST_EQ("(f64.cos 3.14159)");
     }
 
