@@ -393,7 +393,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             }
             break;
         }
-        case ALocalIndexed:
+        case ALocalIndexed: {
             // First, we need the size of the variable & allocate space for it on the stack
             // ------------------------------------------------------------------------------------------
             // Store stack size in R9
@@ -409,10 +409,12 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             // Finally, move the value from the source to the stack head
             generate_poly_move(reg(VSTACK_HEAD, sz_64), reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
             break;
-        case ATypeVar:
+        }
+        case ATypeVar: {
             gen_mk_type_var(syn.variable, ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
             break;
+        }
         case AGlobal: {
             PiType indistinct_type = *strip_type(syn.ptype);
 
@@ -1131,7 +1133,6 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         break;
     }
     case SInstance: {
-        // TODO: check that the instance handles stack alignment correctly
         /* Instances work as follows:
          * • Instances as values are expected to be passed as pointers and allocated temporarily. 
          * • Non-parametric instances are simply pointers : codegen generates a
@@ -1150,7 +1151,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // Grow by address size to account for the fact that the for loop
-        // keeps a stack of the address, which is updated each iteration.
+        // keeps an address for the current field, which is updated each iteration.
         data_stack_grow(env, ADDRESS_SIZE);
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
@@ -1164,11 +1165,12 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             generate_i(*val, env, target, links, a, point);
 
             // The offset tells us how far up the stack we look to find the instance ptr
-            size_t offset = pi_stack_size_of(*val->ptype);
+            size_t val_sz = pi_size_of(*val->ptype);
+            size_t val_stack_sz = pi_stack_align(val_sz);
 
             // Retrieve index (ptr) 
             // TODO (BUG): Check offset is < int8_t max.
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(offset), sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
 
             // Align RCX
             size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*val->ptype));
@@ -1177,17 +1179,17 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
             }
 
-            // TODO (check if replace with stack copy)
-            generate_monomorphic_copy(RCX, RSP, offset, ass, a, point);
+            // TODO (check if should replace with stack copy/move)
+            generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
 
-            // We need to increment the current field index to be able ot access
+            // We need to increment the current field index to be able to access
             // the next
-            build_binary_op(Add, reg(RCX, sz_64), imm32(offset), ass, a, point);
-            index_offset += offset;
+            build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
+            index_offset += val_sz;
 
             // Pop value from stack
-            build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(offset)), ass, a, point);
-            data_stack_shrink(env, offset);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
+            data_stack_shrink(env, val_stack_sz);
 
             // Override index with new value
             build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
