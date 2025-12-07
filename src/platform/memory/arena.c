@@ -75,9 +75,14 @@ void* arena_malloc_adapter(size_t memsize, void* arena) {
 void* arena_realloc(void* ptr, size_t memsize, void* ctx) {
     // Arenas don't reallocate; just get a new block and discard the old one
     size_t old_size = *(size_t*) (ptr - sizeof(size_t));
-    void* new_data = arena_malloc(ctx, memsize);
-    memcpy(new_data, ptr, old_size);
-    return new_data;
+    if (memsize > old_size) {
+        void* new_data = arena_malloc(ctx, memsize);
+        memcpy(new_data, ptr, old_size);
+        return new_data;
+    } else {
+        // new size is <= than old size, just return old pointer
+        return ptr;
+    }
 }
 
 #pragma GCC diagnostic push

@@ -275,7 +275,10 @@ int main(int argc, char** argv) {
         init_codegen(command.script.backend, stdalloc);
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
-            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, stdalloc);
+            RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
+            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, region);
+            delete_region_allocator(region);
+            
             delete_istream(fin, stdalloc);
         } else {
             write_string(mv_string("Failed to open file: "), cout);

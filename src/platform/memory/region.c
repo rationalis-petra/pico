@@ -18,6 +18,7 @@ struct RegionAllocator {
     PtrArray child_regions;
 
     size_t memory_allocated;
+    size_t child_blocksize;
     size_t blocksize;
     RBlockArray blocks;
     Allocator* gpa;
@@ -34,6 +35,7 @@ RegionAllocator* make_region_allocator(size_t initial_regionsize, bool dynamic_r
         .child_regions = mk_ptr_array(8, a),
 
         .memory_allocated = 0,
+        .child_blocksize = initial_regionsize,
         .blocksize = initial_regionsize,
         .blocks = mk_rblock_array(1, a),
         .gpa = a,
@@ -119,11 +121,16 @@ void* region_malloc_adapter(size_t memsize, void* arena) {
 }
 
 void* region_realloc(void* ptr, size_t memsize, void* ctx) {
-    // Arenas don't reallocate; just get a new block and discard the old one
+    // Regions are like arenas and don't reallocate; just get a new block and discard the old one
     size_t old_size = *(size_t*) (ptr - sizeof(size_t));
-    void* new_data = region_alloc(ctx, memsize);
-    memcpy(new_data, ptr, old_size);
-    return new_data;
+    if (memsize > old_size) {
+        void* new_data = region_alloc(ctx, memsize);
+        memcpy(new_data, ptr, old_size);
+        return new_data;
+    } else {
+        // new size is <= than old size, just return old pointer
+        return ptr;
+    }
 }
 
 #pragma GCC diagnostic push
@@ -150,7 +157,7 @@ RegionAllocator* make_subregion(RegionAllocator* region) {
         *subregion = (RegionAllocator) {
             .parent_region = region,
             .memory_allocated = 0,
-            .blocksize = region->blocksize,
+            .blocksize = region->child_blocksize,
             .blocks = mk_rblock_array(1, region->gpa),
             .gpa = region->gpa,
             .dynamic_regionsize = region->dynamic_regionsize,
@@ -175,10 +182,9 @@ void release_subregion(RegionAllocator* subregion) {
 
 void reset_subregion(RegionAllocator* subregion) {
     if (subregion->memory_allocated > subregion->blocksize) {
-        // TODO: only reset regionsize if dynamic regionsize is true.
         subregion->blocksize = subregion->memory_allocated;
-        if (subregion->parent_region) {
-            subregion->parent_region->blocksize = subregion->memory_allocated;
+        if (subregion->parent_region && subregion->parent_region->dynamic_regionsize) {
+            subregion->parent_region->child_blocksize = subregion->memory_allocated;
         }
         subregion->memory_allocated = 0;
         for (size_t i = 0; i < subregion->blocks.len; i++) {

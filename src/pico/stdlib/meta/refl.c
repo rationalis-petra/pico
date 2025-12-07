@@ -55,7 +55,7 @@ CType mk_maybe_module_ctype(PiAllocator* pia) {
 
 Result load_module_c_fun(String filename, MaybeModule module) {
     // (ann load-module String → Unit) : load the module/code located in file! 
-    PiAllocator pia = get_std_current_allocator();
+    PiAllocator pia = get_std_perm_allocator();
     Allocator a = convert_to_callocator(&pia);
     IStream* sfile = open_file_istream(filename, &a);
     if (!sfile) {
@@ -68,7 +68,11 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     Package* current_package = get_current_package();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
     Module* parent = module.is_none ? NULL : module.module;
-    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, pia);
+
+    RegionAllocator* ra = make_region_allocator(16384, true, &a);
+    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, pia, ra);
+    delete_region_allocator(ra);
+
     delete_istream(sfile, &a);
     delete_formatted_ostream(os, &a);
     return (Result) {.type = Ok};
@@ -102,7 +106,11 @@ Result run_script_c_fun(String filename, MaybeModule mmodule) {
         : mmodule.module;
     OStream* current_ostream = get_std_ostream();
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
-    run_script_from_istream(sfile, os, (const char*)filename.bytes, module, &a);
+
+    RegionAllocator* region = make_region_allocator(16384, true, &a);
+    run_script_from_istream(sfile, os, (const char*)filename.bytes, module, region); 
+    delete_region_allocator(region);
+
     delete_istream(sfile, &a);
     delete_formatted_ostream(os, &a);
     return (Result) {.type = Ok};
