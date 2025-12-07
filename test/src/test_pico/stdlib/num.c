@@ -1,3 +1,5 @@
+#include "data/float.h"
+
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
@@ -101,6 +103,16 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(f32.* 51.5 2.45)");
     }
 
+    if (test_start(log, mv_string("f32-sin"))) {
+        float expected = sin_f32(3.14159);
+        TEST_EQ("(f32.sin 3.14159)");
+    }
+
+    if (test_start(log, mv_string("f32-cos"))) {
+        float expected = cos_f32(3.14159);
+        TEST_EQ("(f32.cos 3.14159)");
+    }
+
     if (test_start(log, mv_string("f64-add"))) {
         double expected = 51.5 + 2.45;
         TEST_EQ("(f64.+ 51.5 2.45)");
@@ -119,6 +131,16 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
     if (test_start(log, mv_string("f64-mul"))) {
         double expected = 51.5 * 2.45;
         TEST_EQ("(f64.* 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-sin"))) {
+        float expected = sin_f64(3.14159);
+        TEST_EQ("(f64.sin 3.14159)");
+    }
+
+    if (test_start(log, mv_string("f64-cos"))) {
+        float expected = cos_f64(3.14159);
+        TEST_EQ("(f64.cos 3.14159)");
     }
 
     // -------------------------------------------------------------------------

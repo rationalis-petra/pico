@@ -2260,11 +2260,15 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                          "push 0x8(%4)        \n"
                          "push (%4)         \n"
 
+                         // First store the function to call in RAX, in case
+                         // the compiler has stored it as an offset to rbp
+                         // then we can set rbp and call
+                         "mov %1, %%rax \n"
                          "mov %%rsp, %%rbp \n"
 
                          // Call function, this should consume 'Array' from the stack and push
                          // 'Raw Syntax' onto the stack
-                         "call *%1         \n"
+                         "call *%%rax         \n"
 
                          // After calling the function, we
                          // expect a RawTree to be atop the stack:
@@ -2312,7 +2316,9 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                            , "r" (&input)
                            , "r" (&output)
                            , "c" (sizeof(MacroResult)) 
-                         : "rbp", "r13", "r14", "r15");
+                           // Clobbers are either registers we change (output cannot be trusted)
+                           // or registers we don't want compiler to assign to input values
+                         : "rax", "r13", "r14", "r15");
 
     set_std_temp_allocator(old_temp_alloc);
     return output;
