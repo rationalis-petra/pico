@@ -23,5 +23,9 @@ _Noreturn void panic(String message) {
     write_string(mv_string("of pico, rather than an issue with program being run.\n"), get_stdout_stream());
     end_coloured_text(stdout);
 
-    exit(1); // Exit to ensure buffers are flushed
+    // When in debug, quick_exit prevents the leak checker from producing a leak
+    // report, which is undesirable in a crash/panic situation
+    // When in release, we don't really care about cleaning up in a panic, so
+    // quick_exit is fine anyways.
+    quick_exit(1); 
 }
