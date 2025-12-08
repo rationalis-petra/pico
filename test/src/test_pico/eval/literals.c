@@ -5,10 +5,10 @@
 
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 
-void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
     };

@@ -83,6 +83,9 @@ typedef enum {
     CMovL, // Move if lesser (signed)
     CMovG, // Move if greater (signed)
 
+    // Conversions
+    CvtSD2SS, // p 403.
+
     // ------------------
     //  Meta
     // ------------------

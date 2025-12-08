@@ -1,13 +1,10 @@
 #include <string.h>
 
-#include "data/stringify.h"
-
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/machine_info.h"
 #include "components/pretty/string_printer.h"
 
-#include "pico/data/error.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
@@ -335,7 +332,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
     }
 }
 
-void generate_offset_of(Regname dest, Symbol field, SymPtrAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
+void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
     build_unary_op(Push, imm8(0), ass, a, point);
     for (size_t i = 0; i < fields.len; i++) {
         if (i != 0) {

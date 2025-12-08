@@ -8,8 +8,7 @@
 
 /* The Document Interaface. */
 
-typedef enum {
-    // 'Core'
+typedef enum {// 'Core'
     LineDocument,
     StringDocument,
     CatDocument,

@@ -1,21 +1,23 @@
-#include <string.h>
 #include "platform/memory/static.h"
+#include "data/float.h"
 
-#include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
-#define ASSERT_EQ(str) assert_toplevel_eq(str, &expected, module, context)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
-void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_allocator = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_allocator;
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
+        .pia = pia,
         .log = log,
         .target = target,
     };
@@ -26,9 +28,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
 
-    if (test_start(log, mv_string("widen-u32-u64"))) {
+    if (test_start(log, mv_string("widen-u32->u64"))) {
         int64_t expected = 678;
         TEST_EQ("(widen (is 678 U32) U64)");
+    }
+
+    if (test_start(log, mv_string("narrow-f64->f32"))) {
+        float32_t expected = 1.0;
+        TEST_EQ("(narrow (is 1.0 F64) F32)");
     }
 
     // -------------------------------------------------------------------------
@@ -500,65 +507,72 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // 
     // -----------------------------------------------------
     
-    void* mem = mem_alloc(128, a);
-    Allocator old = get_std_current_allocator();
-    void* start;
-    {
-        Allocator sta = mk_static_allocator(mem, 128);
-        start = mem_alloc(8, &sta);
-    }
+#define SETUP_MEM(type) void* mem = mem_alloc(128, &ra); type* start; { Allocator sta = mk_static_allocator(mem, 128); start = mem_alloc(8, &sta); }
 
+    PiAllocator old = get_std_current_allocator(); 
     if (test_start(log, mv_string("test-load-i64"))) {
+        SETUP_MEM(int64_t);
         Allocator sta = mk_static_allocator(mem, 128);
-        *(int64_t*)start = 8;
+        PiAllocator psta = convert_to_pallocator(&sta);
+        *start = 8;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         uint64_t expected = 8;
-        TEST_EQ("(let [addr malloc (size-of I64)] (load {I64} addr))");
+        TEST_EQ("(let [addr alloc (size-of I64)] (load {I64} addr))");
     }
 
     if (test_start(log, mv_string("test-load-i8"))) {
+        SETUP_MEM(int8_t);
         Allocator sta = mk_static_allocator(mem, 128);
-        *(int8_t*)start = -5;
+        PiAllocator psta = convert_to_pallocator(&sta);
+        *start = -5;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         int8_t expected = -5;
-        TEST_EQ("(let [addr malloc (size-of I8)] (load {I8} addr))");
+        TEST_EQ("(let [addr alloc (size-of I8)] (load {I8} addr))");
     }
 
     if (test_start(log, mv_string("test-load-struct"))) {
-        Allocator sta = mk_static_allocator(mem, 128);
         typedef struct { int64_t x; int64_t y; } IPr;
-        set_std_current_allocator(sta);
+        SETUP_MEM(IPr);
+        Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
+        set_std_current_allocator(psta);
         IPr expected = {.x = 25, .y = -5};
-        *(IPr*)(start) = expected;
-        TEST_EQ("(let [addr malloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
+        *start = expected;
+        TEST_EQ("(let [addr alloc 16] (load {(Struct [.x I64] [.y I64])} addr))");
     }
 
     if (test_start(log, mv_string("test-store-i8"))) {
+        SETUP_MEM(void)
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int8_t expected = -5;
 
-        set_std_current_allocator(sta);
-        RUN("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
-        TEST_MEM("(let [addr malloc (size-of I8)] (store {I8} addr -5))");
+        set_std_current_allocator(psta);
+        RUN("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
+        TEST_MEM("(let [addr alloc (size-of I8)] (store {I8} addr -5))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = 197231987;
 
-        set_std_current_allocator(sta);
-        TEST_MEM("(let [addr malloc (size-of I64)] (store {I64} addr 197231987))");
+        set_std_current_allocator(psta);
+        TEST_MEM("(let [addr alloc (size-of I64)] (store {I64} addr 197231987))");
     }
 
     if (test_start(log, mv_string("test-store-i64"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct { int64_t x; int64_t y; } IPr;
         IPr expected = {.x = -123, .y = 9713};
 
-        set_std_current_allocator(sta);
-        TEST_MEM("(let [addr malloc 16] (store addr (struct [.x -123] [.y 9713])))");
+        set_std_current_allocator(psta);
+        TEST_MEM("(let [addr alloc 16] (store addr (struct [.x -123] [.y 9713])))");
     }
 
 
@@ -574,35 +588,40 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     // ---------------------------------------------------------------
 
     if (test_start(log, mv_string("seal-val"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
         SID expected = {.tinfo = 0x800000080000008, .address = start};
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-trivial"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         typedef struct {uint64_t tinfo; void* address; } SID;
         SID expected = {.tinfo = 0x800000080000008, .address = start};
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.p Address])");
-        TEST_EQ("(seq [let! addr malloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
+        TEST_EQ("(seq [let! addr alloc 8] (store addr 9) (seal SID [I64] struct [.p addr]))");
     }
 
     if (test_start(log, mv_string("unseal-load/store"))) {
+        SETUP_MEM(void);
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         uint64_t expected = 16823;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def SID Sealed [A] Struct [.dest Address] [.src Address])");
-        RUN("(def sl seq [let! dest malloc 8] [let! src malloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
+        RUN("(def sl seq [let! dest alloc 8] [let! src alloc 8] (store src 16823) (seal SID [I64] struct [.dest dest] [.src src]))");
         TEST_MEM("(unseal [x sl] [A] (store x.dest (load {A} x.src)))");
     }
 
     set_std_current_allocator(old);
-    mem_free(mem, a);
 }

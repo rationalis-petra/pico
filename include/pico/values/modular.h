@@ -1,12 +1,13 @@
 #ifndef __PICO_VALUES_MODULAR_H
 #define __PICO_VALUES_MODULAR_H
 
-#include "platform/memory/allocator.h"
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
 #include "components/assembler/link_data.h"
 
+#include "pico/data/client/allocator.h"
+#include "pico/data/client/list.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
@@ -27,7 +28,7 @@ typedef struct {
 
 typedef struct {
     uint64_t id;
-    PtrArray args;
+    AddrPiList args;
     Symbol src_sym;
     Module* src;
 } InstanceSrc;
@@ -104,14 +105,14 @@ typedef struct {
 } Segments;
 
 // Package Interface
-Package* mk_package(Name name, Allocator* a);
+Package* mk_package(Name name, PiAllocator pico_allocator);
 void delete_package(Package* package);
 Result add_module(Symbol symbol, Module* module, Package* package);
 Module* get_module(Symbol symbol, Package* package);
 Module* get_root_module(Package* package);
 
 // Module Interface
-Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, Allocator* a);
+Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, PiAllocator pico_allocator);
 void delete_module(Module* module);
 
 // If we are going to define the result of evaluating (target), then it must be prepped

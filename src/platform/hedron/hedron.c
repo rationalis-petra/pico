@@ -7,7 +7,9 @@
 
 #ifdef USE_VULKAN
 
-#if OS_FAMILY == UNIX
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+#define VK_USE_PLATFORM_XLIB_KHR
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #define VK_USE_PLATFORM_WAYLAND_KHR
 #elif OS_FAMILY == WINDOWS
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -51,7 +53,6 @@ typedef struct {
     VkPresentModeKHR* present_modes;
 } SwapChainSupportDetails;
 
-
 struct HedronShaderModule {
     VkShaderModule module;
 };
@@ -59,6 +60,26 @@ struct HedronShaderModule {
 struct HedronPipeline {
     VkPipelineLayout layout;
     VkPipeline pipeline;
+};
+
+struct HedronDescriptorSetLayout {
+    VkDescriptorSetLayout layout;
+};
+
+struct HedronBuffer {
+    VkBuffer vulkan_buffer;
+    VkDeviceMemory device_memory;
+    uint64_t size;
+};
+
+struct HedronDescriptorSet {
+    VkDescriptorSet vk_set;
+};
+
+struct HedronDescriptorPool {
+    VkDescriptorPool pool;
+    HedronDescriptorSet* sets;
+    uint32_t num_sets;
 };
 
 struct HedronCommandPool {
@@ -93,11 +114,14 @@ static VkInstance rl_vk_instance;
 static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 static VkDevice logical_device = VK_NULL_HANDLE;
 static Allocator* hd_alloc;
+static PiAllocator hd_pi_alloc;
 
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
-#if OS_FAMILY == UNIX
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
     VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 #elif OS_FAMILY == WINDOWS
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
@@ -311,6 +335,7 @@ bool is_hedron_supported() {
 
 int init_hedron(Allocator* a) {
     hd_alloc = a;
+    hd_pi_alloc = convert_to_pallocator(a);
     VkResult result = create_instance(a);
     if (result != VK_SUCCESS) return 1;
 
@@ -572,10 +597,20 @@ void cleanup_swap_chain(HedronSurface *surface) {
     vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
 }
 
-HedronSurface *create_window_surface(struct Window *window) {
+HedronSurface *create_window_surface(struct PlWindow *window) {
     VkSurfaceKHR surface;
 
-#if OS_FAMILY == UNIX 
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+    VkXlibSurfaceCreateInfoKHR create_info = (VkXlibSurfaceCreateInfoKHR){
+        .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+        .dpy = get_x11_display(),
+        .window = window->x11_window,
+    };
+
+    VkResult result = vkCreateXlibSurfaceKHR(rl_vk_instance, &create_info, NULL, &surface);
+    if (result != VK_SUCCESS) return NULL;
+
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
     VkWaylandSurfaceCreateInfoKHR create_info = (VkWaylandSurfaceCreateInfoKHR){};
     create_info.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
     create_info.display = get_wl_display();
@@ -666,11 +701,12 @@ uint32_t num_swapchain_images(HedronSurface* surface) {
     return surface->num_images;
 }
 
-HedronShaderModule* create_shader_module(U8Array code) {
+HedronShaderModule* create_shader_module(U8PiList code) {
     VkShaderModuleCreateInfo create_info = (VkShaderModuleCreateInfo){};
     create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     // TODO: check if code.len % 4 == 0??
     create_info.codeSize = code.len;
+    // TODO: confirm alignment is ok?
     create_info.pCode = (uint32_t*)code.data;
 
     VkShaderModule shader_module;
@@ -689,7 +725,175 @@ void destroy_shader_module(HedronShaderModule* module) {
     mem_free(module, hd_alloc);
 }
 
-HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface) {
+HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
+    VkDescriptorSetLayoutBinding* bindings = mem_alloc(sizeof(VkDescriptorSetLayoutBinding) * bdesc.len, hd_alloc);
+    for (size_t i = 0; i < bdesc.len; i++) {
+        VkDescriptorSetLayoutBinding layoutBinding = {};
+        layoutBinding.binding = 0;
+        if (bdesc.data[i].type == UniformBufferDesc) {
+            layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        if (bdesc.data[i].shader_type == VertexShader) {
+            layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        }
+        layoutBinding.descriptorCount = 1;
+        layoutBinding.pImmutableSamplers = NULL; // Optional
+        bindings[i] = layoutBinding;
+    }
+
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = bdesc.len;
+    layoutInfo.pBindings = bindings;
+
+    VkDescriptorSetLayout descriptorSetLayout;
+    if (vkCreateDescriptorSetLayout(logical_device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
+        panic(mv_string("failed to create descriptor set layout!"));
+    }
+
+    mem_free(bindings, hd_alloc);
+
+    HedronDescriptorSetLayout* layout = mem_alloc(sizeof(HedronDescriptorSetLayout), hd_alloc);
+    layout->layout = descriptorSetLayout;
+
+    return layout;
+}
+
+void destroy_descriptor_set_layout(HedronDescriptorSetLayout* layout) {
+    vkDestroyDescriptorSetLayout(logical_device, layout->layout, NULL);
+    mem_free(layout, hd_alloc);
+}
+
+HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList sizes, uint32_t max_sets) {
+    VkDescriptorPoolSize* pool_sizes = mem_alloc(sizeof(VkDescriptorPoolSize) * sizes.len, hd_alloc);
+    for (size_t i = 0; i < sizes.len; i++) {
+        HedronDescriptorPoolSize hd_psize = sizes.data[i];
+        
+        uint32_t type = 0;
+        switch (hd_psize.type) {
+        case UniformBufferDesc:
+            type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        pool_sizes[i] = (VkDescriptorPoolSize) {
+            .type = type,
+            .descriptorCount = hd_psize.descriptor_count,
+        };
+    }
+
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = pool_sizes,
+        .maxSets = max_sets,
+    };
+
+    VkDescriptorPool descriptorPool;
+    if (vkCreateDescriptorPool(logical_device, &pool_info, NULL, &descriptorPool) != VK_SUCCESS) {
+        panic(mv_string("failed to create descriptor pool!"));
+    }
+    mem_free(pool_sizes, hd_alloc);
+
+    HedronDescriptorPool* pool = mem_alloc(sizeof(HedronDescriptorPool), hd_alloc);
+    *pool = (HedronDescriptorPool) {
+        .pool = descriptorPool,
+        .sets = mem_alloc(sizeof(HedronDescriptorSet) * max_sets, hd_alloc),
+        .num_sets = 0,
+    };
+    return pool;
+}
+
+void destroy_descriptor_pool(HedronDescriptorPool *pool) {
+    vkDestroyDescriptorPool(logical_device, pool->pool, NULL);
+    mem_free(pool->sets, hd_alloc);
+    mem_free(pool, hd_alloc);
+}
+
+AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* layout, HedronDescriptorPool *pool) {
+    VkDescriptorSetLayout* vk_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * set_count, hd_alloc);
+    for (size_t i =  0; i < set_count; i++) {
+        vk_layouts[i] = layout->layout;
+    }
+
+    VkDescriptorSetAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = pool->pool,
+        .descriptorSetCount = set_count,
+        .pSetLayouts = vk_layouts,
+    };
+
+    VkDescriptorSet* vk_descriptor_sets = mem_alloc(sizeof(VkDescriptorSet) * set_count, hd_alloc);
+    if (vkAllocateDescriptorSets(logical_device, &alloc_info, vk_descriptor_sets) != VK_SUCCESS) {
+        panic(mv_string("failed to allocate descriptor sets!"));
+    };
+
+    AddrPiList descriptor_sets = mk_addr_list(set_count, &hd_pi_alloc);
+    for (size_t i = 0; i < set_count; i++) {
+        HedronDescriptorSet* hd_set = &pool->sets[pool->num_sets + i];
+        descriptor_sets.data[i] = hd_set;
+        hd_set->vk_set = vk_descriptor_sets[i];
+    }
+    pool->num_sets += set_count;
+
+    mem_free(vk_layouts, hd_alloc);
+    mem_free(vk_descriptor_sets, hd_alloc);
+    return descriptor_sets;
+}
+
+void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
+    VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet), hd_alloc);
+    VkDescriptorBufferInfo* vk_write_buffer_info = mem_alloc(sizeof(VkDescriptorBufferInfo), hd_alloc);
+
+    for (size_t i = 0; i < writes.len; i++) {
+        HedronWriteDescriptorSet descriptor_write = writes.data[i];
+        
+        uint32_t descriptor_type;
+        switch (descriptor_write.descriptor_type) {
+        case UniformBufferDesc:
+            descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
+
+        vk_write_buffer_info[i] = (VkDescriptorBufferInfo) {
+            .buffer = buffer->vulkan_buffer,
+            .offset = descriptor_write.buffer_info.offset,
+            .range = descriptor_write.buffer_info.range,
+        };
+
+        vk_writes[i] = (VkWriteDescriptorSet) {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptor_write.descriptor_set->vk_set,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = descriptor_type,
+            .descriptorCount = 1,
+            .pBufferInfo = vk_write_buffer_info + i,
+            .pImageInfo = NULL,
+            .pTexelBufferView = NULL,
+        };
+    }
+
+    if (copies.len > 0) {
+        panic(mv_string("update_descriptor_sets does not yet support descriptor set copies!"));
+    }
+
+    VkCopyDescriptorSet* vk_copies = mem_alloc(sizeof(VkCopyDescriptorSet), hd_alloc);
+
+    vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
+    mem_free(vk_writes, hd_alloc);
+    mem_free(vk_write_buffer_info, hd_alloc);
+    mem_free(vk_copies, hd_alloc);
+}
+
+HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,
+                                BindingDescriptionPiList bdesc,
+                                AttributeDescriptionPiList adesc,
+                                AddrPiList shaders,
+                                HedronSurface* surface) {
+
     if (shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }
@@ -845,10 +1049,16 @@ HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescript
     colour_blending.blendConstants[2] = 0.0f; // Optional
     colour_blending.blendConstants[3] = 0.0f; // Optional
 
+    VkDescriptorSetLayout* vk_ds_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * descriptor_set_layouts.len, hd_alloc);
+    for (size_t i = 0; i < descriptor_set_layouts.len; i++) {
+        HedronDescriptorSetLayout* layout = descriptor_set_layouts.data[i];
+        vk_ds_layouts[i] = layout->layout;
+    }
+
     VkPipelineLayoutCreateInfo pipeline_layout_info = (VkPipelineLayoutCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = NULL,
+        .setLayoutCount = descriptor_set_layouts.len,
+        .pSetLayouts = vk_ds_layouts,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = NULL,
     };
@@ -883,7 +1093,7 @@ HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescript
         panic(mv_string("failed to create graphics pipeline!"));
     }
 
-
+    mem_free(vk_ds_layouts, hd_alloc);
     HedronPipeline *pipeline = mem_alloc(sizeof(HedronPipeline), hd_alloc);
     *pipeline = (HedronPipeline) {
         .pipeline = vk_pipeline,
@@ -893,18 +1103,11 @@ HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescript
 }
 
 void destroy_pipeline(HedronPipeline *pipeline) {
-    vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
     vkDestroyPipeline(logical_device, pipeline->pipeline, NULL);
+    vkDestroyPipelineLayout(logical_device, pipeline->layout, NULL);
     mem_free(pipeline, hd_alloc);
 }
 
-// Buffers
-
-struct HedronBuffer {
-    VkBuffer vulkan_buffer;
-    VkDeviceMemory device_memory;
-    uint64_t size;
-};
 
 
 
@@ -934,6 +1137,8 @@ HedronBuffer *create_buffer(BufferType type, uint64_t size) {
     case VertexBuffer: buffer_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
         break;
     case IndexBuffer: buffer_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        break;
+    case UniformBuffer: buffer_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         break;
     }
 
@@ -1208,6 +1413,15 @@ void command_end_render_pass(HedronCommandBuffer *buffer) {
     vkCmdEndRenderPass(buffer->buffer);
 }
 
+void command_bind_descriptor_set(HedronCommandBuffer *commands,
+                                 HedronPipeline *pipeline,
+                                 HedronDescriptorSet *descriptor_set) {
+  vkCmdBindDescriptorSets(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipeline->layout, 0,
+                          1, &descriptor_set->vk_set,
+                          0, NULL);
+}
+
 void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeline) {
     vkCmdBindPipeline(commands->buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
 }
@@ -1263,7 +1477,7 @@ int init_hedron(Allocator*)
   {panic(mv_string("Hedron not supported on this build"));}
 void teardown_hedron()
   {panic(mv_string("Hedron not supported on this build"));}
-HedronSurface *create_window_surface(struct Window * win)
+HedronSurface *create_window_surface(struct PlWindow* win)
   {panic(mv_string("Hedron not supported on this build"));}
 void resize_window_surface(HedronSurface* surface, Extent extent)
   {panic(mv_string("Hedron not supported on this build"));}

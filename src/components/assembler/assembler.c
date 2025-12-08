@@ -101,6 +101,8 @@ typedef enum : uint32_t {
     XMM64_XMM64 = 0b1000000000000000000000000,
     XMM64_M64   = 0b10000000000000000000000000,
     M64_XMM64   = 0b100000000000000000000000000,
+    XMM32_XMM64 = 0b1000000000000000000000000000,
+    XMM32_M64   = 0b10000000000000000000000000000,
 } BinOpType; 
 
 struct Assembler {
@@ -484,6 +486,26 @@ void build_binary_table() {
         .use_modrm_byte = true,
         .num_immediate_bytes = 0,
         .order = MR,
+        .has_opcode_ext = false,
+    };
+
+    // r32, r/m64
+    binary_table[bindex(Dest_Register, sz_32, Dest_Register, sz_64)] = (BinaryTableEntry) {
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
+        .has_opcode_ext = false,
+    };
+    binary_table[bindex(Dest_Register, sz_32, Dest_Deref, sz_64)] = (BinaryTableEntry) {
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 0,
+        .order = RM,
         .has_opcode_ext = false,
     };
 
@@ -940,6 +962,7 @@ void build_binary_opcode_tables() {
         binary_opcode_tables[MovSD] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
+            .flags = SSE,
         };
     }
 
@@ -1012,6 +1035,22 @@ void build_binary_opcode_tables() {
             .entries = ops,
         };
     }
+
+    // -------------------
+    //  Conditional Moves
+    // -------------------
+    {   // Convert Double to Float. Source - Intel Manual Vol 2. 403
+        static uint32_t sup = XMM32_XMM64 | XMM32_M64;
+        static BinOpBytes ops[3];
+        add_op3(0xF2, 0x0F, 0x5A, XMM32_XMM64, sup, ops);
+        add_op3(0xF2, 0x0F, 0x5A, XMM32_M64, sup, ops);
+
+        binary_opcode_tables[CvtSD2SS] = (BinaryOpTable) {
+            .supported = sup,
+            .entries = ops,
+            .flags = SSE,
+        };
+    }
 }
 
 uint8_t modrm_rm(uint8_t reg_bits)  { return (reg_bits & 0b111); }
@@ -1049,18 +1088,31 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
     case Dest_Register:
       // XMM register?
       if (dest.reg & XMM0) {
-          if (src.type == Dest_Register && (src.reg & XMM0) && src.sz == dest.sz) {
-              if (src.sz == sz_32) type = XMM32_XMM32;
-              else if (src.sz == sz_64) type = XMM64_XMM64;
-              else goto report_error;
-          } else if (src.type == Dest_Deref && src.sz == dest.sz) {
-            if (src.sz == sz_32) {
-                type = XMM32_M32;
-            } else if (src.sz == sz_64) {
-                type = XMM64_M64;
-            } else {
-              goto report_error;
-            }
+          if (src.type == Dest_Register && (src.reg & XMM0)) {
+              if (src.sz == dest.sz) {
+                  if (src.sz == sz_32) type = XMM32_XMM32;
+                  else if (src.sz == sz_64) type = XMM64_XMM64;
+                  else goto report_error;
+              } else if (src.sz == sz_64 && dest.sz == sz_32) {
+                  type = XMM32_XMM64;
+              } else {
+                  goto report_error;
+              }
+                  
+          } else if (src.type == Dest_Deref) {
+              if (src.sz == dest.sz) {
+                  if (src.sz == sz_32) {
+                      type = XMM32_M32;
+                  } else if (src.sz == sz_64) {
+                      type = XMM64_M64;
+                  } else {
+                      goto report_error;
+                  }
+              } else if (src.sz == sz_64 && dest.sz == sz_32) {
+                  type = XMM32_M64;
+              } else {
+                  goto report_error;
+              }
           } else {
               goto report_error;
           }
@@ -2069,7 +2121,9 @@ Document* pretty_binary_op(BinaryOp op, Allocator* a) {
       "Add", "Sub", "Cmp", "AddSS", "AddSD", "SubSS", "SubSD",
       "MulSS", "MulSD", "DivSS", "DivSD",
       "And", "Or", "Xor", "SHL", "SHR",
-      "Mov", "MovSS", "MovSD", "LEA", "CMovE", "CMovL", "CMovG",
+      "Mov", "MovSS", "MovSD", "LEA", 
+      "CMovE", "CMovB", "CMovA", "CMovL", "CMovG",
+      "CvtSD2SS"
     };
     // TODO BUG bounds check here.
     return mk_str_doc(mv_string(names[op]), a);

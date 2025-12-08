@@ -4,7 +4,7 @@
 #include <time.h>
 
 #include "platform/memory/allocator.h"
-#include "platform/profiling/profiling.h"
+#include "platform/time/time.h"
 #include "platform/terminal/terminal.h"
 
 typedef struct {

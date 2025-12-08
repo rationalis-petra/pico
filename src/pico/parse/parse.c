@@ -1,4 +1,5 @@
 #include <math.h>
+#include "pico/stdlib/extra.h"
 #include "pico/parse/parse.h"
 
 // The main parsing functions, which parse different types of expressions. 
@@ -10,14 +11,14 @@
 //   + parse_prefix - for prefixed operators, is called by parse_atom
 // + numbers - for decimal or floating-point numbers
 
-ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected);
-ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a);
-ParseResult parse_atom(IStream* is, Allocator* a);
-ParseResult parse_number(IStream* is, Allocator* a);
-ParseResult parse_prefix(char prefix, IStream* is, Allocator* a);
-ParseResult parse_string(IStream* is, Allocator* a);
-ParseResult parse_rawstring(IStream* is, Allocator* a);
-ParseResult parse_char(IStream* is, Allocator* a);
+ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
+ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
+ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
+ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
+ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
+ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
+ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -26,39 +27,39 @@ bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
-ParseResult parse_rawtree(IStream* is, Allocator* a) {
-    return parse_expr(is, a, '\0');
+ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
+    return parse_expr(is, '\0', pia, a);
 }
 
-ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
+ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a) {
     // default if we never enter loop body 
     ParseResult out = (ParseResult) {.type = ParseNone};
     uint32_t point;
 
     consume_whitespace(is);
     StreamResult result;
-    RawTreeArray terms = mk_rawtree_array(8, a);
+    RawTreePiList terms = mk_rawtree_list(8, pia);
     bool running = true;
 
     while (running && ((result = peek(is, &point)) == StreamSuccess)) {
         switch (peek(is, &point)) {
         case StreamSuccess:
             if (point == '(') {
-                out = parse_list(is, ')', HExpression, a);
+                out = parse_list(is, ')', HExpression, pia, a);
             }
             else if (point == '[') {
-                out = parse_list(is, ']', HSpecial, a);
+                out = parse_list(is, ']', HSpecial, pia, a);
             }
             else if (point == '{') {
-                out = parse_list(is, '}', HImplicit, a);
+                out = parse_list(is, '}', HImplicit, pia, a);
             }
             //  0x27E8 = ⟨, 0x27E9 = ⟩
             else if (point == 0x27E8) {
-                out = parse_list(is, 0x27E9, HData, a);
+                out = parse_list(is, 0x27E9, HData, pia, a);
             }
             else if (point == ':') {
                 if (terms.len == 0) {
-                    out = parse_prefix(':', is, a);
+                    out = parse_prefix(':', is, pia, a);
                 } else {
                     size_t start = bytecount(is);
                     next(is, &point);
@@ -77,7 +78,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
             }
             else if (point == '.') {
                 if (terms.len == 0) {
-                    out = parse_prefix('.', is, a);
+                    out = parse_prefix('.', is, pia, a);
                 } else {
                     size_t start = bytecount(is);
                     next(is, &point);
@@ -95,16 +96,16 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 }
             }
             else if (point == '"') {
-                out = parse_string(is, a);
+                out = parse_string(is, pia, a);
             }
             else if (point == '~') {
-                out = parse_rawstring(is, a);
+                out = parse_rawstring(is, pia, a);
             }
             else if (point == '#') {
-                out = parse_char(is, a);
+                out = parse_char(is, pia, a);
             }
             else if (is_numchar(point) || point == '-') {
-                out = parse_number(is, a);
+                out = parse_number(is, pia, a);
             }
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -115,7 +116,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
                 break;
             }
             else if (is_symchar(point)){
-                out = parse_atom(is, a);
+                out = parse_atom(is, pia, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
                 out.type = ParseNone;
@@ -193,7 +194,7 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
         // meaning that (num : i64 . +) becomes (. + (: num i64))
         RawTree current = terms.data[0];
         for (size_t i = 1; terms.len - i != 0; i += 2) {
-            RawTreeArray children = mk_rawtree_array(3, a);
+            RawTreePiList children = mk_rawtree_list(3, pia);
             push_rawtree(terms.data[i], &children);
             push_rawtree(terms.data[i+1], &children);
             push_rawtree(current, &children);
@@ -215,11 +216,11 @@ ParseResult parse_expr(IStream* is, Allocator* a, uint32_t expected) {
     return out;
 }
 
-ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Allocator* a) {
+ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a) {
     ParseResult res;
     res.type = ParseSuccess;
     ParseResult out;
-    RawTreeArray nodes = mk_rawtree_array(8, a);
+    RawTreePiList nodes = mk_rawtree_list(8, pia);
     uint32_t codepoint;
 
     // Assume '(' is next character
@@ -229,7 +230,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     StreamResult sres;
 
     while ((sres = peek(is, &codepoint)) == StreamSuccess && (codepoint != terminator)) {
-        res = parse_expr(is, a, terminator);
+        res = parse_expr(is, terminator, pia, a);
 
         if (res.type == ParseFail) {
             out = res;
@@ -272,7 +273,7 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, Alloca
     return out;
 }
 
-ParseResult parse_atom(IStream* is, Allocator* a) {
+ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
      * and ':' such as Maybe:none and foo.var are also considered by the parser
@@ -286,7 +287,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
     ParseResult out;
     U32Array arr = mk_u32_array(16, a);
 
-    RawTreeArray terms = mk_rawtree_array(8, a);
+    RawTreePiList terms = mk_rawtree_list(8, pia);
     size_t start = bytecount(is);
 
     // Accumulate a list of symbols, so, for example, 
@@ -366,7 +367,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
         // meaning that (num : i64 . +) becomes (. + (: num i64))
         RawTree current = terms.data[0];
         for (size_t i = 1; terms.len - i != 0; i += 2) {
-            RawTreeArray children = mk_rawtree_array(3, a);
+            RawTreePiList children = mk_rawtree_list(3, pia);
             push_rawtree(terms.data[i], &children);
             push_rawtree(terms.data[i+1], &children);
             push_rawtree(current, &children);
@@ -388,7 +389,7 @@ ParseResult parse_atom(IStream* is, Allocator* a) {
     return out;
 }
 
-ParseResult parse_number(IStream* is, Allocator* a) {
+ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -492,7 +493,7 @@ ParseResult parse_number(IStream* is, Allocator* a) {
     }
 }
 
-ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
+ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     ParseResult out;
@@ -543,7 +544,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
             .atom.symbol = sym_result,
         };
 
-        RawTreeArray nodes = mk_rawtree_array(2, a);
+        RawTreePiList nodes = mk_rawtree_list(2, pia);
         push_rawtree(proj, &nodes);
         push_rawtree(field, &nodes);
 
@@ -560,7 +561,7 @@ ParseResult parse_prefix(char prefix, IStream* is, Allocator* a) {
     return out;
 }
 
-ParseResult parse_string(IStream* is, Allocator* a) {
+ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
@@ -619,7 +620,7 @@ ParseResult parse_string(IStream* is, Allocator* a) {
     };
 }
 
-ParseResult parse_rawstring(IStream* is, Allocator* a) {
+ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     U32Array arr = mk_u32_array(64, a);
     uint32_t codepoint;
@@ -660,7 +661,7 @@ ParseResult parse_rawstring(IStream* is, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, Allocator* a) {
+ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     uint32_t codepoint;
     size_t start = bytecount(is);

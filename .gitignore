@@ -1,3 +1,6 @@
 build/*
 scratch/*
 gmon.out
+*.~undo-tree~
+compile_commands.json
+.cache

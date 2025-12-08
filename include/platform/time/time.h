@@ -1,5 +1,5 @@
-#ifndef __PLATFORM_PROFILING_PROFILING_H
-#define __PLATFORM_PROFILING_PROFILING_H
+#ifndef __PLATFORM_TIME_TIME_H
+#define __PLATFORM_TIME_TIME_H
 
 #include <stdint.h>
 
@@ -20,5 +20,9 @@ double time_to_double(PerfTime time, TimeUnit unit);
 PerfTime time_diff(PerfTime start, PerfTime end);
 
 PerfTime query_performance_timer();
+
+PerfTime query_mono_timer();
+
+PerfTime query_realtime();
 
 #endif

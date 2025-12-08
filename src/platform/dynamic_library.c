@@ -6,7 +6,6 @@
 
 struct DynLib {
     void* ptr;
-    Allocator* from;
 };
 
 Result open_lib(DynLib **out, String path, Allocator* a) {
@@ -15,7 +14,6 @@ Result open_lib(DynLib **out, String path, Allocator* a) {
     *out = mem_alloc(sizeof(DynLib),a);
     **out = (DynLib) {
         .ptr = dlopen((char*)path.bytes, RTLD_LAZY),
-        .from = a,
     };
 
     char* error_message = dlerror();
@@ -53,7 +51,6 @@ Result lib_sym(void **out, DynLib *lib, String symbol) {
 
 struct DynLib {
     HINSTANCE instance;
-    Allocator* from;
 };
 
 Result open_lib(DynLib **out, String path, Allocator* a) {
@@ -63,7 +60,6 @@ Result open_lib(DynLib **out, String path, Allocator* a) {
 
     **out = (DynLib) {
         .instance = lib,
-        .from = a,
     };
 
     if (lib) {

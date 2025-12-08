@@ -1,5 +1,4 @@
 #include "platform/signals.h"
-#include "data/meta/assoc_header.h"
 #include "data/meta/assoc_impl.h"
 
 #include "pico/binding/type_env.h"
@@ -62,7 +61,7 @@ TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     return out;
 }
 
-InstanceEntry type_instance_lookup(uint64_t id, PtrArray args, TypeEnv* env) {
+InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
     PtrArray* instances = env_implicit_lookup(id, env->env);
     if (!instances) {
         return (InstanceEntry) {.type = IENotFound,};

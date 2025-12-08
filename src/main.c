@@ -4,7 +4,6 @@
 #include "platform/error.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
-#include "platform/memory/arena.h"
 #include "platform/jump.h"
 #include "platform/terminal/terminal.h"
 #include "platform/window/window.h"
@@ -31,28 +30,29 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.1.1";
+static const char* version = "0.1.2";
 
 typedef struct {
     bool debug_print;
     bool interactive;
 } IterOpts;
 
-bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* exec, Module* module, IterOpts opts) {
+bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator arena = mk_arena_allocator(4096, a);
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_region = convert_to_pallocator(&ra);
 
-    cin = mk_capturing_istream(cin, &arena);
+    cin = mk_capturing_istream(cin, &ra);
     reset_bytecount(cin);
 
     Target gen_target = {
         .target = mk_assembler(current_cpu_feature_flags(), exec),
         .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
-        .data_aux = mem_alloc(sizeof(U8Array), &arena)
+        .data_aux = mem_alloc(sizeof(U8Array), &ra)
     };
-    *gen_target.data_aux = mk_u8_array(128, &arena);
+    *gen_target.data_aux = mk_u8_array(128, &ra);
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -64,15 +64,15 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    Environment* env = env_from_module(module, &point, &arena);
+    Environment* env = env_from_module(module, &point, &ra);
 
     if (opts.interactive) {
-        String name = get_name(module, &arena);
+        String name = get_name(module, &ra);
         write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }
 
-    ParseResult res = parse_rawtree(cin, &arena);
+    ParseResult res = parse_rawtree(cin, &pico_region, &ra);
 
     if (res.type == ParseNone) {
         write_fstring(mv_string("\n"), cout);
@@ -83,20 +83,18 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, cin, get_formatted_stdout(), NULL, a);
-        release_arena_allocator(arena);
+        display_error(multi, cin, get_formatted_stdout(), NULL, stdalloc);
         return true;
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
         write_fstring(mv_string("Parse Returned Invalid Result!\n"), cout);
-        release_arena_allocator(arena);
         return false;
     }
 
     Document* doc;
     if (opts.debug_print) {
-        doc = pretty_rawtree(res.result, &arena);
+        doc = pretty_rawtree(res.result, &ra);
         start_underline(cout);
         write_fstring(mv_string("Raw Syntax\n"), cout);
         end_underline(cout);
@@ -108,13 +106,13 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, &arena, &pi_point);
+    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
     if (opts.debug_print) {
         start_underline(cout);
         write_fstring(mv_string("Abstract Syntax:\n"), cout);
         end_underline(cout);
-        doc = pretty_toplevel(&abs, &arena);
+        doc = pretty_toplevel(&abs, &ra);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\n"), cout);
     }
@@ -126,7 +124,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &arena, .point = &pi_point, .target = gen_target,
+        .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
     };
     type_check(&abs, env, ctx);
 
@@ -136,7 +134,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
             start_underline(cout);
             write_fstring(mv_string("Inferred Type\n"), cout);
             end_underline(cout);
-            doc = mv_nest_doc(2, pretty_type(ty, &arena), a);
+            doc = mv_nest_doc(2, pretty_type(ty, &ra), stdalloc);
             write_doc_formatted(doc, 120, cout);
             write_fstring(mv_string("\n"), cout);
         }
@@ -147,17 +145,17 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // -------------------------------------------------------------------------
 
     clear_target(gen_target);
-    LinkData links = generate_toplevel(abs, env, gen_target, &arena, &point);
+    LinkData links = generate_toplevel(abs, env, gen_target, &ra, &point);
 
     if (opts.debug_print) {
         start_underline(cout);
         write_fstring(mv_string("Compiled Binary:\n"), cout);
         end_underline(cout);
         write_fstring(mv_string("Execute Assembly:\n"), cout);
-        doc = pretty_assembler(gen_target.target, &arena);
+        doc = pretty_assembler(gen_target.target, &ra);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\nCode Segment:\n"), cout);
-        doc = pretty_assembler(gen_target.code_aux, &arena);
+        doc = pretty_assembler(gen_target.code_aux, &ra);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\nData Segment:\n"), cout);
         // TODO (FEAT): as per string (below)
@@ -170,27 +168,25 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     // Evaluation
     // -------------------------------------------------------------------------
 
-    EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &arena, &point);
+    EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &ra, &point);
     if (opts.debug_print) {
         write_fstring(mv_string("Evaluation Result\n"), cout);
     }
 
     if (opts.debug_print || opts.interactive) {
-        doc = pretty_res(call_res, &arena);
+        doc = pretty_res(call_res, &ra);
         write_doc_formatted(doc, 140, get_formatted_stdout());
         write_fstring(mv_string("\n"), cout);
     }
 
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
-    release_arena_allocator(arena);
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, cout, NULL, &arena);
+    display_error(pi_point.multi, cin, cout, NULL, &ra);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
-    release_arena_allocator(arena);
     return true;
 
  on_error:
@@ -198,13 +194,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* a, Allocator* ex
     write_fstring(mv_string("\n"), cout);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
-    release_arena_allocator(arena);
     return true;
 
  on_exit:
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
-    release_arena_allocator(arena);
     return false;
 }
 
@@ -225,7 +219,7 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
-    if (init_window_system(stdalloc)) {
+    if (pl_init_window_system(stdalloc)) {
         write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
     if (is_hedron_supported()) {
@@ -235,9 +229,15 @@ int main(int argc, char** argv) {
     }
     thread_init_dynamic_vars();
 
+    RegionAllocator* region = make_region_allocator(8096, true, stdalloc);
+    RegionAllocator* subregion = make_subregion(region);
+
+    PiAllocator module_allocator = convert_to_pallocator(stdalloc);
+
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), &exalloc);
     Assembler* ass_base = mk_assembler(current_cpu_feature_flags(), &exalloc);
-    Package* base = base_package(ass_base, stdalloc, stdalloc);
+    Package* base = base_package(ass_base, stdalloc, &module_allocator, subregion);
+    reset_subregion(subregion);
     delete_assembler(ass_base);
 
     Module* module = get_module(string_to_symbol(mv_string("user")), base);
@@ -265,14 +265,20 @@ int main(int argc, char** argv) {
         write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
         write_string(mv_string(version), cout);
         write_string(mv_string("\n"), cout);
-        while (repl_iter(cin, get_formatted_stdout(), stdalloc, &exalloc, module, opts));
+
+        while (repl_iter(cin, get_formatted_stdout(), stdalloc, subregion, &exalloc, module, opts)) {
+            reset_subregion(subregion);
+        }
         break;
     }
     case CScript: {
         init_codegen(command.script.backend, stdalloc);
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
-            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, stdalloc);
+            RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
+            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, region);
+            delete_region_allocator(region);
+            
             delete_istream(fin, stdalloc);
         } else {
             write_string(mv_string("Failed to open file: "), cout);
@@ -289,7 +295,9 @@ int main(int argc, char** argv) {
         };
 
         IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
-        while (repl_iter(sin, get_formatted_stdout(), stdalloc, &exalloc, module, opts));
+        while (repl_iter(sin, get_formatted_stdout(), stdalloc, subregion, &exalloc, module, opts)) {
+            reset_subregion(subregion);
+        }
         delete_istream(sin, stdalloc);
         break;
     }
@@ -313,6 +321,7 @@ int main(int argc, char** argv) {
     }
 
     // Cleanup
+    delete_region_allocator(region);
     delete_package(base);
     delete_assembler(ass);
     release_executable_allocator(exalloc);
@@ -321,7 +330,7 @@ int main(int argc, char** argv) {
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
-    teardown_window_system();
+    pl_teardown_window_system();
 
     if (is_hedron_supported()) {
         teardown_hedron();

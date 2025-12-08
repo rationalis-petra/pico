@@ -1,24 +1,24 @@
-#include <string.h>
 #include "platform/memory/static.h"
 
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, a)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
 #define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
-void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
 
     };
+    Allocator ra = ra_to_gpa(region);
 
     // -------------------------------------------------------------------------
     //
@@ -364,8 +364,8 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    void* mem = mem_alloc(128, a);
-    Allocator old = get_std_current_allocator();
+    void* mem = mem_alloc(128, &ra);
+    PiAllocator old = get_std_current_allocator();
     void* start;
     {
         Allocator sta = mk_static_allocator(mem, 128);
@@ -375,13 +375,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("test-multi-poly-call"))) {
         // Test to ensure that polymorphic calls preserve the stack for a future call
         Allocator sta = mk_static_allocator(mem, 128);
+        PiAllocator psta = convert_to_pallocator(&sta);
         int64_t expected = -67;
 
-        set_std_current_allocator(sta);
+        set_std_current_allocator(psta);
         RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
-        TEST_MEM("(seq [let! addr (malloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+        TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
     }
 
     set_std_current_allocator(old);
-    mem_free(mem, a);
 }

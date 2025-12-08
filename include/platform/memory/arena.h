@@ -3,10 +3,14 @@
 
 #include "platform/memory/allocator.h"
 
-Allocator mk_arena_allocator(size_t blocksize, Allocator* a);
+typedef struct ArenaAllocator ArenaAllocator;
 
-void reset_arena_allocator(Allocator a);
+ArenaAllocator* make_arena_allocator(size_t blocksize, Allocator* a);
+void* arena_malloc(ArenaAllocator* arena, size_t memsize);
+void reset_arena_allocator(ArenaAllocator* a);
+void delete_arena_allocator(ArenaAllocator* a);
 
-void release_arena_allocator(Allocator a);
+Allocator aa_to_gpa(ArenaAllocator* arena);
+
 
 #endif

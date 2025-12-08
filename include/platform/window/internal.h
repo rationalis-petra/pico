@@ -2,12 +2,27 @@
 #include "platform/window/window.h"
 #include "data/string.h"
 
-#if OS_FAMILY == UNIX
+#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+#include <X11/Xlib.h>
+
+Display* get_x11_display();
+
+struct PlWindow {
+    Window x11_window;
+
+    uint32_t width;
+    uint32_t height;
+
+    // Internal state (used by us!)
+    bool should_close;
+};
+
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #include <wayland-client.h>
 
 struct wl_display* get_wl_display();
 
-struct Window {
+struct PlWindow {
     struct wl_surface* surface; // Window surface (from compositor)
     struct wl_buffer* buffer; // control/access to shared memory buffer
     struct xdg_toplevel* toplevel; // This represents the window, and allows us
@@ -29,7 +44,7 @@ struct Window {
 
 #include <windows.h>
 
-struct Window {
+struct PlWindow {
     HWND impl;
     bool should_close;
     WinMessageArray messages;

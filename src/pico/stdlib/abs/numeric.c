@@ -1,29 +1,26 @@
-#include "platform/memory/arena.h"
 #include "platform/signals.h"
 
 #include "pico/stdlib/abs/submodules.h"
 #include "pico/stdlib/helpers.h"
 
-void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
-    Allocator arena = mk_arena_allocator(16384, alloc);
-    Allocator* a = &arena;
+void add_numeric_module(Target target, Module *abs, PiAllocator* module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, a),
+        .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
-    add_import_all(&imports.clauses, a, 1, "num");
+    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 1, "num");
 
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("numeric")),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL, alloc);
-    reset_arena_allocator(arena);
+    Module* module = mk_module(header, get_package(abs), NULL, *module_allocator);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -44,23 +41,23 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ Proc [A A] A]"
         "  [.zero A]"
         "  [.one A])\n";
-    compile_toplevel(num_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_trait, module, target, &point, &pi_point, region);
 
     const char* add_fn =
         "(def + all [A] proc {(n (Num A))} [(x A) (y A)] n.+ x y)";
-    compile_toplevel(add_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(add_fn, module, target, &point, &pi_point, region);
 
     const char* sub_fn = 
         "(def - all [A] proc {(n (Num A))} [(x A) (y A)] n.- x y)";
-    compile_toplevel(sub_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(sub_fn, module, target, &point, &pi_point, region);
 
     const char* mul_fn = 
         "(def * all [A] proc {(n (Num A))} [(x A) (y A)] n.* x y)";
-    compile_toplevel(mul_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(mul_fn, module, target, &point, &pi_point, region);
 
     const char* div_fn = 
         "(def / all [A] proc {(n (Num A))} [(x A) (y A)] n./ x y)";
-    compile_toplevel(div_fn, module, target, &point, &pi_point, a);
+    compile_toplevel(div_fn, module, target, &point, &pi_point, region);
 
     const char* num_i64_trait = 
         "(def i64-num instance (Num I64)"
@@ -70,7 +67,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ i64./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_i64_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_i64_trait, module, target, &point, &pi_point, region);
 
     const char* num_u64_trait = 
         "(def u64-num instance (Num U64)"
@@ -80,7 +77,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ u64./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_u64_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_u64_trait, module, target, &point, &pi_point, region);
 
     const char* num_i32_trait = 
         "(def i32-num instance (Num I32)"
@@ -90,7 +87,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ i32./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_i32_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_i32_trait, module, target, &point, &pi_point, region);
 
     const char* num_u32_trait = 
         "(def u32-num instance (Num U32)"
@@ -100,7 +97,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ u32./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_u32_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_u32_trait, module, target, &point, &pi_point, region);
 
     const char* num_i16_trait = 
         "(def i16-num instance (Num I16)"
@@ -110,7 +107,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ i16./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_i16_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_i16_trait, module, target, &point, &pi_point, region);
 
     const char* num_u16_trait = 
         "(def u16-num instance (Num U16)"
@@ -120,7 +117,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ u16./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_u16_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_u16_trait, module, target, &point, &pi_point, region);
 
     const char* num_i8_trait = 
         "(def i8-num instance (Num I8)"
@@ -130,7 +127,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ i8./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_i8_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_i8_trait, module, target, &point, &pi_point, region);
 
     const char* num_u8_trait = 
         "(def u8-num instance (Num U8)"
@@ -140,7 +137,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ u8./]"
         "  [.zero 0]"
         "  [.one 1])\n";
-    compile_toplevel(num_u8_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_u8_trait, module, target, &point, &pi_point, region);
 
     const char* num_f64_trait =
         "(def f64-num instance (Num F64)"
@@ -150,7 +147,7 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ f64./]"
         "  [.zero 0.0]"
         "  [.one 1.0])\n";
-    compile_toplevel(num_f64_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_f64_trait, module, target, &point, &pi_point, region);
 
     const char* num_f32_trait =
         "(def f32-num instance (Num F32)"
@@ -160,9 +157,8 @@ void add_numeric_module(Target target, Module *abs, Allocator *alloc) {
         "  [./ f32./]"
         "  [.zero 0.0]"
         "  [.one 1.0])\n";
-    compile_toplevel(num_f32_trait, module, target, &point, &pi_point, a);
+    compile_toplevel(num_f32_trait, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(abs, string_to_symbol(mv_string("numeric")), module);
     if (r.type == Err) panic(r.error_message);
-    release_arena_allocator(arena);
 }

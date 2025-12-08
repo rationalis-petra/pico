@@ -10,10 +10,10 @@
 #include <windows.h>
 #endif
 
-struct File {
-    FILE* handle; 
-    Allocator gpa;
-};
+/* struct File { */
+/*     FILE* handle;  */
+/*     Allocator gpa; */
+/* }; */
 
 File *open_file(String name, FilePermissions perms, Allocator *alloc) {
     const char *mode = NULL;
@@ -39,30 +39,15 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
 
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
-    FILE* handle = fopen((char*)name.bytes, mode);
-    if (handle == NULL) return NULL;
-
-    File* file = mem_alloc(sizeof(File), alloc);
-    *file = (File) {
-        .handle = handle,
-        .gpa = *alloc,
-    };
-    return file;
+    return (File*)fopen((char*)name.bytes, mode);
 }
 
 File *open_tempfile(Allocator *alloc) {
-    FILE* handle = tmpfile();
-    File* file = mem_alloc(sizeof(File), alloc);
-    *file = (File) {
-        .handle = handle,
-        .gpa = *alloc,
-    };
-    return file;
+    return (File*) tmpfile();
 }
 
 void close_file(File *file) {
-    fclose(file->handle);
-    mem_free(file, &file->gpa);
+    fclose((FILE*)file);
 }
 
 String get_tmpdir(Allocator* a) {
@@ -93,7 +78,7 @@ String get_tmpdir(Allocator* a) {
 
 // return true on failure
 bool read_byte(File *file, uint8_t *out) {
-    return !fread(out, sizeof(char), 1, file->handle);
+    return !fread(out, sizeof(char), 1, (FILE*)file);
 }
 
 U8Array read_chunk(File *file, bool limit, uint64_t max_size, Allocator *region) {
@@ -101,24 +86,24 @@ U8Array read_chunk(File *file, bool limit, uint64_t max_size, Allocator *region)
         U8Array bytes = mk_u8_array(max_size, region);
 
         // TODO (BUG): update this method to return error on read failure.
-        bytes.len = fread(bytes.data, sizeof(uint8_t), max_size, file->handle);
+        bytes.len = fread(bytes.data, sizeof(uint8_t), max_size, (FILE*)file);
         return bytes;
     } else {
-        fseek(file->handle, 0, SEEK_END);
-        long fsize = ftell(file->handle);
-        fseek(file->handle, 0, SEEK_SET);  /* same as rewind(f); */
+        fseek((FILE*)file, 0, SEEK_END);
+        long fsize = ftell((FILE*)file);
+        fseek((FILE*)file, 0, SEEK_SET);  /* same as rewind(f); */
         U8Array bytes = mk_u8_array(fsize, region);
 
-        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize, file->handle);
+        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize, (FILE*)file);
         return bytes;
     }
 
 }
 
 bool write_byte(File *file, uint8_t out) {
-    return !fwrite(&out, sizeof(uint8_t), 1, file->handle);
+    return !fwrite(&out, sizeof(uint8_t), 1, (FILE*)file);
 }
 
 bool write_chunk(File* file, U8Array arr) {
-    return !fwrite(arr.data, sizeof(uint8_t), arr.len, file->handle);
+    return !fwrite(arr.data, sizeof(uint8_t), arr.len, (FILE*)file);
 }

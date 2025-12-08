@@ -1,4 +1,4 @@
-#include "platform/profiling/profiling.h"
+#include "platform/time/time.h"
 #include "platform/machine_info.h"
 
 double time_to_double(PerfTime time, TimeUnit unit) {
@@ -44,6 +44,24 @@ PerfTime query_performance_timer() {
     };
 }
 
+PerfTime query_mono_timer() {
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return (PerfTime) {
+        .time_sec = time.tv_sec,
+        .time_ns = time.tv_nsec,
+    };
+}
+
+PerfTime query_realtime() {
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+    return (PerfTime) {
+        .time_sec = time.tv_sec,
+        .time_ns = time.tv_nsec,
+    };
+}
+
 #elif ABI == WIN_64
 
 #include <windows.h>
@@ -59,6 +77,24 @@ PerfTime query_performance_timer() {
     return (PerfTime) {
         .time_ns = (perf.QuadPart % freq.QuadPart) * 1E9 / freq.QuadPart,
         .time_sec = perf.QuadPart / freq.QuadPart,
+    };
+}
+
+PerfTime query_mono_timer() {
+    uint64_t milliseconds = GetTickCount64();
+
+    return (PerfTime) {
+        .time_sec = (milliseconds / 1000),
+        .time_ns = (milliseconds % 1000) * 1E6,
+    };
+}
+
+PerfTime query_realtime() {
+    uint64_t milliseconds = GetTickCount64();
+
+    return (PerfTime) {
+        .time_sec = (milliseconds / 1000),
+        .time_ns = (milliseconds % 1000) * 1E6,
     };
 }
 

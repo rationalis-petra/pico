@@ -1,17 +1,10 @@
-#include "data/meta/array_impl.h"
+#include "pico/data/client/meta/list_impl.h"
 #include "platform/signals.h"
 #include "components/pretty/standard_types.h"
 
 #include "pico/syntax/concrete.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-int cmp_rawtree(RawTree lhs, RawTree rhs) {
-    panic(mv_string("cmp_rawtree not implemented!"));
-}
-#pragma GCC diagnostic pop
-
-ARRAY_CMP_IMPL(RawTree, cmp_rawtree, rawtree, RawTree)
+PICO_LIST_COMMON_IMPL(RawTree, rawtree, RawTree)
 
 bool is_expr(RawTree tree) {
     return tree.type == RawAtom || tree.branch.hint == HExpression;
@@ -61,7 +54,7 @@ void delete_rawtree(RawTree tree, Allocator* a) {
     case RawBranch:
         for (size_t i = 0; i < tree.branch.nodes.len; i++)
             delete_rawtree(tree.branch.nodes.data[i], a);
-        sdelete_rawtree_array(tree.branch.nodes);
+        sdelete_rawtree_list(tree.branch.nodes);
         break;
     }
 }

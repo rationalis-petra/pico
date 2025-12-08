@@ -8,6 +8,7 @@
 
 typedef struct {
     Allocator* a;
+    PiAllocator* pia;
     PiErrorPoint* point;
     Target target;
 } TypeCheckContext;

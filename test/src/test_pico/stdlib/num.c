@@ -1,12 +1,14 @@
+#include "data/float.h"
+
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 
-void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, Target target, Allocator *a) {
+void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
-        .a = a,
+        .region = region,
         .log = log,
         .target = target,
     };
@@ -91,6 +93,26 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(f32.- 51.5 2.45)");
     }
 
+    if (test_start(log, mv_string("f32-div"))) {
+        float expected = 51.5 / 2.45;
+        TEST_EQ("(f32./ 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f32-mul"))) {
+        float expected = 51.5 * 2.45;
+        TEST_EQ("(f32.* 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f32-sin"))) {
+        float expected = sin_f32(3.14159);
+        TEST_EQ("(f32.sin 3.14159)");
+    }
+
+    if (test_start(log, mv_string("f32-cos"))) {
+        float expected = cos_f32(3.14159);
+        TEST_EQ("(f32.cos 3.14159)");
+    }
+
     if (test_start(log, mv_string("f64-add"))) {
         double expected = 51.5 + 2.45;
         TEST_EQ("(f64.+ 51.5 2.45)");
@@ -99,6 +121,26 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
     if (test_start(log, mv_string("f64-sub"))) {
         double expected = 51.5 - 2.45;
         TEST_EQ("(f64.- 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-div"))) {
+        double expected = 51.5 / 2.45;
+        TEST_EQ("(f64./ 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-mul"))) {
+        double expected = 51.5 * 2.45;
+        TEST_EQ("(f64.* 51.5 2.45)");
+    }
+
+    if (test_start(log, mv_string("f64-sin"))) {
+        double expected = sin_f64(3.14159);
+        TEST_EQ("(f64.sin 3.14159)");
+    }
+
+    if (test_start(log, mv_string("f64-cos"))) {
+        double expected = cos_f64(3.14159);
+        TEST_EQ("(f64.cos 3.14159)");
     }
 
     // -------------------------------------------------------------------------

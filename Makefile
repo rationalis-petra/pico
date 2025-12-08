@@ -11,16 +11,31 @@ SRC_DIRS := ./src
 C_VERSION := c99
 CC := gcc
 
+# Process deafult.config
 CONFIG = default.config
 include ${CONFIG}
 
 ifeq ($(OS), Windows_NT)
-VULKAN_LINK=$(VULKAN_DIR)\Lib\vulkan-1.lib
-VULKAN_INCLUDE=-I$(VULKAN_DIR)\Include 
+  VULKAN_LINK=$(VULKAN_DIR)\Lib\vulkan-1.lib
+  VULKAN_INCLUDE=-I$(VULKAN_DIR)\Include 
 else
-VULKAN_LINK=-lvulkan
-VULKAN_INCLUDE=
+  VULKAN_LINK=-lvulkan
+  VULKAN_INCLUDE=
 endif
+
+ifeq ($(WINDOW_SYSTEM), DEFAULT)
+
+# select default window system if linux
+ifneq ($(OS), Windows_NT)
+
+ifeq ($(XDG_SESSION_TYPE), x11)
+  WINDOW_SYSTEM := X11
+else ifeq ($(XDG_SESSION_TYPE), wayland)
+  WINDOW_SYSTEM := WAYLAND
+endif
+
+endif
+
 
 ## Emit info and warnings
 ##-------------------------------------
@@ -40,7 +55,7 @@ endif
 ifeq ($(HEDRON), YES)
 ifeq ($(OS), Windows_NT)
 ifeq ($(wildcard $(VULKAN_DIR)), )
-	DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedro or install the Vulkan SDK and point VULKAN_DIR at it)
+	DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedron or install the Vulkan SDK and point VULKAN_DIR at it)
 endif
 endif
 
@@ -54,14 +69,23 @@ endif
 
 ## Platform specifics and configuration
 ##-------------------------------------
-RELEASE_FLAGS := -Ofast -Werror
-DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT
+RELEASE_FLAGS := -Ofast -Werror -g
+DEBUG_FLAGS := -O0 -DDEBUG -DDEBUG_ASSERT -g3 -gdwarf-2 
+
+ifeq ($(WINDOW_SYSTEM), X11)
+  DEBUG_FLAGS := $(DEBUG_FLAGS) -DWINDOW_SYSTEM=1 -lX11
+  RELEASE_FLAGS := $(RELEASE_FLAGS) -DWINDOW_SYSTEM=1 -lX11
+else ifeq ($(WINDOW_SYSTEM), WAYLAND)
+  DEBUG_FLAGS := $(DEBUG_FLAGS) -DWINDOW_SYSTEM=2 -lwayland-client
+  RELEASE_FLAGS := $(RELEASE_FLAGS) -DWINDOW_SYSTEM=2 -lwayland-client
+endif
+endif
 
 # Sanitisers currently aren't supported by gcc on windows
 ifneq ($(OS), Windows_NT)
-	DEBUG_FLAGS := $(DEBUG_FLAGS) -lwayland-client $(SANITIZERS)
+	DEBUG_FLAGS := $(DEBUG_FLAGS) $(SANITIZERS)
 	LINK_FLAGS := -ldl -lm
-    RELEASE_FLAGS := $(RELEASE_FLAGS) -lwayland-client
+    RELEASE_FLAGS := $(RELEASE_FLAGS) 
 else
 	LINK_FLAGS := 
 endif
@@ -98,7 +122,7 @@ INC_FLAGS := $(addprefix -I ,$(INC_DIRS))
 
 # The -MMD and -MP flags together generate Makefiles for us!
 # These files will have .d instead of .o as the output.
-CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -g -std=$(C_VERSION) -D_GNU_SOURCE
+CFLAGS := $(CFLAGS) $(INC_FLAGS) -MMD -MP -std=$(C_VERSION) -D_GNU_SOURCE
 
 # The warnings we want 
 CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereference -Wcast-align 

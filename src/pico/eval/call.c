@@ -2,7 +2,7 @@
 
 #include "pico/eval/call.h"
 #include "pico/values/types.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/platform/submodules.h"
 #include "pico/codegen/codegen.h"
 
 EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point) {
@@ -61,7 +61,8 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* dynamic_memory_space = mem_alloc(4096, a);
     void* dynamic_memory_ptr = dynamic_memory_space + 4096; 
 
-    Allocator old_temp_alloc = set_std_temp_allocator(*a);
+    PiAllocator new_temp_alloc = convert_to_pallocator(a);
+    PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
     typedef void*(*RunExpression)(void*, void*, void*); 
     RunExpression run = (RunExpression)get_instructions(target.target).data;
 

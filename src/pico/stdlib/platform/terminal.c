@@ -47,48 +47,52 @@ void relic_write_string(String str) {
     write_string(str, current_ostream);
 }
 
-void build_read_codepoint_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 0, mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
+void build_read_codepoint_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
 
     convert_c_fn(relic_read_codepoint, &fn_ctype, type, ass, a, point); 
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-void build_write_codepoint_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-  CType fn_ctype = mk_fn_ctype(a, 1,
+void build_write_codepoint_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1,
                                "codepoint", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}),
                                (CType){.sort = CSVoid});
 
     convert_c_fn(relic_write_codepoint, &fn_ctype, type, ass, a, point); 
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-void build_write_string_fn(PiType* type, Assembler* ass, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(a, 1,
-                                 "string", mk_string_ctype(a),
+void build_write_string_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "string", mk_string_ctype(pia),
                                  (CType){.sort = CSVoid});
 
     convert_c_fn(relic_write_string, &fn_ctype, type, ass, a, point); 
 
-    delete_c_type(fn_ctype, a);
+    delete_c_type(fn_ctype, pia);
 }
 
-void add_terminal_module(Assembler *ass, Module *platform, Allocator *a) {
+void add_terminal_module(Assembler *ass, Module *platform, PiAllocator *module_allocator, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_region = convert_to_pallocator(&ra);
+    PiAllocator* pia = &pico_region;
+
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &ra),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_symbol(mv_string("terminal")),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, a);
+    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
     delete_module_header(header);
     Symbol sym;
 
@@ -99,38 +103,38 @@ void add_terminal_module(Assembler *ass, Module *platform, Allocator *a) {
     }
 
     Segments prepped;
-    Segments fn_segments = {.data = mk_u8_array(0, a),};
+    Segments fn_segments = {.data = mk_u8_array(0, &ra),};
     Segments null_segments = (Segments) {
-        .code = mk_u8_array(0, a),
-        .data = mk_u8_array(0, a),
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
     };
 
-    typep = mk_proc_type(a, 0, mk_prim_type(a, UInt_32));
-    build_read_codepoint_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, UInt_32));
+    build_read_codepoint_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("read-codepoint"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 1, mk_prim_type(a, UInt_32), mk_prim_type(a, Unit));
-    build_write_codepoint_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
+    build_write_codepoint_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("write-codepoint"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
-    typep = mk_proc_type(a, 1, mk_string_type(a), mk_prim_type(a, Unit));
-    build_write_string_fn(typep, ass, a, &point);
+    typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
+    build_write_string_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("write-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, a);
+    delete_pi_type_p(typep, pia);
 
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
