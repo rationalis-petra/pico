@@ -9,6 +9,8 @@
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/platform/submodules.h"
 
+#ifdef WINDOW_SYSTEM
+
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
@@ -166,3 +168,5 @@ void add_window_module(Assembler *ass, Module *platform, PiAllocator *module_all
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);
 }
+
+#endif

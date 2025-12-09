@@ -15,6 +15,7 @@ CC := gcc
 CONFIG = default.config
 include ${CONFIG}
 
+
 ifeq ($(OS), Windows_NT)
   VULKAN_LINK=$(VULKAN_DIR)\Lib\vulkan-1.lib
   VULKAN_INCLUDE=-I$(VULKAN_DIR)\Include 
@@ -25,17 +26,15 @@ endif
 
 ifeq ($(WINDOW_SYSTEM), DEFAULT)
 
-# select default window system if linux
-ifneq ($(OS), Windows_NT)
-
-ifeq ($(XDG_SESSION_TYPE), x11)
-  WINDOW_SYSTEM := X11
-else ifeq ($(XDG_SESSION_TYPE), wayland)
-  WINDOW_SYSTEM := WAYLAND
+  # select default window system if linux
+  ifneq ($(OS), Windows_NT)
+    ifeq ($(XDG_SESSION_TYPE), x11)
+      WINDOW_SYSTEM := X11
+    else ifeq ($(XDG_SESSION_TYPE), wayland)
+      WINDOW_SYSTEM := WAYLAND
+    endif
+  endif
 endif
-
-endif
-
 
 ## Emit info and warnings
 ##-------------------------------------
@@ -53,18 +52,18 @@ ifneq ($(shell echo -e "$(CURRENT_GCC_VERSION)\n$(MIN_GCC_VERSION)" | sort -V | 
 endif
 
 ifeq ($(HEDRON), YES)
-ifeq ($(OS), Windows_NT)
-ifeq ($(wildcard $(VULKAN_DIR)), )
-	DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedron or install the Vulkan SDK and point VULKAN_DIR at it)
-endif
-endif
+  ifeq ($(OS), Windows_NT)
+    ifeq ($(wildcard $(VULKAN_DIR)), )
+      DUMMY := $(warning Hedron is enabled and the Vulkan directory is set to $(VULKAN_DIR), which does not exist. Either disable Hedron or install the Vulkan SDK and point VULKAN_DIR at it)
+    endif
+  endif
 
 else
-undefine HEDRON
+  undefine HEDRON
 endif
 
 ifneq ($(DEBUG_ASSERT), YES)
-undefine DEBUG_ASSERT
+  undefine DEBUG_ASSERT
 endif
 
 ## Platform specifics and configuration
@@ -78,7 +77,6 @@ ifeq ($(WINDOW_SYSTEM), X11)
 else ifeq ($(WINDOW_SYSTEM), WAYLAND)
   DEBUG_FLAGS := $(DEBUG_FLAGS) -DWINDOW_SYSTEM=2 -lwayland-client
   RELEASE_FLAGS := $(RELEASE_FLAGS) -DWINDOW_SYSTEM=2 -lwayland-client
-endif
 endif
 
 # Sanitisers currently aren't supported by gcc on windows

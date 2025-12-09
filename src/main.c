@@ -26,6 +26,8 @@
 #include "pico/stdlib/meta/meta.h"
 #include "pico/values/types.h"
 
+#include "atlas/atlas.h"
+
 #include "app/command_line_opts.h"
 #include "app/module_load.h"
 #include "app/help_string.h"
@@ -219,14 +221,19 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+
+#ifdef WINDOW_SYSTEM
     if (pl_init_window_system(stdalloc)) {
         write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
-    if (is_hedron_supported()) {
-        if (init_hedron(stdalloc)) {
-            write_string(mv_string("Warning: failed to init hedron!\n"), cout);
-      }
+#endif
+
+#ifdef USE_VULKAN
+    if (init_hedron(stdalloc)) {
+        write_string(mv_string("Warning: failed to init hedron!\n"), cout);
     }
+#endif
+
     thread_init_dynamic_vars();
 
     RegionAllocator* region = make_region_allocator(8096, true, stdalloc);
@@ -310,6 +317,10 @@ int main(int argc, char** argv) {
         write_string(mv_string("\n"), cout);
         write_string(mv_string("target: x86_64\n"), cout);
         break;
+    case CAtlas:
+        run_atlas(command.for_atlas, cout);
+        sdelete_string_array(command.for_atlas);
+        break;
     case CInvalid:
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
@@ -330,11 +341,14 @@ int main(int argc, char** argv) {
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
-    pl_teardown_window_system();
 
-    if (is_hedron_supported()) {
-        teardown_hedron();
-    }
+#ifdef USE_VULKAN
+    teardown_hedron();
+#endif
+
+#ifdef WINDOW_SYSYTEM
+    pl_teardown_window_system();
+#endif
 
     return 0;
 }

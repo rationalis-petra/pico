@@ -1,3 +1,5 @@
+#ifdef USE_VULKAN
+
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
@@ -48,6 +50,7 @@ static PiType* fence_ty;
 // 
 // ----------------------------------------------------------------------------
 
+#ifdef WINDOW_SYSTEM
 void build_create_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "window", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
     convert_c_fn(create_window_surface, &fn_ctype, type, ass, a, point); 
@@ -64,6 +67,7 @@ void build_destroy_window_surface_fn(PiType* type, Assembler* ass, PiAllocator* 
     CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
     convert_c_fn(destroy_window_surface, &fn_ctype, type, ass, a, point); 
 }
+#endif
 
 void build_num_swapchain_images_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "surface", mk_voidptr_ctype(pia),
@@ -653,6 +657,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
     e = get_def(sym, module);
     fence_ty = e->value;
 
+#ifdef WINDOW_SYSTEM
     typep = mk_proc_type(pia, 1, copy_pi_type_p(get_window_ty(), pia), copy_pi_type_p(surface_ty, pia));
     build_create_window_surface_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-window-surface"));
@@ -661,9 +666,8 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    PiType* prim = mk_prim_type(pia, UInt_32);
     typep = mk_proc_type(pia, 2, copy_pi_type_p(surface_ty, pia), 
-                         mk_app_type(pia, get_pair_type(), prim, prim),
+                         mk_app_type(pia, get_pair_type(), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32)),
                          mk_prim_type(pia, Unit));
     build_resize_window_surface_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("resize-window-surface"));
@@ -679,6 +683,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+#endif
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(surface_ty, pia), mk_prim_type(pia, UInt_32));
     build_num_swapchain_images_fn(typep, ass, pia, &ra, &point);
@@ -784,9 +789,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    // .....
-    prim = mk_prim_type(pia, UInt_8);
-    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), prim), copy_pi_type_p(shader_module_ty, pia));
+    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), mk_prim_type(pia, UInt_8)), copy_pi_type_p(shader_module_ty, pia));
     build_create_shader_module_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-shader-module"));
     fn_segments.code = get_instructions(ass);
@@ -1044,3 +1047,5 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
     Result r = add_module_def(platform, string_to_symbol(mv_string("hedron")), module);
     if (r.type == Err) panic(r.error_message);
 }
+
+#endif

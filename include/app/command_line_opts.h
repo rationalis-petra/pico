@@ -12,6 +12,8 @@ typedef enum {
     CEval,
     CHelp,
     CVersion,
+
+    CAtlas,
     CInvalid,
 } SubCommand_t;
 
@@ -42,6 +44,7 @@ typedef struct {
         ScriptOpts script;
         EvalOpts eval;
         HelpOpts help;
+        StringArray for_atlas;
         String error_message;
     };
 } Command;

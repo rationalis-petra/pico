@@ -13,7 +13,7 @@ void write_help_string(FormattedOStream *os) {
     write_fstring(mv_string("\n\n"), os);
     write_fstring(mv_string("  Usage: "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico [repl | script | eval] [options]\n"), os);
+    write_fstring(mv_string("pico [repl | script | eval | atlas] <options>\n"), os);
     end_boldness(os);
     write_fstring(mv_string("\n"), os);
 
@@ -51,7 +51,7 @@ void write_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" be explicitly provided, instead of relying upon this as the default mode, i.e.\n"), os);
     write_fstring(mv_string(" type "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico repl [options]"), os);
+    write_fstring(mv_string("pico repl <options>"), os);
     end_boldness(os);
     write_fstring(mv_string("\n"), os);
 
@@ -77,7 +77,7 @@ void write_help_string(FormattedOStream *os) {
 
     write_fstring(mv_string(" Usage: "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico script filename\n"), os);
+    write_fstring(mv_string("pico script <filename>\n"), os);
     end_boldness(os);
 
     write_fstring(mv_string("\n"), os);

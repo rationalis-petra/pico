@@ -1,0 +1,4 @@
+#ifndef __ATLAS_SYNTAX_ABSTRACT_H
+#define __ATLAS_SYNTAX_ABSTRACT_H
+
+#endif

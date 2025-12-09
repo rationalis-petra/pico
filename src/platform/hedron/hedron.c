@@ -1,13 +1,15 @@
+#ifdef USE_VULKAN
+
 #include <string.h>
 
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
 #include "platform/signals.h"
 #include "data/string.h"
-
-#ifdef USE_VULKAN
-
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+ 
+#ifndef WINDOW_SYSTEM
+#define NO_PLATFORM_AVAILABLE
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
 #define VK_USE_PLATFORM_XLIB_KHR
 #elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #define VK_USE_PLATFORM_WAYLAND_KHR
@@ -116,9 +118,16 @@ static VkDevice logical_device = VK_NULL_HANDLE;
 static Allocator* hd_alloc;
 static PiAllocator hd_pi_alloc;
 
+#ifndef WINDOW_SYSTEM
+const uint32_t num_required_extensions = 1;
+const char *required_extensions[] = {
+    VK_KHR_SURFACE_EXTENSION_NAME,
+};
+#else
 const uint32_t num_required_extensions = 2;
 const char *required_extensions[] = {
     VK_KHR_SURFACE_EXTENSION_NAME,
+    // No window extension needed.
 #if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
     VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
 #elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
@@ -129,6 +138,7 @@ const char *required_extensions[] = {
 #error "unrecognized OS!"
 #endif
 };
+#endif
 
 const uint32_t num_required_device_extensions = 1;
 const char *required_device_extensions[] = {
@@ -329,10 +339,6 @@ VkResult create_logical_device(Allocator* a) {
     return vkCreateDevice(physical_device, &create_info, NULL, &logical_device);
 }
 
-bool is_hedron_supported() {
-    return true;
-}
-
 int init_hedron(Allocator* a) {
     hd_alloc = a;
     hd_pi_alloc = convert_to_pallocator(a);
@@ -341,17 +347,17 @@ int init_hedron(Allocator* a) {
 
     // TODO: setup_debug_messenger();
 
-    result = pick_physical_device(a);
+    //result = pick_physical_device(a);
     if (result != VK_SUCCESS) return 1;
 
-    result = create_logical_device(a);
+    //result = create_logical_device(a);
     if (result != VK_SUCCESS) return 1;
 
     return 0;
 } 
 
 void teardown_hedron() {
-    vkDestroyDevice(logical_device, NULL);
+    //vkDestroyDevice(logical_device, NULL);
     vkDestroyInstance(rl_vk_instance, NULL);
 }
 
@@ -597,6 +603,7 @@ void cleanup_swap_chain(HedronSurface *surface) {
     vkDestroySwapchainKHR(logical_device, surface->swapchain, NULL);
 }
 
+#ifdef WINDOW_SYSTEM
 HedronSurface *create_window_surface(struct PlWindow *window) {
     VkSurfaceKHR surface;
 
@@ -673,6 +680,7 @@ HedronSurface *create_window_surface(struct PlWindow *window) {
     hd_surface->present_family = indices.graphics_family;
     return hd_surface;
 }
+#endif
 
 void resize_window_surface(HedronSurface* surface, Extent extent) {
     vkDeviceWaitIdle(logical_device);
@@ -1466,87 +1474,6 @@ void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count,
                           int32_t vertex_offset, uint32_t first_instance) { 
     vkCmdDrawIndexed(commands->buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
 }
-
-#else
-
-bool is_hedron_supported() {
-    return false;
-}
-
-int init_hedron(Allocator*)
-  {panic(mv_string("Hedron not supported on this build"));}
-void teardown_hedron()
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronSurface *create_window_surface(struct PlWindow* win)
-  {panic(mv_string("Hedron not supported on this build"));}
-void resize_window_surface(HedronSurface* surface, Extent extent)
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_window_surface(HedronSurface* surface)
-  {panic(mv_string("Hedron not supported on this build"));}
-uint32_t num_swapchain_images(HedronSurface* surface)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronShaderModule* create_shader_module(U8Array code)
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_shader_module(HedronShaderModule* module)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronPipeline* create_pipeline(BindingDescriptionArray bdesc, AttributeDescriptionArray adesc, PtrArray shaders, HedronSurface* surface)
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_pipeline(HedronPipeline* pipeline)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronBuffer* create_buffer(BufferType type, uint64_t size)
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_buffer(HedronBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void set_buffer_data(HedronBuffer* buffer, void* data)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronSemaphore* create_semaphore()
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_semaphore(HedronSemaphore* semaphore)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronFence* create_fence()
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void wait_for_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void reset_fence(HedronFence* fence)
-  {panic(mv_string("Hedron not supported on this build"));}
-void wait_for_device()
-  {panic(mv_string("Hedron not supported on this build"));}
-ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphore)
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronCommandPool* create_command_pool()
-  {panic(mv_string("Hedron not supported on this build"));}
-void destroy_command_pool()
-  {panic(mv_string("Hedron not supported on this build"));}
-HedronCommandBuffer* create_command_buffer(HedronCommandPool* pool)
-  {panic(mv_string("Hedron not supported on this build"));}
-void queue_submit(HedronCommandBuffer *buffer, HedronFence *fence, HedronSemaphore* wait, HedronSemaphore* signal)
-  {panic(mv_string("Hedron not supported on this build"));}
-void queue_present(HedronSurface* surface, HedronSemaphore* wait, uint32_t image_index)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_begin(HedronCommandBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_end(HedronCommandBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void reset_command_buffer(HedronCommandBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surface, uint32_t image_index)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_end_render_pass(HedronCommandBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_bind_pipeline(HedronCommandBuffer* buffer, HedronPipeline* pipeline)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_draw(HedronCommandBuffer *buffer, uint32_t vertex_count, uint32_t instance_cont, uint32_t first_vertex, uint32_t first_instance)
-  {panic(mv_string("Hedron not supported on this build"));}
-void command_draw_indexed(HedronCommandBuffer *commands, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t vertex_offset, uint32_t first_instance)
-  {panic(mv_string("Hedron not supported on this build"));}
 
 #endif
 

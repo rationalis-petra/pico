@@ -2,7 +2,11 @@
 #include "platform/window/window.h"
 #include "data/string.h"
 
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+#ifndef WINDOW_SYSTEM
+// Not using a window system!
+struct PlWindow {};
+
+#elif (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
 #include <X11/Xlib.h>
 
 Display* get_x11_display();
