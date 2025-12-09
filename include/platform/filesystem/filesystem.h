@@ -1,12 +1,35 @@
 #ifndef __PLATFORM_FILESYSTEM_FILESYSTEM_H
 #define __PLATFORM_FILESYSTEM_FILESYSTEM_H
 
-#include "platform/memory/allocator.h"
-#include "data/string.h"
 #include <stdbool.h>
 #include <stdint.h>
 
-// forward-declaration of window (platform/window/window.h)
+#include "platform/memory/allocator.h"
+#include "data/meta/array_header.h"
+
+#include "data/string.h"
+
+// ---------------------------------------------------------------------------
+//     Directories 
+// ---------------------------------------------------------------------------
+
+typedef struct Directory Directory;
+
+typedef struct {
+    String dirname;
+} DirectoryEntry;
+
+ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
+
+Directory* open_directory(String name, Allocator* alloc);
+void close_directory(Directory* directory);
+
+DirEntArray list_entries(Directory* dir, Allocator* alloc);
+
+// ---------------------------------------------------------------------------
+//     Files 
+// ---------------------------------------------------------------------------
+
 typedef struct File File;
 
 typedef enum {

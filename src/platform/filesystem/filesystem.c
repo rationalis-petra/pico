@@ -4,11 +4,64 @@
 #include "platform/machine_info.h"
 #include "platform/filesystem/filesystem.h"
 #include "platform/signals.h"
+
 #include "data/string.h"
+#include "data/meta/array_impl.h"
+
+
+//#define PICO_ARRAY_COMMON_IMPL(type, fprefix, tprefix) 
+ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 
 #if OS_FAMILY == WINDOWS
 #include <windows.h>
+struct Directory {
+    DIR* handle;
+    Allocator* gpa;
+};
+
+#else
+#include <dirent.h>
+
+struct Directory {
+    DIR* handle;
+    Allocator* gpa;
+};
 #endif
+
+
+Directory* open_directory(String name, Allocator* alloc) {
+    // TODO: what encoding to filenames use?
+    DIR* handle = opendir((char*)name.bytes);
+    
+    if (handle) {
+        Directory* dir = mem_alloc(sizeof(Directory), alloc);
+        *dir = (Directory) {
+            .handle = handle,
+            .gpa = alloc,
+        };
+        return dir;
+    } else {
+        return NULL;
+    }
+}
+
+void close_directory(Directory* directory) {
+    closedir(directory->handle);
+    mem_free(directory, directory->gpa);
+}
+
+DirEntArray list_entries(Directory* dir, Allocator* alloc) {
+    struct dirent *ep;
+    DirEntArray entries = mk_dirent_array(8, alloc);
+    while ((ep = readdir(dir->handle)) != NULL) {
+        DirectoryEntry entry = {
+            .dirname = mv_string(ep->d_name),
+        };
+        push_dirent(entry, &entries);
+    }
+
+    return entries;
+}
 
 /* struct File { */
 /*     FILE* handle;  */

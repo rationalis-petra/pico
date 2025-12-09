@@ -5,13 +5,23 @@
 
 static const char* version = "0.0.1";
 
+void load_atlas_project() {
+    
+}
+
 void run_atlas(StringArray args, OStream* out) {
     AtlasCommand command = atlas_parse_command(args);
 
     switch (command.type) {
     case CInit:
+        write_string(mv_string("TODO: Implement atlas init "), out);
+        write_string(command.init.name, out);
+        write_string(mv_string("\n"), out);
         break;
     case CRun:
+        write_string(mv_string("TODO: Implement atlas run "), out);
+        write_string(command.run.target, out);
+        write_string(mv_string("\n"), out);
         break;
     case CHelp:
         write_atlas_help_string(get_formatted_stdout());
