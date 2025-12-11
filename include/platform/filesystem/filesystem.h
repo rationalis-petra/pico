@@ -16,7 +16,8 @@
 typedef struct Directory Directory;
 
 typedef struct {
-    String dirname;
+    String name;
+    bool is_directory;
 } DirectoryEntry;
 
 ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
@@ -24,7 +25,15 @@ ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
 Directory* open_directory(String name, Allocator* alloc);
 void close_directory(Directory* directory);
 
+// List all entries in the current directory
+//  WARNING: if using this to traverse a directory, beware the possibility
+//   of getting stuck in an infinite loop, as the current directory (.) is
+//   also listed.
 DirEntArray list_entries(Directory* dir, Allocator* alloc);
+
+// List all entries in the curent directory - excluding the 'self' entry (.)
+//   and the 'parent' entry (..).
+DirEntArray list_children(Directory* dir, Allocator* alloc);
 
 // ---------------------------------------------------------------------------
 //     Files 

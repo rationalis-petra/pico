@@ -55,7 +55,26 @@ DirEntArray list_entries(Directory* dir, Allocator* alloc) {
     DirEntArray entries = mk_dirent_array(8, alloc);
     while ((ep = readdir(dir->handle)) != NULL) {
         DirectoryEntry entry = {
-            .dirname = mv_string(ep->d_name),
+            .name = mv_string(ep->d_name),
+            .is_directory = ep->d_type == DT_DIR,
+        };
+        push_dirent(entry, &entries);
+    }
+
+    return entries;
+}
+
+DirEntArray list_children(Directory* dir, Allocator* alloc) {
+    struct dirent *ep;
+    DirEntArray entries = mk_dirent_array(8, alloc);
+    while ((ep = readdir(dir->handle)) != NULL) {
+        if ((string_cmp(mv_string(ep->d_name), mv_string(".")) == 0)
+            || (string_cmp(mv_string(ep->d_name), mv_string("..")) == 0))
+            continue;
+
+        DirectoryEntry entry = {
+            .name = mv_string(ep->d_name),
+            .is_directory = ep->d_type == DT_DIR,
         };
         push_dirent(entry, &entries);
     }

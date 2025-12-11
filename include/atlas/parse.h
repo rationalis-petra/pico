@@ -21,8 +21,8 @@ typedef struct AtParseResult {
     };
 } AtParseResult;
 
-AtParseResult parse_atlas_project(IStream* is, PiAllocator* pia, RegionAllocator* a);
+AtParseResult parse_atlas_project(IStream* is, RegionAllocator* a);
 
-AtParseResult parse_atlas_defs(IStream* is, PiAllocator* pia, RegionAllocator* a);
+AtParseResult parse_atlas_defs(IStream* is, RegionAllocator* a);
 
 #endif

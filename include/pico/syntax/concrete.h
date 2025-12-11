@@ -77,4 +77,5 @@ void delete_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a);
 
 Document* pretty_atom(Atom val, Allocator* a);
+
 #endif

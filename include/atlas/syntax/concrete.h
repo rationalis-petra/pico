@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 
-#include "pico/data/error.h"
+#include "pico/data/range.h"
 #include "pico/values/values.h"
-#include "pico/data/client/meta/list_header.h"
+#include "data/meta/array_header.h"
 
 typedef enum : uint64_t {
-    AVersion,
-    ASymbol
+    AtVersion,
+    AtSymbol,
+    AtKeyword,
+    AtString,
 } AtAtom_t;
 
 typedef struct {
@@ -23,24 +25,29 @@ typedef struct {
     union {
         int64_t int_64;
         Symbol symbol;
+        Symbol keyword;
+        String string;
     };
 } AtAtom;
 
 typedef enum : uint64_t {
-    RawAtom,
-    RawBranch,
+    AtlAtom,
+    AtlBranch,
 } RawAtlas_t;
 
 typedef struct RawAtlas RawAtlas;
-PICO_LIST_HEADER(RawAtlas, rawatlas, RawAtlas);
+ARRAY_HEADER(RawAtlas, rawatlas, RawAtlas);
 
 struct RawAtlas {
     RawAtlas_t type;
     Range range;
     union {
         AtAtom atom;
-        RawAtlasPiList branch;
+        RawAtlasArray branch;
     };
 };
+
+Document* pretty_rawatlas(RawAtlas atlas, Allocator* a);
+Document* pretty_atlas_atom(AtAtom val, Allocator* a);
 
 #endif

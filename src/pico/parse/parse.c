@@ -1,5 +1,4 @@
 #include <math.h>
-#include "pico/stdlib/extra.h"
 #include "pico/parse/parse.h"
 
 // The main parsing functions, which parse different types of expressions. 
@@ -11,14 +10,14 @@
 //   + parse_prefix - for prefixed operators, is called by parse_atom
 // + numbers - for decimal or floating-point numbers
 
-ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
-ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
-ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
+static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
+static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
