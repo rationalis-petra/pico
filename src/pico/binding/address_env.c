@@ -49,7 +49,7 @@ typedef struct {
 int compare_saddr(SAddr lhs, SAddr rhs) {
     int out = lhs.type - rhs.type;
     if (!out) return out;
-    out = cmp_symbol(lhs.symbol, rhs.symbol);
+    out = symbol_cmp(lhs.symbol, rhs.symbol);
     if (!out) return out;
     out = lhs.stack_offset - rhs.stack_offset;
     return out;
@@ -59,7 +59,7 @@ ARRAY_HEADER(SAddr, saddr, SAddr)
 ARRAY_CMP_IMPL(SAddr, compare_saddr, saddr, SAddr)
 
 int compare_binding(Binding lhs, Binding rhs) {
-    int out = cmp_symbol(lhs.sym, rhs.sym);
+    int out = symbol_cmp(lhs.sym, rhs.sym);
     if (!out) return out;
     out = lhs.is_variable - rhs.is_variable;
     if (!out) return out;

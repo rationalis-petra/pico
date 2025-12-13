@@ -178,7 +178,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         out.result = terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
         // Check that there is an appropriate (odd) number of terms for infix operator
-        // unrolling to function
+        //   unrolling to function
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
@@ -283,7 +283,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
      */
     uint32_t codepoint;
     StreamResult result;
-    ParseResult out;
+    ParseResult out = {.type = ParseNone};
     U32Array arr = mk_u32_array(16, a);
 
     RawTreePiList terms = mk_rawtree_list(8, pia);

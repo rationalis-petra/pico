@@ -3,7 +3,7 @@
 
 #include "pico/binding/type_env.h"
 
-ASSOC_CMP_IMPL(Symbol, Local, cmp_symbol, sym_local, SymLocal)
+ASSOC_CMP_IMPL(Symbol, Local, symbol_cmp, sym_local, SymLocal)
 
 struct TypeEnv {
     Environment* env;

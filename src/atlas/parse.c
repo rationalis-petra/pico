@@ -173,13 +173,9 @@ static AtParseResult parse_atom(IStream* is, bool is_keyword, RegionAllocator* r
     AtParseResult out;
     U32Array arr = mk_u32_array(16, &gpa);
 
-    RawAtlasArray terms = mk_rawatlas_array(8, &gpa);
+    RawAtlas val = {};
     size_t start = bytecount(is);
 
-    // Accumulate a list of symbols, so, for example, 
-    // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
-
-    // consume starting ':' if keyword
     if (is_keyword) next(is, &codepoint);
 
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
@@ -188,14 +184,13 @@ static AtParseResult parse_atom(IStream* is, bool is_keyword, RegionAllocator* r
             push_u32(codepoint, &arr);
         } else {
             String str = string_from_UTF_32(arr, &gpa);
-            RawAtlas val = (RawAtlas) {
+            val = (RawAtlas) {
                 .type = AtlAtom,
                 .range.start = start,
                 .range.end = bytecount(is),
                 .atom.type = is_keyword ? AtKeyword : AtSymbol,
                 .atom.symbol = string_to_symbol(str),
             };
-            push_rawatlas(val, &terms);
 
             // We are done; break out of loop
             break;
@@ -204,14 +199,13 @@ static AtParseResult parse_atom(IStream* is, bool is_keyword, RegionAllocator* r
 
     if (result == StreamEnd) {
         String str = string_from_UTF_32(arr, &gpa);
-        RawAtlas val = (RawAtlas) {
+        val = (RawAtlas) {
             .type = AtlAtom,
             .range.start = start,
             .range.end = bytecount(is),
             .atom.type = is_keyword ? AtKeyword : AtSymbol,
             .atom.symbol = string_to_symbol(str),
         };
-        push_rawatlas(val, &terms);
     }
 
     if (result != StreamSuccess && result != StreamEnd) {
@@ -222,26 +216,9 @@ static AtParseResult parse_atom(IStream* is, bool is_keyword, RegionAllocator* r
             .error.range.end = bytecount(is),
         };
     } else {
-        // Now that the list has been accumulated, 'unroll' the list appropriately, 
-        // meaning that (num : i64 . +) becomes (. + (: num i64))
-        RawAtlas current = terms.data[0];
-        for (size_t i = 1; terms.len - i != 0; i += 2) {
-            RawAtlasArray children = mk_rawatlas_array(3, &gpa);
-            push_rawatlas(terms.data[i], &children);
-            push_rawatlas(terms.data[i+1], &children);
-            push_rawatlas(current, &children);
-
-            current = (RawAtlas) {
-                .type = AtlBranch,
-                .range.start = current.range.start,
-                .range.end = terms.data[i+1].range.end,
-                .branch = children,
-            };
-        };
-
         out = (AtParseResult) {
             .type = ParseSuccess,
-            .result = current,
+            .result = val,
         };
     }
     return out;

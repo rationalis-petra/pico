@@ -65,9 +65,9 @@ typedef struct {
 } SymPair;
 
 int64_t cmp_sym_pair(SymPair s1, SymPair s2) {
-    int64_t r1 = cmp_symbol(s1.lhs, s2.lhs);
+    int64_t r1 = symbol_cmp(s1.lhs, s2.lhs);
 
-    return r1 == 0 ? cmp_symbol(s1.rhs, s2.rhs) : r1;
+    return r1 == 0 ? symbol_cmp(s1.rhs, s2.rhs) : r1;
 }
 
 ARRAY_HEADER(SymPair, sym_pair, SymPair)

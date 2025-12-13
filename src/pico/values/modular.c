@@ -38,7 +38,7 @@ typedef struct {
 } ModuleEntryInternal;
 
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
-AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, cmp_symbol, entry, Entry)
+AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, symbol_cmp, entry, Entry)
 
 struct Package {
     Name name;

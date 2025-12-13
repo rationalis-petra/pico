@@ -19,7 +19,7 @@ Document* pretty_rawatlas(RawAtlas tree, Allocator* a) {
             Document* doc = pretty_rawatlas(node, a);
             push_ptr(doc, &doc_arr);
         }
-        out = mk_paren_doc("(", ")", mv_hsep_doc(doc_arr, a), a);
+        out = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(doc_arr, a), a), a);
         break;
     }
     }

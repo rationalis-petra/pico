@@ -318,7 +318,7 @@ int main(int argc, char** argv) {
         write_string(mv_string("target: x86_64\n"), cout);
         break;
     case CAtlas:
-        run_atlas(command.for_atlas, cout);
+        run_atlas(command.for_atlas, get_formatted_stdout());
         sdelete_string_array(command.for_atlas);
         break;
     case CInvalid:

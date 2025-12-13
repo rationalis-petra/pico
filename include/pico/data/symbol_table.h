@@ -37,6 +37,8 @@ Name get_table_name(String name, SymbolTable* table);
 
 String get_table_string(Name name, SymbolTable* table, Allocator* a);
 
+String view_table_string(Name name, SymbolTable* table);
+
 void delete_table(SymbolTable *table);
 
 void clear_table(SymbolTable* table);
