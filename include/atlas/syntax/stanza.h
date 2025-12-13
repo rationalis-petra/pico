@@ -29,7 +29,7 @@ typedef enum {
 typedef struct {
     Symbol name;
     String filename;
-    String entry_point;
+    Symbol entry_point;
     SymbolArray dependencies;
 } Executable;
 

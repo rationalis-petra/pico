@@ -5,7 +5,7 @@
 Document* pretty_stanza(Stanza stanza, Allocator* a) {
     Document* out = NULL;
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
-    DocStyle field_style = scolour(colour(237, 218, 50), dstyle);
+    DocStyle field_style = scolour(colour(219, 174, 78), dstyle);
     DocStyle str_style = scolour(colour(120, 200, 60), dstyle);
 
     switch (stanza.type) {
@@ -83,7 +83,7 @@ Document* pretty_stanza(Stanza stanza, Allocator* a) {
         {
             PtrArray entry_point_nodes = mk_ptr_array(2, a);
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("entry-point"), a), a), &entry_point_nodes);
-            push_ptr(mk_str_doc(stanza.executable.entry_point, a), &entry_point_nodes);
+            push_ptr(mk_str_doc(view_symbol_string(stanza.executable.entry_point), a), &entry_point_nodes);
 
             Document* entry_point_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(entry_point_nodes, a), a), a);
             push_ptr(entry_point_doc, &nodes);

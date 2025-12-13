@@ -74,7 +74,7 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
             PropSet* props = make_prop_set(4, &ra);
             add_symbol_prop(mv_string("name"), &executable_stanza.name, props);
             add_string_prop(mv_string("file"), &executable_stanza.filename, props);
-            add_string_prop(mv_string("entry-point"), &executable_stanza.entry_point, props);
+            add_symbol_prop(mv_string("entry-point"), &executable_stanza.entry_point, props);
             add_symbol_array_prop(mv_string("dependencies"), &executable_stanza.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {

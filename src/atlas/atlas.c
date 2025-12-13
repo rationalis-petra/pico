@@ -11,10 +11,11 @@
 #include "atlas/app/help_string.h"
 #include "atlas/parse.h"
 #include "atlas/analysis/abstraction.h"
+#include "atlas/eval/instance.h"
 
 static const char* version = "0.0.1";
 
-bool process_atlas(IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
+bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     PiErrorPoint pi_point;
@@ -41,6 +42,14 @@ bool process_atlas(IStream* in, FormattedOStream* out, String filename, RegionAl
     write_fstring(mv_string("\n"), out);
 
     Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
+    switch (stanza.type) {
+    case StExecutable:
+        add_executable(stanza.executable, instance);
+        break;
+    case StLibrary:
+        add_library(stanza.library, instance);
+        break;
+    }
 
     prndoc = pretty_stanza(stanza, &ra);
     write_fstring(mv_string("\n"), out);
@@ -54,7 +63,7 @@ bool process_atlas(IStream* in, FormattedOStream* out, String filename, RegionAl
     return true;
 }
 
-bool load_atlas_files(String path, FormattedOStream* out, RegionAllocator* region) {
+bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instance, RegionAllocator* region) {
     Allocator* stda = get_std_allocator();
     Directory* dir = open_directory(path, stda);
     DirEntArray entries = list_children(dir, stda);
@@ -65,7 +74,7 @@ bool load_atlas_files(String path, FormattedOStream* out, RegionAllocator* regio
       // If is a non-hidden directory
       if (entry.is_directory && (entry.name.memsize > 0 && entry.name.bytes[0] != '.')) {
           String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
-          fail = load_atlas_files(newpath, out, region);
+          fail = load_atlas_files(newpath, out, instance, region);
           mem_free(newpath.bytes, stda);
       } else if (string_cmp(entry.name, mv_string("atlas")) == 0) {
           String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
@@ -73,7 +82,7 @@ bool load_atlas_files(String path, FormattedOStream* out, RegionAllocator* regio
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
           RegionAllocator* subregion = make_subregion(region);
 
-          fail = process_atlas(captured_fstream, out, newpath, region);
+          fail = process_atlas(instance, captured_fstream, out, newpath, region);
 
           release_subregion(subregion);
           delete_istream(captured_fstream, stda);
@@ -106,14 +115,29 @@ void run_atlas(StringArray args, FormattedOStream* out) {
         write_fstring(mv_string("\n"), out);
         break;
     case CRun: {
-        write_fstring(mv_string("IMPLEMENTING: atlas run "), out);
-        write_fstring(command.run.target, out);
-        write_fstring(mv_string("\n"), out);
-
         Allocator* stda = get_std_allocator();
+        AtlasInstance* instance = make_atlas_instance(stda);
+
         RegionAllocator* region = make_region_allocator(4096, true, stda);
-        load_atlas_files(mv_string("."), out, region);
+        load_atlas_files(mv_string("."), out, instance, region);
+
+        PiErrorPoint point;
+        if (catch_error(point)) {
+            if (point.multi.has_many) {
+                for (size_t i = 0; i < point.multi.errors.len; i++) {
+                    Document* message = point.multi.errors.data[i];
+                    write_doc_formatted(message, 120, out);
+                    write_fstring(mv_string("\n"), out);
+                }
+            } else {
+                write_doc_formatted(point.multi.error.message, 120, out);
+                    write_fstring(mv_string("\n"), out);
+            }
+        } else {
+            atlas_run(instance, command.run.target, region, &point);
+        }
         delete_region_allocator(region);
+        delete_atlas_instance(instance);
 
         break;
     }

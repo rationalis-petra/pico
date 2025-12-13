@@ -41,6 +41,8 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
 
 void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
 
+void call_unit_fn(void* function, Allocator* a);
+
 Document* pretty_res(EvalResult res, Allocator* a);
 
 
