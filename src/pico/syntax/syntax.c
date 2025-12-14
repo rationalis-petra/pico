@@ -40,9 +40,8 @@ Document* pretty_syntax_callback(Syntax* syntax, void* ctx, Allocator* a) {
 Document* pretty_syntax_internal(Syntax* syntax, Allocator* a) {
     Document* out = NULL;
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
-    DocStyle field_style = scolour(colour(219, 174, 78), dstyle);
+    DocStyle field_style = scolour(colour(60, 150, 210), dstyle);
     DocStyle var_style = scolour(colour(212, 130, 42), dstyle);
-    //DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
 
     switch (syntax->type) {
     case SLitUntypedIntegral: {

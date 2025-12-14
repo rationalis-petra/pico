@@ -5,7 +5,7 @@
 Document* pretty_stanza(Stanza stanza, Allocator* a) {
     Document* out = NULL;
     DocStyle former_style = scolour(colour(60, 190, 24), dstyle);
-    DocStyle field_style = scolour(colour(219, 174, 78), dstyle);
+    DocStyle field_style = scolour(colour(60, 150, 210), dstyle);
     DocStyle str_style = scolour(colour(120, 200, 60), dstyle);
 
     switch (stanza.type) {

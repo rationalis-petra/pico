@@ -21,40 +21,89 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
 
-    AtParseResult parse_res = parse_atlas_defs(in, region);
-    if (parse_res.type == ParseNone) {
-        write_fstring(mv_string("parse returned nothing...\n"), out);
-    } else if (parse_res.type == ParseFail) {
-        MultiError multi = (MultiError) {
-            .has_many = false,
-            .error = parse_res.error,
-        };
-        display_error(multi, in, get_formatted_stdout(), NULL, &ra);
-        goto on_error_generic;
+    bool running = true;
+    while (running) {
+        AtParseResult parse_res = parse_atlas_defs(in, region);
+        if (parse_res.type == ParseNone) {
+            running = false;
+        } else if (parse_res.type == ParseFail) {
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = parse_res.error,
+            };
+            display_error(multi, in, get_formatted_stdout(), NULL, &ra);
+            goto on_error_generic;
+        } else {
+            write_fstring(mv_string("parse returned value:\n"), out);
+            Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
+            write_doc_formatted(prndoc, 120, out);
+            write_fstring(mv_string("\n"), out);
+
+            Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
+            switch (stanza.type) {
+            case StExecutable:
+                add_executable(stanza.executable, instance);
+                break;
+            case StLibrary:
+                add_library(stanza.library, instance);
+                break;
+            }
+            prndoc = pretty_stanza(stanza, &ra);
+            write_fstring(mv_string("\n"), out);
+            write_doc_formatted(prndoc, 120, out);
+            write_fstring(mv_string("\n"), out);
+        }
+    }
+
+    return false;
+
+ on_pi_error:
+    display_error(pi_point.multi, in, out, (char*)filename.bytes, &ra);
+ on_error_generic:
+    return true;
+}
+
+bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+
+    Project project;
+    ProjectRecord record;
+
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) goto on_pi_error;
+
+    bool running = true;
+    while (running) {
+        AtParseResult parse_res = parse_atlas_defs(in, region);
+        if (parse_res.type == ParseNone) {
+            write_fstring(mv_string("ending project parsing...\n"), out);
+            running = false;
+        } else if (parse_res.type == ParseFail) {
+            MultiError multi = (MultiError) {
+                .has_many = false,
+                .error = parse_res.error,
+            };
+            display_error(multi, in, get_formatted_stdout(), NULL, &ra);
+            goto on_error_generic;
               
-    } else if (parse_res.type != ParseSuccess) {
-        panic(mv_string("Atlas parse returned invalid result"));
-    }
+        } else if (parse_res.type != ParseSuccess) {
+            panic(mv_string("Atlas parse returned invalid result"));
+        } else {
+            write_fstring(mv_string("project parse returned value:\n"), out);
+            Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
+            write_doc_formatted(prndoc, 120, out);
+            write_fstring(mv_string("\n"), out);
 
-    write_fstring(mv_string("parse returned value:\n"), out);
-    Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
+            abstract_atlas_project(&project, &record, parse_res.result, region, &pi_point);
+        }
+    }
+    // TODO: check all fields were filled out!
+    Document* prndoc = pretty_project(project, &ra);
+    write_fstring(mv_string("\n"), out);
     write_doc_formatted(prndoc, 120, out);
     write_fstring(mv_string("\n"), out);
 
-    Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
-    switch (stanza.type) {
-    case StExecutable:
-        add_executable(stanza.executable, instance);
-        break;
-    case StLibrary:
-        add_library(stanza.library, instance);
-        break;
-    }
-
-    prndoc = pretty_stanza(stanza, &ra);
-    write_fstring(mv_string("\n"), out);
-    write_doc_formatted(prndoc, 120, out);
-    write_fstring(mv_string("\n"), out);
+    set_instance_project(instance, project);
     return 0;
 
  on_pi_error:
@@ -89,12 +138,17 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
           delete_istream(fstream, stda);
           mem_free(newpath.bytes, stda);
       } else if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
-          write_fstring(mv_string("atlas project at: "), out);
+          String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
+          IStream* fstream = open_file_istream(newpath, stda);
+          IStream* captured_fstream = mk_capturing_istream(fstream, stda);
+          RegionAllocator* subregion = make_subregion(region);
 
-          write_fstring(path, out);
-          write_fstring(mv_string("/"), out);
-          write_fstring(entry.name, out);
-          write_fstring(mv_string("\n"), out);
+          fail = process_atlas_project(instance, captured_fstream, out, newpath, region);
+
+          release_subregion(subregion);
+          delete_istream(captured_fstream, stda);
+          delete_istream(fstream, stda);
+          mem_free(newpath.bytes, stda);
       }
 
       if (fail) break;

@@ -6,6 +6,8 @@
 
 struct AtlasInstance {
     SymPtrAMap targets;
+    bool project_set;
+    Project project;
     Allocator* gpa;
 };
 
@@ -22,6 +24,7 @@ AtlasInstance* make_atlas_instance(Allocator* a) {
     AtlasInstance* instance = mem_alloc(sizeof(AtlasInstance), a);
     *instance = (AtlasInstance) {
         .targets = mk_sym_ptr_amap(32, a),
+        .project_set = false,
         .gpa = a,
     };
     return instance;
@@ -51,6 +54,14 @@ static Module* atlas_load_target(AtlasInstance* instance, AtlasTarget* target, R
 void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, PiErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
     Symbol sym = string_to_symbol(target_name);
+
+    if (!instance->project_set) {
+        PicoError err = {
+            .range = (Range) {},
+            .message = mk_str_doc(mv_string("No atlas project was found, please ensure there is an 'atlas-project' file in the current directory."), &ra),
+        };
+        throw_pi_error(point, err);
+    }
 
     size_t tidx;
     if (sym_ptr_find(&tidx, sym, instance->targets)) {
@@ -90,15 +101,40 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         // TODO: check that function has appropriate type, i.e. (Proc [] Unit)
         call_unit_fn(e->value, &ra);
     } else {
-      PicoError err = {
-          .message = mk_str_doc(mv_string("Unrecognized target"), &ra),
-      };
-      throw_pi_error(point, err);
+        PtrArray nodes = mk_ptr_array(5, &ra);
+        push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
+        push_ptr(mk_str_doc(target_name, &ra), &nodes);
+        push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
+        PicoError err = {
+            .message = mv_cat_doc(nodes, &ra),
+        };
+        throw_pi_error(point, err);
     }
 }
 
-Module *atlas_load_target(AtlasInstance* instance, AtlasTarget* target, RegionAllocator* region, PiErrorPoint* point) {
-    return NULL;
+Module* atlas_load_target(AtlasInstance* instance, AtlasTarget* target, RegionAllocator* region, PiErrorPoint* point) {
+    /* Loading algorithm
+     *  - For now, assume that dependencies form not just a DAG, but a tree
+     *  - Therefore, we do NOT need to check for duplicates and recursion
+     *  - This will need to change as projects and dependencies get more complex;
+     */
+
+    // Does the target have an entry-point? If so, it is an executable,
+    // otherwise it is a module.
+    Module* out = NULL;
+    if (target->entrypoint.type == Some) {
+        // Load all dependencies first
+    } else {
+        // Create new Module
+    }
+    
+    
+    return out;
+}
+
+void set_instance_project(AtlasInstance *instance, Project project) {
+    instance->project_set = true;
+    instance->project = project;
 }
 
 void add_library(Library library, AtlasInstance* instance) {

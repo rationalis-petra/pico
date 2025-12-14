@@ -22,82 +22,66 @@ AtParseResult parse_expr(IStream* is, uint32_t expected, RegionAllocator* region
     uint32_t point;
 
     consume_whitespace(is);
-    StreamResult result;
-    RawAtlasArray terms = mk_rawatlas_array(8, &gpa);
-    bool running = true;
-
-    while (running && ((result = peek(is, &point)) == StreamSuccess)) {
-        switch (peek(is, &point)) {
-        case StreamSuccess:
-            if (point == '(') {
-                out = parse_list(is, ')', region);
-            }
-            else if (point == '"') {
-                out = parse_string(is, region);
-            } else if (point == ':') {
-                out = parse_atom(is, true, region);
-            }
-            else if (is_whitespace(point)) {
-                // Whitespace always terminates a unit, e.g. 
-                out.type = ParseNone;
-                running = false;
-                break;
-            }
-            else if (is_symchar(point)){
-                out = parse_atom(is, false, region);
-            } else if (point == expected) {
-                // We couldn't do a parse!
-                out.type = ParseNone;
-                running = false;
-                break;
-            } else {
-                // We couldn't do a parse!
-                size_t range_start = bytecount(is);
-                next(is, &point);
-
-                String actual_string = string_from_codepoint(point, &gpa);
-                String expected_string = string_from_codepoint(expected, &gpa);
-                String message = string_ncat(&gpa, 5,
-                                             mv_string("Unexpected character: '"),
-                                             actual_string,
-                                             mv_string("', expected: '"),
-                                             expected_string,
-                                             mv_string("'"));
-
-                out = (AtParseResult) {
-                    .type = ParseFail,
-                    .error.range.start = range_start,
-                    .error.range.end = bytecount(is),
-                    .error.message = mv_str_doc(message, &gpa),
-                };
-                running = false;
-                break;
-            }
-            break;
-
-        case StreamEnd: {
+    switch (peek(is, &point)) {
+    case StreamSuccess:
+        if (point == '(') {
+            out = parse_list(is, ')', region);
+        }
+        else if (point == '"') {
+            out = parse_string(is, region);
+        } else if (point == ':') {
+            out = parse_atom(is, true, region);
+        }
+        else if (is_whitespace(point)) {
+            // Whitespace always terminates a unit, e.g. 
             out.type = ParseNone;
-            running = false;
             break;
         }
-        
-        default: {
+        else if (is_symchar(point)){
+            out = parse_atom(is, false, region);
+        } else if (point == expected) {
+            // We couldn't do a parse!
+            out.type = ParseNone;
+            break;
+        } else {
+            // We couldn't do a parse!
+            size_t range_start = bytecount(is);
+            next(is, &point);
+
+            String actual_string = string_from_codepoint(point, &gpa);
+            String expected_string = string_from_codepoint(expected, &gpa);
+            String message = string_ncat(&gpa, 5,
+                                         mv_string("Unexpected character: '"),
+                                         actual_string,
+                                         mv_string("', expected: '"),
+                                         expected_string,
+                                         mv_string("'"));
+
             out = (AtParseResult) {
                 .type = ParseFail,
-                .error.message = mv_cstr_doc("Stream result was in unexpected state.", &gpa),
-                .error.range.start = bytecount(is),
+                .error.range.start = range_start,
                 .error.range.end = bytecount(is),
+                .error.message = mv_str_doc(message, &gpa),
             };
-            running = false;
-        } break;
+            break;
         }
+        break;
 
-        if (out.type == ParseSuccess) {
-            push_rawatlas(out.result, &terms);
-        } else if (out.type == ParseFail) {
-            running = false;
-        }
+    case StreamEnd: {
+        out.type = ParseNone;
+        break;
     }
+        
+    default: {
+        out = (AtParseResult) {
+            .type = ParseFail,
+            .error.message = mv_cstr_doc("Stream result was in unexpected state.", &gpa),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
+        };
+    } break;
+    }
+
     return out;
 }
 

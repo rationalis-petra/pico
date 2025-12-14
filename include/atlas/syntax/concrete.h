@@ -23,7 +23,7 @@ typedef struct {
 typedef struct {
     AtAtom_t type;
     union {
-        int64_t int_64;
+        Version version;
         Symbol symbol;
         Symbol keyword;
         String string;

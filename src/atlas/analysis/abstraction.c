@@ -18,11 +18,6 @@ typedef enum {
     EDependencies,
 } ExecutableChecks;
 
-
-typedef struct {
-} Properties;
-
-
 Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
 
@@ -87,9 +82,13 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
                 .type = StExecutable,
                 .executable = executable_stanza,
             };
+        } else {
+            PicoError err = {
+                .range = raw.range,
+                .message = mv_cstr_doc("Unrecognized stanza header.", &ra),
+            };
+            throw_pi_error(point, err);
         }
-
-
         break;
     }
     case AtlAtom: {
@@ -123,4 +122,58 @@ Symbol get_symbol(RawAtlas raw, PiErrorPoint* point, Allocator* a) {
     }
 
     return raw.atom.symbol;
+}
+
+void abstract_atlas_project(Project *project, ProjectRecord *record, RawAtlas raw, RegionAllocator *region, PiErrorPoint *point) {
+    Allocator ra = ra_to_gpa(region);
+
+    switch (raw.type) {
+    case AtlBranch: {
+        if (raw.branch.len == 0) {
+            PicoError err = {
+                .range = raw.range,
+                .message = mv_cstr_doc("Empty stanza.", &ra),
+            };
+            throw_pi_error(point, err);
+        }
+        RawAtlas rawhead = raw.branch.data[0];
+        Symbol head = get_symbol(rawhead, point, &ra);
+        if (string_cmp(mv_string("lang"), symbol_to_string(head, &ra)) == 0) {
+            return;
+        } else if (string_cmp(mv_string("package"), symbol_to_string(head, &ra)) == 0) {
+            bool package_checks[] = {false, false };
+
+            // Package 
+            // - package-name :: symbol
+            // - package-dependencies :: symbol list
+            PropSet* props = make_prop_set(4, &ra);
+            add_symbol_prop(mv_string("name"), &project->package.package_name, props);
+            add_symbol_array_prop(mv_string("dependencies"), &project->package.dependent_packages, props);
+
+            for (size_t i = 1; i < raw.branch.len; i++) {
+                parse_prop(raw.branch.data[i], props, package_checks, point, &ra);
+            }
+
+            check_props(props, package_checks, raw.range, point, &ra);
+            return;
+        } else {
+            PicoError err = {
+                .range = raw.range,
+                .message = mv_cstr_doc("Unrecognized atlas project stanza header.", &ra),
+            };
+            throw_pi_error(point, err);
+        }
+        break;
+    }
+    case AtlAtom: {
+        PicoError err = {
+            .range = raw.range,
+            .message = mv_cstr_doc("Expecting a stanza, but got an atom instead.", &ra),
+        };
+        throw_pi_error(point, err);
+        break;
+    }
+    }
+
+    panic(mv_string("Invalid raw stanza received from parsing stage."));
 }
