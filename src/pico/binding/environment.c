@@ -110,8 +110,6 @@ void refresh_env(Environment* env) {
         } else {
             p = mem_alloc(sizeof(PtrArray), env->gpa);
             *p = mk_ptr_array(8, env->gpa);
-            // TODO: we know this isn't in the instances; could perhaps
-            // speed up the process?
             name_ptr_insert(instance->id, p, &env->instances);
         }
 
@@ -135,7 +133,6 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Imports imports = get_imports(module);
     Package* package = get_package(module);
     Module* root_module = package_root_module(package);
-    //Module* parent = get_parent(module);
 
     for (size_t i = 0; i < imports.clauses.len; i++) {
         // TODO (BUG): currently, we only search in the package, not the parent

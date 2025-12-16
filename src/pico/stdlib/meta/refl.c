@@ -70,7 +70,7 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     Module* parent = module.is_none ? NULL : module.module;
 
     RegionAllocator* ra = make_region_allocator(16384, true, &a);
-    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, pia, ra);
+    load_module_from_istream(sfile, os, filename, current_package, parent, pia, ra);
     delete_region_allocator(ra);
 
     delete_istream(sfile, &a);
@@ -108,7 +108,7 @@ Result run_script_c_fun(String filename, MaybeModule mmodule) {
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
 
     RegionAllocator* region = make_region_allocator(16384, true, &a);
-    run_script_from_istream(sfile, os, (const char*)filename.bytes, module, region); 
+    run_script_from_istream(sfile, os, filename, module, region); 
     delete_region_allocator(region);
 
     delete_istream(sfile, &a);

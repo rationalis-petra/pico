@@ -71,18 +71,18 @@ void delete_atlas_instance(AtlasInstance* instance) {
     mem_free(instance, a);
 }
 
-static Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, PiErrorPoint* point);
+static Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point);
 
-void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, PiErrorPoint* point) {
+void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* region, AtErrorPoint* point) {
     Allocator ra = ra_to_gpa(region);
     Symbol sym = string_to_symbol(target_name);
 
     if (!instance->project_set) {
-        PicoError err = {
+        AtlasError err = {
             .range = (Range) {},
             .message = mk_str_doc(mv_string("No atlas project was found, please ensure there is an 'atlas-project' file in the current directory."), &ra),
         };
-        throw_pi_error(point, err);
+        throw_at_error(point, err);
     }
 
     size_t tidx;
@@ -95,11 +95,11 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore is not runnable."), &ra), &nodes);
 
-            PicoError err = {
+            AtlasError err = {
                 .range = (Range) {},
                 .message = mv_cat_doc(nodes, &ra),
             };
-            throw_pi_error(point, err);
+            throw_at_error(point, err);
         }
 
         // First, create a new package for the project
@@ -134,11 +134,11 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
                 push_ptr(mk_str_doc(view_name_string(dep_name), &ra), &nodes);
                 push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
-                PicoError err = {
+                AtlasError err = {
                     .range = (Range) {},
                     .message = mv_cat_doc(nodes, &ra),
                 };
-                throw_pi_error(point, err);
+                throw_at_error(point, err);
             }
         }
 
@@ -152,11 +152,11 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             push_ptr(mk_str_doc(target_name, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
-            PicoError err = {
+            AtlasError err = {
                 .range = (Range) {},
                 .message = mv_cat_doc(nodes, &ra),
             };
-            throw_pi_error(point, err);
+            throw_at_error(point, err);
         }
 
         // TODO: check that function has appropriate type, i.e. (Proc [] Unit)
@@ -168,14 +168,14 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
         push_ptr(mk_str_doc(target_name, &ra), &nodes);
         push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
-        PicoError err = {
+        AtlasError err = {
             .message = mv_cat_doc(nodes, &ra),
         };
-        throw_pi_error(point, err);
+        throw_at_error(point, err);
     }
 }
 
-Module* atlas_load_file(String filename, Package* package, Module* parent, StringArray dependencies, RegionAllocator* region, PiErrorPoint* point) {
+Module* atlas_load_file(String filename, Package* package, Module* parent, StringArray dependencies, RegionAllocator* region, AtErrorPoint* point) {
     // Create new Module in package
     // TODO: use different procedure for scripts?
     // Load module from system
@@ -208,10 +208,10 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         PtrArray docs = mk_ptr_array(4, &ra);
         push_ptr(mk_str_doc(mv_string("File not found: "), &ra), &docs);
         push_ptr(mk_str_doc(filename, &ra), &docs);
-        PicoError err = {
+        AtlasError err = {
             .message = mv_sep_doc(docs, &ra),
         };
-        throw_pi_error(point, err);
+        throw_at_error(point, err);
     }
     IStream* cin = mk_capturing_istream(in, &ra);
     reset_bytecount(cin);
@@ -242,14 +242,17 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
     module = mk_module(*header, package, NULL);
-    add_module(header->name, module, package);
+    if (parent) {
+        add_module_def(parent, header->name, module);
+    } else {
+        add_module(header->name, module, package);
+    }
 
     old_module = get_std_current_module();
     set_std_current_module(module);
 
     for (size_t i = 0; i < dependencies.len; i++) {
-        Module* child = atlas_load_file(dependencies.data[i], package, module, mk_string_array(0, &ra), region, point);
-        add_module_def(child, module_name(child), child);
+        atlas_load_file(dependencies.data[i], package, module, mk_string_array(0, &ra), region, point);
     }
 
 
@@ -313,53 +316,62 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     release_executable_allocator(exec);
     return module;
  on_parse_error: {
-        delete_istream(in, &ra);
-        if (old_module) set_std_current_module(old_module);
-        uncapture_istream(cin);
-        release_subregion(iter_region);
-        release_executable_allocator(exec);
         Document* out = copy_doc(ph_res.error.message, &ra);
-        PicoError new_err = {
+        AtlasError new_err = {
             .range = ph_res.error.range,
             .message = out,
+            .filename = filename,
+            .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
-        throw_pi_error(point, new_err);
+
+        delete_istream(in, &ra);
+        if (old_module) set_std_current_module(old_module);
+        release_subregion(iter_region);
+        release_executable_allocator(exec);
+
+        throw_at_error(point, new_err);
     }
 
  on_pi_error: {
+        if (pi_point.multi.has_many) {
+            panic(mv_string("Atlas needs to accommodate multi-errors being thrown when loading files"));
+        }
+        Document* out = copy_doc(pi_point.multi.error.message, &ra);
+        AtlasError new_err = {
+            .range = pi_point.multi.error.range,
+            .message = out,
+            .filename = filename,
+            .captured_file = copy_string(*get_captured_buffer(cin), &ra),
+        };
+
         delete_istream(in, &ra);
         if (old_module) set_std_current_module(old_module);
-        uncapture_istream(cin);
         release_subregion(iter_region);
         release_executable_allocator(exec);
 
-        // TODO: accommodate multierrors!
-        Document* out = copy_doc(pi_point.multi.error.message, &ra);
-        PicoError new_err = {
-            .range = pi_point.multi.error.range,
-            .message = out,
-        };
-        throw_pi_error(point, new_err);
+        throw_at_error(point, new_err);
     }
     
 
  on_error: {
+        Document* out = mk_str_doc(err_point.error_message, &ra);
+        AtlasError new_err = {
+            .range = pi_point.multi.error.range,
+            .message = out,
+            .filename = filename,
+            .captured_file = copy_string(*get_captured_buffer(cin), &ra),
+        };
+
         delete_istream(in, &ra);
         if (old_module) set_std_current_module(old_module);
-        uncapture_istream(cin);
         release_subregion(iter_region);
         release_executable_allocator(exec);
 
-        // TODO: accommodate multierrors!
-        Document* out = mk_str_doc(err_point.error_message, &ra);
-        PicoError new_err = {
-            .message = out,
-        };
-        throw_pi_error(point, new_err);
+        throw_at_error(point, new_err);
     }
 }
 
-Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, PiErrorPoint* point) {
+Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget* target, RegionAllocator* region, AtErrorPoint* point) {
     /* Loading algorithm
      *  - For now, assume that dependencies form not just a DAG, but a tree
      *  - Therefore, we do NOT need to check for duplicates and recursion
@@ -382,10 +394,10 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
             push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
             push_ptr(mk_str_doc(view_symbol_string(dep_sym), &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("'"), &ra), &nodes);
-            PicoError err = {
+            AtlasError err = {
                 .message = mv_cat_doc(nodes, &ra),
             };
-            throw_pi_error(point, err);
+            throw_at_error(point, err);
         }
     }
 

@@ -25,24 +25,19 @@ const Colour message_colour = (Colour){.r = 200, .g = 20, .b = 20};
 const Colour regular_code_colour = (Colour){.r = 150, .g = 150, .b = 150};
 const Colour bad_code_colour = (Colour){.r = 208, .g = 105, .b = 30};
 
-void display_error(MultiError multi, IStream* is, FormattedOStream* fos, const char* filename, Allocator* a) {
+void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, String filename, Allocator* a) {
     // TODO (FEAT): As user code can produce source positions, we should ensure
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
-    String* buffer = get_captured_buffer(is);
 
-    if (filename) {
-        write_fstring(mv_string(filename), fos);
-        write_fstring(mv_string(": \n\n"), fos);
-    }
+    write_fstring(filename, fos);
+    write_fstring(mv_string(": \n\n"), fos);
 
     if (multi.has_many) {
         for (size_t i = 0; i < multi.errors.len; i++) {
             PicoError error = *(PicoError*)multi.errors.data[i];
-            if (buffer) {
-                size_t prev_lines = i == 0 ? 5 : 2;
-                display_code_region(*buffer, error.range, prev_lines, fos, a);
-            }
+            size_t prev_lines = i == 0 ? 5 : 2;
+            display_code_region(code_buffer, error.range, prev_lines, fos, a);
 
             write_fstring(mv_string("\n"), fos);
             start_coloured_text(message_colour, fos);
@@ -53,9 +48,7 @@ void display_error(MultiError multi, IStream* is, FormattedOStream* fos, const c
             write_fstring(mv_string("\n\n"), fos);
         }
     } else {
-        if (buffer) {
-            display_code_region(*buffer, multi.error.range, 5, fos, a);
-        }
+        display_code_region(code_buffer, multi.error.range, 5, fos, a);
         write_fstring(mv_string("\n"), fos);
         start_coloured_text(message_colour, fos);
 

@@ -85,7 +85,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, cin, get_formatted_stdout(), NULL, stdalloc);
+        display_error(multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("stdin"), stdalloc);
         return true;
     }
     if (res.type != ParseSuccess) {
@@ -186,7 +186,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, cout, NULL, &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cin), cout, mv_string("stdin"), &ra);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     return true;
@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
             RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
-            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, region);
+            run_script_from_istream(fin, get_formatted_stdout(), command.script.filename, module, region);
             delete_region_allocator(region);
             
             delete_istream(fin, stdalloc);

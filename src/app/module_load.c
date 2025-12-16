@@ -14,7 +14,7 @@
 #include "pico/stdlib/meta/meta.h"
 
 
-void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Package* package, Module* parent, PiAllocator module_allocator, RegionAllocator* region) {
+void load_module_from_istream(IStream* in, FormattedOStream* serr, String filename, Package* package, Module* parent, PiAllocator module_allocator, RegionAllocator* region) {
 
     // Step 1: Setup necessary state
     Allocator ra = ra_to_gpa(region);
@@ -55,7 +55,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
             .has_many = false,
             .error = ph_res.error,
         };
-        display_error(multi, cin, serr, filename, &itera);
+        display_error(multi, *get_captured_buffer(cin), serr, filename, &itera);
         goto on_noparse;
     }
 
@@ -94,7 +94,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
                 .has_many = false,
                 .error = res.error,
             };
-            display_error(multi, cin, serr, filename, &itera);
+            display_error(multi, *get_captured_buffer(cin), serr, filename, &itera);
             goto on_error_generic;
         }
         if (res.type != ParseSuccess) {
@@ -147,7 +147,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, serr, filename, &itera);
+    display_error(pi_point.multi, *get_captured_buffer(cin), serr, filename, &itera);
     goto on_error_generic;
 
  on_error:
@@ -162,7 +162,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     return;
 }
 
-void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* filename, Module* current, RegionAllocator* region) {
+void run_script_from_istream(IStream* in, FormattedOStream* serr, String filename, Module* current, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Allocator exec = mk_executable_allocator(&ra);
 
@@ -204,7 +204,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
                 .has_many = false,
                 .error = res.error,
             };
-            display_error(multi, cin, serr, filename, &itera);
+            display_error(multi, *get_captured_buffer(cin), serr, filename, &itera);
             goto on_error_generic;
         }
         if (res.type != ParseSuccess) {
@@ -251,7 +251,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, const char* fi
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, serr, filename, &itera);
+    display_error(pi_point.multi, *get_captured_buffer(cin), serr, filename, &itera);
     goto on_error_generic;
 
  on_error:

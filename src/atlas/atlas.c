@@ -7,6 +7,7 @@
 
 #include "atlas/atlas.h"
 
+#include "atlas/data/error.h"
 #include "atlas/app/command_line_opts.h"
 #include "atlas/app/help_string.h"
 #include "atlas/parse.h"
@@ -31,13 +32,9 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
                 .has_many = false,
                 .error = parse_res.error,
             };
-            display_error(multi, in, get_formatted_stdout(), NULL, &ra);
+            display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), filename, &ra);
             goto on_error_generic;
         } else {
-            write_fstring(mv_string("parse returned value:\n"), out);
-            Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
-            write_doc_formatted(prndoc, 120, out);
-
             Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
             switch (stanza.type) {
             case StExecutable:
@@ -47,18 +44,13 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
                 add_library(stanza.library, path, instance);
                 break;
             }
-            prndoc = pretty_stanza(stanza, &ra);
-            write_fstring(mv_string("\n"), out);
-            write_doc_formatted(prndoc, 120, out);
-            write_fstring(mv_string("\n"), out);
-            write_fstring(mv_string("\n"), out);
         }
     }
 
     return false;
 
  on_pi_error:
-    display_error(pi_point.multi, in, out, (char*)filename.bytes, &ra);
+    display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
  on_error_generic:
     return true;
 }
@@ -76,38 +68,28 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     while (running) {
         AtParseResult parse_res = parse_atlas_defs(in, region);
         if (parse_res.type == ParseNone) {
-            write_fstring(mv_string("Ending project parsing...\n"), out);
             running = false;
         } else if (parse_res.type == ParseFail) {
             MultiError multi = (MultiError) {
                 .has_many = false,
                 .error = parse_res.error,
             };
-            display_error(multi, in, get_formatted_stdout(), NULL, &ra);
+            display_error(multi, *get_captured_buffer(in), get_formatted_stdout(), filename, &ra);
             goto on_error_generic;
               
         } else if (parse_res.type != ParseSuccess) {
             panic(mv_string("Atlas parse returned invalid result"));
         } else {
-            write_fstring(mv_string("Project parse returned value:\n"), out);
-            Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
-            write_doc_formatted(prndoc, 120, out);
-            write_fstring(mv_string("\n"), out);
-
             abstract_atlas_project(&project, &record, parse_res.result, region, &pi_point);
         }
     }
-    // TODO: check all fields were filled out!
-    Document* prndoc = pretty_project(project, &ra);
-    write_doc_formatted(prndoc, 120, out);
-    write_fstring(mv_string("\n"), out);
-    write_fstring(mv_string("\n"), out);
 
+    // TODO: check all fields were filled out!
     set_instance_project(instance, project);
     return 0;
 
  on_pi_error:
-    display_error(pi_point.multi, in, out, (char*)filename.bytes, &ra);
+    display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
  on_error_generic:
     return true;
 }
@@ -176,18 +158,14 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         RegionAllocator* region = make_region_allocator(4096, true, stda);
         load_atlas_files(mv_string("."), out, instance, region);
 
-        PiErrorPoint point;
+        AtErrorPoint point;
         if (catch_error(point)) {
-            if (point.multi.has_many) {
-                for (size_t i = 0; i < point.multi.errors.len; i++) {
-                    Document* message = point.multi.errors.data[i];
-                    write_doc_formatted(message, 120, out);
-                    write_fstring(mv_string("\n"), out);
-                }
-            } else {
-                write_doc_formatted(point.multi.error.message, 120, out);
-                    write_fstring(mv_string("\n"), out);
-            }
+            Allocator ra = ra_to_gpa(region);
+            MultiError error = (MultiError) {
+              .has_many = false,
+              .error = (PicoError) {.range = point.error.range, .message = point.error.message},
+            };
+            display_error(error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
             atlas_run(instance, command.run.target, region, &point);
         }

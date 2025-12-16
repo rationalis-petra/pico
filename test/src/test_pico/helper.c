@@ -156,7 +156,7 @@ void fail_error(String err, TestLog* log) {
 void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
     ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
-    display_error(err, cin, get_fstream(log), NULL, &gpa);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
     test_fail(log);
     delete_arena_allocator(arena);
@@ -468,7 +468,7 @@ void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
     // TODO: improve the test log error to take in a document 
     ArenaAllocator* arena = make_arena_allocator(256, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
-    display_error(err, cin, get_fstream(log), NULL, &gpa);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
     delete_arena_allocator(arena);
 }

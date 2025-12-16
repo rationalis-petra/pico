@@ -6,6 +6,7 @@
 #include "pico/data/error.h"
 #include "pico/values/modular.h"
 
+#include "atlas/data/error.h"
 #include "atlas/syntax/stanza.h"
 #include "atlas/syntax/project.h"
 
@@ -22,7 +23,7 @@ typedef struct AtlasInstance AtlasInstance;
 AtlasInstance* make_atlas_instance(Allocator* a);
 void delete_atlas_instance(AtlasInstance* instance);
 
-void atlas_run(AtlasInstance* instance, String target, RegionAllocator* region, PiErrorPoint* point);
+void atlas_run(AtlasInstance* instance, String target, RegionAllocator* region, AtErrorPoint* point);
 
 /* Register a package so that projects can use it as a dependency.
  */

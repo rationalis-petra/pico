@@ -404,7 +404,9 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
     // Free a previous definition (if it exists!)
     // TODO BUG UB: possibly throw here?
     ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
-    if (old_entry) delete_module_entry(*old_entry, module);
+    if (old_entry) {
+        delete_module_entry(*old_entry, module);
+    }
 
     entry_insert(symbol, entry, &module->entries);
 
@@ -412,7 +414,23 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
 }
 
 ModuleEntry* get_def(Symbol symbol, Module* module) {
-    return (ModuleEntry*)entry_lookup(symbol, module->entries);
+    Module* root = module->lexical_parent_package->root_module;
+    if (module != root) {
+        return (ModuleEntry*)entry_lookup(symbol, module->entries);
+    } else {
+        ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        if (e) return e;
+
+        // Root module should also return definitions available in 
+        //   imported packages...
+        Package* package = module->lexical_parent_package;
+        for (size_t i = 0; i < package->dependencies.len; i++) {
+            Package* dep = package->dependencies.data[i];
+            ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, dep->root_module->entries);
+            if (e) return e;
+        }
+        return NULL;
+    }
 }
 
 Symbol module_name(Module* module) {
