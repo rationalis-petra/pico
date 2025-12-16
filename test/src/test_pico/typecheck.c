@@ -41,8 +41,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .imports = imports,
         .exports = exports,
     };
-    PiAllocator pia = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pia);
+    Module* module = mk_module(header, base, NULL);
 
     ErrorPoint point;
     if (catch_error(point)) {

@@ -69,7 +69,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     Environment* env = env_from_module(module, &point, &ra);
 
     if (opts.interactive) {
-        String name = get_name(module, &ra);
+        String name = symbol_to_string(module_name(module), &ra);
         write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }
@@ -318,7 +318,7 @@ int main(int argc, char** argv) {
         write_string(mv_string("target: x86_64\n"), cout);
         break;
     case CAtlas:
-        run_atlas(command.for_atlas, get_formatted_stdout());
+        run_atlas(base, command.for_atlas, get_formatted_stdout());
         sdelete_string_array(command.for_atlas);
         break;
     case CInvalid:

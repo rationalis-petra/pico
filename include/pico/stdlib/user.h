@@ -5,6 +5,6 @@
 
 #include "pico/values/modular.h"
 
-void add_user_module(Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_user_module(Package* base, RegionAllocator* region);
 
 #endif

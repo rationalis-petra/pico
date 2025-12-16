@@ -1,6 +1,5 @@
 #include "platform/signals.h"
 #include "platform/memory/region.h"
-#include "platform/memory/arena.h"
 
 #include "pico/stdlib/stdlib.h"
 
@@ -38,8 +37,7 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     if (catch_error(point)) {
         panic(mv_string("Error in tests: test_pico/eval/eval.c"));
     }
-    PiAllocator pia = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pia);
+    Module* module = mk_module(header, base, NULL);
     Environment* env = env_from_module(module, &point, a);
     delete_module_header(header);
 

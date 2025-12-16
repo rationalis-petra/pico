@@ -3,7 +3,8 @@
 
 #include "platform/terminal/terminal.h"
 #include "pico/data/string_array.h"
+#include "pico/values/modular.h"
 
-void run_atlas(StringArray args, FormattedOStream* out);
+void run_atlas(Package* base, StringArray args, FormattedOStream* out);
 
 #endif

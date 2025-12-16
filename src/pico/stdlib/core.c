@@ -175,7 +175,7 @@ void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(Ret, ass, a, point);
 }
 
-void add_core_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -189,7 +189,7 @@ void add_core_module(Assembler* ass, Package* base, PiAllocator* module_allocato
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
     Symbol sym;
 
     PiType type;

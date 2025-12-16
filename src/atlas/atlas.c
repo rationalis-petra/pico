@@ -15,7 +15,7 @@
 
 static const char* version = "0.0.1";
 
-bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String filename, RegionAllocator* region) {
+bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, String path, String filename, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     PiErrorPoint pi_point;
@@ -37,20 +37,20 @@ bool process_atlas(AtlasInstance* instance, IStream* in, FormattedOStream* out, 
             write_fstring(mv_string("parse returned value:\n"), out);
             Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
             write_doc_formatted(prndoc, 120, out);
-            write_fstring(mv_string("\n"), out);
 
             Stanza stanza = abstract_atlas(parse_res.result, region, &pi_point);
             switch (stanza.type) {
             case StExecutable:
-                add_executable(stanza.executable, instance);
+                add_executable(stanza.executable, path, instance);
                 break;
             case StLibrary:
-                add_library(stanza.library, instance);
+                add_library(stanza.library, path, instance);
                 break;
             }
             prndoc = pretty_stanza(stanza, &ra);
             write_fstring(mv_string("\n"), out);
             write_doc_formatted(prndoc, 120, out);
+            write_fstring(mv_string("\n"), out);
             write_fstring(mv_string("\n"), out);
         }
     }
@@ -76,7 +76,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     while (running) {
         AtParseResult parse_res = parse_atlas_defs(in, region);
         if (parse_res.type == ParseNone) {
-            write_fstring(mv_string("ending project parsing...\n"), out);
+            write_fstring(mv_string("Ending project parsing...\n"), out);
             running = false;
         } else if (parse_res.type == ParseFail) {
             MultiError multi = (MultiError) {
@@ -89,7 +89,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
         } else if (parse_res.type != ParseSuccess) {
             panic(mv_string("Atlas parse returned invalid result"));
         } else {
-            write_fstring(mv_string("project parse returned value:\n"), out);
+            write_fstring(mv_string("Project parse returned value:\n"), out);
             Document* prndoc = pretty_rawatlas(parse_res.result, &ra);
             write_doc_formatted(prndoc, 120, out);
             write_fstring(mv_string("\n"), out);
@@ -99,8 +99,8 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     }
     // TODO: check all fields were filled out!
     Document* prndoc = pretty_project(project, &ra);
-    write_fstring(mv_string("\n"), out);
     write_doc_formatted(prndoc, 120, out);
+    write_fstring(mv_string("\n"), out);
     write_fstring(mv_string("\n"), out);
 
     set_instance_project(instance, project);
@@ -131,7 +131,7 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
           RegionAllocator* subregion = make_subregion(region);
 
-          fail = process_atlas(instance, captured_fstream, out, newpath, region);
+          fail = process_atlas(instance, captured_fstream, out, path, newpath, region);
 
           release_subregion(subregion);
           delete_istream(captured_fstream, stda);
@@ -159,7 +159,7 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
     return fail;
 }
 
-void run_atlas(StringArray args, FormattedOStream* out) {
+void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
     AtlasCommand command = atlas_parse_command(args);
 
     switch (command.type) {
@@ -171,6 +171,7 @@ void run_atlas(StringArray args, FormattedOStream* out) {
     case CRun: {
         Allocator* stda = get_std_allocator();
         AtlasInstance* instance = make_atlas_instance(stda);
+        register_package(instance, package);
 
         RegionAllocator* region = make_region_allocator(4096, true, stda);
         load_atlas_files(mv_string("."), out, instance, region);

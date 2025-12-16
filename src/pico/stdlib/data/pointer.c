@@ -3,7 +3,7 @@
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/submodules.h"
 
-void add_pointer_module(Target target, Module *data, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
@@ -22,7 +22,7 @@ void add_pointer_module(Target target, Module *data, PiAllocator* module_allocat
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(data), NULL);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {

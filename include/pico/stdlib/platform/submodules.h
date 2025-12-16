@@ -33,14 +33,14 @@ PiAllocator set_std_region_allocator(PiAllocator al);
 // Computation
 // commented out modules are yet to be implemented
 //void add_machine_info_module(Assembler* ass, Module* platform, Allocator* a);
-void add_hedron_module(Assembler* ass, Module* platform, PiAllocator* module_allocator, RegionAllocator* region);
-void add_platform_memory_module(Assembler* ass, Module* platform, Allocator* default_allocator, PiAllocator* module_allocator, RegionAllocator* region);
+void add_hedron_module(Assembler* ass, Module* platform, RegionAllocator* region);
+void add_platform_memory_module(Assembler* ass, Module* platform, Allocator* default_allocator, RegionAllocator* region);
 
 // IO (terminal, filesystem)
 // commented out modules are yet to be implemented
-void add_terminal_module(Assembler* ass, Module* platform, PiAllocator* module_allocator, RegionAllocator* region);
-void add_filesystem_module(Assembler* ass, Module* platform, PiAllocator* module_allocator, RegionAllocator* region);
-void add_window_module(Assembler* ass, Module* platform, PiAllocator* module_allocator, RegionAllocator* region);
-void add_time_module(Assembler* ass, Module* platform, PiAllocator* module_allocator, RegionAllocator* region);
+void add_terminal_module(Assembler* ass, Module* platform, RegionAllocator* region);
+void add_filesystem_module(Assembler* ass, Module* platform, RegionAllocator* region);
+void add_window_module(Assembler* ass, Module* platform, RegionAllocator* region);
+void add_time_module(Assembler* ass, Module* platform, RegionAllocator* region);
 
 #endif

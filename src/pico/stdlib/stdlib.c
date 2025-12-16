@@ -26,33 +26,33 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     base = mk_package(string_to_name(mv_string("base")), *module_allocator);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_core_module(ass, base, module_allocator, subregion);
+    add_core_module(ass, base, subregion);
     reset_subregion(subregion);
-    add_num_module(ass, base, module_allocator, subregion);
+    add_num_module(ass, base, subregion);
     reset_subregion(subregion);
-    add_meta_module(ass, base, module_allocator, subregion);
+    add_meta_module(ass, base, subregion);
     reset_subregion(subregion);
-    add_debug_module(target, base, module_allocator, subregion);
+    add_debug_module(target, base, subregion);
     reset_subregion(subregion);
 
     // Extra happens AFTER meta, as extra has `loop` - a macro!
-    add_extra_module(ass, base, module_allocator, region);
+    add_extra_module(ass, base, subregion);
     reset_subregion(subregion);
 
-    add_platform_module(ass, base, default_allocator, module_allocator, subregion);
+    add_platform_module(ass, base, default_allocator, subregion);
     reset_subregion(subregion);
 
     // abs and data happen after platform, as they depend on allocators present
     // in 'platform.memory'
-    add_data_module(target, base, module_allocator, subregion);
+    add_data_module(target, base, subregion);
     reset_subregion(subregion);
-    add_abs_module(target, base, module_allocator, subregion);
+    add_abs_module(target, base, subregion);
     reset_subregion(subregion);
-    add_foreign_module(ass, base, module_allocator, subregion);
+    add_foreign_module(ass, base, subregion);
     reset_subregion(subregion);
 
 
-    add_user_module(base, module_allocator, region);
+    add_user_module(base, region);
     reset_subregion(subregion);
 
     release_executable_allocator(exalloc);

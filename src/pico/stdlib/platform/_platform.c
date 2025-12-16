@@ -2,7 +2,7 @@
 #include "pico/stdlib/platform/platform.h"
 
 
-void add_platform_module(Assembler* ass, Package* base, Allocator* default_allocator, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_platform_module(Assembler* ass, Package* base, Allocator* default_allocator, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -16,26 +16,26 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_platform_memory_module(ass, module, default_allocator, module_allocator, subregion);
+    add_platform_memory_module(ass, module, default_allocator, subregion);
     reset_subregion(subregion);
-    add_time_module(ass, module, module_allocator, subregion);
+    add_time_module(ass, module, subregion);
     reset_subregion(subregion);
-    add_filesystem_module(ass, module, module_allocator, subregion);
+    add_filesystem_module(ass, module, subregion);
     reset_subregion(subregion);
-    add_terminal_module(ass, module, module_allocator, subregion);
+    add_terminal_module(ass, module, subregion);
     reset_subregion(subregion);
 
 #ifdef WINDOW_SYSTEM
-    add_window_module(ass, module, module_allocator, subregion);
+    add_window_module(ass, module, subregion);
     reset_subregion(subregion);
 #endif
     
 #ifdef USE_VULKAN
-    add_hedron_module(ass, module, module_allocator, subregion); // Dependencies: window
+    add_hedron_module(ass, module, subregion); // Dependencies: window
     release_subregion(subregion);
 #endif
 

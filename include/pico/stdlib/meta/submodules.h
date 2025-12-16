@@ -5,7 +5,7 @@
 
 #include "pico/values/modular.h"
 
-void add_refl_module(Assembler* ass, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
-void add_gen_module(Assembler* ass, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_refl_module(Assembler* ass, Module* base, RegionAllocator* region);
+void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region);
 
 #endif

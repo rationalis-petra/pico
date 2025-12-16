@@ -399,7 +399,7 @@ void build_acquire_next_image_fn(PiType* type, Assembler* ass, PiAllocator* pia,
     convert_c_fn(acquire_next_image, &fn_ctype, type, ass, a, point); 
 }
 
-void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -415,7 +415,7 @@ void add_hedron_module(Assembler *ass, Module *platform, PiAllocator* module_all
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     Symbol sym;
 
     ModuleEntry* e;

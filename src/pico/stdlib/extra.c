@@ -568,7 +568,7 @@ void build_ann_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator*
     convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
 }
 
-void add_extra_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -582,7 +582,7 @@ void add_extra_module(Assembler* ass, Package* base, PiAllocator* module_allocat
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
 
     PiType* typep;
     Symbol sym;

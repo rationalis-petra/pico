@@ -46,6 +46,10 @@ String name_to_string(Name name, Allocator* a) {
     return get_table_string(name, &symbol_table, a);
 }
 
+String view_name_string(Name name) {
+    return view_table_string(name, &symbol_table);
+}
+
 void clear_symbols() {
     delete_table(&symbol_table);
 }

@@ -8,17 +8,17 @@ Document* pretty_project(Project proj, Allocator* a) {
     {
         PtrArray name_nodes = mk_ptr_array(2, a);
         push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("name"), a), a), &name_nodes);
-        push_ptr(mk_str_doc(view_symbol_string(proj.package.package_name), a), &name_nodes);
+        push_ptr(mk_str_doc(view_symbol_string(proj.package.name), a), &name_nodes);
 
         Document* name_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(name_nodes, a), a), a);
         push_ptr(name_doc, &nodes);
     }
 
     {
-        PtrArray sub_nodes = mk_ptr_array(1 + proj.package.dependent_packages.len, a);
+        PtrArray sub_nodes = mk_ptr_array(1 + proj.package.dependencies.len, a);
         push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("dependencies"), a), a), &sub_nodes);
 
-        SymbolArray deps = proj.package.dependent_packages;
+        SymbolArray deps = proj.package.dependencies;
         for (size_t i = 0; i < deps.len; i ++) {
             push_ptr(mk_str_doc(view_symbol_string(deps.data[i]), a), &sub_nodes);
         }

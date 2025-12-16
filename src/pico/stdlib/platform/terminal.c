@@ -75,7 +75,7 @@ void build_write_string_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
     delete_c_type(fn_ctype, pia);
 }
 
-void add_terminal_module(Assembler *ass, Module *platform, PiAllocator *module_allocator, RegionAllocator* region) {
+void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -92,7 +92,7 @@ void add_terminal_module(Assembler *ass, Module *platform, PiAllocator *module_a
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     delete_module_header(header);
     Symbol sym;
 

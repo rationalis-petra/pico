@@ -68,7 +68,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, const char* f
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
-    module = mk_module(*header, package, parent, module_allocator);
+    module = mk_module(*header, package, parent);
     if (parent) {
         add_module_def(parent, header->name, module);
     } else {

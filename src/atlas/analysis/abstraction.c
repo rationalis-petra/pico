@@ -147,8 +147,8 @@ void abstract_atlas_project(Project *project, ProjectRecord *record, RawAtlas ra
             // - package-name :: symbol
             // - package-dependencies :: symbol list
             PropSet* props = make_prop_set(4, &ra);
-            add_symbol_prop(mv_string("name"), &project->package.package_name, props);
-            add_symbol_array_prop(mv_string("dependencies"), &project->package.dependent_packages, props);
+            add_symbol_prop(mv_string("name"), &project->package.name, props);
+            add_symbol_array_prop(mv_string("dependencies"), &project->package.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {
                 parse_prop(raw.branch.data[i], props, package_checks, point, &ra);

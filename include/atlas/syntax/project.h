@@ -4,8 +4,8 @@
 #include "pico/data/symbol_array.h"
 
 typedef struct {
-    Symbol package_name;
-    SymbolArray dependent_packages;
+    Symbol name;
+    SymbolArray dependencies;
 } AtlPackage;
 
 typedef struct {

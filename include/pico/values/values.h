@@ -26,6 +26,7 @@ Symbol string_to_unique_symbol(String string);
 
 Name string_to_name(String string);
 String name_to_string(Name name, Allocator* a);
+String view_name_string(Name name);
 
 void init_symbols(Allocator* a);
 void clear_symbols();
