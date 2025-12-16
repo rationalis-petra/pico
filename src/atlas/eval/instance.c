@@ -160,9 +160,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         }
 
         // TODO: check that function has appropriate type, i.e. (Proc [] Unit)
-        call_unit_fn(e->value, &ra);
-
-        delete_package(package);
+        call_unit_fn(*(void**)e->value, &ra);
     } else {
         PtrArray nodes = mk_ptr_array(5, &ra);
         push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
@@ -206,7 +204,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         release_executable_allocator(exec);
 
         PtrArray docs = mk_ptr_array(4, &ra);
-        push_ptr(mk_str_doc(mv_string("File not found: "), &ra), &docs);
+        push_ptr(mk_str_doc(mv_string("File not found:"), &ra), &docs);
         push_ptr(mk_str_doc(filename, &ra), &docs);
         AtlasError err = {
             .message = mv_sep_doc(docs, &ra),
@@ -417,8 +415,7 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
         out = mk_module(header, package, NULL);
         add_module(target->name, out, package);
         for (size_t i = 0; i < target->file_dependencies.len; i++) {
-            Module* child = atlas_load_file(target->file_dependencies.data[i], package, out, target->file_dependencies, region, point);
-            add_module_def(child, target->name, child);
+            atlas_load_file(target->file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
         }
     }
     
@@ -479,8 +476,9 @@ void add_executable(Executable executable, String path, AtlasInstance* instance)
         .name = executable.name,
         .path = path,
         .filename = (StringOption) {
-            .type = Some,
-            .value = copy_string(executable.filename, instance->gpa),
+          .type = Some,
+          .value = string_ncat(instance->gpa, 4,
+                               path, mv_string("/"), executable.filename, mv_string(".rl")),
         },
         .entrypoint = (SymbolOption) {.type = Some, .value = executable.entry_point },
         .target_dependencies = scopy_symbol_array(executable.dependencies, instance->gpa),

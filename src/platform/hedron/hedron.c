@@ -347,17 +347,17 @@ int init_hedron(Allocator* a) {
 
     // TODO: setup_debug_messenger();
 
-    //result = pick_physical_device(a);
+    result = pick_physical_device(a);
     if (result != VK_SUCCESS) return 1;
 
-    //result = create_logical_device(a);
+    result = create_logical_device(a);
     if (result != VK_SUCCESS) return 1;
 
     return 0;
 } 
 
 void teardown_hedron() {
-    //vkDestroyDevice(logical_device, NULL);
+    vkDestroyDevice(logical_device, NULL);
     vkDestroyInstance(rl_vk_instance, NULL);
 }
 
