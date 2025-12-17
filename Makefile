@@ -228,10 +228,6 @@ ifeq ($(QUIET), YES)
 .SILENT:
 endif
 
-DUMMY := $(info Release flags are $(RELEASE_FLAGS))
-DUMMY := $(info Debug flags are $(DEBUG_FLAGS))
-DUMMY := $(info Link flags are $(LINK_FLAGS))
-
 # Include the .d makefiles. The - at the front suppresses the errors of missing
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.

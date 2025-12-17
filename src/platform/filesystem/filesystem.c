@@ -48,7 +48,7 @@ Directory* open_directory(String name, Allocator* alloc) {
     // TODO: what encoding to filenames use?
 #if OS_FAMILY == WINDOWS
 // TODO: the name here is ascii, but our strings are UTF-8!
-    HANDLE handle = CreateFileA(name.bytes,
+    HANDLE handle = CreateFileA((const char*)name.bytes,
         0, // Windows is weird, so we don't need to requirest any permissions!
         0, // Don't share
         NULL, // Default security attributes
@@ -188,7 +188,8 @@ String get_current_directory(Allocator* a) {
         .memsize = mem_required,
         .bytes = mem_alloc(mem_required, a),
     };
-    GetCurrentDirectory(mem_required, out.bytes);
+    // TODO: convert to valid path (consider encoding)
+    GetCurrentDirectory(mem_required, (char*)out.bytes);
     return out;
 #else
     size_t mem_required = getcwd(0, NULL);
@@ -202,8 +203,9 @@ String get_current_directory(Allocator* a) {
 }
 
 void set_current_directory(String path) {
+// TODO: convert to valid path (consider encoding)
 #if OS_FAMILY == WINDOWS
-    SetCurrentDirectory(path.bytes);
+    SetCurrentDirectory((const char*)path.bytes);
 #else
     setcwd(path.bytes);
 #endif
