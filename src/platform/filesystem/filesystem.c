@@ -36,6 +36,8 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 
 #else
 #include <dirent.h>
+#include <unistd.h>
+#include <linux/limits.h>
 
     struct Directory {
     DIR* handle;
@@ -166,7 +168,7 @@ DirEntArray list_children(Directory* dir, Allocator* alloc) {
 #else
     struct dirent *ep;
     while ((ep = readdir(dir->handle)) != NULL) {
-            String name = mv_string(cp->d_name);
+            String name = mv_string(ep->d_name);
         if ((string_cmp(name, mv_string(".")) != 0) && (string_cmp(name, mv_string("..")) != 0)) {
             DirectoryEntry entry = {
                 .name = mk_string(ep->d_name, alloc),
@@ -192,13 +194,10 @@ String get_current_directory(Allocator* a) {
     GetCurrentDirectory(mem_required, (char*)out.bytes);
     return out;
 #else
-    size_t mem_required = getcwd(0, NULL);
-    String out = {
-        .memsize = mem_required,
-        .bytes = mem_alloc(mem_required, a),
-    };
-    getcwd(mem_required, out.bytes);
-    return out;
+    char cwd[PATH_MAX];
+    getcwd(cwd, PATH_MAX);
+    String dir = mv_string(cwd);
+    return copy_string(dir, a);
 #endif
 }
 
@@ -207,14 +206,13 @@ void set_current_directory(String path) {
 #if OS_FAMILY == WINDOWS
     SetCurrentDirectory((const char*)path.bytes);
 #else
-    setcwd(path.bytes);
+    chdir((char*)path.bytes);
 #endif
 }
 
-/* struct File { */
-/*     FILE* handle;  */
-/*     Allocator gpa; */
-/* }; */
+// ---------------------------------------------------------------------------
+//     Directories 
+// ---------------------------------------------------------------------------
 
 File *open_file(String name, FilePermissions perms, Allocator *alloc) {
     const char *mode = NULL;

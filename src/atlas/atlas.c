@@ -136,6 +136,9 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
       if (fail) break;
     }
 
+    for (size_t i = 0; i < entries.len; i++) {
+        mem_free(entries.data[i].name.bytes, stda);
+    }
     sdelete_dirent_array(entries);
     close_directory(dir);
     return fail;
