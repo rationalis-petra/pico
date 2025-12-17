@@ -1,5 +1,6 @@
 #include "platform/machine_info.h"
 
+#ifdef WINDOW_SYSTEM
 #if (OS_FAMILY == WINDOWS)
 
 #include "platform/window/window.h"
@@ -126,4 +127,5 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     return out;
 }
 
+#endif
 #endif

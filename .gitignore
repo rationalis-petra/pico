@@ -1,6 +1,7 @@
 build/*
 scratch/*
 gmon.out
+.idea/*
 *.~undo-tree~
 compile_commands.json
 .cache

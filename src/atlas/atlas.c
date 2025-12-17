@@ -104,11 +104,11 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
       DirectoryEntry entry = entries.data[i];
       // If is a non-hidden directory
       if (entry.is_directory && (entry.name.memsize > 0 && entry.name.bytes[0] != '.')) {
-          String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
+          String newpath = path_cat(path, entry.name, stda);
           fail = load_atlas_files(newpath, out, instance, region);
           mem_free(newpath.bytes, stda);
       } else if (string_cmp(entry.name, mv_string("atlas")) == 0) {
-          String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
+          String newpath = path_cat(path, entry.name, stda);
           IStream* fstream = open_file_istream(newpath, stda);
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
           RegionAllocator* subregion = make_subregion(region);
@@ -120,7 +120,7 @@ bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instanc
           delete_istream(fstream, stda);
           mem_free(newpath.bytes, stda);
       } else if (string_cmp(entry.name, mv_string("atlas-project")) == 0) {
-          String newpath = string_ncat(stda, 3, path, mv_string("/"), entry.name);
+          String newpath = path_cat(path, entry.name, stda);
           IStream* fstream = open_file_istream(newpath, stda);
           IStream* captured_fstream = mk_capturing_istream(fstream, stda);
           RegionAllocator* subregion = make_subregion(region);
@@ -156,7 +156,9 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         register_package(instance, package);
 
         RegionAllocator* region = make_region_allocator(4096, true, stda);
-        load_atlas_files(mv_string("."), out, instance, region);
+        String cwd = get_current_directory(stda);
+        load_atlas_files(cwd, out, instance, region);
+        mem_free(cwd.bytes, stda);
 
         AtErrorPoint point;
         if (catch_error(point)) {

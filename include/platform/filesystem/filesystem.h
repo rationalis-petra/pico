@@ -10,6 +10,12 @@
 #include "data/string.h"
 
 // ---------------------------------------------------------------------------
+//     Paths 
+// ---------------------------------------------------------------------------
+
+String path_cat(String path1, String path2, Allocator* alloc);
+
+// ---------------------------------------------------------------------------
 //     Directories 
 // ---------------------------------------------------------------------------
 
@@ -35,6 +41,9 @@ DirEntArray list_entries(Directory* dir, Allocator* alloc);
 //   and the 'parent' entry (..).
 DirEntArray list_children(Directory* dir, Allocator* alloc);
 
+String get_current_directory(Allocator* a);
+void set_current_directory(String path);
+
 // ---------------------------------------------------------------------------
 //     Files 
 // ---------------------------------------------------------------------------
@@ -57,7 +66,6 @@ U8Array read_chunk(File* file, bool limit, uint64_t size_limit, Allocator* regio
 
 bool write_byte(File* file, uint8_t out);
 bool write_chunk(File* file, U8Array arr);
-
 
 
 #endif
