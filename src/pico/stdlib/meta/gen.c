@@ -1,5 +1,4 @@
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 
 #include "pico/data/range.h"
 #include "pico/syntax/concrete.h"
@@ -140,7 +139,7 @@ void build_get_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocato
     convert_c_fn(get_range, &fn_ctype, type, ass, a, point); 
 }
 
-void add_gen_module(Assembler* ass, Module* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -154,7 +153,7 @@ void add_gen_module(Assembler* ass, Module* base, PiAllocator* module_allocator,
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(base), NULL);
     delete_module_header(header);
     Symbol sym;
 

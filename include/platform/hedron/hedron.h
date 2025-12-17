@@ -24,8 +24,6 @@ typedef struct HedronShaderModule HedronShaderModule;
 typedef struct HedronPipeline HedronPipeline;
 
 // Global Utility - supported, setup & teardown
-bool is_hedron_supported();
-
 int init_hedron(Allocator* a);
 void teardown_hedron();
 

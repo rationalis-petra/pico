@@ -23,7 +23,7 @@ void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     convert_c_fn(debug_break, &fn_ctype, type, ass, a, point); 
 }
 
-void add_debug_module(Target target, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -40,7 +40,7 @@ void add_debug_module(Target target, Package* base, PiAllocator* module_allocato
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
     Symbol sym;
 
     PiType type;

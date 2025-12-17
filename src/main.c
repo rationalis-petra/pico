@@ -26,11 +26,13 @@
 #include "pico/stdlib/meta/meta.h"
 #include "pico/values/types.h"
 
+#include "atlas/atlas.h"
+
 #include "app/command_line_opts.h"
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.1.2";
+static const char* version = "0.1.3";
 
 typedef struct {
     bool debug_print;
@@ -67,7 +69,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     Environment* env = env_from_module(module, &point, &ra);
 
     if (opts.interactive) {
-        String name = get_name(module, &ra);
+        String name = symbol_to_string(module_name(module), &ra);
         write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }
@@ -83,7 +85,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, cin, get_formatted_stdout(), NULL, stdalloc);
+        display_error(multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("stdin"), stdalloc);
         return true;
     }
     if (res.type != ParseSuccess) {
@@ -184,7 +186,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, cout, NULL, &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cin), cout, mv_string("stdin"), &ra);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     return true;
@@ -219,14 +221,19 @@ int main(int argc, char** argv) {
     init_asm();
     init_symbols(stdalloc);
     init_dynamic_vars(stdalloc);
+
+#ifdef WINDOW_SYSTEM
     if (pl_init_window_system(stdalloc)) {
         write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
-    if (is_hedron_supported()) {
-        if (init_hedron(stdalloc)) {
-            write_string(mv_string("Warning: failed to init hedron!\n"), cout);
-      }
+#endif
+
+#ifdef USE_VULKAN
+    if (init_hedron(stdalloc)) {
+        write_string(mv_string("Warning: failed to init hedron!\n"), cout);
     }
+#endif
+
     thread_init_dynamic_vars();
 
     RegionAllocator* region = make_region_allocator(8096, true, stdalloc);
@@ -276,7 +283,7 @@ int main(int argc, char** argv) {
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
             RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
-            run_script_from_istream(fin, get_formatted_stdout(), (const char*)command.script.filename.bytes, module, region);
+            run_script_from_istream(fin, get_formatted_stdout(), command.script.filename, module, region);
             delete_region_allocator(region);
             
             delete_istream(fin, stdalloc);
@@ -310,6 +317,10 @@ int main(int argc, char** argv) {
         write_string(mv_string("\n"), cout);
         write_string(mv_string("target: x86_64\n"), cout);
         break;
+    case CAtlas:
+        run_atlas(base, command.for_atlas, get_formatted_stdout());
+        sdelete_string_array(command.for_atlas);
+        break;
     case CInvalid:
         write_string(command.error_message, cout);
         write_string(mv_string("\n"), cout);
@@ -330,11 +341,14 @@ int main(int argc, char** argv) {
     clear_symbols();
     thread_clear_dynamic_vars();
     clear_dynamic_vars();
-    pl_teardown_window_system();
 
-    if (is_hedron_supported()) {
-        teardown_hedron();
-    }
+#ifdef USE_VULKAN
+    teardown_hedron();
+#endif
+
+#ifdef WINDOW_SYSYTEM
+    pl_teardown_window_system();
+#endif
 
     return 0;
 }

@@ -6,7 +6,7 @@
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h"
 
-void add_numeric_module(Target target, Module *abs, PiAllocator* module_allocator, RegionAllocator* region);
-void add_show_module(Target target, Module *abs, PiAllocator* module_allocator, RegionAllocator* region);
+void add_numeric_module(Target target, Module *abs, RegionAllocator* region);
+void add_show_module(Target target, Module *abs, RegionAllocator* region);
 
 #endif

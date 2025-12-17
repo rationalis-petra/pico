@@ -3,7 +3,7 @@
 
 // Provide tools for manipulating bit-obejcts 
 
-#include <stddef.h>
+#include <stdint.h>
 
 static inline void set_bit(uint8_t* value, uint8_t index) {
     *value = *value | (1 << index);

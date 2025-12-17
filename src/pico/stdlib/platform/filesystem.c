@@ -5,7 +5,6 @@
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
 
 static PiType* file_ty;
 static PiType* file_mode_ty;
@@ -94,7 +93,7 @@ void build_write_chunk_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     convert_c_fn(write_chunk, &fn_ctype, type, ass, a, point); 
 }
 
-void add_filesystem_module(Assembler *ass, Module *platform, PiAllocator *module_allocator, RegionAllocator* region) {
+void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -111,7 +110,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, PiAllocator *module
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     Symbol sym;
 
     ModuleEntry* e;

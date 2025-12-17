@@ -1,7 +1,7 @@
 #include "pico/stdlib/data/submodules.h"
 #include "pico/stdlib/data/data.h"
 
-void add_data_module(Target target, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_data_module(Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -15,21 +15,21 @@ void add_data_module(Target target, Package* base, PiAllocator* module_allocator
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_list_module(target, module, module_allocator, subregion);
+    add_list_module(target, module, subregion);
     reset_subregion(subregion);
-    add_either_module(target, module, module_allocator, subregion);
+    add_either_module(target, module, subregion);
     reset_subregion(subregion);
-    add_maybe_module(target, module, module_allocator, subregion);
+    add_maybe_module(target, module, subregion);
     reset_subregion(subregion);
-    add_pair_module(target, module, module_allocator, subregion);
+    add_pair_module(target, module, subregion);
     reset_subregion(subregion);
-    add_pointer_module(target, module, module_allocator, subregion);
+    add_pointer_module(target, module, subregion);
     reset_subregion(subregion);
-    add_string_module(target, module, module_allocator, subregion);
+    add_string_module(target, module, subregion);
     release_subregion(subregion);
 
     add_module(string_to_symbol(mv_string("data")), module, base);

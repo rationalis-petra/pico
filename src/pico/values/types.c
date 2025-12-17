@@ -2020,7 +2020,7 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     case TPrim: return false;
     case TVar: {
         for (size_t i = 0; i < vars.len; i++) {
-            if (cmp_symbol(ty->var, vars.data[i]) == 0) return true;
+            if (symbol_cmp(ty->var, vars.data[i]) == 0) return true;
         }
         return false;
     }

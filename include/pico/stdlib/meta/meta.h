@@ -27,6 +27,6 @@ Module* set_std_current_module(Module* al);
 Package* set_current_package(Package* current);
 Package* get_current_package();
 
-void add_meta_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_meta_module(Assembler* ass, Package* base, RegionAllocator* region);
 
 #endif

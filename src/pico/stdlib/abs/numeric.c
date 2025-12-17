@@ -3,7 +3,7 @@
 #include "pico/stdlib/abs/submodules.h"
 #include "pico/stdlib/helpers.h"
 
-void add_numeric_module(Target target, Module *abs, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, &ra),
@@ -20,7 +20,7 @@ void add_numeric_module(Target target, Module *abs, PiAllocator* module_allocato
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(abs), NULL);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {

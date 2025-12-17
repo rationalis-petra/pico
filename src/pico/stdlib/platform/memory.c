@@ -1,6 +1,5 @@
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "platform/memory/arena.h"
 #include "platform/memory/platform.h"
 
 #include "pico/data/client/allocator.h"
@@ -215,7 +214,7 @@ void build_platform_free_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
     convert_c_fn(platform_free, &fn_ctype, type, ass, a, point); 
 }
 
-void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* default_allocator, PiAllocator *module_allocator, RegionAllocator* region) {
+void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* default_allocator, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -232,7 +231,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     Symbol sym;
 
     PiType kind;

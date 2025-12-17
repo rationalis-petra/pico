@@ -72,27 +72,32 @@ Document* mk_cat_doc(const PtrArray source, Allocator* a) {
 
 Document *mv_nest_doc(size_t idx, Document *nested, Allocator *a) {
     Document* doc = mem_alloc(sizeof(Document), a);
-
-    doc->type = NestDocument;
-    doc->nest.indent = idx;
-    doc->nest.inner = nested;
-    doc->requirement = nested->requirement;
+    *doc = (Document) {
+        .type = NestDocument,
+        .nest.indent = idx,
+        .nest.inner = nested,
+        .requirement = nested->requirement,
+    };
     return doc;
 }
 
 Document *mv_group_doc(Document* group, Allocator *a) {
     Document* doc = mem_alloc(sizeof(Document), a);
-    doc->type = GroupDocument;
-    doc->group = group;
-    doc->requirement = group->requirement;
+    *doc = (Document) {
+        .type = GroupDocument,
+        .group = group,
+        .requirement = group->requirement,
+    };
     return doc;
 }
 
 Document *mv_hook_doc(Document* hook, Allocator *a) {
     Document* doc = mem_alloc(sizeof(Document), a);
-    doc->type = HookDocument;
-    doc->hook = hook;
-    doc->requirement = hook->requirement;
+    *doc = (Document) {
+        .type = HookDocument,
+        .hook = hook,
+        .requirement = hook->requirement,
+    };
     return doc;
 }
 
@@ -154,10 +159,12 @@ Document* mk_vsep_doc(const PtrArray source, Allocator* a) {
 
 Document *mv_style_doc(const DocStyle style, Document *inner, Allocator *a) {
     Document* doc = mem_alloc(sizeof(Document), a);
-    doc->type = StyledDocument;
-    doc->styled.style = style;
-    doc->styled.inner = inner;
-    doc->requirement = inner->requirement;
+    *doc = (Document) {
+        .type = StyledDocument,
+        .styled.style = style,
+        .styled.inner = inner,
+        .requirement = inner->requirement,
+    };
     return doc;
 }
 
@@ -219,6 +226,63 @@ void delete_doc(Document* doc, Allocator* a) {
         break;
     }
     mem_free(doc, a);
+}
+
+Document* copy_doc(Document *doc, Allocator *a) {
+    Document* out = mem_alloc(sizeof(Document), a);
+    switch (doc->type) {
+    case LineDocument:
+    case StringDocument:
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .string = copy_string(doc->string, a),
+        };
+        break;
+    case NestDocument:
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .nest.indent = doc->nest.indent,
+            .nest.inner = copy_doc(doc->nest.inner, a),
+        };
+        break;
+    case GroupDocument:
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .group = copy_doc(doc->group, a),
+        };
+        break;
+    case HookDocument:
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .hook = copy_doc(doc->hook, a),
+        };
+        break;
+    case CatDocument:
+    case SepDocument:
+    case VSepDocument:
+    case HSepDocument: {
+        typedef void*(*Copier)(void*, Allocator*);
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .docs = copy_ptr_array(doc->docs, (Copier)copy_doc, a),
+        };
+        break;
+    }
+    case StyledDocument:
+        *out = (Document) {
+            .type = doc->type,
+            .requirement = doc->requirement,
+            .styled.style = doc->styled.style,
+            .styled.inner = copy_doc(doc->styled.inner, a),
+        };
+        break;
+    }
+    return out;
 }
 
 DocStyle scolour(Colour c, const DocStyle base) {

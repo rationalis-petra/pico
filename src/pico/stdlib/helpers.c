@@ -68,7 +68,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, cin, get_formatted_stdout(), NULL, &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("C Sources."), &ra);
     delete_istream(sin, &ra);
     throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));
 

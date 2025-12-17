@@ -130,6 +130,17 @@ static Command internal_parse_command(StringArray args, Allocator* a) {
         return (Command) {
             .type = CVersion,
         };
+
+    } else if (string_cmp(subcommand, mv_string("atlas")) == 0) {
+        StringArray forwarding_args =  mk_string_array(args.len - 1, get_std_allocator());
+        for (size_t i = 1; i < args.len; i++) {
+            push_string(args.data[i], &forwarding_args);
+        }
+
+        return (Command) {
+            .type = CAtlas,
+            .for_atlas = forwarding_args
+        };
     } else {
         return (Command) {
             .type = CInvalid,

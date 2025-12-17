@@ -27,6 +27,10 @@ String symbol_to_string(Symbol symbol, Allocator* a) {
     return get_table_string(symbol.name, &symbol_table, a);
 }
 
+String view_symbol_string(Symbol symbol) {
+    return view_table_string(symbol.name, &symbol_table);
+}
+
 Symbol string_to_symbol(String string) {
     return (Symbol){ .name = string_to_name(string), .did = 0 };
 }
@@ -42,6 +46,10 @@ String name_to_string(Name name, Allocator* a) {
     return get_table_string(name, &symbol_table, a);
 }
 
+String view_name_string(Name name) {
+    return view_table_string(name, &symbol_table);
+}
+
 void clear_symbols() {
     delete_table(&symbol_table);
 }
@@ -50,7 +58,7 @@ bool symbol_eq(Symbol lhs, Symbol rhs) {
     return lhs.name == rhs.name && lhs.did == rhs.did;
 }
 
-int64_t cmp_symbol(Symbol lhs, Symbol rhs) {
+int64_t symbol_cmp(Symbol lhs, Symbol rhs) {
     int64_t r1 = lhs.name - rhs.name;
     return r1 == 0 ? (int64_t)(lhs.did - rhs.did) : r1;
 }

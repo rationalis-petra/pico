@@ -37,8 +37,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         panic(mv_string("Error in tests: test_pico/stdlib/stdlib.c"));
     }
 
-    PiAllocator pia = convert_to_pallocator(a);
-    Module* module = mk_module(header, base, NULL, pia);
+    Module* module = mk_module(header, base, NULL);
     Environment* env = env_from_module(module, &point, a);
     Module* old_current = get_std_current_module();
     set_std_current_module(module);

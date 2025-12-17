@@ -1,4 +1,4 @@
 #include "data/meta/array_impl.h"
 #include "pico/data/symbol_array.h"
 
-ARRAY_CMP_IMPL(Symbol, cmp_symbol, symbol, Symbol)
+ARRAY_CMP_IMPL(Symbol, symbol_cmp, symbol, Symbol)

@@ -9,6 +9,6 @@
 // Hooks
 void set_exit_callback(jump_buf* buf);
 
-void add_extra_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region);
 
 #endif

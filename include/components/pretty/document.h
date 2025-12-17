@@ -108,8 +108,10 @@ Document* mv_grouped_sep_doc(const PtrArray docs, Allocator* a);
 Document* mv_grouped_vsep_doc(const PtrArray docs, Allocator* a);
 Document* mk_paren_doc(const char* lhs, const char* rhs, Document* inner, Allocator* a);
 
+
 /* The Document Destructor */
 void delete_doc(Document* Document, Allocator* a);
+Document* copy_doc(Document* Document, Allocator* a);
 
 // Styles
 static const DocStyle dstyle = (DocStyle){.options = 0};

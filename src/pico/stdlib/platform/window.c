@@ -9,6 +9,8 @@
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/platform/submodules.h"
 
+#ifdef WINDOW_SYSTEM
+
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
@@ -64,7 +66,7 @@ void build_poll_events_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     delete_c_type(fn_ctype, pia);
 }
 
-void add_window_module(Assembler *ass, Module *platform, PiAllocator *module_allocator, RegionAllocator* region) {
+void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_allocator = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_allocator;
@@ -81,7 +83,7 @@ void add_window_module(Assembler *ass, Module *platform, PiAllocator *module_all
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     delete_module_header(header);
     Symbol sym;
 
@@ -166,3 +168,5 @@ void add_window_module(Assembler *ass, Module *platform, PiAllocator *module_all
     Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
     if (r.type == Err) panic(r.error_message);
 }
+
+#endif

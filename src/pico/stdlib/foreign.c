@@ -1,7 +1,6 @@
 #include "platform/signals.h"
 #include "platform/dynamic_library.h"
 #include "platform/memory/std_allocator.h"
-#include "platform/memory/arena.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
@@ -114,7 +113,7 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
 
 }
 
-void add_foreign_module(Assembler* ass, Package *base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -128,7 +127,7 @@ void add_foreign_module(Assembler* ass, Package *base, PiAllocator* module_alloc
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
 
     PiType type;
     PiType* typep;

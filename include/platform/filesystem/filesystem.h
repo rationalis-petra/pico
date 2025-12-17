@@ -1,12 +1,53 @@
 #ifndef __PLATFORM_FILESYSTEM_FILESYSTEM_H
 #define __PLATFORM_FILESYSTEM_FILESYSTEM_H
 
-#include "platform/memory/allocator.h"
-#include "data/string.h"
 #include <stdbool.h>
 #include <stdint.h>
 
-// forward-declaration of window (platform/window/window.h)
+#include "platform/memory/allocator.h"
+#include "data/meta/array_header.h"
+
+#include "data/string.h"
+
+// ---------------------------------------------------------------------------
+//     Paths 
+// ---------------------------------------------------------------------------
+
+String path_cat(String path1, String path2, Allocator* alloc);
+
+// ---------------------------------------------------------------------------
+//     Directories 
+// ---------------------------------------------------------------------------
+
+typedef struct Directory Directory;
+
+typedef struct {
+    String name;
+    bool is_directory;
+} DirectoryEntry;
+
+ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
+
+Directory* open_directory(String name, Allocator* alloc);
+void close_directory(Directory* directory);
+
+// List all entries in the current directory
+//  WARNING: if using this to traverse a directory, beware the possibility
+//   of getting stuck in an infinite loop, as the current directory (.) is
+//   also listed.
+DirEntArray list_entries(Directory* dir, Allocator* alloc);
+
+// List all entries in the curent directory - excluding the 'self' entry (.)
+//   and the 'parent' entry (..).
+DirEntArray list_children(Directory* dir, Allocator* alloc);
+
+String get_current_directory(Allocator* a);
+void set_current_directory(String path);
+
+// ---------------------------------------------------------------------------
+//     Files 
+// ---------------------------------------------------------------------------
+
 typedef struct File File;
 
 typedef enum {
@@ -25,7 +66,6 @@ U8Array read_chunk(File* file, bool limit, uint64_t size_limit, Allocator* regio
 
 bool write_byte(File* file, uint8_t out);
 bool write_chunk(File* file, U8Array arr);
-
 
 
 #endif

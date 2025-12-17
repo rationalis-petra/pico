@@ -21,7 +21,7 @@ void clear_assembler(Assembler* assembler);
 
 U8Array get_instructions(Assembler* assembler);
 
-// 
+// Get and set the current write head of the assembler.
 size_t get_pos(Assembler* assembler);
 void set_pos(Assembler* assembler, size_t pos);
 

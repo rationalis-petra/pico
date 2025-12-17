@@ -13,6 +13,7 @@
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
+#include "pico/values/modular.h"
 #include "pico/binding/address_env.h"
 #include "pico/eval/call.h"
 
@@ -2621,9 +2622,9 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
               PtrArray lines = mk_ptr_array(syms.len + 8, a);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String module_name = get_name(entry.value, a);
+                  String m_name = symbol_to_string(module_name(entry.value), a);
                   push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
-                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
+                  push_ptr(mk_str_doc(m_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
@@ -2665,9 +2666,9 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String module_name = get_name(entry.source, a);
+                  String m_name = symbol_to_string(module_name(entry.source), a);
                   push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
-                  push_ptr(mk_str_doc(module_name, a), &moduledesc);
+                  push_ptr(mk_str_doc(m_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
               }
               {

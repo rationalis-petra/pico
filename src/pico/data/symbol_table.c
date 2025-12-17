@@ -88,6 +88,15 @@ String get_table_string(Name name, SymbolTable* table, Allocator* a) {
     };
 }
 
+String view_table_string(Name name, SymbolTable* table) {
+    void* strptr = table->string_memory + name;
+    size_t size = *(size_t*)strptr;
+    return (String) {
+        .memsize = size,
+        .bytes = strptr + sizeof(size),
+    };
+}
+
 void delete_table(SymbolTable *table) {
     Allocator* a = &table->gpa;
     for (size_t i = 0; i < table->capacity; i++) {

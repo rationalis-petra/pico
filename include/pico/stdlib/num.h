@@ -5,6 +5,6 @@
 
 #include "pico/values/modular.h"
 
-void add_num_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_num_module(Assembler* ass, Package* base, RegionAllocator* region);
 
 #endif

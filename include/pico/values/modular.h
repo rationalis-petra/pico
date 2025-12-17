@@ -104,15 +104,21 @@ typedef struct {
     U8Array code;
 } Segments;
 
-// Package Interface
+//     Package Interface
+// -----------------------------------------------------------------------------
 Package* mk_package(Name name, PiAllocator pico_allocator);
 void delete_package(Package* package);
+
+void add_dependency(Package* package, Package* dep);
 Result add_module(Symbol symbol, Module* module, Package* package);
+
+Name package_name(Package* package);
+Module* package_root_module(Package* package);
 Module* get_module(Symbol symbol, Package* package);
-Module* get_root_module(Package* package);
 
 // Module Interface
-Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, PiAllocator pico_allocator);
+// -----------------------------------------------------------------------------
+Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent);
 void delete_module(Module* module);
 
 // If we are going to define the result of evaluating (target), then it must be prepped
@@ -139,7 +145,7 @@ ModuleEntry* get_def(Symbol symbol, Module* module);
 SymbolArray get_defined_symbols(Module* module, Allocator* a);
 PtrArray get_defined_instances(Module* module, Allocator* a);
 
-String get_name(Module* module, Allocator* a);
+Symbol module_name(Module* module);
 Package* get_package(Module* module);
 Module* get_parent(Module* module);
 Imports get_imports(Module* module);

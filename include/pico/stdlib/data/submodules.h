@@ -6,14 +6,14 @@
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h"
 
-void add_pointer_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
-void add_memory_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_pointer_module(Target target, Module* base, RegionAllocator* region);
+void add_memory_module(Target target, Module* base, RegionAllocator* region);
 
-void add_pair_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
-void add_maybe_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
-void add_either_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_pair_module(Target target, Module* base, RegionAllocator* region);
+void add_maybe_module(Target target, Module* base, RegionAllocator* region);
+void add_either_module(Target target, Module* base, RegionAllocator* region);
 
-void add_list_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
-void add_string_module(Target target, Module* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_list_module(Target target, Module* base, RegionAllocator* region);
+void add_string_module(Target target, Module* base, RegionAllocator* region);
 
 #endif

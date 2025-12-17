@@ -6,8 +6,6 @@
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
 
 float64_t start_timer() {
     return time_to_double(query_mono_timer(), Seconds);
@@ -32,7 +30,7 @@ void build_time_elapsed_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
     convert_c_fn(time_elapsed, &fn_ctype, type, ass, a, point); 
 }
 
-void add_time_module(Assembler *ass, Module *platform, PiAllocator *module_allocator, RegionAllocator* region) {
+void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -49,7 +47,7 @@ void add_time_module(Assembler *ass, Module *platform, PiAllocator *module_alloc
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(platform), NULL);
     Symbol sym;
 
     ModuleEntry* e;

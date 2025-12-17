@@ -14,6 +14,6 @@ PiType* get_either_type();
 PiType* get_allocator_vtable_type();
 PiType* get_allocator_type();
 
-void add_core_module(Assembler* ass, Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_core_module(Assembler* ass, Package* base, RegionAllocator* region);
 
 #endif

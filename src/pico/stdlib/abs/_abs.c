@@ -1,9 +1,8 @@
-#include "pico/stdlib/helpers.h"
 #include "pico/stdlib/abs/submodules.h"
 
 #include "pico/stdlib/abs/abs.h"
 
-void add_abs_module(Target target, Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_abs_module(Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -18,13 +17,13 @@ void add_abs_module(Target target, Package* base, PiAllocator* module_allocator,
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_numeric_module(target, module, module_allocator, subregion);
+    add_numeric_module(target, module, subregion);
     reset_subregion(subregion);
-    add_show_module(target, module, module_allocator, subregion);
+    add_show_module(target, module, subregion);
     release_subregion(subregion);
 
     add_module(string_to_symbol(mv_string("abs")), module, base);

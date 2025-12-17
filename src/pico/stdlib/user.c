@@ -3,7 +3,7 @@
 #include "pico/stdlib/user.h"
 #include "pico/stdlib/helpers.h"
 
-void add_user_module(Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+void add_user_module(Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {.clauses = mk_import_clause_array(9, &ra),};
 
@@ -30,7 +30,7 @@ void add_user_module(Package* base, PiAllocator* module_allocator, RegionAllocat
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL, *module_allocator);
+    Module* module = mk_module(header, base, NULL);
 
     Result r = add_module(string_to_symbol(mv_string("user")), module, base);
     if (r.type == Err) panic(r.error_message);

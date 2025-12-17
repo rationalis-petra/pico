@@ -29,15 +29,15 @@ Module* path_parent(SymbolArray path, Module* root, Module* mfor, ErrorPoint* po
           } else {
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for "),
-                                           get_name(mfor, ea));
+                                           mv_string(" while constructing environment for module "),
+                                           symbol_to_string(module_name(mfor), ea));
               throw_error(point, message);
           }
         } else {
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for "),
-                                           get_name(mfor, ea));
+                                           mv_string(" while constructing environment for module "),
+                                           symbol_to_string(module_name(mfor), ea));
               throw_error(point, message);
         }
     }
@@ -56,15 +56,15 @@ Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point
           } else {
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
-                                           mv_string(" while constructing environment for "),
-                                           get_name(mfor, ea));
+                                           mv_string(" while constructing environment for module "),
+                                           symbol_to_string(module_name(mfor), ea));
               throw_error(point, message);
           }
         } else {
             String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                          symbol_to_string(path.data[i], ea),
-                                         mv_string(" while constructing environment for "),
-                                         get_name(mfor, ea));
+                                         mv_string(" while constructing environment for module "),
+                                         symbol_to_string(module_name(mfor), ea));
             throw_error(point, message);
         }
     }
@@ -72,7 +72,7 @@ Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point
 }
 
 bool import_clause_valid(Environment *env, ImportClause clause) {
-    Module* current = get_root_module(get_package(env->base));
+    Module* current = package_root_module(get_package(env->base));
 
     for (size_t i = 0; i < clause.path.len; i++) {
         ModuleEntry* e = get_def(clause.path.data[i], current);
@@ -110,8 +110,6 @@ void refresh_env(Environment* env) {
         } else {
             p = mem_alloc(sizeof(PtrArray), env->gpa);
             *p = mk_ptr_array(8, env->gpa);
-            // TODO: we know this isn't in the instances; could perhaps
-            // speed up the process?
             name_ptr_insert(instance->id, p, &env->instances);
         }
 
@@ -134,8 +132,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     // cache results?
     Imports imports = get_imports(module);
     Package* package = get_package(module);
-    Module* root_module = get_root_module(package);
-    //Module* parent = get_parent(module);
+    Module* root_module = package_root_module(package);
 
     for (size_t i = 0; i < imports.clauses.len; i++) {
         // TODO (BUG): currently, we only search in the package, not the parent

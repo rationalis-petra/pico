@@ -1,7 +1,8 @@
-#include "pico/data/client/meta/list_impl.h"
 #include "platform/signals.h"
+
 #include "components/pretty/standard_types.h"
 
+#include "pico/data/client/meta/list_impl.h"
 #include "pico/syntax/concrete.h"
 
 PICO_LIST_COMMON_IMPL(RawTree, rawtree, RawTree)
@@ -80,7 +81,7 @@ Document* pretty_atom(Atom atom, Allocator* a) {
     }
     case ASymbol: {
         String str = symbol_to_string(atom.symbol, a);
-        out = mk_str_doc(str, a);
+        out = mv_str_doc(str, a);
         break;
     }
     case AString: {

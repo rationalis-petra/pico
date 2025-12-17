@@ -13,7 +13,7 @@ void write_help_string(FormattedOStream *os) {
     write_fstring(mv_string("\n\n"), os);
     write_fstring(mv_string("  Usage: "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico [repl | script | eval] [options]\n"), os);
+    write_fstring(mv_string("pico [repl | script | eval | atlas] <options>\n"), os);
     end_boldness(os);
     write_fstring(mv_string("\n"), os);
 
@@ -51,7 +51,7 @@ void write_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" be explicitly provided, instead of relying upon this as the default mode, i.e.\n"), os);
     write_fstring(mv_string(" type "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico repl [options]"), os);
+    write_fstring(mv_string("pico repl <options>"), os);
     end_boldness(os);
     write_fstring(mv_string("\n"), os);
 
@@ -77,7 +77,7 @@ void write_help_string(FormattedOStream *os) {
 
     write_fstring(mv_string(" Usage: "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico script filename\n"), os);
+    write_fstring(mv_string("pico script <filename>\n"), os);
     end_boldness(os);
 
     write_fstring(mv_string("\n"), os);
@@ -101,7 +101,7 @@ void write_help_string(FormattedOStream *os) {
     
     write_fstring(mv_string(" Usage: "), os);
     start_boldness(Dim, os);
-    write_fstring(mv_string("pico eval expression\n"), os);
+    write_fstring(mv_string("pico eval <expression>\n"), os);
     end_boldness(os);
 
     write_fstring(mv_string(" The script subcommand takes a single string as input. It will try and evaluate\n"), os);
@@ -118,4 +118,23 @@ void write_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" of compilation.\n"), os);
 
     write_fstring(mv_string("\n"), os);
+    start_boldness(Bold, os);
+    write_fstring(mv_string("\n                                      Atlas                                     "), os);
+    write_fstring(mv_string("\n           ──────────────────────────────────────────────────────────           "), os);
+    end_boldness(os);
+
+    write_fstring(mv_string("\n"), os);
+    write_fstring(mv_string("\n"), os);
+    
+    write_fstring(mv_string(" Usage: "), os);
+    start_boldness(Dim, os);
+    write_fstring(mv_string("pico atlas <args>\n"), os);
+    end_boldness(os);
+
+    write_fstring(mv_string(" The atlas subcommand will hand off parsing of the remaining <args> to the builtin\n"), os);
+    write_fstring(mv_string(" atlas build-system. For more information, use"), os);
+    start_boldness(Dim, os);
+    write_fstring(mv_string(" pico atlas help"), os);
+    end_boldness(os);
+    write_fstring(mv_string(".\n\n"), os);
 }

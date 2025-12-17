@@ -4,6 +4,6 @@
 #include "pico/codegen/codegen.h"
 #include "pico/values/modular.h"
 
-void add_debug_module(Target target, Package* base, PiAllocator* module_allocator, RegionAllocator* region);
+void add_debug_module(Target target, Package* base, RegionAllocator* region);
 
 #endif

@@ -20,17 +20,19 @@ typedef struct env_capture env_capture;
 
 // Symbol table
 String symbol_to_string(Symbol symbol, Allocator* a);
+String view_symbol_string(Symbol symbol);
 Symbol string_to_symbol(String string);
 Symbol string_to_unique_symbol(String string);
 
 Name string_to_name(String string);
 String name_to_string(Name name, Allocator* a);
+String view_name_string(Name name);
 
 void init_symbols(Allocator* a);
 void clear_symbols();
 
 bool symbol_eq(Symbol lhs, Symbol rhs);
-int64_t cmp_symbol(Symbol lhs, Symbol rhs);
+int64_t symbol_cmp(Symbol lhs, Symbol rhs);
 
 // Useful for container methods
 void delete_symbol(Symbol s);

@@ -27,11 +27,11 @@
 #include "test_pico/helper.h"
 
 typedef struct {
-    void (* on_expr)(PiType* type, void* val, void* data, TestLog* log);
-    void (* on_top)(void* data, TestLog* log);
-    void (* on_pi_error)(MultiError err, IStream* sin, TestLog* log);
-    void (* on_error)(String msg, TestLog* log);
-    void (* on_exit)(void* data, TestLog* log);
+    void (*on_expr)(PiType* type, void* val, void* data, TestLog* log);
+    void (*on_top)(void* data, TestLog* log);
+    void (*on_pi_error)(MultiError err, IStream* sin, TestLog* log);
+    void (*on_error)(String msg, TestLog* log);
+    void (*on_exit)(void* data, TestLog* log);
 } Callbacks;
 
 typedef struct {
@@ -142,7 +142,6 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     return;
 }
 
-
 void fail_exit(void* data, TestLog* log) {
     test_log_error(log, mv_string("(exit) called unexpectedly during test"));
     test_fail(log);
@@ -156,7 +155,7 @@ void fail_error(String err, TestLog* log) {
 void fail_pi_error(MultiError err, IStream* cin, TestLog* log) {
     ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
-    display_error(err, cin, get_fstream(log), NULL, &gpa);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
     test_fail(log);
     delete_arena_allocator(arena);
@@ -465,10 +464,10 @@ void log_error(String err, TestLog* log) {
 }
 
 void log_pi_error(MultiError err, IStream* cin, TestLog* log) {
-    // TODO: improve the test log error to take in a document 
+    // TODO: improve the 'test_log_error' so it can take in a document 
     ArenaAllocator* arena = make_arena_allocator(256, get_std_allocator());
     Allocator gpa = aa_to_gpa(arena);
-    display_error(err, cin, get_fstream(log), NULL, &gpa);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
     test_log_error(log, mv_string("Test failure - message logged"));
     delete_arena_allocator(arena);
 }

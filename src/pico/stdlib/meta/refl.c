@@ -70,7 +70,7 @@ Result load_module_c_fun(String filename, MaybeModule module) {
     Module* parent = module.is_none ? NULL : module.module;
 
     RegionAllocator* ra = make_region_allocator(16384, true, &a);
-    load_module_from_istream(sfile, os, (const char*)filename.bytes, current_package, parent, pia, ra);
+    load_module_from_istream(sfile, os, filename, current_package, parent, pia, ra);
     delete_region_allocator(ra);
 
     delete_istream(sfile, &a);
@@ -108,7 +108,7 @@ Result run_script_c_fun(String filename, MaybeModule mmodule) {
     FormattedOStream* os = mk_formatted_ostream(current_ostream, &a);
 
     RegionAllocator* region = make_region_allocator(16384, true, &a);
-    run_script_from_istream(sfile, os, (const char*)filename.bytes, module, region); 
+    run_script_from_istream(sfile, os, filename, module, region); 
     delete_region_allocator(region);
 
     delete_istream(sfile, &a);
@@ -132,7 +132,7 @@ void build_run_script_fun(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
 }
 
 
-void add_refl_module(Assembler* ass, Module* base,  PiAllocator* module_allocator, RegionAllocator* region) {
+void add_refl_module(Assembler* ass, Module* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -146,7 +146,7 @@ void add_refl_module(Assembler* ass, Module* base,  PiAllocator* module_allocato
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL, *module_allocator);
+    Module* module = mk_module(header, get_package(base), NULL);
     Symbol sym;
 
     PiType type;

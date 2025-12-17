@@ -1,5 +1,4 @@
 #include <math.h>
-#include "pico/stdlib/extra.h"
 #include "pico/parse/parse.h"
 
 // The main parsing functions, which parse different types of expressions. 
@@ -11,14 +10,14 @@
 //   + parse_prefix - for prefixed operators, is called by parse_atom
 // + numbers - for decimal or floating-point numbers
 
-ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
-ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
-ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
-ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
+static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
+static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -179,7 +178,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         out.result = terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
         // Check that there is an appropriate (odd) number of terms for infix operator
-        // unrolling to function
+        //   unrolling to function
         if (terms.len % 2 == 0) {
           out = (ParseResult) {
             .type = ParseFail,
@@ -284,7 +283,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
      */
     uint32_t codepoint;
     StreamResult result;
-    ParseResult out;
+    ParseResult out = {.type = ParseNone};
     U32Array arr = mk_u32_array(16, a);
 
     RawTreePiList terms = mk_rawtree_list(8, pia);

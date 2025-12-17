@@ -38,11 +38,13 @@ typedef struct {
 } ModuleEntryInternal;
 
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
-AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, cmp_symbol, entry, Entry)
+AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, symbol_cmp, entry, Entry)
 
 struct Package {
     Name name;
     Module* root_module;
+    AddrPiList dependencies;
+    PiAllocator gpa;
 };
 
 struct Module {
@@ -78,20 +80,34 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
             .clauses = mk_export_clause_array(0, &a),
         },
     };
-    package->root_module = mk_module(header, package, NULL, pico_allocator);
-    package->name = name;
+
+    *package = (Package) {
+        .name = name,
+        .gpa = pico_allocator,
+    };
+    package->root_module = mk_module(header, package, NULL),
+    package->dependencies = mk_addr_list(4, &package->gpa);
     delete_module_header(header);
     return package;
 }
 
 void delete_package(Package* package) {
     PiAllocator pia = package->root_module->pico_allocator;
+    sdelete_addr_list(package->dependencies);
     delete_module(package->root_module);
     call_free(package, &pia);
 }
 
+void add_dependency(Package *package, Package *dep) {
+    push_addr(dep, &package->dependencies);
+}
+
 Result add_module(Symbol symbol, Module* module, Package* package) {
     return add_module_def(package->root_module, symbol, module); 
+}
+
+Name package_name(Package *package) {
+    return package->name;
 }
 
 void add_import_clause(ImportClause clause, Module *module) {
@@ -114,7 +130,7 @@ Module* get_module(Symbol symbol, Package* package) {
     }
 }
 
-Module* get_root_module(Package* package) {
+Module* package_root_module(Package* package) {
     return package->root_module;
 }
 
@@ -125,7 +141,9 @@ Module* get_root_module(Package* package) {
 // Forward declaration of utility functions
 void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links);
 
-Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent, PiAllocator pico_allocator) {
+Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent) {
+    PiAllocator pico_allocator = pkg_parent->gpa;
+
     Module* module = call_alloc(sizeof(Module), &pico_allocator);
     *module = (Module) {.pico_allocator = pico_allocator};
     module->allocator = convert_to_callocator(&module->pico_allocator);
@@ -386,7 +404,9 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
     // Free a previous definition (if it exists!)
     // TODO BUG UB: possibly throw here?
     ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
-    if (old_entry) delete_module_entry(*old_entry, module);
+    if (old_entry) {
+        delete_module_entry(*old_entry, module);
+    }
 
     entry_insert(symbol, entry, &module->entries);
 
@@ -394,11 +414,27 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
 }
 
 ModuleEntry* get_def(Symbol symbol, Module* module) {
-    return (ModuleEntry*)entry_lookup(symbol, module->entries);
+    Module* root = module->lexical_parent_package->root_module;
+    if (module != root) {
+        return (ModuleEntry*)entry_lookup(symbol, module->entries);
+    } else {
+        ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        if (e) return e;
+
+        // Root module should also return definitions available in 
+        //   imported packages...
+        Package* package = module->lexical_parent_package;
+        for (size_t i = 0; i < package->dependencies.len; i++) {
+            Package* dep = package->dependencies.data[i];
+            ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, dep->root_module->entries);
+            if (e) return e;
+        }
+        return NULL;
+    }
 }
 
-String get_name(Module* module, Allocator* a) {
-    return symbol_to_string(module->header.name, a);
+Symbol module_name(Module* module) {
+    return module->header.name;
 }
 
 SymbolArray get_defined_symbols(Module* module, Allocator* a) {
