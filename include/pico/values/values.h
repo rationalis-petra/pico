@@ -125,7 +125,7 @@ typedef enum TermFormer {
     // style typechecker.
     FLiftCType,
 
-    // Temporary formers: TODO delegate to macros.
+    // Temporary formers: TODO (STRUCTURE): delegate to macros.
     FReinterpretNative,
     FReinterpretRelic,
     FConvertNative,

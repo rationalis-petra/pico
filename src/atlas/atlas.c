@@ -59,7 +59,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     Allocator ra = ra_to_gpa(region);
 
     Project project;
-    ProjectRecord record;
+    ProjectRecord record = {};
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
@@ -84,9 +84,13 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
         }
     }
 
-    // TODO (BUG): check all fields were filled out!
+    if (!record.package) {
+        write_fstring(mv_string("atlas-project file was missing 'package' stanza.\n"), out);
+        return true; // signal failure
+    }
+
     set_instance_project(instance, project);
-    return 0;
+    return false; // success
 
  on_pi_error:
     display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
@@ -160,9 +164,8 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
 
         RegionAllocator* region = make_region_allocator(4096, true, stda);
         String cwd = get_current_directory(stda);
-        load_atlas_files(cwd, out, instance, region);
+        bool fail = load_atlas_files(cwd, out, instance, region);
         mem_free(cwd.bytes, stda);
-
         AtErrorPoint point;
         if (catch_error(point)) {
             Allocator ra = ra_to_gpa(region);
@@ -177,7 +180,9 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
                 display_error(error, point.error.captured_file, out, point.error.filename, &ra);
             }
         } else {
-            atlas_run(instance, command.run.target, region, &point);
+            if (!fail) {
+                atlas_run(instance, command.run.target, region, &point);
+            }
         }
         delete_region_allocator(region);
         delete_atlas_instance(instance);
