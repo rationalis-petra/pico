@@ -63,7 +63,6 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE("((all [A] -28) {Unit})");
     }
 
-    // TODO: fix this test!
     if (test_start(log, mv_string("substitution-through-uvar"))) {
         RUN("(def id all [A] proc [(x A)] x)");
         PiType* expected = mk_prim_type(&pregion, Int_64);

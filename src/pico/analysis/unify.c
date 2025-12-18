@@ -514,7 +514,6 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
             }
         }
     } else {
-        // TODO: better error messages
         // TOOD (BUG): is unwrap what we want here? specifically, unwrap
         // substitutes in when recurring?
         PiType* unwrapped = unwrap_type(type, ctx.pia, a);

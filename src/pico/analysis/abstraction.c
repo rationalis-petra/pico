@@ -416,7 +416,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
 
-        // TODO (BUG): shadow the arguments!
         SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
         for (size_t i = 0; i < arguments.len; i++) {
             push_symbol(arguments.data[i].key, &to_shadow);
