@@ -7,6 +7,8 @@
 #include "platform/time/time.h"
 #include "platform/terminal/terminal.h"
 
+#include "components/logging/structured_logging.h"
+
 typedef struct {
     bool show_fails;
     bool show_passes;
@@ -29,6 +31,7 @@ typedef struct {
     size_t skipped_tests;
     size_t passed_tests;
     size_t failed_tests;
+    Logger* slogger;
     Allocator* gpa;
 } TestLog;
 
@@ -44,6 +47,8 @@ bool test_start(TestLog* log, String name);
 void test_pass(TestLog* log);
 void test_skip(TestLog* log);
 void test_fail(TestLog* log);
+
+Logger* get_structured_logger(TestLog* log);
 
 void test_log_error(TestLog* log, String message);
 void test_log_info(TestLog* log, String message);

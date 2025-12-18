@@ -64,11 +64,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     // TODO: fix this test!
-    /* if (test_start(log, mv_string("Substitution through uvar"))) { */
-    /*     RUN("(def id all [A] proc [(x A)] x)"); */
-    /*     PiType* expected = mk_prim_type(&arena, Int_64); */
-    /*     TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)"); */
-    /* } */
+    if (test_start(log, mv_string("substitution-through-uvar"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)");
+    }
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         PiAllocator current_old = get_std_current_allocator();

@@ -447,6 +447,7 @@ struct Syntax {
 };
 
 /* Other instances */
+String syntax_type_to_string(Syntax_t type);
 Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 // -----------------------------------------------------------------------------

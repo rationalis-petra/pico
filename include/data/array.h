@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "data/meta/array_header.h"
 
+typedef void  (*PtrDelete)(void*, Allocator*);
+typedef void* (*PtrCopy)(void*, Allocator*);
 ARRAY_HEADER(void*, ptr, Ptr)
 
 ARRAY_HEADER(uint8_t, u8, U8)

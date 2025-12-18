@@ -88,10 +88,11 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // -------------------------------------------------------------------------
     // Resolution
     // -------------------------------------------------------------------------
-
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+
+    Logger* logger = get_structured_logger(log);
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = target,
+        .a = &ra, .pia = pia, .point = &pi_point, .target = target, .logger = logger,
     };
     type_check(&abs, env, ctx);
 
@@ -540,8 +541,9 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
+    Logger* logger = get_structured_logger(log);
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target,
+        .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target, .logger = logger,
     };
     type_check(&abs, env, ctx);
 

@@ -270,7 +270,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         break;
 
     case TUVar:
-        out = t;
+        out.uvar = copy_uvar(t.uvar, pia);
         break;
     case TPrim:
         out.prim = t.prim;
@@ -686,7 +686,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         } else {
             if (type->array.dimensions.len != 0) {
                 PtrArray arg_nodes = mk_ptr_array(type->array.dimensions.len, a);
-                for (size_t i = 0; i < type->proc.implicits.len; i++) {
+                for (size_t i = 0; i < type->array.dimensions.len; i++) {
                     ArrayDimType dim = *(ArrayDimType*)type->array.dimensions.data[i];
                     if (dim.is_any) {
                         push_ptr(mk_cstr_doc(".", a), &nodes);
@@ -725,7 +725,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TUVar:
-        out = mv_str_doc(mk_string("?", a), a);
+        out = mk_paren_doc("<", ">", pretty_uvar_type(type->uvar, a), a);
         break;
     case TStruct: {
         PtrArray nodes = mk_ptr_array(2, a);
@@ -944,6 +944,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &args);
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
+
+        ctx.should_wrap = false;
         push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -989,7 +991,9 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &vars);
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_group);
-        push_ptr(mv_sep_doc(head_group, a), &nodes);
+        push_ptr(mv_group_doc(mv_sep_doc(head_group, a), a), &nodes);
+
+        ctx.should_wrap = false;
         push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
@@ -1481,7 +1485,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
     case TNamed:
         push_symbol(body->named.name, shadowed);
-        type_app_subst(body->distinct.type, subst, shadowed, pia, a);
+        type_app_subst(body->named.type, subst, shadowed, pia, a);
         shadowed->len--;
         if (body->named.args) {
             for (size_t i = 0; i < body->named.args->len; i++) {

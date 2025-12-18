@@ -27,12 +27,16 @@
     }                                                                   \
                                                                         \
     tprefix##Assoc scopy_##fprefix##_assoc(tprefix##Assoc map, Allocator* a) { \
-        return (tprefix##Assoc) {                                       \
+        tprefix##Assoc out =  {                                         \
             .capacity = map.len,                                        \
             .len = map.len,                                             \
-            .data = mem_alloc(map.len * sizeof(tprefix##ACell), a),      \
+            .data = mem_alloc(map.len * sizeof(tprefix##ACell), a),     \
             .gpa = *a,                                                  \
         };                                                              \
+        for (size_t i = 0; i < map.len; i++) {                          \
+            out.data[i] = map.data[i];                                  \
+        }                                                               \
+        return out;                                                     \
     }                                                                   \
                                                                         \
     void fprefix##_bind(key_t key, val_t val, tprefix##Assoc* map) {    \
