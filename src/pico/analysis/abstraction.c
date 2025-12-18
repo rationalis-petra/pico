@@ -847,6 +847,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
             Syntax* syn = abstract_expr_i(*val_desc, ctx);
 
+            // Check that there are no duplicates, then insert
+            size_t found_idx;
+            if (sym_ptr_find(&found_idx, field, fields)) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Duplicate field in structure.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
             sym_ptr_insert(field, syn, &fields);
         }
 

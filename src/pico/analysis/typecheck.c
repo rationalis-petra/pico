@@ -838,7 +838,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                // TODO (BUG): check for no duplicates!
                 Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
                 if (field_syn) {
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
@@ -856,11 +855,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             for (size_t i = 0; i < untyped->structure.fields.len; i++) {
                 // TODO (FEATURE): allow the inference algorithm to later
                 //                 reorder the fields!
-                // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
                 type_infer_i(cell.val, env, ctx);
                 sym_addr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
             }
+
             untyped->ptype = call_alloc(sizeof(PiType), ctx.pia);
             *untyped->ptype = struct_type;
         }

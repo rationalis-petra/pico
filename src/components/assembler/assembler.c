@@ -969,8 +969,6 @@ void build_binary_opcode_tables() {
     {   // Load Effective Address. Source - Intel Manual Vol 2. 705
         // Lea is much more limited in how it works - operand 1 is always a register
         //      and operand 2 is a memory location.
-        // TODO (BUG): This restriction is (will be) enforced elsewhere by a
-        //   check_special_conditions() function for binary operations
         static uint32_t sup = R64_RM64;
         static BinOpBytes ops[1];
         add_op(0x8D, R64_RM64, sup, ops);
@@ -1671,6 +1669,8 @@ void build_unary_opcode_table() {
         (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x2};
 
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
+    // TODO (INVESTIGATE): confirm if this is true, or doesit overwrite the
+    //      entire register?
     unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
     unary_opcode_table[SetNE][uindex(Dest_Register, sz_64)] =
