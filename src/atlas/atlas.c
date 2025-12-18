@@ -84,7 +84,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
         }
     }
 
-    // TODO: check all fields were filled out!
+    // TODO (BUG): check all fields were filled out!
     set_instance_project(instance, project);
     return 0;
 
@@ -149,7 +149,7 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
 
     switch (command.type) {
     case CInit:
-        write_fstring(mv_string("TODO: Implement atlas init "), out);
+        write_fstring(mv_string("TODO (FEAT): Implement atlas init "), out);
         write_fstring(command.init.name, out);
         write_fstring(mv_string("\n"), out);
         break;

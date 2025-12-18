@@ -159,8 +159,27 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             throw_at_error(point, err);
         }
 
-        // TODO: check that function has appropriate type, i.e. (Proc [] Unit)
-        call_unit_fn(*(void**)e->value, &ra);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
+        if (pi_type_eql(check_ty, &e->type, &ra)) {
+            call_unit_fn(*(void**)e->value, &ra);
+        } else {
+            PtrArray nodes = mk_ptr_array(5, &ra);
+            {
+                PtrArray ep_nodes = mk_ptr_array(5, &ra);
+                push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
+                push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
+            }
+            push_ptr(pretty_type(&e->type, &ra), &nodes);
+            push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
+            push_ptr(pretty_type(check_ty, &ra), &nodes);
+            AtlasError err = {
+                .message = mv_sep_doc(nodes, &ra),
+            };
+            throw_at_error(point, err);
+        }
     } else {
         PtrArray nodes = mk_ptr_array(5, &ra);
         push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);

@@ -703,22 +703,25 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TProc: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(4, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &head_nodes);
         if (type->proc.implicits.len != 0) {
             PtrArray arg_nodes = mk_ptr_array(type->proc.implicits.len, a);
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
                 push_ptr(pretty_type_internal(type->proc.implicits.data[i], ctx, a), &arg_nodes);
             }
-            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &nodes);
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &head_nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(pretty_type_internal(type->proc.args.data[i], ctx, a), &arg_nodes);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
-        push_ptr(pretty_type_internal(type->proc.ret, ctx, a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &head_nodes);
+
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type_internal(type->proc.ret, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
