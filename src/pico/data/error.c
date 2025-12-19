@@ -70,7 +70,7 @@ void write_linenum(uint64_t line_number, uint64_t max_width, FormattedOStream* f
     for (size_t i = 0; i < max_width - strnum.memsize; i++) {
         write_fstring(mv_string(" "), fos);
     }
-    write_fstring(mv_string(" | "), fos);
+    write_fstring(mv_string(" │ "), fos);
     delete_string(strnum, a);
 }
 
