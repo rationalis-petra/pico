@@ -805,28 +805,29 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         break;
     }
     case SEnumType: {
-        PtrArray nodes = mk_ptr_array(syntax->enum_type.variants.len + 2, a) ;
-        push_ptr(mv_str_doc(mk_string("(Enum", a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(syntax->enum_type.variants.len + 2, a);
+        push_ptr(mv_style_doc(former_style, mv_str_doc(mk_string("Enum", a), a), a), &head_nodes);
+        push_ptr(pretty_u8(syntax->enum_type.tag_size, a), &head_nodes);
+
+        PtrArray nodes = mk_ptr_array(syntax->enum_type.variants.len + 1, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         
         for (size_t i = 0; i < syntax->enum_type.variants.len ; i++)  {
             PtrArray fnodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(mv_string("[:"), a), &fnodes);
-            push_ptr(mk_str_doc(symbol_to_string(syntax->struct_type.fields.data[i].key, a), a), &fnodes);
+            push_ptr(mk_str_doc(symbol_to_string(syntax->enum_type.variants.data[i].key, a), a), &fnodes);
 
             PtrArray* args = syntax->enum_type.variants.data[i].val;
             PtrArray anodes = mk_ptr_array(args->len, a);
             for (size_t j = 0; j < args->len; j++) {
                 push_ptr(pretty_syntax_internal(args->data[j], ctx, a), &anodes);
             }
-
             push_ptr(mv_sep_doc(anodes, a), &fnodes);
-            push_ptr(mk_str_doc(mv_string("]"), a), &fnodes);
 
-            push_ptr(mv_sep_doc(fnodes, a), &nodes);
+            push_ptr(mk_paren_doc("[:","]", mv_sep_doc(fnodes, a), a), &nodes);
         }
 
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SResetType: {

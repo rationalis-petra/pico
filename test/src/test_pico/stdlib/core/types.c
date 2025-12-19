@@ -35,6 +35,21 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("(Proc [I64 I64] I64)");
     }
 
+    if (test_start(log, mv_string("enum-basic"))) {
+        PiType* expected = mk_sz_enum_type(pia, 64, 2, "x", 1, mk_prim_type(pia, Int_64), "y", 1, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Enum [:x I64] [:y I64])");
+    }
+
+    if (test_start(log, mv_string("enum-with-size"))) {
+        PiType* expected = mk_sz_enum_type(pia, 8, 2, "x", 1, mk_prim_type(pia, Int_64), "y", 1, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Enum 8 [:x I64] [:y I64])");
+    }
+
+    if (test_start(log, mv_string("proc-const"))) {
+        PiType* expected = mk_proc_type(pia, 2, mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64));
+        TEST_EQ("(Proc [I64 I64] I64)");
+    }
+
     if (test_start(log, mv_string("all-type"))) {
         PiType* expected = mk_all_type(pia, 1, "A", mk_var_type(pia, "A"));
         TEST_EQ("(All [A] A)");

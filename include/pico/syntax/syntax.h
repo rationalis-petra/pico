@@ -345,6 +345,7 @@ typedef struct {
 } SynStructType;
 
 typedef struct {
+    uint8_t tag_size;
     SymPtrAMap variants;
 } SynEnumType;
 

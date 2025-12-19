@@ -755,6 +755,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* enum_type = call_alloc(sizeof(PiType), ctx.pia);
             *enum_type = (PiType) {
                 .sort = TEnum,
+                .enumeration.tag_size = 64,
                 .enumeration.variants = mk_sym_addr_piamap(untyped->match.clauses.len, ctx.pia),
             };
 

@@ -100,6 +100,7 @@ typedef struct {
 } StructType;
 
 typedef struct {
+    uint8_t tag_size;
     SymAddrPiAMap variants;
 } EnumType;
 
@@ -261,6 +262,7 @@ PiType* mk_trait_type(PiAllocator* pia, size_t nfields, ...);
 //   "Singleton", 1, mk_prim_type(Int_64),
 //   "None", 0)
 PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...);
+PiType* mk_sz_enum_type(PiAllocator* pia, uint8_t tagsize, size_t nfields, ...);
 
 // Sample usage: mk_distinct_type(a, "List", ...)
 PiType* mk_named_type(PiAllocator* pia, const char* name, PiType* inner);

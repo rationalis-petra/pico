@@ -455,7 +455,7 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     }
 }
 
-void* mk_enum_ty(size_t len, uint64_t* shape, SymAddrPiCell* data) {
+void* mk_enum_ty(size_t len, uint8_t tagsize, uint64_t* shape, SymAddrPiCell* data) {
     PiAllocator pia = get_std_temp_allocator();
 
     SymAddrPiAMap variants = mk_sym_addr_piamap(len, &pia);
@@ -475,12 +475,13 @@ void* mk_enum_ty(size_t len, uint64_t* shape, SymAddrPiCell* data) {
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TEnum,
+        .enumeration.tag_size = tagsize,
         .enumeration.variants = variants,
     };
     return ty;
 }
 
-void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Generate a dynamic allocation
     // Note: this allocation is fine for definitions as types get copied,
     // probably not fine if we have a proc which returns an enum!
@@ -492,12 +493,14 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
 
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), imm64(shape.variants.len), ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_8), imm8(tagsize), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(shape.variants.len), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_8), imm64((uint8_t)tagsize), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
+    build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif

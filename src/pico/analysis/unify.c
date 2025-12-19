@@ -302,6 +302,12 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
                 .message = mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a)
             };
         }
+        if (lhs->enumeration.tag_size != rhs->enumeration.tag_size) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: two different enums differing tag-size.", a)
+            };
+        }
 
         for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
             Symbol lhs_sym = lhs->enumeration.variants.data[i].key;
@@ -912,7 +918,11 @@ void squash_type(PiType* type, UnifyContext ctx) {
 
                   sym_addr_insert(con.has_variant.name, con.has_variant.types, &out_variants);
               }
-              *type = (PiType){.sort = TEnum, .enumeration.variants = out_variants};
+              *type = (PiType) {
+                  .sort = TEnum,
+                  .enumeration.tag_size = 64,
+                  .enumeration.variants = out_variants
+              };
               break;
           }
           }

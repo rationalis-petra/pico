@@ -2408,7 +2408,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         }
 
         // Finally, generate function call to make type
-        gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, reg(RAX, sz_64), ass, a, point);
+        gen_mk_enum_ty(reg(RAX, sz_64), syn.enum_type, syn.enum_type.tag_size, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;

@@ -1652,7 +1652,28 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     case FEnumType: {
         SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        uint8_t tag_size = 64;
+        size_t start_idx = 1;
+        RawTree esz = raw.branch.nodes.data[1];
+        if (esz.type == RawAtom && esz.atom.type == AIntegral) {
+            start_idx++;
+            int64_t ilit = esz.atom.int_64;
+            if (ilit == 8) {
+                tag_size = 8;
+            } else if (ilit == 16) {
+                tag_size = 16;
+            } else if (ilit == 32) {
+                tag_size = 32;
+            } else if (ilit == 64) {
+                tag_size = 64;
+            } else {
+                err.range = esz.range;
+                err.message = mv_cstr_doc("The enumeration tagsize (in bits) must be one of 8, 16, 32 or 64.", a);
+                throw_pi_error(ctx.point, err);
+            }
+        }
+
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree edesc = raw.branch.nodes.data[i];
 
             if (edesc.type != RawBranch) {
@@ -1707,6 +1728,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SEnumType,
             .ptype = NULL,
             .range = raw.range,
+            .enum_type.tag_size = tag_size,
             .enum_type.variants = enum_variants,
         };
         return res;

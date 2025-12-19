@@ -476,6 +476,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(size-of I8)");
     }
 
+    if (test_start(log, mv_string("size-of-enum"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of (Enum :x :y))");
+    }
+
+    if (test_start(log, mv_string("size-of-enum"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(size-of (Enum 8 :x :y))");
+    }
+
     if (test_start(log, mv_string("align-of-I64"))) {
         uint64_t expected = 8;
         TEST_EQ("(size-of I64)");

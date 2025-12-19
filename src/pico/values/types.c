@@ -205,6 +205,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.structure.fields = copy_sym_addr_piamap(t.structure.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
     case TEnum:
+        out.enumeration.tag_size = t.enumeration.tag_size,
         out.enumeration.variants = copy_sym_addr_piamap(t.enumeration.variants, symbol_id, (TyCopier)copy_enum_variant, pia);
         break;
     case TReset:
@@ -753,9 +754,11 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TEnum: {
-        PtrArray nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
+        PtrArray head_nodes = mk_ptr_array(1 + type->enumeration.variants.len, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum", a)), a), a), &head_nodes);
+        push_ptr(pretty_u8(type->enumeration.tag_size, a), &head_nodes);
+
         PtrArray variants = mk_ptr_array(1 + type->enumeration.variants.len, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Enum", a)), a), a), &nodes);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->enumeration.variants.data[i].key, a), a), a);
@@ -783,6 +786,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(var_doc, &variants);
         }
 
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         push_ptr(mv_nest_doc(2, mv_sep_doc(variants, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1146,15 +1151,19 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TEnum: {
+        size_t align = 0;
         size_t max = 0; 
+        size_t tag_size = type.enumeration.tag_size / 8;
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
-            size_t total = 0;
+            size_t total = tag_size;
             PtrArray types = *(PtrArray*)type.enumeration.variants.data[i].val;
             for (size_t i = 0; i < types.len; i++) {
-                size_t field_align;
-                Result_t res = pi_maybe_align_of(*(PiType*)types.data[i], &field_align);
+                size_t var_align;
+                Result_t res = pi_maybe_align_of(*(PiType*)types.data[i], &var_align);
                 if (res != Ok) return res;
-                total = pi_size_align(total, field_align);
+                align = align > var_align ? align : var_align;
+
+                total = pi_size_align(total, var_align);
                 size_t field_size;
                 res = pi_maybe_size_of(*(PiType*)types.data[i], &field_size);
                 if (res != Ok) return res;
@@ -1167,7 +1176,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
 
         // Add 1 for tag!
-        *out = max + sizeof(uint64_t);
+        *out = max;
         return Ok;
     }
 
@@ -1470,7 +1479,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
     case TEnum:
         for (size_t i = 0; i < body->enumeration.variants.len; i++) {
-            PtrArray* variant = body->structure.fields.data[i].val;
+            PtrArray* variant = body->enumeration.variants.data[i].val;
             for (size_t j = 0; j < variant->len; j++) {
                 type_app_subst(variant->data[j], subst, shadowed, pia, a);
             }
@@ -1704,10 +1713,11 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         break;
     case TEnum:
         if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) return false;
+        if (lhs->enumeration.tag_size != rhs->enumeration.tag_size) return false;
 
         for (size_t i = 0; i < lhs->enumeration.variants.len; i++) {
-            SymAddrPiCell lhcell = lhs->structure.fields.data[i];
-            SymAddrPiCell rhcell = lhs->structure.fields.data[i];
+            SymAddrPiCell lhcell = lhs->enumeration.variants.data[i];
+            SymAddrPiCell rhcell = lhs->enumeration.variants.data[i];
             if (!symbol_eq(lhcell.key, rhcell.key)) 
                 return false;
             PtrArray* lhvars = lhcell.val;
@@ -2216,7 +2226,40 @@ PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...) {
     va_end(args);
 
     PiType* enumeration = call_alloc(sizeof(PiType), pia);
-    *enumeration = (PiType) {.sort = TEnum, .structure.fields = fields,};
+    *enumeration = (PiType) {
+      .sort = TEnum,
+      .enumeration.tag_size = 64,
+      .enumeration.variants = fields,
+    };
+    return enumeration;
+}
+
+PiType *mk_sz_enum_type(PiAllocator *pia, uint8_t tagsize, size_t nfields, ...) {
+    va_list args;
+    va_start(args, nfields);
+    
+    SymAddrPiAMap fields = mk_sym_addr_piamap(nfields, pia);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        int nargs = va_arg(args, int);
+        AddrPiList variant_args = mk_addr_list(nargs, pia);
+        for (int j = 0; j < nargs; j++) {
+            PiType* arg = va_arg(args, PiType*);
+            push_addr(arg, &variant_args);
+        }
+        AddrPiList* heap_variant_args = call_alloc(sizeof(AddrPiList), pia);
+        *heap_variant_args = variant_args;
+        sym_addr_insert(name, heap_variant_args, &fields);
+
+    }
+    va_end(args);
+
+    PiType* enumeration = call_alloc(sizeof(PiType), pia);
+    *enumeration = (PiType) {
+      .sort = TEnum,
+      .enumeration.tag_size = tagsize,
+      .enumeration.variants = fields,
+    };
     return enumeration;
 }
 
