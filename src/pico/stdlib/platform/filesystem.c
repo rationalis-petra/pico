@@ -7,6 +7,7 @@
 #include "pico/stdlib/core.h"
 
 static PiType* file_ty;
+static PiType* file_err_ty;
 static PiType* file_mode_ty;
 
 typedef struct {
@@ -14,7 +15,7 @@ typedef struct {
     uint64_t size;
 } MaybeSize;
 
-File *relic_open_file(String name, FilePermissions perms) {
+FileResult relic_open_file(String name, FilePermissions perms) {
     PiAllocator pia = get_std_perm_allocator();
     Allocator a = convert_to_callocator(&pia);
     return open_file(name, perms, &a);
@@ -36,11 +37,19 @@ U8Array relic_read_chunk(File *file, MaybeSize msize) {
     return read_chunk(file, !msize.tag, msize.size, &a);
 }
 
+CType build_file_result_ctype(PiAllocator* pia) {
+  return mk_struct_ctype(pia, 2,
+                         "type", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
+                         "payload", mk_union_ctype(pia, 2,
+                                                   "value", mk_voidptr_ctype(pia),
+                                                   "errcode", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong})));
+}
+
 void build_open_file_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
                                  "name", mk_string_ctype(pia),
                                  "mode", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
-                                 mk_voidptr_ctype(pia));
+                                 build_file_result_ctype(pia));
 
     convert_c_fn(relic_open_file, &fn_ctype, type, ass, a, point); 
 }
@@ -128,13 +137,21 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
         .data = mk_u8_array(0, &ra),
     };
 
-    typep = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "File", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("File"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def(sym, module);
     file_ty = e->value;
+
+    typep = mk_enum_type(pia, 2, "DoesNotExist", 0, "PermissionDenied", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("FileError"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    file_err_ty = e->value;
 
     typep = mk_enum_type(pia, 3, "read", 0, "write", 0, "read-write", 0, "append", 0, "read-append", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
@@ -145,8 +162,8 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     file_mode_ty = e->value;
 
     typep = mk_proc_type(pia, 2, mk_string_type(pia),
-                         copy_pi_type_p(file_mode_ty, pia),
-                         copy_pi_type_p(file_ty, pia));
+                         file_mode_ty,
+                         mk_enum_type(pia, 2, "ok", 1, file_ty, "err", 1, file_err_ty));
     build_open_file_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("open-file"));
     fn_segments.code = get_instructions(ass);

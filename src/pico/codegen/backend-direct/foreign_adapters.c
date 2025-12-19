@@ -229,7 +229,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function reuturn types -", a), &nodes);
+        push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function return types -", a), &nodes);
         push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
         push_ptr(mv_cstr_doc("and", a), &nodes);
         push_ptr(pretty_type(ptype->proc.ret, a), &nodes);

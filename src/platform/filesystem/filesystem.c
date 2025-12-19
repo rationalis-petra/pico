@@ -37,6 +37,7 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 #else
 #include <dirent.h>
 #include <unistd.h>
+#include <errno.h>
 #include <linux/limits.h>
 
     struct Directory {
@@ -45,8 +46,27 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 };
 #endif
 
+FileOpenError get_file_error_code() {
+#if OS_FAMILY == WINDOWS
+  switch (GetLastError()) {
+  default:
+      // TODO: surely there's a better solution than to panic?
+      panic(mv_string("Unrecognized error code."));
+  }
+#else
+  switch (errno) {
+  case EACCES:
+      return ErrFilePermissionDenied;
+  case ENOENT:
+      return ErrFileDoesNotExist;
+  default:
+      // TODO: surely there's a better solution than to panic?
+      panic(mv_string("Unrecognized error code."));
+  }
+#endif
+}
 
-Directory* open_directory(String name, Allocator* alloc) {
+DirectoryResult open_directory(String name, Allocator* alloc) {
     // TODO: what encoding to filenames use?
 #if OS_FAMILY == WINDOWS
 // TODO: the name here is ascii, but our strings are UTF-8!
@@ -65,9 +85,9 @@ Directory* open_directory(String name, Allocator* alloc) {
             .handle = handle,
             .gpa = alloc,
         };
-        return dir;
+        return (DirectoryResult) {.type = Ok, .directory = dir};
     } else {
-        return NULL;
+        return (DirectoryResult) {.type = Err, .error = get_file_error_code()};
     }
 #else
     DIR* handle = opendir((char*)name.bytes);
@@ -77,9 +97,9 @@ Directory* open_directory(String name, Allocator* alloc) {
             .handle = handle,
             .gpa = alloc,
         };
-        return dir;
+        return (DirectoryResult) {.type = Ok, .directory = dir};
     } else {
-        return NULL;
+        return (DirectoryResult) {.type = Err, .error = get_file_error_code()};
     }
 #endif
     
@@ -214,7 +234,7 @@ void set_current_directory(String path) {
 //     Directories 
 // ---------------------------------------------------------------------------
 
-File *open_file(String name, FilePermissions perms, Allocator *alloc) {
+FileResult open_file(String name, FilePermissions perms, Allocator *alloc) {
     const char *mode = NULL;
     switch (perms) {
     case Read:
@@ -238,11 +258,22 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
 
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
-    return (File*)fopen((char*)name.bytes, mode);
+    File* file = (File*)fopen((char*)name.bytes, mode);
+    if (file) {
+        return (FileResult) {.type = Ok, .file = file};
+    } else {
+        return (FileResult) {.type = Err, .error = get_file_error_code()};
+    }
+
 }
 
-File *open_tempfile(Allocator *alloc) {
-    return (File*) tmpfile();
+FileResult open_tempfile(Allocator *alloc) {
+    File* file = (File*)tmpfile();
+    if (file) {
+        return (FileResult) {.type = Ok, .file = file};
+    } else {
+        return (FileResult) {.type = Err, .error = get_file_error_code()};
+    }
 }
 
 void close_file(File *file) {

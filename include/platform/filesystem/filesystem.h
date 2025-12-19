@@ -4,10 +4,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "platform/memory/allocator.h"
 #include "data/meta/array_header.h"
-
+#include "data/result.h"
 #include "data/string.h"
+
+#include "platform/memory/allocator.h"
+
+// ---------------------------------------------------------------------------
+//     Errors 
+// ---------------------------------------------------------------------------
+
+typedef enum : uint64_t {
+    ErrFileDoesNotExist,
+    ErrFilePermissionDenied,
+} FileOpenError;
 
 // ---------------------------------------------------------------------------
 //     Paths 
@@ -22,13 +32,21 @@ String path_cat(String path1, String path2, Allocator* alloc);
 typedef struct Directory Directory;
 
 typedef struct {
+    Result_t type;
+    union {
+        Directory* directory;
+        FileOpenError error;
+    };
+} DirectoryResult;
+
+typedef struct {
     String name;
     bool is_directory;
 } DirectoryEntry;
 
 ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
 
-Directory* open_directory(String name, Allocator* alloc);
+DirectoryResult open_directory(String name, Allocator* alloc);
 void close_directory(Directory* directory);
 
 // List all entries in the current directory
@@ -50,12 +68,20 @@ void set_current_directory(String path);
 
 typedef struct File File;
 
+typedef struct {
+    Result_t type;
+    union {
+        File* file;
+        FileOpenError error;
+    };
+} FileResult;
+
 typedef enum {
     Read, Write, ReadWrite, Append, ReadAppend
 } FilePermissions;
 
-File* open_file(String name, FilePermissions perms, Allocator* alloc);
-File* open_tempfile(Allocator* alloc);
+FileResult open_file(String name, FilePermissions perms, Allocator* alloc);
+FileResult open_tempfile(Allocator* alloc);
 void close_file(File* file);
 
 String get_tmpdir(Allocator* a);

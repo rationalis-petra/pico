@@ -100,7 +100,12 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
 
 bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instance, RegionAllocator* region) {
     Allocator* stda = get_std_allocator();
-    Directory* dir = open_directory(path, stda);
+    DirectoryResult dir_res = open_directory(path, stda);
+    if (dir_res.type == Err) {
+        write_fstring(mv_string("Failed to open directory while loading atlas files."), out);
+    }
+
+    Directory* dir = dir_res.directory;
     DirEntArray entries = list_children(dir, stda);
 
     bool fail = false;
