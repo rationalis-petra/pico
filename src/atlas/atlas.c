@@ -3,8 +3,6 @@
 #include "platform/memory/region.h"
 #include "platform/filesystem/filesystem.h"
 
-#include "components/pretty/stream_printer.h"
-
 #include "atlas/atlas.h"
 
 #include "atlas/data/error.h"

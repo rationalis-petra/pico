@@ -1,6 +1,8 @@
 #include <math.h>
 #include "pico/parse/parse.h"
 
+#include "components/pretty/standard_types.h"
+
 // The main parsing functions, which parse different types of expressions. 
 // The entry point, parse_expr, which an arbitrary expression, inspects the head
 // of the input sream and delegates to a number of secondary parsing functions:  
@@ -180,13 +182,17 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         // Check that there is an appropriate (odd) number of terms for infix operator
         //   unrolling to function
         if (terms.len % 2 == 0) {
-          out = (ParseResult) {
-            .type = ParseFail,
-            .error.message = mv_cstr_doc("Inappropriate number of terms for infix-operator", a),
-            .error.range.start = terms.data[0].range.start,
-            .error.range.end = terms.data[terms.len - 1].range.end,
-          };
-          return out;
+            PtrArray nodes = mk_ptr_array(3, a);
+            push_ptr(mv_cstr_doc("Inappropriate number of terms for infix-operator, expecting odd number but got", a), &nodes);
+            push_ptr(pretty_u64(terms.len, a), &nodes);
+
+            out = (ParseResult) {
+                .type = ParseFail,
+                .error.message = mv_sep_doc(nodes, a),
+                .error.range.start = terms.data[0].range.start,
+                .error.range.end = terms.data[terms.len - 1].range.end,
+            };
+            return out;
         }
 
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
@@ -272,7 +278,15 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllo
     return out;
 }
 
+static ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a);
+
 ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
+    U32Array symchars = mk_u32_array(16, a);
+    size_t start = bytecount(is);
+    return parse_atom_prepped(symchars, start, is, pia, a);
+} 
+
+ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
      * and ':' such as Maybe:none and foo.var are also considered by the parser
@@ -284,10 +298,8 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     ParseResult out = {.type = ParseNone};
-    U32Array arr = mk_u32_array(16, a);
 
     RawTreePiList terms = mk_rawtree_list(8, pia);
-    size_t start = bytecount(is);
 
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
@@ -295,7 +307,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
-            push_u32(codepoint, &arr);
+            push_u32(codepoint, &symchars);
         } else if (codepoint == '.' || codepoint == ':') {
             size_t op_start = bytecount(is);
             next(is, &codepoint);
@@ -312,7 +324,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
             };
 
             // Store symbol
-            String str = string_from_UTF_32(arr, a);
+            String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
                 .range.start = start,
@@ -324,11 +336,11 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
             start = op_end;
 
             push_rawtree(val, &terms);
-            arr.len = 0; // reset array
+            symchars.len = 0; // reset array
 
             push_rawtree(op, &terms);
         } else {
-            String str = string_from_UTF_32(arr, a);
+            String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
                 .range.start = start,
@@ -343,7 +355,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
         }
     }
     if (result == StreamEnd) {
-        String str = string_from_UTF_32(arr, a);
+        String str = string_from_UTF_32(symchars, a);
         RawTree val = (RawTree) {
             .type = RawAtom,
             .range.start = start,
@@ -425,14 +437,20 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
     }
 
     if (just_negation) {
-        return (ParseResult) {
-            .type = ParseSuccess,
-            .result.type = RawAtom,
-            .result.range.start = start,
-            .result.range.end = bytecount(is),
-            .result.atom.type = ASymbol,
-            .result.atom.symbol = string_to_symbol(mv_string("-")),
-        };
+        if (is_whitespace(codepoint)) {
+            return (ParseResult) {
+                .type = ParseSuccess,
+                .result.type = RawAtom,
+                .result.range.start = start,
+                .result.range.end = bytecount(is),
+                .result.atom.type = ASymbol,
+                .result.atom.symbol = string_to_symbol(mv_string("-")),
+            };
+        } else {
+            U32Array symchars = mk_u32_array(16, a);
+            push_u32('-', &symchars);
+            return parse_atom_prepped(symchars, start, is, pia, a);
+        }
     }
 
 

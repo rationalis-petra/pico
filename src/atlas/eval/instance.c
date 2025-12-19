@@ -292,13 +292,13 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         reset_subregion(iter_region);
         refresh_env(env);
 
-        ParseResult res = parse_rawtree(cin, &pico_itera, &itera);
-        if (res.type == ParseNone) goto on_exit;
+        ph_res = parse_rawtree(cin, &pico_itera, &itera);
+        if (ph_res.type == ParseNone) goto on_exit;
 
-        if (res.type == ParseFail) {
+        if (ph_res.type == ParseFail) {
             goto on_parse_error;
         }
-        if (res.type != ParseSuccess) {
+        if (ph_res.type != ParseSuccess) {
             panic(mv_string("Parse Returned Invalid Result!\n"));
         }
 
@@ -306,7 +306,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &itera, &pi_point);
+        TopLevel abs = abstract(ph_res.result, env, &itera, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking

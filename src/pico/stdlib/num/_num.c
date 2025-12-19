@@ -4,7 +4,7 @@
 #include "data/float.h"
 
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/num.h"
+#include "pico/stdlib/num/num.h"
 #include "pico/codegen/codegen.h"
 
 PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
