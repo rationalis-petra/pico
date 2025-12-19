@@ -527,11 +527,15 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
             switch (uvar->constraints.data[i].type) {
             case ConInt:
                 if (unwrapped->sort != TPrim || unwrapped->prim > 0b111) {
-                  return (UnifyResult) {
-                    .type = UConstraintError,
-                    .initial = uvar->constraints.data[i].range,
-                    .message = mv_cstr_doc("Does not satisfy integral constraint.", a)
-                  };
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_cstr_doc("Type does not satisfy integral constraint:", a), &nodes);
+                    push_ptr(pretty_type(type, a), &nodes);
+
+                    return (UnifyResult) {
+                        .type = UConstraintError,
+                        .initial = uvar->constraints.data[i].range,
+                        .message = mv_hsep_doc(nodes, a)
+                    };
                 }
                 break;
             case ConFloat:

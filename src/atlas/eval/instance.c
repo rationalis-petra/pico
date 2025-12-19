@@ -276,7 +276,18 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
-    Environment* env = env_from_module(module, &err_point, &ra);
+    ErrorPoint env_point;
+    if (catch_error(env_point)) {
+        pi_point.multi = (MultiError) {
+            .has_many = false,
+            .error.message = mv_str_doc(env_point.error_message, &ra),
+            .error.range = header->range,
+        };
+
+        goto on_pi_error;
+    }
+    Environment* env = env_from_module(module, &env_point, &ra);
+
     while (next_iter) {
         reset_subregion(iter_region);
         refresh_env(env);
@@ -350,13 +361,31 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     }
 
  on_pi_error: {
+        MultiError error;
         if (pi_point.multi.has_many) {
-            panic(mv_string("Atlas needs to accommodate multi-errors being thrown when loading files"));
+            PtrArray copied_errors = mk_ptr_array(pi_point.multi.errors.len, &ra); 
+            for (size_t i = 0; i < pi_point.multi.errors.len; i++) {
+                PicoError* old_error = pi_point.multi.errors.data[i];
+                PicoError* new_error = mem_alloc(sizeof(PicoError), &ra);
+                *new_error = (PicoError) {
+                    .range = old_error->range,
+                    .message = copy_doc(old_error->message, &ra),
+                };
+                push_ptr(new_error, &copied_errors);
+            }
+            error = (MultiError) {
+                .has_many = true,
+                .errors = copied_errors,
+            };
+        } else {
+          error = (MultiError) {
+              .has_many = false,
+              .error.message = copy_doc(pi_point.multi.error.message, &ra),
+              .error.range = pi_point.multi.error.range,
+          };
         }
-        Document* out = copy_doc(pi_point.multi.error.message, &ra);
-        AtlasError new_err = {
-            .range = pi_point.multi.error.range,
-            .message = out,
+        AtlasMultiError new_err = {
+            .error = error,
             .filename = filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
@@ -366,7 +395,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         release_subregion(iter_region);
         release_executable_allocator(exec);
 
-        throw_at_error(point, new_err);
+        throw_at_multi_error(point, new_err);
     }
     
 

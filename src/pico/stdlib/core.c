@@ -26,6 +26,11 @@ PiType* get_either_type() {
     return either_type;
 }
 
+static PiType* result_type;
+PiType* get_result_type() {
+    return result_type;
+}
+
 static PiType* pair_type;
 PiType* get_pair_type() {
     return pair_type;
@@ -593,6 +598,24 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
         e = get_def(sym, module);
         either_type = e->value;
+
+        // Result Type 
+        vars = mk_sym_list(2, &pia);
+        push_sym(string_to_symbol(mv_string("Value")), &vars);
+        push_sym(string_to_symbol(mv_string("Error")), &vars);
+        type.kind.nargs = 2;
+
+        type_val = mk_named_type(&pia, "Result", mk_type_family(&pia,
+                                                             vars,
+                                                             mk_enum_type(&pia, 2,
+                                                                          "ok", 1, mk_var_type(&pia, "Value"),
+                                                                          "error", 1, mk_var_type(&pia, "Error"))));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Result"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        e = get_def(sym, module);
+        result_type = e->value;
 
         // Pair Type 
         vars = mk_sym_list(2, &pia);

@@ -29,7 +29,8 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 
 #if OS_FAMILY == WINDOWS
 #include <windows.h>
-    struct Directory {
+
+struct Directory {
     HANDLE handle;
     Allocator* gpa;
 };
@@ -40,13 +41,14 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 #include <errno.h>
 #include <linux/limits.h>
 
-    struct Directory {
+struct Directory {
     DIR* handle;
     Allocator* gpa;
 };
 #endif
 
 FileOpenError get_file_error_code() {
+    // TODO: account for all documented possible error codes.
 #if OS_FAMILY == WINDOWS
   switch (GetLastError()) {
   default:

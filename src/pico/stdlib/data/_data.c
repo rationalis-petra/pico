@@ -23,6 +23,8 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_either_module(target, module, subregion);
     reset_subregion(subregion);
+    add_result_module(target, module, subregion);
+    reset_subregion(subregion);
     add_maybe_module(target, module, subregion);
     reset_subregion(subregion);
     add_pair_module(target, module, subregion);

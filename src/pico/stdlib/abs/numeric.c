@@ -25,7 +25,7 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
         //panic(doc_to_str(pi_point.error.message, 120, a));
-        panic(mv_string("pico error in abs/numeric.c"));
+        panic(mv_string("pico error in pico/stdlib/abs/numeric.c"));
     }
 
     ErrorPoint point;

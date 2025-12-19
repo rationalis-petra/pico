@@ -23,6 +23,8 @@ void add_abs_module(Target target, Package* base, RegionAllocator* region) {
     RegionAllocator* subregion = make_subregion(region);
     add_numeric_module(target, module, subregion);
     reset_subregion(subregion);
+    add_order_module(target, module, subregion);
+    reset_subregion(subregion);
     add_show_module(target, module, subregion);
     release_subregion(subregion);
 

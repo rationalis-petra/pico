@@ -30,8 +30,10 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
     // that we the (start, end) range in the error to avoid segfaults and provide
     // friendlier errors.
 
-    write_fstring(filename, fos);
-    write_fstring(mv_string(": \n\n"), fos);
+    if (filename.bytes) {
+        write_fstring(filename, fos);
+        write_fstring(mv_string(": \n\n"), fos);
+    }
 
     if (multi.has_many) {
         for (size_t i = 0; i < multi.errors.len; i++) {
@@ -62,6 +64,16 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
 
 }
 
+void write_linenum(uint64_t line_number, uint64_t max_width, FormattedOStream* fos, Allocator* a) {
+    String strnum = string_u64(line_number, a);
+    write_fstring(strnum, fos);
+    for (size_t i = 0; i < max_width - strnum.memsize; i++) {
+        write_fstring(mv_string(" "), fos);
+    }
+    write_fstring(mv_string(" | "), fos);
+    delete_string(strnum, a);
+}
+
 void display_code_region(String buffer, Range range, const size_t lines_prior, FormattedOStream* fos, Allocator* a) {
     // Get the line number of the affected area, and the start position of at most 
     // the previous max_prev_line_numbers lines
@@ -90,9 +102,21 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
     start_coloured_text(regular_code_colour, fos);
     // Now, gather the past n lines
 
-    String strnum = string_u64(line_number + 1, a);
-    size_t line_width = strnum.memsize;
-    delete_string(strnum, a);
+    String bad_code = substring(range.start, range.end, buffer, a);
+    size_t line_width;
+    {
+        uint64_t max_line_number = line_number + 1;
+        size_t i = 0;
+        for (; i < bad_code.memsize; i++) {
+            if (bad_code.bytes[i] == '\n') {
+                max_line_number++;
+            }
+        }
+
+        String strnum = string_u64(max_line_number, a);
+        line_width = strnum.memsize;
+        delete_string(strnum, a);
+    }
     if (line_number < lines_prior) {
         for (size_t i = 0; i < line_number; i++) {
             size_t line_start = prev_line_starts.data[i];
@@ -100,13 +124,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                 ? current_start
                 : prev_line_starts.data[1 + i];
 
-            String strnum = string_u64(i + 1, a);
-            for (size_t i = 0; i < line_width - strnum.memsize; i++) {
-                write_fstring(mv_string(" "), fos);
-            }
-            write_fstring(strnum, fos);
-            delete_string(strnum, a);
-            write_fstring(mv_string(" | "), fos);
+            write_linenum(i + 1, line_width, fos, a);
             String str = substring(line_start, next_line_start, buffer, a);
             write_fstring(str, fos);
             delete_string(str, a);
@@ -119,13 +137,7 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                 ? current_start
                 : prev_line_starts.data[(prev_line + 1 + i) % lines_prior];
 
-            String strnum = string_u64(line_number + 1 - (lines_prior - i), a);
-            for (size_t i = 0; i < line_width - strnum.memsize; i++) {
-                write_fstring(mv_string(" "), fos);
-            }
-            write_fstring(strnum, fos);
-            write_fstring(mv_string(" | "), fos);
-            delete_string(strnum, a);
+            write_linenum(line_number + 1 - (lines_prior - i), line_width, fos, a);
 
             String str = substring(line_start, next_line_start, buffer, a);
             write_fstring(str, fos);
@@ -133,15 +145,10 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
         }
     }
 
-    Document* doc = pretty_u64(++line_number, a);
-    write_doc_formatted(doc, 80, fos);
-    delete_doc(doc, a);
-    write_fstring(mv_string(" | "), fos);
+    write_linenum(++line_number, line_width, fos, a);
 
     // The 'bad region' may take multiple lines of code, so we check that
     String s1 = substring(current_start, range.start, buffer, a);
-    // TODO (BUG) '+1' won't work with UTF-8!
-    String bad_code = substring(range.start, range.end, buffer, a);
     String s2 = substring(range.end, affected_line_end, buffer, a);;
 
     write_fstring(s1, fos);
@@ -155,12 +162,10 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
             if (bad_code.bytes[i] == '\n') {
                 String bad_line = substring(start_idx, i + 1, bad_code, a);
                 if (start_idx != 0) {
-                    Document* doc = pretty_u64(++line_number, a);
+                    start_coloured_text(regular_code_colour, fos);
+                    write_linenum(++line_number, line_width, fos, a);
                     end_coloured_text(fos);
-                    write_doc_formatted(doc, 80, fos);
-                    delete_doc(doc, a);
-                    write_fstring(mv_string(" | "), fos);
-                    start_coloured_text(colour(208, 105, 30), fos);
+                    start_coloured_text(bad_code_colour, fos);
                 }
                 write_fstring(bad_line, fos);
                 delete_string(bad_line, a);
@@ -169,12 +174,9 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
         }
         String bad_line = substring(start_idx, i, bad_code, a);
         if (start_idx != 0) {
-            line_number++;
-            Document* doc = pretty_u64(line_number, a);
+            start_coloured_text(regular_code_colour, fos);
+            write_linenum(++line_number, line_width, fos, a);
             end_coloured_text(fos);
-            write_doc_formatted(doc, 80, fos);
-            delete_doc(doc, a);
-            write_fstring(mv_string(" | "), fos);
             start_coloured_text(bad_code_colour, fos);
         } 
         write_fstring(bad_line, fos);

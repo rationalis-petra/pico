@@ -12,6 +12,7 @@ void add_memory_module(Target target, Module* base, RegionAllocator* region);
 void add_pair_module(Target target, Module* base, RegionAllocator* region);
 void add_maybe_module(Target target, Module* base, RegionAllocator* region);
 void add_either_module(Target target, Module* base, RegionAllocator* region);
+void add_result_module(Target target, Module* base, RegionAllocator* region);
 
 void add_list_module(Target target, Module* base, RegionAllocator* region);
 void add_string_module(Target target, Module* base, RegionAllocator* region);

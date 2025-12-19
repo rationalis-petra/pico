@@ -348,12 +348,24 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected ", a), &nodes);
-                push_ptr(pretty_u64(fn_type.proc.args.len, a), &nodes);
-                push_ptr(mv_cstr_doc("but got ", a), &nodes);
-                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
-                err.message = mv_hsep_doc(nodes, a);
+                PtrArray err_nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected", a), &err_nodes);
+                push_ptr(pretty_u64(fn_type.proc.args.len, a), &err_nodes);
+                push_ptr(mv_cstr_doc("but got ", a), &err_nodes);
+
+                PtrArray cat_nodes = mk_ptr_array(2, a);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &cat_nodes);
+                push_ptr(mv_cstr_doc(".", a), &cat_nodes);
+                push_ptr(mv_cat_doc(cat_nodes, a), &err_nodes);
+
+                PtrArray supplement_nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("The function being applied has type:", a), &supplement_nodes);
+                push_ptr(mv_nest_doc(2, pretty_type(&fn_type, a), a), &supplement_nodes);
+
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_hsep_doc(err_nodes, a), &nodes);
+                push_ptr(mv_hsep_doc(supplement_nodes, a), &nodes);
+                err.message = mv_vsep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 

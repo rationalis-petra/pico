@@ -27,7 +27,7 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        panic(mv_string("pico error in abs/string.c"));
+        panic(mv_string("pico error in pico/stdlib/abs/show.c"));
     }
 
     ErrorPoint point;

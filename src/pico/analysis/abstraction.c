@@ -197,6 +197,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         .name = module_name,
         .imports = imports,
         .exports = exports,
+        .range = raw.range,
     };
     return out;
 }

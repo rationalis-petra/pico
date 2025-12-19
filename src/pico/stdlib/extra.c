@@ -568,6 +568,77 @@ void build_ann_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator*
     convert_c_fn(ann_macro, &fn_ctype, type, ass, a, point); 
 }
 
+MacroResult when_macro(RawTreePiList nodes) {
+    if (nodes.len < 3) {
+        return (MacroResult) {
+            .result_type = Left,
+            .err.message = mv_string("Malformed annotation (ann): expected at least three terms"),
+            .err.range = nodes.data[0].range,
+        };
+    }
+
+    PiAllocator pia = get_std_current_allocator();
+    RawTreePiList if_nodes = mk_rawtree_list(3, &pia);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("if")),
+        }, &if_nodes);
+
+    push_rawtree(nodes.data[1], &if_nodes);
+
+    RawTreePiList unit_nodes = mk_rawtree_list(2, &pia);
+
+    // push <type>
+    RawTree body;
+    if (nodes.len == 3) {
+        body = nodes.data[2];
+    } else {
+        const size_t drop = 2;
+        body = (RawTree) {
+            .type = RawBranch,
+            .range.start = nodes.data[drop].range.start,
+            .range.end = nodes.data[nodes.len - 1].range.end,
+            .branch.hint = HExpression,
+            .branch.nodes.len = nodes.len - drop,
+            .branch.nodes.size = nodes.size - drop,
+            .branch.nodes.data = nodes.data + drop,
+            .branch.nodes.gpa = nodes.gpa,
+        };
+    }
+    push_rawtree(body, &if_nodes);
+
+    // push ':unit'
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string(":")),
+        }, &unit_nodes);
+    push_rawtree((RawTree) {
+            .type = RawAtom,
+            .atom.type = ASymbol,
+            .atom.symbol = string_to_symbol(mv_string("unit")),
+        }, &unit_nodes);
+    push_rawtree((RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = unit_nodes,
+        }, &if_nodes);
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term.type = RawBranch,
+        .term.branch.hint = HExpression,
+        .term.branch.nodes = if_nodes,
+    };
+}
+
+void build_when_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "nodes", mk_list_ctype(pia), mk_macro_result_ctype(pia));
+
+    convert_c_fn(when_macro, &fn_ctype, type, ass, a, point); 
+}
+
 void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
@@ -631,6 +702,14 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     typep = mk_prim_type(pia, TMacro);
     build_ann_macro(macro_proc, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("ann"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_prim_type(pia, TMacro);
+    build_when_macro(macro_proc, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("when"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

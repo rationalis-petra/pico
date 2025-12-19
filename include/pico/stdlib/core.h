@@ -10,6 +10,7 @@ PiType* get_list_type();
 PiType* get_maybe_type();
 PiType* get_pair_type();
 PiType* get_either_type();
+PiType* get_result_type();
 
 PiType* get_allocator_vtable_type();
 PiType* get_allocator_type();

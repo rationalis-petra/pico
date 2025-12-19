@@ -174,16 +174,7 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         AtErrorPoint point;
         if (catch_error(point)) {
             Allocator ra = ra_to_gpa(region);
-            MultiError error = (MultiError) {
-              .has_many = false,
-              .error = (PicoError) {.range = point.error.range, .message = point.error.message},
-            };
-            if (point.error.filename.bytes == NULL) {
-                write_doc_formatted(point.error.message, 120, out);
-                write_fstring(mv_string("\n"), out);
-            } else {
-                display_error(error, point.error.captured_file, out, point.error.filename, &ra);
-            }
+            display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
             if (!fail) {
                 atlas_run(instance, command.run.target, region, &point);
