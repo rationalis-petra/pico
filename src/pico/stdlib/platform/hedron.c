@@ -39,6 +39,8 @@ static PiType* descriptor_copy_ty;
 
 static PiType* buffer_ty;
 static PiType* buffer_sort_ty;
+static PiType* image_ty;
+static PiType* image_format_ty;
 
 static PiType* command_pool_ty;
 static PiType* command_buffer_ty;
@@ -184,6 +186,24 @@ void build_buffer_set_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 void build_set_buffer_data_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2, "buffer", mk_voidptr_ctype(pia), "data", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
     convert_c_fn(set_buffer_data, &fn_ctype, type, ass, a, point); 
+}
+
+void build_create_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 3, 
+                                 "width", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
+                                 "height", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
+                                 "format", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
+                                 mk_voidptr_ctype(pia));
+
+    convert_c_fn(create_image, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, 
+                                 "image", mk_voidptr_ctype(pia), 
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(destroy_image, &fn_ctype, type, ass, a, point); 
 }
 
 // Descriptor Sets
@@ -475,6 +495,22 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     buffer_ty = e->value;
 
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Image", mk_prim_type(pia, Address)));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Image"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    image_ty = e->value;
+
+    typep = mk_enum_type(pia, 1, "r8-g8-b8-a8-srgb", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("ImageFormat"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    image_format_ty = e->value;
+
     typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandPool", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
@@ -634,7 +670,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     attribute_desc_ty = e->value;
 
-    typep = mk_enum_type(pia, 3, "vertex", 0, "index", 0, "uniform", 0);
+    typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "transfer-source", 0, "transfer-destination", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("BufferSort"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -729,6 +765,22 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 2, copy_pi_type_p(buffer_ty, pia), mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
     build_set_buffer_data_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("set-buffer-data"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), image_format_ty, image_ty);
+    build_create_image_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("create-image"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, image_ty, mk_prim_type(pia, Unit));
+    build_destroy_image_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("destroy-image"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

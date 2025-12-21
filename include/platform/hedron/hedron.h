@@ -48,6 +48,8 @@ typedef enum {
     VertexBuffer = 0,
     IndexBuffer = 1,
     UniformBuffer = 2,
+    TransferSourceBuffer = 3,
+    TransferDestinationBuffer = 4,
 } BufferType;
 
 typedef enum {
@@ -61,6 +63,15 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size);
 void destroy_buffer(HedronBuffer* buffer);
 
 void set_buffer_data(HedronBuffer* buffer, void* data);
+
+typedef struct HedronImage HedronImage;
+
+typedef enum {
+    R8G8B8A8_SRGB,
+} ImageFormat;
+
+HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format);
+void destroy_image(HedronImage* image);
 
 // Descriptor Sets
 // ----------------------------------

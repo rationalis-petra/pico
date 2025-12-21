@@ -1139,7 +1139,7 @@ uint32_t find_memory_type(uint32_t filter, VkMemoryPropertyFlags properties) {
 }
 
 
-HedronBuffer *create_buffer(BufferType type, uint64_t size) {
+HedronBuffer* create_buffer(BufferType type, uint64_t size) {
     uint32_t buffer_usage = 0;
     switch (type) {
     case VertexBuffer: buffer_usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -1147,6 +1147,10 @@ HedronBuffer *create_buffer(BufferType type, uint64_t size) {
     case IndexBuffer: buffer_usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
         break;
     case UniformBuffer: buffer_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        break;
+    case TransferSourceBuffer: buffer_usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        break;
+    case TransferDestinationBuffer: buffer_usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         break;
     }
 
@@ -1159,7 +1163,7 @@ HedronBuffer *create_buffer(BufferType type, uint64_t size) {
 
     VkBuffer vertex_buffer;
     if (vkCreateBuffer(logical_device, &buffer_info, NULL, &vertex_buffer) != VK_SUCCESS) {
-        panic(mv_string("failed to create vertex buffer!"));
+        panic(mv_string("failed to create vulkan buffer!"));
     }
 
     VkMemoryRequirements mem_requirements;
@@ -1199,6 +1203,69 @@ void set_buffer_data(HedronBuffer* buffer, void* source) {
     vkMapMemory(logical_device, buffer->device_memory, 0, buffer->size, 0, &data);
     memcpy(data, source, buffer->size);
     vkUnmapMemory(logical_device, buffer->device_memory);
+}
+
+struct HedronImage {
+    VkImage image;
+    VkDeviceMemory image_memory;
+};
+
+HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
+    uint64_t image_format = 0;
+    switch (format) {
+    case R8G8B8A8_SRGB:
+        image_format = VK_FORMAT_R8G8B8A8_SRGB;
+    }
+
+    VkImageCreateInfo imageInfo = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .extent.width = width,
+        .extent.height = height,
+        .extent.depth = 1,
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .format = image_format,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .flags = 0,
+    };
+
+    VkImage vk_image;
+    if (vkCreateImage(logical_device, &imageInfo, NULL, &vk_image)) {
+        panic(mv_string("failed to create image"));
+    }
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(logical_device, vk_image, &memRequirements);
+
+    VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = find_memory_type(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+    };
+
+    VkDeviceMemory image_memory;
+    if (vkAllocateMemory(logical_device, &alloc_info, NULL, &image_memory) != VK_SUCCESS) {
+        panic(mv_string("failed to allocate image memory!"));
+    }
+
+    vkBindImageMemory(logical_device, vk_image, image_memory, 0);
+
+    HedronImage* out = mem_alloc(sizeof(HedronImage), hd_alloc);
+    *out = (HedronImage) {
+        .image = vk_image,
+        .image_memory = image_memory,
+    };
+    
+    return out;
+}
+
+void destroy_image(HedronImage *image) {
+    vkDestroyImage(logical_device, image->image, NULL);
+    vkFreeMemory(logical_device, image->image_memory, NULL);
 }
 
 // -----------------------------------------------------------------------------
