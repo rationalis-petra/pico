@@ -18,7 +18,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0x48, 0x83, 0xC0, 0x0C, 0x90 };
             build_binary_op(Add, reg(RAX, sz_64), imm8(12), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -28,7 +28,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0x48, 0x03, 0xD9, 0x90 };
             build_binary_op(Add, reg(RBX, sz_64), reg(RCX, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -38,7 +38,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0x49, 0x03, 0x51, 0x08, 0x90 };
             build_binary_op(Add, reg(RDX, sz_64), rref8(R9, 8, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -49,7 +49,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] =  { 0x41, 0x02, 0x51, 0x08, 0x90 } ;
             build_binary_op(Add, reg(RDX, sz_8), rref8(R9, 8, sz_8), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -59,7 +59,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] =  { 0x40, 0x88, 0x7E, 0x08, 0x90 } ;
             build_binary_op(Mov, rref8(RSI, 8, sz_8), reg(RDI, sz_8), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -69,7 +69,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0xF3, 0x0F, 0x10, 0xC1, 0x90 };
             build_binary_op(MovSS, reg(XMM0, sz_32), reg(XMM1, sz_32), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -79,7 +79,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0xF3, 0x0F, 0x10, 0x54, 0x24, 0x08, 0x90 };
             build_binary_op(MovSS, reg(XMM2, sz_32), rref8(RSP, 8, sz_32), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -89,7 +89,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0xF3, 0x0F, 0x11, 0x6F, 0x08, 0x90 };
             build_binary_op(MovSS, rref8(RDI, 8, sz_32), reg(XMM5, sz_32), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -99,7 +99,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] =  { 0x48, 0xF2, 0x0F, 0x10, 0x44, 0x24, 0x08, 0x90 } ;
             build_binary_op(MovSD, reg(XMM0, sz_64), rref8(RSP, 8, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -109,7 +109,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0x48, 0xF2, 0x0F, 0x11, 0x6F, 0x08, 0x90 };
             build_binary_op(MovSD, rref8(RDI, 8, sz_64), reg(XMM5, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -119,7 +119,7 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0xF2, 0x0F, 0x5A, 0xDF , 0x90 };
             build_binary_op(CvtSD2SS, reg(XMM3, sz_32), reg(XMM7, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }
@@ -129,7 +129,27 @@ void run_assembler_tests(TestLog *log, Allocator *a) {
             uint8_t expected[] = { 0xF2, 0x0F, 0x5A, 0x62, 0x08, 0x90 };
             build_binary_op(CvtSD2SS, reg(XMM4, sz_32), rref8(RDX, 8, sz_64), ass, &gpa, &point);
 
-            check_asm_eq(expected, ass, a, log);
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("bswap-r64"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0x48, 0x0F, 0xCE, 0x90 };
+            build_unary_op(BSwap, reg(RSI, sz_64), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("bswap-r32"))) { // MovSD XMM0, XMM1
+        ASM_TEST() {
+            uint8_t expected[] = { 0x0F, 0xC9,  0x90 };
+            build_unary_op(BSwap, reg(RCX, sz_32), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);
         }
     }

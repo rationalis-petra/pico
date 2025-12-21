@@ -6,7 +6,7 @@
 #include "components/pretty/document.h"
 
 typedef struct {
-    volatile Document* error_message; 
+    Document* volatile error_message; 
     jump_buf buf; 
 } ErrorPoint;
 

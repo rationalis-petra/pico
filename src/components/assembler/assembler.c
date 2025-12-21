@@ -1482,9 +1482,7 @@ typedef enum UnaryEncOrder {
 typedef struct {
     bool valid;
     bool use_size_prefix;
-    bool use_modrm_byte;
     uint8_t num_immediate_bytes;
-    UnaryEncOrder order;
 } UnaryTableEntry;
 
 typedef struct {
@@ -1497,6 +1495,8 @@ typedef struct {
     // the initial value of the REX byte. As 0 is an invalid REX byte, set to 0
     // if not used!
     uint8_t init_rex_byte; 
+    // Encoding order.
+    UnaryEncOrder order;
 } UnaryOpEntry;
 
 // 128 - 2 bits for Dest (3 possibilities: Register/Deref/Immediate)
@@ -1518,83 +1518,61 @@ void build_unary_table() {
     }
 
     // r/m64
-    unary_table[uindex(Dest_Register, sz_64)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Register, sz_64)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Deref, sz_64)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Deref, sz_64)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Register, sz_32)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Register, sz_32)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Deref, sz_32)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Deref, sz_32)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Register, sz_16)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Register, sz_16)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = true,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Deref, sz_16)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Deref, sz_16)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = true,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Register, sz_8)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Register, sz_8)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
-    unary_table[uindex(Dest_Deref, sz_8)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Deref, sz_8)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = true,
         .num_immediate_bytes = 0,
-        .order = M,
     };
 
-    unary_table[uindex(Dest_Immediate, sz_8)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_8)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = false,
         .num_immediate_bytes = 1,
-        .order = I,
     };
-    unary_table[uindex(Dest_Immediate, sz_16)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_16)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = true,
-        .use_modrm_byte = false,
         .num_immediate_bytes = 2,
-        .order = I,
     };
-    unary_table[uindex(Dest_Immediate, sz_32)] = (UnaryTableEntry){
+    unary_table[uindex(Dest_Immediate, sz_32)] = (UnaryTableEntry) {
         .valid = true,
         .use_size_prefix = false,
-        .use_modrm_byte = false,
         .num_immediate_bytes = 4,
-        .order = I,
     };
 }
 
@@ -1611,178 +1589,187 @@ void build_unary_opcode_table() {
     // Call
     // r/m64 only! 
     unary_opcode_table[Call][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2, .order = M};
     unary_opcode_table[Call][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x2, .order = M};
 
     // Push
     // r/m 64, imm8,32
     unary_opcode_table[Push][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6, .order = M};
     unary_opcode_table[Push][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x6, .order = M};
 
     unary_opcode_table[Push][uindex(Dest_Immediate, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0x6A,};
+        (UnaryOpEntry) {.opcode = 0x6A, .order = I};
     // 16-bit pushes get extended to 32??
     /* unary_opcode_table[Push][uindex(Immediate, sz_16)] = */
     /*     (UnaryOpEntry) {.opcode = 0x68, .opcode_modrm = 0x6, .init_rex_byte = 0x0}; */
     unary_opcode_table[Push][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0x68,};
+        (UnaryOpEntry) {.opcode = 0x68, .order = I};
 
     unary_opcode_table[Pop][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0x8F,};
+        (UnaryOpEntry) {.opcode = 0x8F, .order = M};
     unary_opcode_table[Pop][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0x8F,};
+        (UnaryOpEntry) {.opcode = 0x8F, .order = M};
 
     // ------------------
     //  Jumps
     // ------------------
     // jumps are imm/8, and imm/32 (64-bit mode doesn't support 16-bit jumps)
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0x74,};
+        (UnaryOpEntry) {.opcode = 0x74, .order = I};
     unary_opcode_table[JE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x84,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x84, .order = I};
 
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0x75,};
+        (UnaryOpEntry) {.opcode = 0x75, .order = I};
     unary_opcode_table[JNE][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x85,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x85, .order = I};
 
     unary_opcode_table[JMP][uindex(Dest_Immediate, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xEB,};
+        (UnaryOpEntry) {.opcode = 0xEB, .order = I};
     unary_opcode_table[JMP][uindex(Dest_Immediate, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xE9, };
+        (UnaryOpEntry) {.opcode = 0xE9, .order = I};
 
     unary_opcode_table[JMP][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4, .order = M};
     unary_opcode_table[JMP][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,};
+        (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4, .order = M};
 
     // --------------------------------
     //  Set Byte based on flag, logic
     // --------------------------------
     unary_opcode_table[Not][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x2};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x2, .order = M};
     unary_opcode_table[Not][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x2};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x2, .order = M};
 
     // TODO (BUG): in the future, change this to sz_8, as only sets r/m 8!
     // TODO (INVESTIGATE): confirm if this is true, or doesit overwrite the
     //      entire register?
     unary_opcode_table[SetE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x94, .order = M};
     unary_opcode_table[SetNE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x95,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x95, .order = M};
     // TODO (FEAT): when sz/8 becomes available for Deref, enable this!
     /* unary_opcode_table[SetE][uindex(Deref, sz_64)] = */
     /*     (UnaryOpEntry) {.opcode = 0xFF, .opcode_modrm = 0x4,}; */
 
     unary_opcode_table[SetA][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x97,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x97, .order = M};
     unary_opcode_table[SetAE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x93,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x93, .order = M};
     unary_opcode_table[SetB][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x92,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x92, .order = M};
     unary_opcode_table[SetBE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x96,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x96, .order = M};
     unary_opcode_table[SetL][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9C,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9C, .order = M};
     unary_opcode_table[SetLE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9E,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9E, .order = M};
     unary_opcode_table[SetG][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9F,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9F, .order = M};
     unary_opcode_table[SetGE][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9D,};
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0x9D, .order = M};
 
     // ------------------
     //  Arithmetic
     // ------------------
 
     unary_opcode_table[Neg][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Neg][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Neg][uindex(Dest_Register, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .order = M};
     unary_opcode_table[Neg][uindex(Dest_Deref, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, };
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .order = M};
     unary_opcode_table[Neg][uindex(Dest_Register, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .order = M};
     unary_opcode_table[Neg][uindex(Dest_Deref, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x03, .order = M};
     unary_opcode_table[Neg][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
     unary_opcode_table[Neg][uindex(Dest_Deref, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x03, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
 
     unary_opcode_table[Mul][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Mul][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Mul][uindex(Dest_Register, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .order = M};
     unary_opcode_table[Mul][uindex(Dest_Deref, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, };
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .order = M};
     unary_opcode_table[Mul][uindex(Dest_Register, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .order = M};
     unary_opcode_table[Mul][uindex(Dest_Deref, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x04, .order = M};
     unary_opcode_table[Mul][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x04, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x04, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
     unary_opcode_table[Mul][uindex(Dest_Deref, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x04, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x04, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
 
     unary_opcode_table[Div][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Div][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[Div][uindex(Dest_Register, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .order = M};
     unary_opcode_table[Div][uindex(Dest_Deref, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .order = M};
     unary_opcode_table[Div][uindex(Dest_Register, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .order = M};
     unary_opcode_table[Div][uindex(Dest_Deref, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x06, .order = M};
     unary_opcode_table[Div][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x06, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x06, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
     unary_opcode_table[Div][uindex(Dest_Deref, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x06, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x06, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
 
     unary_opcode_table[IMul][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[IMul][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[IMul][uindex(Dest_Register, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .order = M};
     unary_opcode_table[IMul][uindex(Dest_Deref, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .order = M};
     unary_opcode_table[IMul][uindex(Dest_Register, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .order = M};
     unary_opcode_table[IMul][uindex(Dest_Deref, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x05, .order = M};
     unary_opcode_table[IMul][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x05, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x05, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
     unary_opcode_table[IMul][uindex(Dest_Deref, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x05, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x05, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
 
     unary_opcode_table[IDiv][uindex(Dest_Register, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Deref, sz_64)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .init_rex_byte = 0b01001000, /*REX.W*/ .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Register, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Deref, sz_32)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Register, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Deref, sz_16)] =
-        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07,};
+        (UnaryOpEntry) {.opcode = 0xF7, .opcode_modrm = 0x07, .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Register, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x07, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x07, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
     unary_opcode_table[IDiv][uindex(Dest_Deref, sz_8)] =
-        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x07, .init_rex_byte = 0b01000000, /*REX*/};
+        (UnaryOpEntry) {.opcode = 0xF6, .opcode_modrm = 0x07, .init_rex_byte = 0b01000000, /*REX*/ .order = M};
+
+
+    // ------------------
+    //  Bit Manipulation
+    // ------------------
+    unary_opcode_table[BSwap][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0xC8, .init_rex_byte = 0b01001000, /*REX.W*/ .order = O};
+    unary_opcode_table[BSwap][uindex(Dest_Register, sz_32)] =
+        (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0xC8, .order = O};
 }
 
 AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
@@ -1799,6 +1786,8 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         throw_error(point, mv_cat_doc(nodes, a));
     }
     UnaryOpEntry uoe = unary_opcode_table[op][uindex(loc.type, loc.sz)];
+
+    bool use_modrm_byte = uoe.order == M;
 
     uint8_t rex_byte = uoe.init_rex_byte;
     uint8_t opcode_byte = uoe.opcode;
@@ -1827,14 +1816,14 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
 
     // Step 2: Determine Operand Encoding type
     // Store the r/m op
-    if (ue.use_modrm_byte) {
+    if (use_modrm_byte) {
    
         // Step 3: R/M encoding (most complex)
         // Store the R/M location
         switch (loc.type) {
         case Dest_Register:
             if (loc.reg & XMM0) {
-                throw_error(point, mv_cstr_doc("Currently, no unary registers support the XMM family of registers: ",err_allocator));
+                throw_error(point, mv_cstr_doc("Currently, no unary operations support the XMM family of registers: ",err_allocator));
             }
 
             // simplest : mod = 11, rm = register 
@@ -1918,11 +1907,11 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         }
 
     } else {
-        if (ue.order == O)  {
+        if (uoe.order == O)  {
             opcode_byte |= (loc.reg & 0b111);
             // TODO (INVESTIGATE) is this correct?
             rex_byte |= rex_rm_ext((loc.reg & 0b1000) >> 3);
-        } else if (ue.order == I) {
+        } else if (uoe.order == I) {
             // TODO (INVESTIGATE): do nothing here?
         } else {
             throw_error(point, mv_cstr_doc("Unrecognized unary op operand order encoding", err_allocator));
@@ -1945,7 +1934,7 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
     // opcode
     push_u8(opcode_byte, instructions);
 
-    if (ue.use_modrm_byte)
+    if (use_modrm_byte)
         push_u8(modrm_byte, instructions);
 
     if (use_sib_byte)
@@ -2046,8 +2035,11 @@ Document* pretty_register(Regname reg, LocationSize sz, Allocator* a) {
         {"RIP", "EIP", "IP", "IPL"},
     };
 
-    // TODO BUG bounds check here.
-    return mk_str_doc(mv_string(names[reg][sz]), a);
+    if (reg >= 33 || sz >= 4) {
+        return mk_cstr_doc("<Invalid Register>", a);
+    } else {
+        return mk_cstr_doc(names[reg][sz], a);
+    }
 };
 
 Document* pretty_location(Location loc, Allocator* a) {
@@ -2103,7 +2095,6 @@ Document* pretty_location(Location loc, Allocator* a) {
             push_ptr(pretty_i64(loc.immediate_64, a), &nodes);
             push_ptr(mk_str_doc(mv_string("i64"), a), &nodes);
             break;
-            // TODO: handle default
         default:
             panic(mv_string("Invalid immediate size size to pretty_location."));
         }
@@ -2116,16 +2107,19 @@ Document* pretty_location(Location loc, Allocator* a) {
 }
 
 Document* pretty_binary_op(BinaryOp op, Allocator* a) {
-  char *names[Binary_Op_Count] = {
-      "Add", "Sub", "Cmp", "AddSS", "AddSD", "SubSS", "SubSD",
-      "MulSS", "MulSD", "DivSS", "DivSD",
-      "And", "Or", "Xor", "SHL", "SHR",
-      "Mov", "MovSS", "MovSD", "LEA", 
-      "CMovE", "CMovB", "CMovA", "CMovL", "CMovG",
-      "CvtSD2SS"
+    char *names[Binary_Op_Count] = {
+        "Add", "Sub", "Cmp", "AddSS", "AddSD", "SubSS", "SubSD",
+        "MulSS", "MulSD", "DivSS", "DivSD",
+        "And", "Or", "Xor", "SHL", "SHR", "XCHG",
+        "Mov", "MovSS", "MovSD", "LEA", 
+        "CMovE", "CMovB", "CMovA", "CMovL", "CMovG",
+        "CvtSD2SS"
     };
-    // TODO BUG bounds check here.
-    return mk_str_doc(mv_string(names[op]), a);
+    if (op >= Binary_Op_Count) {
+        return mk_cstr_doc("<Invalid BinOp>", a);
+    } else {
+        return mk_cstr_doc(names[op], a);
+    }
 }
 
 Document* pretty_unary_op(UnaryOp op, Allocator* a) {
@@ -2133,17 +2127,24 @@ Document* pretty_unary_op(UnaryOp op, Allocator* a) {
         "Call", "Push", "Pop", "JE", "JNE", "JMP",
         "Not", "SetE", "SetB", "SetA", "SetL", "SetG",
         "Mul", "Div", "IMul", "IDiv",
+        "BSwap",
     };
-    // TODO BUG bounds check here.
-    return mk_str_doc(mv_string(names[op]), a);
+    if (op >= Unary_Op_Count) {
+        return mk_cstr_doc("<Invalid UnOp>", a);
+    } else {
+        return mk_cstr_doc(names[op], a);
+    }
 }
 
 Document* pretty_nullary_op(NullaryOp op, Allocator* a) {
     char* names[Nullary_Op_Count] = {
         "Ret", 
     };
-    // TODO BUG bounds check here.
-    return mk_str_doc(mv_string(names[op]), a);
+    if (op >= Nullary_Op_Count) {
+        return mk_cstr_doc("<Invalid NilOp>", a);
+    } else {
+        return mk_str_doc(mv_string(names[op]), a);
+    }
 }
 
 Document* pretty_binary_instruction(BinaryOp op, Location dest, Location src, Allocator* a) {

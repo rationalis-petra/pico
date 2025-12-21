@@ -13,10 +13,6 @@ static PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimTyp
     return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
 }
 
-static PiType* mk_unop_type(PiAllocator* pia, PrimType arg, PrimType r) {
-    return mk_proc_type(pia, 1, mk_prim_type(pia, arg), mk_prim_type(pia, r));
-}
-
 void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
@@ -34,7 +30,6 @@ void build_unary_float_fn(PiType* type, LocationSize sz, void* cfn, Assembler* a
     CType fn_ctype = mk_fn_ctype(pia, 1, "x", arg_type, arg_type);
     convert_c_fn(cfn, &fn_ctype, type, ass, a, point); 
 }
-
 
 String relic_f32_to_string(float32_t f32) {
     PiAllocator pia = get_std_current_allocator();
