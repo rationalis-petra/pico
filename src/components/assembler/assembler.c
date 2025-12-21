@@ -2123,10 +2123,29 @@ Document* pretty_binary_op(BinaryOp op, Allocator* a) {
 }
 
 Document* pretty_unary_op(UnaryOp op, Allocator* a) {
-    char* names[Unary_Op_Count] = {
-        "Call", "Push", "Pop", "JE", "JNE", "JMP",
-        "Not", "SetE", "SetB", "SetA", "SetL", "SetG",
-        "Mul", "Div", "IMul", "IDiv",
+    char *names[Unary_Op_Count] = {
+        "Call",
+        "Push",
+        "Pop",
+        "JE",
+        "JNE",
+        "JMP",
+        "Not",
+        "SetE",
+        "SetNE",
+        "SetB",
+        "SetBE",
+        "SetA",
+        "SetAE",
+        "SetL",
+        "SetLE",
+        "SetG",
+        "SetGE",
+        "Neg",
+        "Mul",
+        "Div",
+        "IMul",
+        "IDiv",
         "BSwap",
     };
     if (op >= Unary_Op_Count) {

@@ -22,7 +22,6 @@ void run_nullary_op_assembler_tests(TestLog *log, Allocator *a) {
             clear_assembler(ass);
         }
     }
-    
 
     delete_assembler(ass);
     delete_arena_allocator(arena);

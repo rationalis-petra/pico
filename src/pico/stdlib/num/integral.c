@@ -16,7 +16,7 @@ static PiType* mk_unop_type(PiAllocator* pia, PrimType arg, PrimType r) {
     return mk_proc_type(pia, 1, mk_prim_type(pia, arg), mk_prim_type(pia, r));
 }
 
-void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+static void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -26,7 +26,16 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
     build_nullary_op(Ret, ass, a, point);
 }
 
-void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+static void build_unary_fn(Assembler* ass,  UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(op, reg(RAX, sz), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
+}
+
+static void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
     build_binary_op(Xor, reg(RAX, sz_64), imm8(1), ass, a, point);
@@ -201,6 +210,16 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
+
+    if (sz > sz_16) {
+        typep = mk_unop_type(pia, prim, prim);
+        build_unary_fn(ass, BSwap, sz, a, &point);
+        sym = string_to_symbol(mv_string("byte-swap"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+    }
 
     build_binary_fn(ass, Add, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
