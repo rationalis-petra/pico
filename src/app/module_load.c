@@ -3,6 +3,7 @@
 #include "platform/memory/region.h"
 #include "platform/memory/executable.h"
 #include "components/assembler/assembler.h"
+#include "components/pretty/stream_printer.h"
 
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
@@ -151,7 +152,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
     goto on_error_generic;
 
  on_error:
-    write_fstring(point.error_message, serr);
+    write_doc_formatted(point.error_message, 120, serr);
     write_fstring(mv_string("\n"), serr);
     goto on_error_generic;
     
@@ -255,7 +256,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
     goto on_error_generic;
 
  on_error:
-    write_fstring(point.error_message, serr);
+    write_doc_formatted(point.error_message, 120, serr);
     write_fstring(mv_string("\n"), serr);
     goto on_error_generic;
 

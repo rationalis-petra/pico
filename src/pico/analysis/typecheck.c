@@ -2489,7 +2489,7 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
  on_error: {
         PicoError err;
         err.range = typed->range;
-        err.message = mv_str_doc(cleanup_point.error_message, a);
+        err.message = cleanup_point.error_message;
         throw_pi_error(point, err);
     }
 }

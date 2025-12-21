@@ -1,6 +1,8 @@
 #include "platform/signals.h"
 #include "platform/terminal/terminal.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
@@ -99,7 +101,7 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments prepped;

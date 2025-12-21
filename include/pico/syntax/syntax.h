@@ -342,6 +342,7 @@ typedef struct {
 
 typedef struct {
     SymSynAMap fields;
+    bool packed;
 } SynStructType;
 
 typedef struct {

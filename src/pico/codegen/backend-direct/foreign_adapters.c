@@ -319,7 +319,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                   Regname next_reg = integer_registers[current_integer_register++];
                   // I8 max = 127
                   if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
+                      throw_error(point, mv_cstr_doc("bd_convert_c_fn: arg offset exeeds I8 max.", a));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
@@ -339,7 +339,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                   Regname next_reg = float_registers[current_float_register++];
                   // I8 max = 127
                   if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
+                      throw_error(point, mv_cstr_doc("bd_convert_c_fn: arg offset exeeds I8 max.", a));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
@@ -943,6 +943,10 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     }
     case TStruct: {
         if (ptype->structure.fields.len != ctype->structure.fields.len) {
+            return false;
+        }
+        if (ptype->structure.packed) {
+            // TODO (FEATURE): add support for packed c structs.
             return false;
         }
 

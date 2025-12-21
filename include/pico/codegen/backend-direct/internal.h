@@ -62,7 +62,7 @@ void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allo
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point);
-void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_struct_ty(Location dest, Location nfields, Location data, bool packed, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point);

@@ -1,10 +1,12 @@
 #include "platform/memory/arena.h"
+
 #include "components/assembler/assembler.h"
+#include "components/pretty/string_printer.h"
 
 #include "test_assembler/test_assembler.h"
 #include "test_assembler/helper.h"
 
-#define ASM_TEST() ErrorPoint point; if (catch_error(point)) { test_log_error(log, point.error_message); test_fail(log); clear_assembler(ass); } else 
+#define ASM_TEST() ErrorPoint point; if (catch_error(point)) { test_log_error(log, doc_to_str(point.error_message, 120, a)); test_fail(log); clear_assembler(ass); } else 
 
 void run_assembler_tests(TestLog *log, Allocator *a) {
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);

@@ -192,7 +192,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_error:
-    write_fstring(point.error_message, cout);
+    write_doc_formatted(point.error_message, 120, cout);
     write_fstring(mv_string("\n"), cout);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);

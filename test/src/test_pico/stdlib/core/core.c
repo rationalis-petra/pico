@@ -33,6 +33,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(widen (is 678 U32) U64)");
     }
 
+    if (test_start(log, mv_string("widen-dirty-u32->u64"))) {
+        int64_t expected = 567;
+        TEST_EQ("(widen (is (struct [.x 678] [.y 567] [.z 456]) (Struct [.x U32] [.y U32] [.z U32])).y U64)");
+    }
+
     if (test_start(log, mv_string("narrow-f64->f32"))) {
         float32_t expected = 1.0;
         TEST_EQ("(narrow (is 1.0 F64) F32)");
@@ -394,6 +399,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("test-size-of-structs"))) {
         uint64_t expected = 12;
         TEST_EQ("(size-of (Struct [.x U8] [.y I32] [.z U16]))");
+    }
+
+    if (test_start(log, mv_string("test-size-of-structs"))) {
+        uint64_t expected = 7;
+        TEST_EQ("(size-of (Struct packed [.x U8] [.y I32] [.z U16]))");
     }
 
     if (test_start(log, mv_string("test-align-of-I64"))) {

@@ -1,11 +1,10 @@
 #ifndef __PICO_STDLIB_NUM_SUBMODULES_H
 #define __PICO_STDLIB_NUM_SUBMODULES_H
 
-#include "platform/memory/region.h"
-
 #include "pico/values/modular.h"
 
-void add_refl_module(Assembler* ass, Module* base, RegionAllocator* region);
-void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region);
+void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a);
+void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a);
+void add_bool_module(Assembler *ass, Module *num, Allocator *a);
 
 #endif

@@ -4,7 +4,6 @@
 #include "platform/error.h"
 
 #include "data/stream.h"
-#include "components/pretty/stream_printer.h"
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
@@ -41,14 +40,14 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     PiAllocator pia = convert_to_pallocator(&ra);
     ParseResult res = parse_rawtree(cin, &pia, &ra);
     if (res.type == ParseNone) {
-        throw_error(&point, mv_string("Parse Returned None!"));
+        throw_error(&point, mv_cstr_doc("Parse Returned None!", &ra));
     }
     if (res.type == ParseFail) {
         throw_pi_error(&pi_point, res.error);
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
-        throw_error(&point, mv_string("Parse Returned Invalid Result!\n"));
+        throw_error(&point, mv_cstr_doc("Parse Returned Invalid Result!\n", &ra));
     }
 
     // -------------------------------------------------------------------------
@@ -82,7 +81,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     }
 #endif
     delete_istream(sin, &ra);
-    throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));
+    throw_error(final_point, mv_cstr_doc("Compile-time failure - message written to stdout", &ra));
 
  on_error:
     delete_istream(sin, &ra);
@@ -90,7 +89,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
  on_exit:
     delete_istream(sin, &ra);
-    throw_error(final_point, mv_string("Startup compiled definition not exepcted to exit!"));
+    throw_error(final_point, mv_cstr_doc("Startup compiled definition not exepcted to exit!", &ra));
 }
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {

@@ -274,7 +274,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
     case SLitTypedIntegral: {
         // Does it fit into 32 bits?
         if (syn.integral.value >= 0x80000000) 
-            throw_error(point, mv_string("Codegen: Literals must fit into less than 32 bits"));
+            throw_error(point, mv_cstr_doc("Codegen: Literals must fit into less than 32 bits", a));
 
         int32_t immediate = (int32_t)syn.integral.value;
         build_unary_op(Push, imm32(immediate), ass, a, point);
@@ -313,7 +313,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
     case SLitString: {
         String immediate = syn.string; 
         if (immediate.memsize > UINT32_MAX) 
-            throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
+            throw_error(point, mv_cstr_doc("Codegen: String literal length must fit into less than 32 bits", a));
 
         // Push the u8
         AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
@@ -462,23 +462,24 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
                 generate_monomorphic_copy(RSP, RCX, value_size, ass, a, point);
             } else {
-                throw_error(point,
-                            string_ncat(a, 3,
-                                        mv_string("Codegen: Global var '"),
-                                        symbol_to_string(syn.variable, a),
-                                        mv_string("' has unsupported sort")));
+                PtrArray nodes = mk_ptr_array(3, a);
+                push_ptr(mk_cstr_doc("Codegen: Global var '", a), &nodes);
+                push_ptr(mv_str_doc(view_symbol_string(syn.variable), a), &nodes);
+                push_ptr(mk_cstr_doc("' has unsupported sort.", a), &nodes);
+                throw_error(point, mv_cat_doc(nodes, a));
             }
             data_stack_grow(env, pi_stack_size_of(indistinct_type));
             break;
         }
         case ANotFound: {
-            String sym = symbol_to_string(syn.variable, a);
-            String msg = mv_string("Couldn't find variable during codegen: ");
-            throw_error(point, string_cat(msg, sym, a));
+            PtrArray nodes = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(view_symbol_string(syn.variable), a), &nodes);
+            push_ptr(mv_cstr_doc("Couldn't find variable during codegen: ", a), &nodes);
+            throw_error(point, mv_sep_doc(nodes, a));
             break;
         }
         case ATooManyLocals:
-            throw_error(point, mk_string("Too Many Local variables!", a));
+            throw_error(point, mk_cstr_doc("Too Many Local variables!", a));
             break;
         }
         break;
@@ -1377,7 +1378,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 // calc backlink offset
                 size_t body_pos = get_pos(ass);
                 if (body_pos - branch_pos > INT32_MAX) {
-                    throw_error(point, mk_string("Jump in match too large", a));
+                    throw_error(point, mv_cstr_doc("Jump in match too large", a));
                 } 
 
                 set_i32_backlink(ass, branch_ref, (int32_t)(body_pos - branch_pos));
@@ -1460,7 +1461,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 size_t body_ref = body_refs.data[i];
 
                 if (curr_pos - body_pos > INT32_MAX) {
-                    throw_error(point, mk_string("Jump in match too large", a));
+                    throw_error(point, mv_cstr_doc("Jump in match too large", a));
                 } 
 
                 set_i32_backlink(ass, body_ref, (int32_t)(curr_pos - body_pos));
@@ -1532,7 +1533,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 // calc backlink offset
                 size_t body_pos = get_pos(ass);
                 if (body_pos - branch_pos > INT32_MAX) {
-                    throw_error(point, mk_string("Jump in match too large", a));
+                    throw_error(point, mv_cstr_doc("Jump in match too large", a));
                 } 
 
                 set_i32_backlink(ass, branch_ref, (int32_t)(body_pos - branch_pos));
@@ -1570,7 +1571,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 size_t body_ref = body_refs.data[i];
 
                 if (curr_pos - body_pos > INT32_MAX) {
-                    throw_error(point, mk_string("Jump in match too large", a));
+                    throw_error(point, mv_cstr_doc("Jump in match too large", a));
                 } 
 
                 set_i32_backlink(ass, body_ref, (int32_t)(curr_pos - body_pos));
@@ -1812,7 +1813,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // calc backlink offset
         size_t end_pos = get_pos(ass);
         if (end_pos - start_pos > INT32_MAX) {
-            throw_error(point, mk_string("Jump in conditional too large", a));
+            throw_error(point, mv_cstr_doc("Jump in conditional too large", a));
         } 
 
         // backlink
@@ -1829,7 +1830,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         // calc backlink offset
         end_pos = get_pos(ass);
         if (end_pos - start_pos > INT32_MAX) {
-            throw_error(point, mk_string("Jump in conditional too large", a));
+            throw_error(point, mv_cstr_doc("Jump in conditional too large", a));
         } 
         set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
         break;
@@ -1886,7 +1887,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
             LabelEntry lble = label_env_lookup(cell.key, env);
             if (lble.type == Err)
-                throw_error(point, mv_string("Label not found during codegen!!"));
+                throw_error(point, mv_cstr_doc("Label not found during codegen!!", a));
             data_stack_shrink(env, arg_total);
 
             // Copy the result down the stack
@@ -1967,7 +1968,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
             backlink_goto(syn.go_to.label, out.backlink, links, a);
         } else {
-            throw_error(point, mv_string("Label not found during codegen!!"));
+            throw_error(point, mv_cstr_doc("Label not found during codegen!!", a));
         }
         break;
     }
@@ -2081,7 +2082,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         size_t cleanup_start_pos = get_pos(ass);
         dist = cleanup_start_pos - end_expr_pos;
         if (dist > INT32_MAX) {
-            throw_error(point, mv_string("Internal error in codegen: jump distance exceeded INT32_MAX"));
+            throw_error(point, mv_cstr_doc("Internal error in codegen: jump distance exceeded INT32_MAX", a));
         }
         *(get_instructions(ass).data + end_expr_link) = (int32_t) dist;
 
@@ -2349,7 +2350,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         }
 
         // Finally, generate function call to make type
-        gen_mk_struct_ty(reg(RAX, sz_64), imm32(syn.struct_type.fields.len), reg(RAX, sz_64), ass, a, point);
+        gen_mk_struct_ty(reg(RAX, sz_64), imm32(syn.struct_type.fields.len), reg(RAX, sz_64), syn.struct_type.packed, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
@@ -2608,10 +2609,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                     entry.value = mentry->value;
                     entry.type = &mentry->type;
                 } else {
-                    throw_error(point, mv_string("Unknown symbol in path to describe."));
+                    throw_error(point, mv_cstr_doc("Unknown symbol in path to describe.", a));
                 }
             } else {
-                throw_error(point, mv_string("Unknown symbol in path to describe."));
+                throw_error(point, mv_cstr_doc("Unknown symbol in path to describe.", a));
             }
         }
         String immediate;
@@ -2696,7 +2697,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 
 
         if (immediate.memsize > UINT32_MAX) 
-            throw_error(point, mv_string("Codegen: String literal length must fit into less than 32 bits"));
+            throw_error(point, mv_cstr_doc("Codegen: String literal length must fit into less than 32 bits", a));
 
         // Push the string onto the stack
         // '0' is used as a placeholder, as the correct address will be

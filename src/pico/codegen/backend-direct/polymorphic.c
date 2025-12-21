@@ -177,7 +177,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -273,7 +273,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -430,7 +430,7 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -466,7 +466,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
                 build_unary_op(Push, reg(R8, sz_64), ass, a, point);
                 break;
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             default: {
@@ -523,7 +523,7 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
     // RDX, RAX, RCX
     if (sz_reg == RAX || sz_reg == RCX || sz_reg == RDX ||
         align == RAX  || align == RCX  || align == RDX) {
-        throw_error(point, mv_string("Error in generate_align_to: sz or align registers were either RAX, RCX or RDX!"));
+        throw_error(point, mv_cstr_doc("Error in generate_align_to: sz or align registers were either RAX, RCX or RDX!", a));
     }
 
     /* size_t rem = size % 8; */

@@ -3,6 +3,8 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core.h"
 
@@ -204,7 +206,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     ErrorPoint point;
     PiAllocator pia = convert_to_pallocator(&ra);
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     TermFormer former;

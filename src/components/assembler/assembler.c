@@ -8,7 +8,6 @@
 #include "components/assembler/assembler.h"
 #include "components/pretty/document.h"
 #include "components/pretty/standard_types.h"
-#include "components/pretty/string_printer.h"
 
 /* Personal Notes/hints
  * 
@@ -1233,7 +1232,7 @@ BinOpBytes lookup_binop_bytes(BinaryOp op, Location dest, Location src, Allocato
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Unsupported operand pair for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
+        throw_error(point, mv_cat_doc(nodes, err_allocator));
     }
 }
 
@@ -1243,7 +1242,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary table entry for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
+        throw_error(point, mv_cat_doc(nodes, err_allocator));
     }
 
     uint8_t rex_byte = be.init_rex_byte;
@@ -1266,7 +1265,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
         PtrArray nodes = mk_ptr_array(8, err_allocator);
         push_ptr(mk_str_doc(mv_string("Invalid binary opcode table entry for: "), err_allocator), &nodes);
         push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
+        throw_error(point, mv_cat_doc(nodes, err_allocator));
     }
     if (be.has_opcode_ext) {
         uint8_t ext_byte = opcode_bytes.reg_ext; 
@@ -1275,7 +1274,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
             PtrArray nodes = mk_ptr_array(8, err_allocator);
             push_ptr(mk_str_doc(mv_string("Invalid binary opcode extension entry for: "), err_allocator), &nodes);
             push_ptr(pretty_binary_instruction(op, dest, src, err_allocator), &nodes);
-            throw_error(point, doc_to_str(mv_cat_doc(nodes, err_allocator), 80, err_allocator));
+            throw_error(point, mv_cat_doc(nodes, err_allocator));
         }
     }
 
@@ -1293,7 +1292,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
             rm_loc = src;
             reg_loc = dest;
         } else {
-            throw_error(point, mv_string("Unrecognized binary op operand order encoding"));
+            throw_error(point, mv_cstr_doc("Unrecognized binary op operand order encoding", err_allocator));
         }
 
         // Step 3: R/M encoding (most complex)
@@ -1301,7 +1300,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
         switch (rm_loc.type) {
         case Dest_Register:
             if (rm_loc.reg == RIP) {
-                throw_error(point, mv_string("Using RIP as a register is invalid"));
+                throw_error(point, mv_cstr_doc("Using RIP as a register is invalid", err_allocator));
             }
             // Simplest : mod = 11, rm = register 
             modrm_byte |= modrm_mod(0b11);
@@ -1327,7 +1326,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
                     disp_bytes[i]  = rm_loc.disp_bytes[i];
                 }
             } else {
-                throw_error(point, mv_string("Bad displacement size: not 0, 1 or 4"));
+                throw_error(point, mv_cstr_doc("Bad displacement size: not 0, 1 or 4", err_allocator));
             }
 
             // Now the register
@@ -1347,7 +1346,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
                 } else if (rm_loc.scale == 8) {
                     sib_byte |= sib_ss(0b11);
                 } else {
-                    throw_error(point, mv_string("Bad scale: not 0, 1, 4 or 8"));
+                    throw_error(point, mv_cstr_doc("Bad scale: not 0, 1, 4 or 8", err_allocator));
                 }
 
                 // Base should be register 
@@ -1357,7 +1356,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
             // Here, we guarantee no index register exists
             } else if (rm_loc.reg == RIP) {
                 if (rm_loc.disp_sz != 4) {
-                    throw_error(point, mv_string("RIP-relative addressing reqiures 32-bit displacement!"));
+                    throw_error(point, mv_cstr_doc("RIP-relative addressing reqiures 32-bit displacement!", err_allocator));
                 }
                 // modrm_mod = 00, so no need to do anything here
                 modrm_byte |= modrm_rm(RIP);
@@ -1395,7 +1394,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
             }
             break;
         case Dest_Immediate:
-            throw_error(point, mv_string("Internal error in build_binary_op: rm_loc is immediate."));
+            throw_error(point, mv_cstr_doc("Internal error in build_binary_op: rm_loc is immediate.", err_allocator));
             break;
         }
 
@@ -1412,7 +1411,7 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
             opcode_byte |= (dest.reg & 0b111);
             rex_byte |= rex_rm_ext((dest.reg & 0b1000) >> 3);
         } else {
-            throw_error(point, mv_string("Unrecognized binary op operand order encoding"));
+            throw_error(point, mv_cstr_doc("Unrecognized binary op operand order encoding", err_allocator));
         }
     }
 
@@ -1788,7 +1787,7 @@ void build_unary_opcode_table() {
 
 AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
     if (loc.type == Dest_Register && loc.reg == RIP) {
-        throw_error(point, mv_string("RIP-relative addressing not supported for unary operations!"));
+        throw_error(point, mv_cstr_doc("RIP-relative addressing not supported for unary operations!", err_allocator));
     }
 
     UnaryTableEntry ue = unary_table[uindex(loc.type, loc.sz)];
@@ -1797,7 +1796,7 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Invalid unary table entry for op: "), a), &nodes);
         push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), 80, a));
+        throw_error(point, mv_cat_doc(nodes, a));
     }
     UnaryOpEntry uoe = unary_opcode_table[op][uindex(loc.type, loc.sz)];
 
@@ -1819,8 +1818,8 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         Allocator* a = err_allocator;
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("Invalid unary opcode table entry for op: "), a), &nodes);
-        push_ptr(pretty_unary_instruction(op, loc, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_cat_doc(nodes, a), 80, a));
+        push_ptr(pretty_unary_instruction(op, loc, a), &nodes);
+        throw_error(point, mv_cat_doc(nodes, a));
     }
     if (uoe.opcode_modrm != 0x9) {
         modrm_byte |= modrm_reg(uoe.opcode_modrm);
@@ -1835,7 +1834,7 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         switch (loc.type) {
         case Dest_Register:
             if (loc.reg & XMM0) {
-                throw_error(point, mv_string("Currently, no unary registers support the XMM family of registers: "));
+                throw_error(point, mv_cstr_doc("Currently, no unary registers support the XMM family of registers: ",err_allocator));
             }
 
             // simplest : mod = 11, rm = register 
@@ -1875,13 +1874,13 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
                     disp_bytes[i]  = loc.disp_bytes[i];
                 }
             } else {
-                throw_error(point, mv_string("Bad displacement size: not 0, 1 or 4"));
+                throw_error(point, mv_cstr_doc("Bad displacement size: not 0, 1 or 4", err_allocator));
             }
 
             // Now the register
             if (loc.reg == RIP) {
                 if (loc.disp_sz != 4) {
-                    throw_error(point, mv_string("RIP-relative addressing reqiures 32-bit displacement!"));
+                    throw_error(point, mv_cstr_doc("RIP-relative addressing reqiures 32-bit displacement!", err_allocator));
                 }
                 // modrm_mod = 00, so no need to do anything here
                 modrm_byte |= modrm_rm(RIP);
@@ -1914,7 +1913,7 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
             }
             break;
         case Dest_Immediate:
-            throw_error(point, mv_string("Internal error in unary_binary_op: r/m loc is immediate."));
+            throw_error(point, mv_cstr_doc("Internal error in unary_binary_op: r/m loc is immediate.", err_allocator));
             break;
         }
 
@@ -1926,7 +1925,7 @@ AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocat
         } else if (ue.order == I) {
             // TODO (INVESTIGATE): do nothing here?
         } else {
-            throw_error(point, mv_string("Unrecognized unary op operand order encoding"));
+            throw_error(point, mv_cstr_doc("Unrecognized unary op operand order encoding", err_allocator));
         }
     }
 
@@ -1985,7 +1984,7 @@ AsmResult build_nullary_op(NullaryOp op, Assembler* assembler, Allocator* err_al
         push_ptr(pretty_nullary_op(op, err_allocator), &nodes);
         push_ptr(mk_str_doc(mv_string("/"), err_allocator), &nodes);
         push_ptr(pretty_i32(op, err_allocator), &nodes);
-        throw_error(point, doc_to_str(mv_sep_doc(nodes, err_allocator), 80, err_allocator));
+        throw_error(point, mv_sep_doc(nodes, err_allocator));
     }
     }
     U8Array* instructions = &assembler->instructions;

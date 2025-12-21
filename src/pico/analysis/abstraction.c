@@ -1614,7 +1614,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     case FStructType: {
         SymSynAMap field_types = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        size_t start_idx = 1;
+        bool packed = false;
+        RawTree ispacked = raw.branch.nodes.data[1];
+        if (ispacked.type == RawAtom && ispacked.atom.type == ASymbol) {
+            start_idx++;
+            if (symbol_eq(ispacked.atom.symbol, string_to_symbol(mv_string("packed")))) {
+                packed = true;
+            } else {
+                err.range = ispacked.range;
+                err.message = mv_cstr_doc("Expecting either the symbol 'packed' or a field descriptor.", a);
+                throw_pi_error(ctx.point, err);
+            }
+        }
+
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
@@ -1647,6 +1661,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .ptype = NULL,
             .range = raw.range,
             .struct_type.fields = field_types,
+            .struct_type.packed = packed,
         };
         return res;
     }
@@ -2683,6 +2698,55 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
     return syms;
 }
 
+SymbolArray get_path(RawTree raw, Allocator *a, PiErrorPoint *point) {
+    PicoError err;
+    err.range = raw.range;
+
+    SymbolArray path = mk_symbol_array(4, a);
+    bool running = true;
+    while (running) {
+        if (raw.type == RawBranch) {
+            if (raw.branch.nodes.len == 3) {
+                RawTree rhead = raw.branch.nodes.data[0];
+                if (!(rhead.type == RawAtom && rhead.atom.type == ASymbol) ||
+                    !symbol_eq(rhead.atom.symbol, string_to_symbol(mv_string(".")))) {
+                    err.range = rhead.range;
+                    err.message = mv_cstr_doc("Invalid path separator: expected '.'", a);
+                    throw_pi_error(point, err);
+                }
+
+                RawTree path_part = raw.branch.nodes.data[1];
+                if (!(path_part.type == RawAtom && path_part.atom.type == ASymbol)) {
+                    err.range = path_part.range;
+                    err.message = mv_cstr_doc("Invalid path part: expecting a symbol here.", a);
+                    throw_pi_error(point, err);
+                }
+            
+                push_symbol(path_part.atom.symbol, &path);
+                raw = raw.branch.nodes.data[2];
+            } else {
+                err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
+                throw_pi_error(point, err);
+            }
+        } else if (raw.type == RawAtom && raw.atom.type == ASymbol) {
+            push_symbol(raw.atom.symbol, &path);
+            running = false;
+        } else {
+            err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
+            throw_pi_error(point, err);
+        }
+    }
+
+    // Reverse path:
+    for (size_t i = 0; i < path.len / 2; i++) {
+        Symbol s1 = path.data[i];
+        Symbol s2 = path.data[path.len - (i + 1)];
+        path.data[i] = s2;
+        path.data[path.len - (i + 1)] = s1;
+    }
+    return path;
+}
+
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     if (is_symbol(*raw)) {
@@ -2694,19 +2758,10 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         };
     } else if (raw->type == RawBranch) {
         // Possibilities:
-        // (name1 )
-        // (name1 :all)
-        // (name1 :as name2)
-        // (. name2 name1)
-        // (. (list-of-names) name1)
+        // field
+        // (. field parent)
         if (raw->branch.nodes.len == 1) {
-            if (!is_symbol(raw->branch.nodes.data[0])) {
-                err.range = raw->range;
-                err.message = mv_cstr_doc("Invalid import clause - expected symbol", a);
-                throw_pi_error(point, err);
-            }
-
-            SymbolArray path = mk_symbol_array(1, a);
+            SymbolArray path = get_path(*raw, a, point);
             push_symbol(raw->atom.symbol, &path);
             return (ImportClause) {
                 .type = Import,
@@ -2732,12 +2787,6 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 .path = path,
             };
         } else if (raw->branch.nodes.len == 3) {
-            if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2])) {
-                err.range = raw->range;
-                err.message = mv_cstr_doc("Invalid import clause", a);
-                throw_pi_error(point, err);
-            }
-
             // Check for '.'
             if (eq_symbol(&raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
                 Symbol src;
@@ -2763,8 +2812,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                         err.message = mv_cstr_doc("Invalid import-. members", a);
                         throw_pi_error(point, err);
                     }
-                    SymbolArray path = mk_symbol_array(1,a);
-                    push_symbol(src, &path);
+                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
                     return (ImportClause) {
                         .type = ImportMany,
                         .path = path,
@@ -2780,34 +2828,54 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 Symbol middle;
                 if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
                     err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause", a);
+                    err.message = mv_cstr_doc("Invalid import clause - expected a keyword such as :as or :only", a);
                     throw_pi_error(point, err);
                 }
-                if (!symbol_eq(middle , string_to_symbol(mv_string("as")))) {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause", a);
-                    throw_pi_error(point, err);
-                }
+                if (symbol_eq(middle, string_to_symbol(mv_string("as")))) {
+                    Symbol rename;
+                    if(!get_fieldname(&raw->branch.nodes.data[2], &rename)) {
+                        err.range = raw->branch.nodes.data[0].range;
+                        err.message = mv_cstr_doc("Invalid import-as new name", a);
+                        throw_pi_error(point, err);
+                    }
+                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
+                    return (ImportClause) {
+                        .type = ImportAs,
+                        .path = path,
+                        .rename = rename,
+                    };
+                } else if (symbol_eq(middle, string_to_symbol(mv_string("only")))) {
+                    RawTree symlist = raw->branch.nodes.data[2]; 
+                    if (symlist.type != RawBranch) {
+                        err.range = raw->branch.nodes.data[2].range;
+                        err.message = mv_cstr_doc("When importing with ':only', exepect a symbol-list here.", a);
+                        throw_pi_error(point, err);
+                    }
 
-                Symbol name;
-                Symbol rename;
-                if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
-                    err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_cstr_doc("Invalid import-as name", a);
+                    SymbolArray members = mk_symbol_array(4, a);
+                    for (size_t i = 0; i < symlist.branch.nodes.len; i++) {
+                        RawTree rsymbol = symlist.branch.nodes.data[i];
+                        for (size_t i = 0; i < raw->branch.nodes.len; i++) {
+                            if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
+                                push_symbol(rsymbol.atom.symbol, &members);
+                            } else {
+                                err.range = rsymbol.range;
+                                err.message = mv_cstr_doc("Expecting a symbol here.", a);
+                                throw_pi_error(point, err);
+                            }
+                        }
+                    }
+                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
+                    return (ImportClause) {
+                        .type = ImportMany,
+                        .path = path,
+                        .members = members,
+                    };
+                } else {
+                    err.range = raw->branch.nodes.data[1].range;
+                    err.message = mv_cstr_doc("Invalid import clause: expecting the keyword :as or :only", a);
                     throw_pi_error(point, err);
                 }
-                if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
-                    err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_cstr_doc("Invalid import-as new name", a);
-                    throw_pi_error(point, err);
-                }
-                SymbolArray path = mk_symbol_array(1,a);
-                push_symbol(name, &path);
-                return (ImportClause) {
-                    .type = ImportAs,
-                    .path = path,
-                    .rename = rename,
-                };
             }
         } else {
             err.range = raw->range;
@@ -2854,7 +2922,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
                 err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_cstr_doc("Invalid export clause", a);
+                err.message = mv_cstr_doc("Invalid export clause - expected to get a keyword such as :as or :only", a);
                 throw_pi_error(point, err);
             }
             if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {

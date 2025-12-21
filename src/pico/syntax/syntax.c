@@ -787,21 +787,29 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         break;
     }
     case SStructType: {
-        PtrArray nodes = mk_ptr_array(syntax->struct_type.fields.len + 2, a) ;
-        push_ptr(mv_str_doc(mk_string("(Struct", a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(2, a) ;
+        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Struct", a), a), a), &head_nodes);
+        if (syntax->struct_type.packed) {
+            push_ptr(mv_str_doc(mk_string("packed", a), a), &head_nodes);
+        }
         
+        PtrArray field_nodes = mk_ptr_array(syntax->struct_type.fields.len, a) ;
         for (size_t i = 0; i < syntax->struct_type.fields.len ; i++)  {
             PtrArray fnodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(mv_string("[."), a), &fnodes);
-            push_ptr(mk_str_doc(symbol_to_string(syntax->struct_type.fields.data[i].key, a), a), &fnodes);
+            PtrArray field_desc = mk_ptr_array(2, a);
+            push_ptr(mk_str_doc(mv_string("."), a), &field_desc);
+            push_ptr(mk_str_doc(symbol_to_string(syntax->struct_type.fields.data[i].key, a), a), &field_desc);
+            push_ptr(mk_cat_doc(field_desc, a), &fnodes);
+
             push_ptr(pretty_syntax_internal(syntax->struct_type.fields.data[i].val, ctx, a), &fnodes);
-            push_ptr(mk_str_doc(mv_string("]"), a), &fnodes);
 
-            push_ptr(mv_sep_doc(fnodes, a), &nodes);
+            push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(fnodes, a), a), a), &field_nodes);
         }
-
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        PtrArray nodes = mk_ptr_array(syntax->struct_type.fields.len + 2, a) ;
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(field_nodes, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SEnumType: {

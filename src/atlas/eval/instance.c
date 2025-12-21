@@ -280,7 +280,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     if (catch_error(env_point)) {
         pi_point.multi = (MultiError) {
             .has_many = false,
-            .error.message = mv_str_doc(env_point.error_message, &ra),
+            .error.message = env_point.error_message,
             .error.range = header->range,
         };
 
@@ -400,10 +400,9 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     
 
  on_error: {
-        Document* out = mk_str_doc(err_point.error_message, &ra);
         AtlasError new_err = {
             .range = pi_point.multi.error.range,
-            .message = out,
+            .message = err_point.error_message,
             .filename = filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };

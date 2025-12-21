@@ -202,6 +202,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.proc.args = copy_addr_list(t.proc.args, (TyCopier)copy_pi_type_p, pia);
         break;
     case TStruct:
+        out.structure.packed = t.structure.packed;
         out.structure.fields = copy_sym_addr_piamap(t.structure.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
     case TEnum:
@@ -409,7 +410,10 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             Document* fname = mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a);
             PiType* ftype = type->structure.fields.data[i].val;
 
-            current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
+            // TODO (BUG): will segfault if the pointer isn't appropriately aligned.
+            if (!type->structure.packed) {
+                current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
+            }
 
             Document* arg = pretty_pi_value(val + current_offset, ftype, a);
 
@@ -732,10 +736,13 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         out = mk_paren_doc("<", ">", pretty_uvar_type(type->uvar, a), a);
         break;
     case TStruct: {
-        PtrArray nodes = mk_ptr_array(2, a);
-        PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(2, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Struct", a)), a), a), &head_nodes);
+        if (type->structure.packed) {
+            push_ptr(mv_str_doc((mk_string("packed", a)), a), &head_nodes);
+        }
 
+        PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
@@ -748,6 +755,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(fd_doc, &fields);
         }
 
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         push_ptr(mv_nest_doc(2, mv_sep_doc(fields, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1140,14 +1149,20 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             size_t tmp_align;
             Result_t res = pi_maybe_align_of(*(PiType*)type.structure.fields.data[i].val, &tmp_align);
             if (res != Ok) return res;
-            align = align > tmp_align ? align : tmp_align;
-            total = pi_size_align(total, tmp_align);
+            if (!type.structure.packed) {
+                align = align > tmp_align ? align : tmp_align;
+                total = pi_size_align(total, tmp_align);
+            }
             size_t field_size;
             res = pi_maybe_size_of(*(PiType*)type.structure.fields.data[i].val, &field_size);
             if (res != Ok) return res;
             total += field_size;
         }
-        *out = pi_size_align(total, align);
+        if (!type.structure.packed) {
+            *out = pi_size_align(total, align);
+        } else {
+            *out = total;
+        }
         return Ok;
     }
     case TEnum: {
@@ -1288,6 +1303,12 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
         *out = sizeof(uint64_t);
         return Ok;
     case TStruct: {
+        // TODO (INVESTIGATE BUG): determine how we calculate alignment of
+        //   packed struct? is it minimum of all fields?
+        if (type.structure.packed) {
+            *out = type.structure.fields.len == 0 ? 0 : 1;
+            return Ok;
+        }
         size_t align = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             size_t field_align;
@@ -1701,6 +1722,7 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
+        if (lhs->structure.packed != rhs->structure.packed) return false;
 
         for (size_t i = 0; i < lhs->structure.fields.len; i++) {
             SymAddrPiCell lhcell = lhs->structure.fields.data[i];
@@ -1952,7 +1974,9 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         size_t offset = 0;
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PiType* ty = type->structure.fields.data[i].val;
-            offset = pi_size_align(offset, pi_align_of(*ty));
+            if (!type->structure.packed) {
+                offset = pi_size_align(offset, pi_align_of(*ty));
+            }
             if (!pi_value_eql(ty, lhs + offset, rhs + offset, a)) {
                 return false;
             }
@@ -2151,6 +2175,27 @@ PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...) {
     return proc;
 }
 
+PiType* mk_struct_packed_type(PiAllocator* pia, bool packed, size_t nfields, ...) {
+    va_list args;
+    va_start(args, nfields);
+    
+    SymAddrPiAMap fields = mk_sym_addr_piamap(nfields, pia);
+    for (size_t i = 0; i < nfields ; i++) {
+        Symbol name = string_to_symbol(mv_string(va_arg(args, char*)));
+        PiType* arg = va_arg(args, PiType*);
+        sym_addr_insert(name, arg, &fields);
+    }
+    va_end(args);
+
+    PiType* structure = call_alloc(sizeof(PiType), pia);
+    *structure = (PiType) {
+        .sort = TStruct,
+        .structure.fields = fields,
+        .structure.packed = packed,
+    };
+    return structure;
+}
+
 PiType* mk_struct_type(PiAllocator* pia, size_t nfields, ...) {
     va_list args;
     va_start(args, nfields);
@@ -2164,7 +2209,11 @@ PiType* mk_struct_type(PiAllocator* pia, size_t nfields, ...) {
     va_end(args);
 
     PiType* structure = call_alloc(sizeof(PiType), pia);
-    *structure = (PiType) {.sort = TStruct, .structure.fields = fields,};
+    *structure = (PiType) {
+        .sort = TStruct,
+        .structure.fields = fields,
+        .structure.packed = false,
+    };
     return structure;
 }
 
