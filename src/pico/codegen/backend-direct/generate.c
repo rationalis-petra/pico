@@ -1211,10 +1211,9 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
         } else {
             PiType* enum_type = strip_type(syn.ptype);
             size_t enum_size = pi_stack_size_of(*enum_type);
-            size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size - variant_size), ass, a, point);
-            build_unary_op(Push, imm32(syn.constructor.tag), ass, a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
 
             data_stack_grow(env, enum_size);
         }
@@ -1292,10 +1291,10 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
         } else {
+            // TODO (BUG): account for differently sized enums!
             const size_t tag_size = sizeof(uint64_t);
             PiType* enum_type = strip_type(syn.ptype);
             size_t enum_size = pi_size_of(*enum_type);
-            size_t variant_size = calc_variant_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
             size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
             // Make space to fit the (final) variant
@@ -1310,30 +1309,29 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
                 generate_i(*(Syntax*)syn.variant.args.data[i], env, target, links, a, point);
             }
 
-            // Now, move them into the space allocated in reverse order
             PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
 
-            // Note, as we are reversing the order, we start at the top of the stack (last enum element),
-            // which gets copied to the end of the enum
-            size_t src_stack_offset = 0;
-            size_t dest_stack_offset = variant_size + variant_stack_size - tag_size;
+            // Note: items are placed on the stack in reverse order, i.e. the
+            // 'first' element in the enum is highest up in the stack. We will
+            // copy in the same order as they were generated, i.e. 'highest'
+            // goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
+            // as the 'subtraction' happens in the loop, we just initialize to
+            // variant_stack_size (same as dest)
+            size_t src_stack_offset = variant_stack_size - tag_size;
+            size_t dest_stack_offset = variant_stack_size;
             for (size_t i = 0; i < syn.variant.args.len; i++) {
-                // We now have both the source_offset and dest_offset. These are both
-                // relative to the 'bottom' of their respective structures.
-                // Therefore, we now need to find their offsets relative to the `top'
-                // of the stack.
-            
-                size_t field_size = pi_size_of(*(PiType*)args.data[syn.variant.args.len - (i + 1)]);
+                size_t field_size = pi_size_of(*(PiType*)args.data[i]);
+                size_t field_align = pi_align_of(*(PiType*)args.data[i]);
 
-                dest_stack_offset -= field_size;
+                dest_stack_offset = pi_size_align(dest_stack_offset, field_align);
+                src_stack_offset -= pi_stack_align(field_size);
                 generate_stack_move(dest_stack_offset, src_stack_offset, field_size, ass, a, point);
-                src_stack_offset += pi_stack_align(field_size);
+                dest_stack_offset += field_size;
             }
 
-            // Remove the space occupied by the temporary values 
-            build_binary_op(Add, reg(RSP, sz_64), imm32(src_stack_offset), ass, a, point);
-
-            // Grow the stack to account for the difference in enum & variant sizes
+            // Remove the space occupied by the temporary values, then update
+            // bookkeeping accordingly 
+            build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size - tag_size), ass, a, point);
             data_stack_shrink(env, variant_stack_size - tag_size);
         }
         break;

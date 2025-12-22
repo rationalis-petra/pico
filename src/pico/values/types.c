@@ -450,6 +450,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
                 size_t current_offset = sizeof(uint64_t); // Start after current tag
                 for (size_t i = 0; i < variant_types.len; i++) {
                     PiType* ftype = variant_types.data[i];
+                    current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
                     Document* arg = pretty_pi_value(val + current_offset, ftype, a);
                     push_ptr(arg, &nodes);
                     current_offset += pi_size_of(*ftype);
@@ -1989,7 +1990,7 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         uint64_t rhs_tag = *(uint64_t*)rhs;
         if (lhs_tag != rhs_tag) return false;
 
-        size_t offset = 0;
+        size_t offset = sizeof(uint64_t);
         PtrArray* types = type->enumeration.variants.data[lhs_tag].val;
         for (size_t i = 0; i < types->len; i++) {
             PiType* ty = types->data[i];
