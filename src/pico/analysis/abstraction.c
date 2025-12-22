@@ -2789,41 +2789,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         } else if (raw->branch.nodes.len == 3) {
             // Check for '.'
             if (eq_symbol(&raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
-                Symbol src;
-                if(!get_fieldname(&raw->branch.nodes.data[2], &src)) {
-                    err.range = raw->branch.nodes.data[2].range;
-                    err.message = mv_cstr_doc("Invalid import-. source", a);
-                    throw_pi_error(point, err);
-                }
-
-                RawTree raw_members = raw->branch.nodes.data[1];
-                if (is_symbol(raw_members)) {
-                    SymbolArray path = mk_symbol_array(1,a);
-                    push_symbol(src, &path);
-                    return (ImportClause) {
-                        .type = Import,
-                        .path = path,
-                        .member = raw_members.atom.symbol,
-                    };
-                } else if (raw_members.type == RawBranch) {
-                    SymbolArray members = mk_symbol_array(raw_members.branch.nodes.len, a);
-                    if (!get_symbol_list(&members, raw_members)) {
-                        err.range = raw->branch.nodes.data[2].range;
-                        err.message = mv_cstr_doc("Invalid import-. members", a);
-                        throw_pi_error(point, err);
-                    }
-                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
-                    return (ImportClause) {
-                        .type = ImportMany,
-                        .path = path,
-                        .members = members,
-                    };
-                } else {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import-. member(s)", a);
-                    throw_pi_error(point, err);
-                }
-
+                SymbolArray path = get_module_path(*raw, a, point);
+                return (ImportClause) {
+                    .type = Import,
+                    .path = path,
+                };
             } else {
                 Symbol middle;
                 if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
