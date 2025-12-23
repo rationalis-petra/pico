@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "platform/signals.h"
 #include "platform/machine_info.h"
 
 // Relevant OS includes 
