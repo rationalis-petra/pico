@@ -716,14 +716,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             for (size_t i = 0; i < type->proc.implicits.len; i++) {
                 push_ptr(pretty_type_internal(type->proc.implicits.data[i], ctx, a), &arg_nodes);
             }
-            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), &head_nodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("{", "}", mv_sep_doc(arg_nodes, a), a), a), a), &head_nodes);
         }
 
         PtrArray arg_nodes = mk_ptr_array(type->proc.args.len, a);
         for (size_t i = 0; i < type->proc.args.len; i++) {
             push_ptr(pretty_type_internal(type->proc.args.data[i], ctx, a), &arg_nodes);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &head_nodes);
+        push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), a), a), &head_nodes);
 
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
@@ -771,7 +771,10 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         PtrArray variants = mk_ptr_array(1 + type->enumeration.variants.len, a);
         for (size_t i = 0; i < type->enumeration.variants.len; i++) {
             PtrArray var_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->enumeration.variants.data[i].key, a), a), a);
+            PtrArray name_nodes= mk_ptr_array(2, a);
+            push_ptr(mv_cstr_doc(":", a), &name_nodes);
+            push_ptr(mk_str_doc(view_symbol_string(type->enumeration.variants.data[i].key), a), &name_nodes);
+            Document* fname = mv_style_doc(fstyle, mv_cat_doc(name_nodes, a), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
@@ -785,12 +788,9 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             if (ty_nodes.len != 0) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
-                var_doc = mk_paren_doc("[:", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
+                var_doc = mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
             } else {
-                PtrArray cat = mk_ptr_array(2, a);
-                push_ptr(mk_cstr_doc(":", a), &cat);
-                push_ptr(mv_sep_doc(var_nodes, a), &cat);
-                var_doc = mk_cat_doc(cat, a); 
+                var_doc = mv_sep_doc(var_nodes, a);
             }
 
             push_ptr(var_doc, &variants);
@@ -919,17 +919,19 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(fd_doc, &nodes);
+            push_ptr(mv_group_doc(fd_doc, a), &nodes);
         }
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTraitInstance: {
-        PtrArray nodes = mk_ptr_array(2 + type->instance.fields.len, a);
-        push_ptr(mk_str_doc(mv_string("Instance" ), a), &nodes);
-        push_ptr(pretty_u64(type->instance.instance_of, a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(2, a);
+        push_ptr(mv_style_doc(fstyle, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
+        push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
 
+        PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
@@ -939,7 +941,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(fd_doc, &nodes);
+            push_ptr(mv_nest_doc(2, mv_group_doc(fd_doc, a), a), &nodes);
         }
 
         out = mv_sep_doc(nodes, a);
@@ -955,16 +957,19 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TAll: {
-        PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(2, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("All", a)), a), a), &head_nodes);
         PtrArray args = mk_ptr_array(type->binder.vars.len, a);
         for (size_t i = 0; i < type->binder.vars.len; i++) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), a), &args);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), a), a), &head_nodes);
+
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
 
         ctx.should_wrap = false;
-        push_ptr(pretty_type_internal(type->binder.body, ctx, a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type_internal(type->binder.body, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1461,6 +1466,10 @@ PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
             sym_ptr_bind(ty->named.name, ty, &binds);
             ty = pi_type_subst(ty->named.type, binds, pia, a);
+        } else if (ty->sort == TUVar) {
+            PiType* maybe_ty = try_get_uvar(ty->uvar);
+            unwrapping = maybe_ty ? true : false;
+            if (unwrapping) ty = maybe_ty;
         } else {
             unwrapping = false;
         }

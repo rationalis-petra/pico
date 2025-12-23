@@ -99,6 +99,23 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         set_std_current_allocator(current_old);
     }
 
+    if (test_start(log, mv_string("Nested-variables-in-match"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        PiType *expected =
+            mk_struct_type(&pregion, 3,
+                           "x", mk_prim_type(&pregion, Int_64),
+                           "y", mk_prim_type(&pregion, Int_64),
+                           "z", mk_prim_type(&pregion, Int_64));
+        TEST_TYPE("(seq \n"
+                  "[let! my-struct struct [.x 12] [.y 14] [.z 24]]\n"
+                  "[let! v match (:left my-struct)  \n"
+                  "          [[:left my-struct] my-struct] \n"
+                  "          [[:right my-struct] my-struct]] \n"
+                  "v)");
+        set_std_current_allocator(current_old);
+    }
+
     if (test_start(log, mv_string("enum from variant constraints"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);

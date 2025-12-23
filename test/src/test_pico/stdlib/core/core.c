@@ -354,6 +354,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(seq thrice.z)");
     }
 
+    if (test_start(log, mv_string("project-nested-v1"))) {
+        int64_t expected = -57;
+        TEST_EQ("(seq [let! st (struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])])] st.p2.x)");
+    }
+
+    if (test_start(log, mv_string("project-nested-v2"))) {
+        int64_t expected = 127;
+        TEST_EQ("(seq [let! st (struct NestOuter [.n1 (struct [.x -8765] [.y -57] [.z 127])] [.n2 (struct [.x 875] [.y 52] [.z -122])])] st.n1.z)");
+    }
+
     // -----------------------------------------------------
     // 
     // Enumeration

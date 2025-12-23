@@ -315,7 +315,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target
+            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, 
         };
         type_check(&abs, env, ctx);
 

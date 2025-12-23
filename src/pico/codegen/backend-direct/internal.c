@@ -86,6 +86,8 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
     if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
 
     if ((dest_stack_offset + size) > 127 || (src_stack_offset + size) > 127)  {
+        // TODO: instead of generating a memcpy call when src/dest offset + sise
+        // exceeds a certain amount, how about only when size > 128?64?
         // TODO: check to ensure offsets don't exceed 32 bit max
 
 #if ABI == SYSTEM_V_64

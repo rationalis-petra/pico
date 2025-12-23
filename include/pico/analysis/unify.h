@@ -42,6 +42,8 @@ UnifyResult unify(PiType* lhs, PiType* rhs, UnifyContext ctx);
 //   that updates to one will not affect another and vice-versa
 UVarType* copy_uvar(UVarType* uvar, PiAllocator* pia);
 
+PiType* try_get_uvar(UVarType* uvar);
+
 // When typechecking, there may be a need to perform substitutions.
 //  For example, given id : All [A] Proc [A] A applied to 3, i.e. (id 3),
 //  it is necessary to substitute A for the type of 3. However, more generall

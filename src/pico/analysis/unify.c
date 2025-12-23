@@ -642,6 +642,10 @@ UVarType* copy_uvar(UVarType* uvar, PiAllocator* pia) {
     return new;
 }
 
+PiType* try_get_uvar(UVarType *uvar) {
+    return uvar->subst;
+}
+
 void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a) {
     // NOTE: We shallow copy here due to the allocation guarantees made 
     //       by the typecheck (caller) function.
