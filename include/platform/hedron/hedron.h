@@ -1,8 +1,10 @@
 #ifndef __PLATFORM_HEDRON_HEDRON_H
 #define __PLATFORM_HEDRON_HEDRON_H
 
-#include "pico/data/client/list.h"
+#include "data/option.h"
 #include "platform/memory/allocator.h"
+
+#include "pico/data/client/list.h"
 #include <stdbool.h>
 
 // forward-declaration of window (platform/window/window.h)
@@ -194,18 +196,37 @@ ImageResult acquire_next_image(HedronSurface* surface, HedronSemaphore* semaphor
 typedef struct HedronCommandPool HedronCommandPool;
 typedef struct HedronCommandBuffer HedronCommandBuffer;
 
+typedef enum : uint64_t {
+    StageColourAttachmentOutput, //  ??
+} CommandStage;
+
+typedef struct {
+    HedronSemaphore* semaphore;
+    CommandStage stage;
+} SemaphoreStagePair;
+
+
+PICO_LIST_HEADER_TYPE(SemaphoreStagePair, SemaphoreStagePair);
+
+typedef enum : uint64_t {
+    BUNone,
+    BUOneTimeSubmit,
+} CommandBufferUsage;
+
 HedronCommandPool* create_command_pool();
 void destroy_command_pool(HedronCommandPool* pool);
 
 // Command buffers are allocated from a pool, and are destroyed at the
 // point the pool is destroyed, so there is no function to release them
 HedronCommandBuffer* create_command_buffer(HedronCommandPool* pool);
+void free_command_buffer(HedronCommandPool* pool, HedronCommandBuffer* buffer);
 
 // Command buffer usage
-void queue_submit(HedronCommandBuffer *buffer, HedronFence *fence, HedronSemaphore* wait, HedronSemaphore* signal);
+void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals);
 void queue_present(HedronSurface* surface, HedronSemaphore* wait, uint32_t image_index);
+void queue_wait_idle();
 
-void command_begin(HedronCommandBuffer* buffer);
+void command_begin(HedronCommandBuffer* buffer, CommandBufferUsage usage);
 void command_end(HedronCommandBuffer* buffer);
 
 void reset_command_buffer(HedronCommandBuffer* buffer);

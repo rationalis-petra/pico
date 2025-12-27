@@ -312,8 +312,6 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     PiAllocator nul_alloc = (PiAllocator){};
     std_temp_allocator = mk_dynamic_var(sizeof(PiAllocator), &nul_alloc); 
-
-    typep = mk_dynamic_type(pia, mk_prim_type(pia, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
     add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
     clear_assembler(ass);

@@ -58,6 +58,15 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "    [.len len]\n"
         "    [.data (alloc (u64.* (size-of A) capacity))]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, region);
+
+    const char *mk_null_list_fn = 
+        "(def null-list all [A] proc []\n"
+        "  (struct (List A)\n"
+        "    [.gpa (use current-allocator)]\n"
+        "    [.capacity 0]\n"
+        "    [.len 0]\n"
+        "    [.data (num-to-address 0)]))";
+    compile_toplevel(mk_null_list_fn, module, target, &point, &pi_point, region);
     
     // TODO (BUG): use list allocator
     const char *mk_free_fn = 

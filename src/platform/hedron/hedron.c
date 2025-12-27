@@ -1263,9 +1263,10 @@ HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
     return out;
 }
 
-void destroy_image(HedronImage *image) {
+void destroy_image(HedronImage* image) {
     vkDestroyImage(logical_device, image->image, NULL);
     vkFreeMemory(logical_device, image->image_memory, NULL);
+    mem_free(image, hd_alloc);
 }
 
 // -----------------------------------------------------------------------------
@@ -1339,7 +1340,7 @@ ImageResult acquire_next_image(HedronSurface *surface, HedronSemaphore *semaphor
 // 
 // -------------------------------------------
 
-HedronCommandPool *create_command_pool() {
+HedronCommandPool* create_command_pool() {
     QueueFamilyIndices queues = find_queue_families(physical_device);
 
     if (!(queues.available & QUEUE_GRAPHICS)) {
@@ -1376,7 +1377,7 @@ void destroy_command_pool(HedronCommandPool* pool) {
     mem_free(pool, hd_alloc);
 }
 
-HedronCommandBuffer *create_command_buffer(HedronCommandPool* pool) {
+HedronCommandBuffer* create_command_buffer(HedronCommandPool* pool) {
     VkCommandBufferAllocateInfo cba_info = (VkCommandBufferAllocateInfo) {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = pool->pool,
@@ -1398,10 +1399,14 @@ HedronCommandBuffer *create_command_buffer(HedronCommandPool* pool) {
     return hd_buffer; 
 }
 
-void command_begin(HedronCommandBuffer *buffer) {
+void free_command_buffer(HedronCommandPool *pool, HedronCommandBuffer *buffer) {
+    vkFreeCommandBuffers(logical_device, pool->pool, 1, &buffer->buffer);
+}
+
+void command_begin(HedronCommandBuffer *buffer, CommandBufferUsage usage) {
     VkCommandBufferBeginInfo begin_info = (VkCommandBufferBeginInfo) {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = 0,
+        .flags = usage,
         .pInheritanceInfo = NULL,
     };
 
@@ -1420,19 +1425,32 @@ void reset_command_buffer(HedronCommandBuffer *buffer) {
     vkResetCommandBuffer(buffer->buffer, 0);
 }
 
-void queue_submit(HedronCommandBuffer *buffer, HedronFence *fence, HedronSemaphore* wait, HedronSemaphore* signal) {
-    VkSemaphore wait_semaphores[] = {wait->semaphore};
-    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSemaphore signal_semaphores[] = {signal->semaphore};
+void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals) {
+    VkSemaphore* wait_semaphores = mem_alloc(sizeof(VkSemaphore) * wait.len, hd_alloc);
+    VkPipelineStageFlags* wait_stages = mem_alloc(sizeof(VkPipelineStageFlags) * wait.len, hd_alloc);
+    for (size_t i = 0; i < wait.len; i++) {
+        wait_semaphores[i] = wait.data[i].semaphore->semaphore;
+        wait_stages[i] = 0; // Null-initialize
+        switch (wait.data[i].stage) {
+        case StageColourAttachmentOutput:
+            wait_stages[i] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+    }
+
+    VkSemaphore* signal_semaphores = mem_alloc(sizeof(VkSemaphore) * signals.len, hd_alloc);
+    for (size_t i = 0; i < signals.len; i++) {
+        HedronSemaphore* semaphore = signals.data[i];
+        signal_semaphores[i] = semaphore->semaphore;
+    }
 
     VkSubmitInfo submit_info = (VkSubmitInfo) {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 1,
+        .waitSemaphoreCount = wait.len,
         .pWaitSemaphores = wait_semaphores,
         .pWaitDstStageMask = wait_stages,
         .commandBufferCount = 1,
         .pCommandBuffers = &buffer->buffer,
-        .signalSemaphoreCount = 1,
+        .signalSemaphoreCount = signals.len,
         .pSignalSemaphores = signal_semaphores,
     };
 
@@ -1443,9 +1461,14 @@ void queue_submit(HedronCommandBuffer *buffer, HedronFence *fence, HedronSemapho
     VkQueue graphics_queue;
     vkGetDeviceQueue(logical_device, indices.graphics_family, 0, &graphics_queue);
 
-    if (vkQueueSubmit(graphics_queue, 1, &submit_info, fence->fence) != VK_SUCCESS) {
+    HedronFence* hd_fence = fence.val;
+    VkFence vk_fence = fence.type == Some ? hd_fence->fence : VK_NULL_HANDLE;
+    if (vkQueueSubmit(graphics_queue, 1, &submit_info, vk_fence) != VK_SUCCESS) {
         panic(mv_string("failed to submit draw command buffer!"));
     }
+    mem_free(signal_semaphores, hd_alloc);
+    mem_free(wait_semaphores, hd_alloc);
+    mem_free(wait_stages, hd_alloc);
 }
 
 void queue_present(HedronSurface *surface, HedronSemaphore *wait, uint32_t image_index) {
@@ -1466,6 +1489,15 @@ void queue_present(HedronSurface *surface, HedronSemaphore *wait, uint32_t image
     vkGetDeviceQueue(logical_device, indices.graphics_family, 0, &present_queue);
 
     vkQueuePresentKHR(present_queue, &present_info);
+}
+
+void queue_wait_idle() {
+    QueueFamilyIndices indices = find_queue_families(physical_device);
+
+    VkQueue graphics_queue;
+    vkGetDeviceQueue(logical_device, indices.graphics_family, 0, &graphics_queue);
+
+    vkQueueWaitIdle(graphics_queue);
 }
 
 void command_begin_render_pass(HedronCommandBuffer* buffer, HedronSurface* surface, uint32_t image_index) {

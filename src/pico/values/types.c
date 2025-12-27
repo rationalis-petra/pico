@@ -1484,6 +1484,10 @@ PiType* strip_type(PiType *ty) {
             ty = ty->distinct.type;
         } else if (ty->sort == TNamed) {
             ty = ty->named.type;
+        } else if (ty->sort == TUVar) {
+            PiType* maybe_ty = try_get_uvar(ty->uvar);
+            unwrapping = maybe_ty ? true : false;
+            if (unwrapping) ty = maybe_ty;
         } else {
             unwrapping = false;
         }
