@@ -649,7 +649,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               break;
           }
           case Win64M128: {
-              throw_error(point, mv_string("Not implemented: register arg of class Win64 __m128 "));
+              throw_error(point, mv_cstr_doc("Not implemented: register arg of class Win64 __m128 ", a));
           }
           }
       } else {

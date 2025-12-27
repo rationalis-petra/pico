@@ -412,7 +412,7 @@ void gen_mk_struct_ty(Location dest, Location nfields,  Location data, bool pack
     build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm8(packed), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm32(packed), ass, a, point);
     build_binary_op(Mov, reg(R8, sz_64), data, ass, a, point);
 #else 
     #error "Unknown calling convention"
@@ -503,7 +503,7 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location 
     build_binary_op(Mov, reg(RCX, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(shape.variants.len), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_8), imm64((uint8_t)tagsize), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_8), imm8((uint8_t)tagsize), ass, a, point);
     build_binary_op(Mov, reg(R8, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
     build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
 #else 
