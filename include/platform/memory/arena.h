@@ -7,6 +7,7 @@ typedef struct ArenaAllocator ArenaAllocator;
 
 ArenaAllocator* make_arena_allocator(size_t blocksize, Allocator* a);
 void* arena_malloc(ArenaAllocator* arena, size_t memsize);
+void* arena_realloc(void* ptr, size_t memsize, void* ctx);
 void reset_arena_allocator(ArenaAllocator* a);
 void delete_arena_allocator(ArenaAllocator* a);
 

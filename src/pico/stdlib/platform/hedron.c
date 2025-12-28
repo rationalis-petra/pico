@@ -4,6 +4,8 @@
 #include "platform/machine_info.h"
 #include "platform/hedron/hedron.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
@@ -37,9 +39,14 @@ static PiType* descriptor_copy_ty;
 
 static PiType* buffer_ty;
 static PiType* buffer_sort_ty;
+static PiType* image_ty;
+static PiType* image_format_ty;
 
 static PiType* command_pool_ty;
 static PiType* command_buffer_ty;
+
+static PiType* pipeline_stage_ty;
+static PiType* command_buffer_usage_ty;
 
 static PiType* semaphore_ty;
 static PiType* fence_ty;
@@ -121,7 +128,7 @@ void build_destroy_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, All
 }
 
 PiType* build_buffer_set_fn_ty(PiAllocator* pia) {
-    PiType* proc_ty  = mk_proc_type(pia, 2, copy_pi_type_p(buffer_ty, pia), mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
+    PiType* proc_ty  = mk_proc_type(pia, 2, buffer_ty, mk_var_type(pia, "A"), mk_prim_type(pia, Unit));
 
     SymbolPiList types = mk_sym_list(1, pia);
     push_sym(string_to_symbol(mv_string("A")), &types);
@@ -182,6 +189,24 @@ void build_buffer_set_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 void build_set_buffer_data_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2, "buffer", mk_voidptr_ctype(pia), "data", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
     convert_c_fn(set_buffer_data, &fn_ctype, type, ass, a, point); 
+}
+
+void build_create_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 3, 
+                                 "width", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
+                                 "height", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt,}),
+                                 "format", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
+                                 mk_voidptr_ctype(pia));
+
+    convert_c_fn(create_image, &fn_ctype, type, ass, a, point); 
+}
+
+void build_destroy_image_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, 
+                                 "image", mk_voidptr_ctype(pia), 
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(destroy_image, &fn_ctype, type, ass, a, point); 
 }
 
 // Descriptor Sets
@@ -246,11 +271,22 @@ void build_create_command_buffer_fn(PiType* type, Assembler* ass, PiAllocator* p
     convert_c_fn(create_command_buffer, &fn_ctype, type, ass, a, point); 
 }
 
+void build_free_command_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 2,
+                                 "pool", mk_voidptr_ctype(pia),
+                                 "buffer",  mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(free_command_buffer, &fn_ctype, type, ass, a, point); 
+}
+
 void build_queue_submit_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType ptr_option = mk_struct_ctype(pia, 2,
+                                       "optional", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                       "ptr", mk_voidptr_ctype(pia));
     CType fn_ctype = mk_fn_ctype(pia, 4, "buffer", mk_voidptr_ctype(pia),
-                                 "fence", mk_voidptr_ctype(pia),
-                                 "wait", mk_voidptr_ctype(pia),
-                                 "signal", mk_voidptr_ctype(pia),
+                                 "fence", ptr_option,
+                                 "wait", mk_list_ctype(pia),
+                                 "signal", mk_list_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(queue_submit, &fn_ctype, type, ass, a, point); 
 }
@@ -263,8 +299,16 @@ void build_queue_present_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
     convert_c_fn(queue_present, &fn_ctype, type, ass, a, point); 
 }
 
+void build_queue_wait_idle_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
+    convert_c_fn(queue_wait_idle, &fn_ctype, type, ass, a, point); 
+}
+
 void build_command_begin_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, "buffer", mk_voidptr_ctype(pia), (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(pia, 2, 
+                                 "buffer", mk_voidptr_ctype(pia), 
+                                 "usage", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
+                                 (CType){.sort = CSVoid});
     convert_c_fn(command_begin, &fn_ctype, type, ass, a, point); 
 }
 
@@ -423,7 +467,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments prepped;
@@ -473,6 +517,22 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     buffer_ty = e->value;
 
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Image", mk_prim_type(pia, Address)));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Image"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    image_ty = e->value;
+
+    typep = mk_enum_type(pia, 1, "r8-g8-b8-a8-srgb", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("ImageFormat"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    image_format_ty = e->value;
+
     typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandPool", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
@@ -489,10 +549,27 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     command_buffer_ty = e->value;
 
+    typep = mk_named_type(pia, "CommandBufferUsage", 
+                          mk_enum_type(pia, 2, "none", 0, "one-time-submit", 0));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("CommandBufferUsage"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    command_buffer_usage_ty = e->value;
+
+    typep = mk_enum_type(pia, 1, "colour-attachment", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("PipelineStage"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    pipeline_stage_ty = e->value;
+
     typep = mk_struct_type(pia, 3,
                            "binding", mk_prim_type(pia, UInt_32),
                            "stride", mk_prim_type(pia, UInt_32),
-                           "input-rate", copy_pi_type_p(input_rate_ty, pia));
+                           "input-rate", input_rate_ty);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("BindingDescription"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -611,8 +688,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     stage_sort_ty = e->value;
 
     typep = mk_struct_type(pia, 2,
-                           "type", copy_pi_type_p(descriptor_type_ty, pia),
-                           "stage-type", copy_pi_type_p(stage_sort_ty, pia));
+                           "type", descriptor_type_ty,
+                           "stage-type", stage_sort_ty);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DescriptorBinding"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -623,7 +700,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_struct_type(pia, 4,
                            "binding", mk_prim_type(pia, UInt_32),
                            "location", mk_prim_type(pia, UInt_32),
-                           "format", copy_pi_type_p(input_format_ty, pia),
+                           "format", input_format_ty,
                            "offset", mk_prim_type(pia, UInt_32));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("AttributeDescription"));
@@ -632,7 +709,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     attribute_desc_ty = e->value;
 
-    typep = mk_enum_type(pia, 3, "vertex", 0, "index", 0, "uniform", 0);
+    typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "transfer-source", 0, "transfer-destination", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("BufferSort"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -658,7 +735,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     fence_ty = e->value;
 
 #ifdef WINDOW_SYSTEM
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(get_window_ty(), pia), copy_pi_type_p(surface_ty, pia));
+    typep = mk_proc_type(pia, 1, get_window_ty(), surface_ty);
     build_create_window_surface_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-window-surface"));
     fn_segments.code = get_instructions(ass);
@@ -666,7 +743,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(surface_ty, pia), 
+    typep = mk_proc_type(pia, 2, surface_ty, 
                          mk_app_type(pia, get_pair_type(), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32)),
                          mk_prim_type(pia, Unit));
     build_resize_window_surface_fn(typep, ass, pia, &ra, &point);
@@ -676,7 +753,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(surface_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, Unit));
     build_destroy_window_surface_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-window-surface"));
     fn_segments.code = get_instructions(ass);
@@ -685,7 +762,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
 #endif
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(surface_ty, pia), mk_prim_type(pia, UInt_32));
+    typep = mk_proc_type(pia, 1, surface_ty, mk_prim_type(pia, UInt_32));
     build_num_swapchain_images_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("num-swapchain-images"));
     fn_segments.code = get_instructions(ass);
@@ -700,7 +777,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     // ------------------------------------------------------------------------
 
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(buffer_sort_ty, pia), mk_prim_type(pia, UInt_64), copy_pi_type_p(buffer_ty, pia));
+    typep = mk_proc_type(pia, 2, buffer_sort_ty, mk_prim_type(pia, UInt_64), buffer_ty);
     build_create_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -708,7 +785,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(buffer_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, buffer_ty, mk_prim_type(pia, Unit));
     build_destroy_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -724,9 +801,25 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(buffer_ty, pia), mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, buffer_ty, mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
     build_set_buffer_data_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("set-buffer-data"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), image_format_ty, image_ty);
+    build_create_image_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("create-image"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, image_ty, mk_prim_type(pia, Unit));
+    build_destroy_image_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("destroy-image"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
@@ -789,7 +882,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), mk_prim_type(pia, UInt_8)), copy_pi_type_p(shader_module_ty, pia));
+    typep = mk_proc_type(pia, 1, mk_app_type(pia, get_list_type(), mk_prim_type(pia, UInt_8)), shader_module_ty);
     build_create_shader_module_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-shader-module"));
     fn_segments.code = get_instructions(ass);
@@ -797,7 +890,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(shader_module_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, shader_module_ty, mk_prim_type(pia, Unit));
     build_destroy_shader_module_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-shader-module"));
     fn_segments.code = get_instructions(ass);
@@ -810,8 +903,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
                          mk_app_type(pia, get_list_type(), binder_desc_ty),
                          mk_app_type(pia, get_list_type(), attribute_desc_ty),
                          mk_app_type(pia, get_list_type(), shader_module_ty),
-                         copy_pi_type_p(surface_ty, pia),
-                         copy_pi_type_p(pipeline_ty, pia));
+                         surface_ty,
+                         pipeline_ty);
     build_create_pipeline_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-pipeline"));
     fn_segments.code = get_instructions(ass);
@@ -819,7 +912,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(pipeline_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, pipeline_ty, mk_prim_type(pia, Unit));
     build_destroy_pipeline_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-pipeline"));
     fn_segments.code = get_instructions(ass);
@@ -827,7 +920,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 0, copy_pi_type_p(command_pool_ty, pia));
+    typep = mk_proc_type(pia, 0, command_pool_ty);
     build_create_command_pool_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-command-pool"));
     fn_segments.code = get_instructions(ass);
@@ -835,7 +928,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(command_pool_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, command_pool_ty, mk_prim_type(pia, Unit));
     build_destroy_command_pool_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-command-pool"));
     fn_segments.code = get_instructions(ass);
@@ -843,7 +936,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(command_pool_ty, pia), copy_pi_type_p(command_buffer_ty, pia));
+    typep = mk_proc_type(pia, 1, command_pool_ty, command_buffer_ty);
     build_create_command_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-command-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -851,8 +944,24 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 4, copy_pi_type_p(command_buffer_ty, pia), copy_pi_type_p(fence_ty, pia),
-                         copy_pi_type_p(semaphore_ty, pia), copy_pi_type_p(semaphore_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, 
+                         command_pool_ty,
+                         command_buffer_ty,
+                         mk_prim_type(pia, Unit));
+    build_free_command_buffer_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("free-command-buffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePairPiList wait, AddrPiList signals) {
+    typep = mk_proc_type(pia, 4, 
+                         command_buffer_ty,
+                         mk_app_type(pia, get_maybe_type(), fence_ty),
+                         mk_app_type(pia, get_list_type(), mk_app_type(pia, get_pair_type(), semaphore_ty, pipeline_stage_ty)), 
+                         mk_app_type(pia, get_list_type(), semaphore_ty),
+                         mk_prim_type(pia, Unit));
     build_queue_submit_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("queue-submit"));
     fn_segments.code = get_instructions(ass);
@@ -860,8 +969,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 3, copy_pi_type_p(surface_ty, pia),
-                         copy_pi_type_p(semaphore_ty, pia), mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 3, surface_ty,
+                         semaphore_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
     build_queue_present_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("queue-present"));
     fn_segments.code = get_instructions(ass);
@@ -869,7 +978,15 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(command_buffer_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
+    build_queue_wait_idle_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("queue-wait-idle"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, command_buffer_ty, command_buffer_usage_ty, mk_prim_type(pia, Unit));
     build_command_begin_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-begin"));
     fn_segments.code = get_instructions(ass);
@@ -877,7 +994,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(command_buffer_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
     build_command_end_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-end"));
     fn_segments.code = get_instructions(ass);
@@ -885,7 +1002,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(command_buffer_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, command_buffer_ty, mk_prim_type(pia, Unit));
     build_reset_command_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("reset-command-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -893,8 +1010,8 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 3, copy_pi_type_p(command_buffer_ty, pia),
-                         copy_pi_type_p(surface_ty, pia),
+    typep = mk_proc_type(pia, 3, command_buffer_ty,
+                         surface_ty,
                          mk_prim_type(pia, UInt_32),
                          mk_prim_type(pia, Unit));
     build_command_begin_renderpass_fn(typep, ass, pia, &ra, &point);
@@ -931,7 +1048,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(command_buffer_ty, pia), copy_pi_type_p(buffer_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, command_buffer_ty, buffer_ty, mk_prim_type(pia, Unit));
     build_command_bind_vertex_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-bind-vertex-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -939,7 +1056,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 3, copy_pi_type_p(command_buffer_ty, pia), copy_pi_type_p(buffer_ty, pia), copy_pi_type_p(index_format_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 3, command_buffer_ty, buffer_ty, index_format_ty, mk_prim_type(pia, Unit));
     build_command_bind_index_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-bind-index-buffer"));
     fn_segments.code = get_instructions(ass);
@@ -947,7 +1064,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(command_buffer_ty, pia), copy_pi_type_p(surface_ty, pia),mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 2, command_buffer_ty, surface_ty, mk_prim_type(pia, Unit));
     build_command_set_surface_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-set-surface"));
     fn_segments.code = get_instructions(ass);
@@ -955,7 +1072,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 5, copy_pi_type_p(command_buffer_ty, pia),
+    typep = mk_proc_type(pia, 5, command_buffer_ty,
                          mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
                          mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
                          mk_prim_type(pia, Unit));
@@ -966,7 +1083,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 6, copy_pi_type_p(command_buffer_ty, pia),
+    typep = mk_proc_type(pia, 6, command_buffer_ty,
                          mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
                          mk_prim_type(pia, UInt_32), mk_prim_type(pia, Int_32),
                          mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
@@ -977,7 +1094,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 0, copy_pi_type_p(semaphore_ty, pia));
+    typep = mk_proc_type(pia, 0, semaphore_ty);
     build_create_semaphore_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-semaphore"));
     fn_segments.code = get_instructions(ass);
@@ -985,7 +1102,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(semaphore_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, semaphore_ty, mk_prim_type(pia, Unit));
     build_destroy_semaphore_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-semaphore"));
     fn_segments.code = get_instructions(ass);
@@ -993,7 +1110,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 0, copy_pi_type_p(fence_ty, pia));
+    typep = mk_proc_type(pia, 0, fence_ty);
     build_create_fence_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-fence"));
     fn_segments.code = get_instructions(ass);
@@ -1001,7 +1118,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(fence_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
     build_destroy_fence_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("destroy-fence"));
     fn_segments.code = get_instructions(ass);
@@ -1009,7 +1126,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(fence_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
     build_wait_for_fence_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("wait-for-fence"));
     fn_segments.code = get_instructions(ass);
@@ -1017,7 +1134,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 1, copy_pi_type_p(fence_ty, pia), mk_prim_type(pia, Unit));
+    typep = mk_proc_type(pia, 1, fence_ty, mk_prim_type(pia, Unit));
     build_reset_fence_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("reset-fence"));
     fn_segments.code = get_instructions(ass);
@@ -1033,7 +1150,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 2, copy_pi_type_p(surface_ty, pia), copy_pi_type_p(semaphore_ty, pia),
+    typep = mk_proc_type(pia, 2, surface_ty, semaphore_ty,
                          mk_enum_type(pia, 2,
                                       "image", 1, mk_prim_type(pia, UInt_32),
                                       "resized", 0));

@@ -155,6 +155,7 @@ void abstract_atlas_project(Project *project, ProjectRecord *record, RawAtlas ra
             }
 
             check_props(props, package_checks, raw.range, point, &ra);
+            record->package = true;
             return;
         } else {
             PicoError err = {

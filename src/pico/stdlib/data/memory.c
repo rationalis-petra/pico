@@ -1,5 +1,7 @@
 #include "platform/signals.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/data/submodules.h"
@@ -35,7 +37,7 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
 
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     PiType type;

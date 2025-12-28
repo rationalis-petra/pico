@@ -63,12 +63,11 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE("((all [A] -28) {Unit})");
     }
 
-    // TODO: fix this test!
-    /* if (test_start(log, mv_string("Substitution through uvar"))) { */
-    /*     RUN("(def id all [A] proc [(x A)] x)"); */
-    /*     PiType* expected = mk_prim_type(&arena, Int_64); */
-    /*     TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)"); */
-    /* } */
+    if (test_start(log, mv_string("substitution-through-uvar"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)");
+    }
 
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         PiAllocator current_old = get_std_current_allocator();
@@ -97,6 +96,23 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
                          mk_enum_type(&pregion, 2, "left", 1, mk_prim_type(&pregion, UInt_64),
                                       "right", 1, mk_prim_type(&pregion, Address)), mk_prim_type(&pregion, UInt_64));
         TEST_TYPE("(proc [either] match either [[:left v] v] [[:right x] (address-to-num x)])");
+        set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("Nested-variables-in-match"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        PiType *expected =
+            mk_struct_type(&pregion, 3,
+                           "x", mk_prim_type(&pregion, Int_64),
+                           "y", mk_prim_type(&pregion, Int_64),
+                           "z", mk_prim_type(&pregion, Int_64));
+        TEST_TYPE("(seq \n"
+                  "[let! my-struct struct [.x 12] [.y 14] [.z 24]]\n"
+                  "[let! v match (:left my-struct)  \n"
+                  "          [[:left my-struct] my-struct] \n"
+                  "          [[:right my-struct] my-struct]] \n"
+                  "v)");
         set_std_current_allocator(current_old);
     }
 

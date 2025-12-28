@@ -23,6 +23,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     IStream* cin = mk_capturing_istream(sin, &ra);
+    Logger* logger = NULL;
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -39,14 +40,14 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     PiAllocator pia = convert_to_pallocator(&ra);
     ParseResult res = parse_rawtree(cin, &pia, &ra);
     if (res.type == ParseNone) {
-        throw_error(&point, mv_string("Parse Returned None!"));
+        throw_error(&point, mv_cstr_doc("Parse Returned None!", &ra));
     }
     if (res.type == ParseFail) {
         throw_pi_error(&pi_point, res.error);
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
-        throw_error(&point, mv_string("Parse Returned Invalid Result!\n"));
+        throw_error(&point, mv_cstr_doc("Parse Returned Invalid Result!\n", &ra));
     }
 
     // -------------------------------------------------------------------------
@@ -55,8 +56,11 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
+#ifdef DEBUG
+    logger = make_logger(&ra);
+#endif
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = &pia, .point = &pi_point, .target = target, 
+        .a = &ra, .pia = &pia, .point = &pi_point, .target = target, .logger = logger,
     };
     type_check(&abs, env, ctx);
 
@@ -68,9 +72,16 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("C Sources."), &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("C Sources"), &ra);
+#ifdef DEBUG
+    if (logger) {
+        write_fstring(mv_string(" Writing Structured Log\n"), get_formatted_stdout());
+        write_fstring(mv_string("--------------------------\n"), get_formatted_stdout());
+        log_to_formatted_ostream(logger, 120, get_formatted_stdout());
+    }
+#endif
     delete_istream(sin, &ra);
-    throw_error(final_point, mv_string("Compile-time failure - message written to stdout"));
+    throw_error(final_point, mv_cstr_doc("Compile-time failure - message written to stdout", &ra));
 
  on_error:
     delete_istream(sin, &ra);
@@ -78,7 +89,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
  on_exit:
     delete_istream(sin, &ra);
-    throw_error(final_point, mv_string("Startup compiled definition not exepcted to exit!"));
+    throw_error(final_point, mv_cstr_doc("Startup compiled definition not exepcted to exit!", &ra));
 }
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {

@@ -159,8 +159,27 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             throw_at_error(point, err);
         }
 
-        // TODO: check that function has appropriate type, i.e. (Proc [] Unit)
-        call_unit_fn(*(void**)e->value, &ra);
+        PiAllocator pia = convert_to_pallocator(&ra);
+        PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
+        if (pi_type_eql(check_ty, &e->type, &ra)) {
+            call_unit_fn(*(void**)e->value, &ra);
+        } else {
+            PtrArray nodes = mk_ptr_array(5, &ra);
+            {
+                PtrArray ep_nodes = mk_ptr_array(5, &ra);
+                push_ptr(mk_str_doc(mv_string("Entry Point: '"), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(view_symbol_string(target->entrypoint.value), &ra), &ep_nodes);
+                push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
+                push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
+            }
+            push_ptr(pretty_type(&e->type, &ra), &nodes);
+            push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
+            push_ptr(pretty_type(check_ty, &ra), &nodes);
+            AtlasError err = {
+                .message = mv_sep_doc(nodes, &ra),
+            };
+            throw_at_error(point, err);
+        }
     } else {
         PtrArray nodes = mk_ptr_array(5, &ra);
         push_ptr(mk_str_doc(mv_string("Unrecognized target: '"), &ra), &nodes);
@@ -257,18 +276,29 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     // Step 5:
     //  • Using the environment, parse and run each expression/definition in the module
     bool next_iter = true;
-    Environment* env = env_from_module(module, &err_point, &ra);
+    ErrorPoint env_point;
+    if (catch_error(env_point)) {
+        pi_point.multi = (MultiError) {
+            .has_many = false,
+            .error.message = env_point.error_message,
+            .error.range = header->range,
+        };
+
+        goto on_pi_error;
+    }
+    Environment* env = env_from_module(module, &env_point, &ra);
+
     while (next_iter) {
         reset_subregion(iter_region);
         refresh_env(env);
 
-        ParseResult res = parse_rawtree(cin, &pico_itera, &itera);
-        if (res.type == ParseNone) goto on_exit;
+        ph_res = parse_rawtree(cin, &pico_itera, &itera);
+        if (ph_res.type == ParseNone) goto on_exit;
 
-        if (res.type == ParseFail) {
+        if (ph_res.type == ParseFail) {
             goto on_parse_error;
         }
-        if (res.type != ParseSuccess) {
+        if (ph_res.type != ParseSuccess) {
             panic(mv_string("Parse Returned Invalid Result!\n"));
         }
 
@@ -276,7 +306,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &itera, &pi_point);
+        TopLevel abs = abstract(ph_res.result, env, &itera, &pi_point);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -285,7 +315,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext ctx = (TypeCheckContext) {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target
+            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, 
         };
         type_check(&abs, env, ctx);
 
@@ -331,13 +361,31 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     }
 
  on_pi_error: {
+        MultiError error;
         if (pi_point.multi.has_many) {
-            panic(mv_string("Atlas needs to accommodate multi-errors being thrown when loading files"));
+            PtrArray copied_errors = mk_ptr_array(pi_point.multi.errors.len, &ra); 
+            for (size_t i = 0; i < pi_point.multi.errors.len; i++) {
+                PicoError* old_error = pi_point.multi.errors.data[i];
+                PicoError* new_error = mem_alloc(sizeof(PicoError), &ra);
+                *new_error = (PicoError) {
+                    .range = old_error->range,
+                    .message = copy_doc(old_error->message, &ra),
+                };
+                push_ptr(new_error, &copied_errors);
+            }
+            error = (MultiError) {
+                .has_many = true,
+                .errors = copied_errors,
+            };
+        } else {
+          error = (MultiError) {
+              .has_many = false,
+              .error.message = copy_doc(pi_point.multi.error.message, &ra),
+              .error.range = pi_point.multi.error.range,
+          };
         }
-        Document* out = copy_doc(pi_point.multi.error.message, &ra);
-        AtlasError new_err = {
-            .range = pi_point.multi.error.range,
-            .message = out,
+        AtlasMultiError new_err = {
+            .error = error,
             .filename = filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
@@ -347,15 +395,14 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         release_subregion(iter_region);
         release_executable_allocator(exec);
 
-        throw_at_error(point, new_err);
+        throw_at_multi_error(point, new_err);
     }
     
 
  on_error: {
-        Document* out = mk_str_doc(err_point.error_message, &ra);
         AtlasError new_err = {
             .range = pi_point.multi.error.range,
-            .message = out,
+            .message = err_point.error_message,
             .filename = filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };

@@ -33,6 +33,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(widen (is 678 U32) U64)");
     }
 
+    if (test_start(log, mv_string("widen-dirty-u32->u64"))) {
+        int64_t expected = 567;
+        TEST_EQ("(widen (is (struct [.x 678] [.y 567] [.z 456]) (Struct [.x U32] [.y U32] [.z U32])).y U64)");
+    }
+
+    /* if (test_start(log, mv_string("widen-f32->f64"))) { */
+    /*     float64_t expected = 1.0; */
+    /*     TEST_EQ("(widen (is 1.0 F32) F64)"); */
+    /* } */
+
     if (test_start(log, mv_string("narrow-f64->f32"))) {
         float32_t expected = 1.0;
         TEST_EQ("(narrow (is 1.0 F64) F32)");
@@ -344,11 +354,32 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(seq thrice.z)");
     }
 
+    if (test_start(log, mv_string("project-nested-v1"))) {
+        int64_t expected = -57;
+        TEST_EQ("(seq [let! st (struct [.v1 -8765] [.p2 (struct [.x -57] [.y 127])])] st.p2.x)");
+    }
+
+    if (test_start(log, mv_string("project-nested-v2"))) {
+        int64_t expected = 127;
+        TEST_EQ("(seq [let! st (struct NestOuter [.n1 (struct [.x -8765] [.y -57] [.z 127])] [.n2 (struct [.x 875] [.y 52] [.z -122])])] st.n1.z)");
+    }
+
     // -----------------------------------------------------
     // 
     // Enumeration
     // 
     // -----------------------------------------------------
+
+    RUN("(def TagOnly Enum :tag-1 :tag-2)");
+    if (test_start(log, mv_string("enum-simple"))) {
+        uint64_t expected = 1;
+        TEST_EQ("TagOnly:tag-2");
+    }
+
+    if (test_start(log, mv_string("enum-simple-2"))) {
+        uint64_t expected = 1;
+        TEST_EQ("((proc [] TagOnly:tag-2))");
+    }
 
     typedef struct {
         uint64_t tag;
@@ -356,7 +387,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int32_t y;
     } SimpleEnum;
     RUN("(def SE Enum [:simple I32 I32])");
-    RUN("(def PSE Enum [:simple I32 I32])");
 
     if (test_start(log, mv_string("enum-simple"))) {
         SimpleEnum expected = (SimpleEnum) {.tag = 0, .x = 1086, .y = -200};
@@ -380,6 +410,29 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                  "  [[:some pr] (i32.+ pr.x pr.y)])");
     }
 
+    typedef struct {
+        uint64_t tag;
+        union {
+            struct {
+                int32_t sml;
+                int64_t big;
+            } large_enum;
+            uint64_t us;
+        };
+    } MixedEnum;
+    RUN("(def Mixed Enum [:large I32 I64] [:sml U64])");
+
+    if (test_start(log, mv_string("enum-mixed-sml"))) {
+        MixedEnum expected = (MixedEnum) {.tag = 1, .us = 1029731092};
+        TEST_EQ("(Mixed:sml 1029731092)");
+    }
+    
+    if (test_start(log, mv_string("enum-mixed-large"))) {
+        MixedEnum expected = (MixedEnum) {.tag = 0, .large_enum.sml = -1086, .large_enum.big = 1937987};
+        TEST_EQ("(Mixed:large -1086 1937987)");
+    }
+
+
     // -----------------------------------------------------
     // 
     //      Type Metadata (size, align, offset)
@@ -394,6 +447,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("test-size-of-structs"))) {
         uint64_t expected = 12;
         TEST_EQ("(size-of (Struct [.x U8] [.y I32] [.z U16]))");
+    }
+
+    if (test_start(log, mv_string("test-size-of-structs"))) {
+        uint64_t expected = 7;
+        TEST_EQ("(size-of (Struct packed [.x U8] [.y I32] [.z U16]))");
     }
 
     if (test_start(log, mv_string("test-align-of-I64"))) {
@@ -474,6 +532,26 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("size-of-I8"))) {
         uint64_t expected = 1;
         TEST_EQ("(size-of I8)");
+    }
+
+    if (test_start(log, mv_string("size-of-enum"))) {
+        uint64_t expected = 8;
+        TEST_EQ("(size-of (Enum :x :y))");
+    }
+
+    if (test_start(log, mv_string("size-enum-payload"))) {
+        uint64_t expected = 10;
+        TEST_EQ("(size-of (Enum [:x I16] :y))");
+    }
+
+    if (test_start(log, mv_string("size-of-small-enum"))) {
+        uint64_t expected = 1;
+        TEST_EQ("(size-of (Enum 8 :x :y))");
+    }
+
+    if (test_start(log, mv_string("size-of-small-enum-payload"))) {
+        uint64_t expected = 4;
+        TEST_EQ("(size-of (Enum 8 [:x I16] :y))");
     }
 
     if (test_start(log, mv_string("align-of-I64"))) {

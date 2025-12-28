@@ -217,7 +217,7 @@ run-test: $(TEST_DIR)/$(TARGET_TEST)
 .PHONY: all
 all: debug release test
 
-# TODO: check shell; set appropriately
+# TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode
 debug_mode:
 	set -x LD_LIBRARY_PATH /usr/lib/debug
