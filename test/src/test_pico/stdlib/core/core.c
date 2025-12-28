@@ -137,10 +137,32 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(use dvar)");
     }
 
+    if (test_start(log, mv_string("bind-preserves-inner"))) {
+        int64_t expected = 7;
+        TEST_EQ("(bind [dvar 12] 7)");
+    }
+
+    // TODO: Add test with small (non-stack aligned) values.
+
+    if (test_start(log, mv_string("bind-reverts-dynamic-to-corect-val"))) {
+        int64_t expected = 9;
+        TEST_EQ("(seq (set dvar 9) (bind [dvar 12] 3) (use dvar))");
+    }
+
+    if (test_start(log, mv_string("bind-provides-correct-value"))) {
+        int64_t expected = 12;
+        TEST_EQ("(bind [dvar 12] (use dvar))");
+    }
+
     RUN("(def ldvar dynamic struct [.x -10] [.y 10])");
     if (test_start(log, mv_string("large-dynamic-use"))) {
         int64_t expected[2] = {-10, 10};
         TEST_EQ("(use ldvar)");
+    }
+
+    if (test_start(log, mv_string("large-dynamic-use"))) {
+        int64_t expected[2] = {47, -72};
+        TEST_EQ("(bind [ldvar (struct [.x 47] [.y -72])] (use ldvar))");
     }
 
     // -----------------------------------------------------

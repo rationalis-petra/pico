@@ -1070,7 +1070,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         }
 
         Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
-        shadow_pop(bindings.len, ctx.env);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
@@ -2370,6 +2369,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
 }
 
 Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
+    // TODO: add debug checks that shadow_env.len is preserved 
     PicoError err = {.range = raw.range};
     Allocator* a = ctx.gpa;
     Syntax* res = mem_alloc(sizeof(Syntax), a);

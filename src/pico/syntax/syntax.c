@@ -541,69 +541,67 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
     case SDynamic: {
         PtrArray nodes = mk_ptr_array(3, a);
 
-        push_ptr(mk_str_doc(mv_string("(dynamic "), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("dynamic", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->dynamic, ctx, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
-        out = mv_cat_doc(nodes, a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SDynamicUse: {
         PtrArray nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("use "), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("use", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->use, ctx, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SDynamicSet: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mk_str_doc(mv_string("set "), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("set", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->dynamic_set.dynamic, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->dynamic_set.new_val, ctx, a), &nodes);
-        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SLet: {
         PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
-        push_ptr(mk_str_doc(mv_string("(let"), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("let", a), a), &nodes);
         for (size_t i = 0; i < syntax->let_expr.bindings.len; i++) {
             Symbol name = syntax->let_expr.bindings.data[i].key;
             Syntax* expr = syntax->let_expr.bindings.data[i].val;
-            PtrArray let_nodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
+            PtrArray let_nodes = mk_ptr_array(2, a);
             push_ptr(mk_str_doc(symbol_to_string(name, a), a), &let_nodes);
             push_ptr(pretty_syntax_internal(expr, ctx, a), &nodes);
-            push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
-            push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+            push_ptr(mv_nest_doc(4, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(let_nodes, a), a), a), a), &nodes);
         }
-        push_ptr(pretty_syntax_internal(syntax->let_expr.body, ctx, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->let_expr.body, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SDynamicLet: {
         PtrArray nodes = mk_ptr_array(3 + syntax->let_expr.bindings.len, a);
-        push_ptr(mk_str_doc(mv_string("(bind"), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("bind", a), a), &nodes);
         for (size_t i = 0; i < syntax->dyn_let_expr.bindings.len; i++) {
             DynBinding* bind = syntax->dyn_let_expr.bindings.data[i];
-            PtrArray let_nodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(mv_string("["), a), &let_nodes);
+            PtrArray let_nodes = mk_ptr_array(2, a);
             push_ptr(pretty_syntax_internal(bind->var, ctx, a), &let_nodes);
             push_ptr(pretty_syntax_internal(bind->expr, ctx, a), &let_nodes);
-            push_ptr(mk_str_doc(mv_string("]"), a), &let_nodes);
 
-            push_ptr(mv_sep_doc(let_nodes, a), &nodes);
+            push_ptr(mv_nest_doc(4, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(let_nodes, a), a), a), a), &nodes);
         }
-        push_ptr(pretty_syntax_internal(syntax->let_expr.body, ctx, a), &nodes);
-        push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->let_expr.body, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
+        if (should_wrap )out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case SIf: {
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("if"), a), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("if", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->if_expr.condition, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->if_expr.true_branch, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->if_expr.false_branch, ctx, a), &nodes);
@@ -678,7 +676,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
     }
     case SLabels: {
         PtrArray head_nodes = mk_ptr_array(3, a);
-        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("labels"), a), a), &head_nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("labels", a), a), &head_nodes);
         push_ptr(mv_nest_doc(2, pretty_syntax_internal(syntax->labels.entry, ctx, a), a), &head_nodes);
 
         PtrArray nodes = mk_ptr_array(3, a);
@@ -709,7 +707,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
     }
     case SGoTo: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mv_style_doc(former_style, mk_str_doc(mv_string("go-to"), a), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("go-to", a), a), &nodes);
         push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(syntax->go_to.label, a), a), a), &nodes);
 
         PtrArray args = mk_ptr_array(syntax->go_to.args.len, a);
