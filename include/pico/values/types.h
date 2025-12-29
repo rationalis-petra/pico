@@ -97,10 +97,12 @@ typedef struct {
 
 typedef struct {
     SymAddrPiAMap fields;
+    bool packed;
 } StructType;
 
 typedef struct {
     SymAddrPiAMap variants;
+    uint8_t tag_size;
 } EnumType;
 
 typedef struct {
@@ -249,6 +251,7 @@ PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
 
 // Sample usage: mk_proc_type(a, 2, "field-1", field_1_ty, "field-2", arg_2_ty)
+PiType* mk_struct_packed_type(PiAllocator* pia, bool packed, size_t nfields, ...);
 PiType* mk_struct_type(PiAllocator* pia, size_t nfields, ...);
 
 // Sample usage: mk_trait_type(a, 1, "A", 2
@@ -261,6 +264,7 @@ PiType* mk_trait_type(PiAllocator* pia, size_t nfields, ...);
 //   "Singleton", 1, mk_prim_type(Int_64),
 //   "None", 0)
 PiType* mk_enum_type(PiAllocator* pia, size_t nfields, ...);
+PiType* mk_sz_enum_type(PiAllocator* pia, uint8_t tagsize, size_t nfields, ...);
 
 // Sample usage: mk_distinct_type(a, "List", ...)
 PiType* mk_named_type(PiAllocator* pia, const char* name, PiType* inner);

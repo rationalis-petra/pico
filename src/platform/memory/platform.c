@@ -1,7 +1,7 @@
 #include <string.h>
 
-#include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/machine_info.h"
 
 // Relevant OS includes 
 #if OS_FAMILY == WINDOWS

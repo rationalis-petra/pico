@@ -3,7 +3,6 @@
 
 #include "platform/memory/region.h"
 
-#include "pico/data/client/allocator.h"
 #include "pico/values/modular.h"
 
 // Hooks

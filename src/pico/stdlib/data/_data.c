@@ -19,9 +19,13 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
+    add_allocators_module(target.target, module, subregion);
+    reset_subregion(subregion);
     add_list_module(target, module, subregion);
     reset_subregion(subregion);
     add_either_module(target, module, subregion);
+    reset_subregion(subregion);
+    add_result_module(target, module, subregion);
     reset_subregion(subregion);
     add_maybe_module(target, module, subregion);
     reset_subregion(subregion);

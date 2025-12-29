@@ -1,9 +1,10 @@
 #ifndef __DATA_RESULT_H
 #define __DATA_RESULT_H
 
+#include <stdint.h>
 #include "data/string.h"
 
-typedef enum Result_t {
+typedef enum : uint64_t {
     Ok,
     Err
 } Result_t;
