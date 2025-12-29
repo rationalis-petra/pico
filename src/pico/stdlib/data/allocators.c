@@ -12,6 +12,7 @@ PiType* arena_ty;
 
 typedef struct {
     PiAllocator adapted_arena;
+    Allocator* c_arena;
     ArenaAllocator* arena;
     Allocator alloc;
     PiAllocator pia;
@@ -45,8 +46,9 @@ PicoArena* relic_make_arena_allocator(PiAllocator from, size_t blocksize) {
         .free = &relic_arena_free,
     };
     
-    Allocator* a = arena_malloc(arena, sizeof(Allocator));
+    Allocator* a = call_alloc(sizeof(Allocator), &from);
     *a = (Allocator) {.vtable = &arena_vtable, .ctx =  ra};
+    ra->c_arena = a;
     ra->adapted_arena = convert_to_pallocator(a);
     return ra;
 }
@@ -62,6 +64,7 @@ void build_make_arena_allocator_fn(PiType* type, Assembler* ass, PiAllocator* pi
 void relic_destroy_arena_allocator(PicoArena* arena) {
     PicoArena parena = *arena;
     delete_arena_allocator(parena.arena);
+    call_free(arena->c_arena, &parena.pia);
     call_free(arena, &parena.pia);
 }
 
