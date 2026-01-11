@@ -318,14 +318,17 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               } else {
                   Regname next_reg = integer_registers[current_integer_register++];
                   // I8 max = 127
-                  if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_cstr_doc("bd_convert_c_fn: arg offset exeeds I8 max.", a));
-                  }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
-                  build_binary_op(Mov, reg(next_reg, sz_64),
-                                  rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
-                                  ass, a, point);
+                  if (arg_offsets.data[i + 1] > 127) {
+                      build_binary_op(Mov, reg(next_reg, sz_64),
+                                      rref32(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
+                                      ass, a, point);
+                  } else {
+                      build_binary_op(Mov, reg(next_reg, sz_64),
+                                      rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
+                                      ass, a, point);
+                  }
               }
               break;
           }

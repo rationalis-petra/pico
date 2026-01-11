@@ -416,23 +416,27 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
         is_positive = false;
     }
 
-    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
         just_negation = false;
         next(is, &codepoint);
-        // the cast is safe as is-numchar ensures codepoint < 256
-        uint8_t val = (uint8_t) codepoint - 48;
-        push_u8(val, &lhs);
+        if (codepoint != '_') {
+            // The cast is safe as is-numchar ensures codepoint < 256
+            uint8_t val = (uint8_t) codepoint - 48;
+            push_u8(val, &lhs);
+        }
     }
 
     if (result == StreamSuccess && codepoint == '.') {
         floating = true;
         just_negation = false;
         next(is, &codepoint);
-        while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+        while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
             next(is, &codepoint);
-            // the cast is safe as is-numchar ensures codepoint < 256
-            uint8_t val = (uint8_t) codepoint - 48;
-            push_u8(val, &rhs);
+            if (codepoint != '_') {
+                // The cast is safe as is-numchar ensures codepoint < 256
+                uint8_t val = (uint8_t) codepoint - 48;
+                push_u8(val, &rhs);
+            }
         }
     }
 

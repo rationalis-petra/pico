@@ -59,13 +59,16 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 #ifdef DEBUG
     logger = make_logger(&ra);
 #endif
-    TypeCheckContext ctx = (TypeCheckContext) {
+    TypeCheckContext tc_ctx = {
         .a = &ra, .pia = &pia, .point = &pi_point, .target = target, .logger = logger,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     clear_target(target);
-    LinkData links = generate_toplevel(abs, env, target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = target, .logger = logger,
+    };
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
     pico_run_toplevel(abs, target, links, module, &ra, &point);
 
     delete_istream(sin, &ra);

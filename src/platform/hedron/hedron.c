@@ -69,10 +69,24 @@ struct HedronDescriptorSetLayout {
 };
 
 struct HedronBuffer {
-    VkBuffer vulkan_buffer;
+    VkBuffer vk_buffer;
     VkDeviceMemory device_memory;
     uint64_t size;
 };
+
+struct HedronImage {
+    VkImage vk_image;
+    VkDeviceMemory image_memory;
+};
+
+struct HedronImageView {
+    VkImageView vk_image_view;
+};
+
+struct HedronSampler {
+    VkSampler vk_sampler;
+};
+
 
 struct HedronDescriptorSet {
     VkDescriptorSet vk_set;
@@ -117,6 +131,102 @@ static VkPhysicalDevice physical_device = VK_NULL_HANDLE;
 static VkDevice logical_device = VK_NULL_HANDLE;
 static Allocator* hd_alloc;
 static PiAllocator hd_pi_alloc;
+
+// -----------------------------------------------------------------------------
+//
+//  Conversions
+// 
+// -----------------------------------------------------------------------------
+
+VkDescriptorType convert_descriptor_type(DescriptorType desc) {
+    VkDescriptorType vk_desc = 0;
+    switch (desc) {
+    case UniformBufferDesc: 
+        vk_desc = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        break;
+    case CombinedImageSamplerDesc: 
+        vk_desc = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        break;
+    }
+    return vk_desc;
+}
+
+VkShaderStageFlagBits convert_shader_type(ShaderStage shader) {
+    VkShaderStageFlagBits vk_shader = 0;
+    switch (shader) {
+    case VertexShader: 
+        vk_shader = VK_SHADER_STAGE_VERTEX_BIT;
+        break;
+    case FragmentShader: 
+        vk_shader = VK_SHADER_STAGE_FRAGMENT_BIT;
+        break;
+    }
+    return vk_shader;
+}
+
+VkPipelineStageFlags convert_pipeline_stage(PipelineStage stage) {
+    VkPipelineStageFlags out_stages = 0;
+    switch (stage) {
+    case StageTopOfPipe:
+        out_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        break;
+    case StageFragmentShader:
+        out_stages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        break;
+    case StageColourAttachmentOutput:
+        out_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        break;
+    case StageTransfer:
+        out_stages = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        break;
+    }
+    return out_stages;
+}
+
+VkFormat convert_image_format(ImageFormat format) {
+    VkFormat vk_format;
+    switch (format) {
+    case R8G8B8A8_SRGB:
+        vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+    }
+    return vk_format;
+}
+
+VkImageLayout convert_image_layout(ImageLayout layout) {
+    VkImageLayout vk_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    switch (layout) {
+    case Undefined:
+        vk_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        break;
+    case TransferDestOptimal:
+        vk_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        break;
+    case ShaderReadOptimal:
+        vk_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        break;
+    }
+    return vk_layout;
+}
+VkAccessFlagBits convert_access_flags(Access access) {
+    VkAccessFlagBits vk_access = 0;
+    switch (access) {
+    case AccessNone:
+        break;
+    case AccessShaderRead:
+        vk_access = VK_ACCESS_SHADER_READ_BIT;
+        break;
+    case AccessShaderWrite:
+        vk_access = VK_ACCESS_SHADER_WRITE_BIT;
+        break;
+    case AccessTransferRead:
+        vk_access = VK_ACCESS_TRANSFER_READ_BIT;
+        break;
+    case AccessTransferWrite:
+        vk_access = VK_ACCESS_TRANSFER_WRITE_BIT;
+        break;
+    } 
+    return vk_access;
+}
 
 #ifndef WINDOW_SYSTEM
 const uint32_t num_required_extensions = 1;
@@ -274,6 +384,7 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
     const bool extensions_supported = check_device_extension_support(device, a);
 
     return (device_features.geometryShader
+            && device_features.samplerAnisotropy
             && extensions_supported
             && (indices.available & required_indices));
 }
@@ -319,8 +430,11 @@ VkResult create_logical_device(Allocator* a) {
 
     create_info.pQueueCreateInfos = &queue_create_info;
     create_info.queueCreateInfoCount = 1;
-   
-    VkPhysicalDeviceFeatures device_features = {};
+
+    // TODO: add extensions + device features to public (relic) API
+    VkPhysicalDeviceFeatures device_features = {
+        .samplerAnisotropy = VK_TRUE,
+    };
     create_info.pEnabledFeatures = &device_features;
 
     // Note: technically, in modern Vulkan implementations, this will probably do nothing
@@ -439,7 +553,6 @@ VkExtent2D choose_swap_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t wi
 }
 
 void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR surface, uint32_t width, uint32_t height, HedronSurface* hd_surface) {
-
     VkSurfaceFormatKHR surface_format = choose_swap_surface_format(swap_chain_details.formats, swap_chain_details.num_formats);
     VkPresentModeKHR mode = choose_swap_present_mode(swap_chain_details.present_modes, swap_chain_details.num_present_modes);
     // TODO: push extent back to window!
@@ -486,23 +599,24 @@ void create_swapchain(SwapChainSupportDetails swap_chain_details, VkSurfaceKHR s
 
     VkImageView* image_views = mem_alloc(image_count * sizeof(VkImageView), hd_alloc);
     for (size_t i = 0; i < image_count; i++) {
-        VkImageViewCreateInfo createInfo = (VkImageViewCreateInfo){};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = images[i];
+        VkImageViewCreateInfo createInfo = (VkImageViewCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = images[i],
 
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = surface_format.format;
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = surface_format.format,
 
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+            .components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
 
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
+            .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .subresourceRange.baseMipLevel = 0,
+            .subresourceRange.levelCount = 1,
+            .subresourceRange.baseArrayLayer = 0,
+            .subresourceRange.layerCount = 1,
+        };
         if (vkCreateImageView(logical_device, &createInfo, NULL, &image_views[i]) != VK_SUCCESS) {
             panic(mv_string("failed to create image views!"));
         }
@@ -735,26 +849,24 @@ void destroy_shader_module(HedronShaderModule* module) {
 
 HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList bdesc) {
     VkDescriptorSetLayoutBinding* bindings = mem_alloc(sizeof(VkDescriptorSetLayoutBinding) * bdesc.len, hd_alloc);
-    for (size_t i = 0; i < bdesc.len; i++) {
-        VkDescriptorSetLayoutBinding layoutBinding = {};
-        layoutBinding.binding = 0;
-        if (bdesc.data[i].type == UniformBufferDesc) {
-            layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        }
 
-        if (bdesc.data[i].shader_type == VertexShader) {
-            layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        }
-        layoutBinding.descriptorCount = 1;
-        layoutBinding.pImmutableSamplers = NULL; // Optional
+    for (size_t i = 0; i < bdesc.len; i++) {
+        VkDescriptorSetLayoutBinding layoutBinding = {
+            .binding = 0,
+            .descriptorType = convert_descriptor_type(bdesc.data[i].type),
+            .stageFlags = convert_shader_type(bdesc.data[i].shader_type),
+            .descriptorCount = 1,
+            .pImmutableSamplers = NULL, // Optional
+        };
         bindings[i] = layoutBinding;
     }
 
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = bdesc.len;
-    layoutInfo.pBindings = bindings;
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = bdesc.len,
+        .pBindings = bindings,
+    };
 
     VkDescriptorSetLayout descriptorSetLayout;
     if (vkCreateDescriptorSetLayout(logical_device, &layoutInfo, NULL, &descriptorSetLayout) != VK_SUCCESS) {
@@ -778,15 +890,8 @@ HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList size
     VkDescriptorPoolSize* pool_sizes = mem_alloc(sizeof(VkDescriptorPoolSize) * sizes.len, hd_alloc);
     for (size_t i = 0; i < sizes.len; i++) {
         HedronDescriptorPoolSize hd_psize = sizes.data[i];
-        
-        uint32_t type = 0;
-        switch (hd_psize.type) {
-        case UniformBufferDesc:
-            type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        }
-
         pool_sizes[i] = (VkDescriptorPoolSize) {
-            .type = type,
+            .type = convert_descriptor_type(hd_psize.type),
             .descriptorCount = hd_psize.descriptor_count,
         };
     }
@@ -853,33 +958,50 @@ AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* 
 void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
     VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet), hd_alloc);
     VkDescriptorBufferInfo* vk_write_buffer_info = mem_alloc(sizeof(VkDescriptorBufferInfo), hd_alloc);
+    VkDescriptorImageInfo* vk_write_image_info = mem_alloc(sizeof(VkDescriptorImageInfo), hd_alloc);
 
     for (size_t i = 0; i < writes.len; i++) {
         HedronWriteDescriptorSet descriptor_write = writes.data[i];
-        
-        uint32_t descriptor_type;
+
+
+        VkDescriptorType dtype = 0;
+        VkDescriptorBufferInfo* binfo = NULL;
+        VkDescriptorImageInfo* iinfo = NULL; 
         switch (descriptor_write.descriptor_type) {
-        case UniformBufferDesc:
-            descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        case BufferInfo: {
+            HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
+            dtype = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+            vk_write_buffer_info[i] = (VkDescriptorBufferInfo) {
+                .buffer = buffer->vk_buffer,
+                .offset = descriptor_write.buffer_info.offset,
+                .range = descriptor_write.buffer_info.range,
+            };
+            binfo = vk_write_buffer_info + i;
+            break;
+        }
+        case ImageInfo: 
+            dtype = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+            vk_write_image_info[i] = (VkDescriptorImageInfo) {
+                .sampler = descriptor_write.image_info.sampler->vk_sampler,
+                .imageView = descriptor_write.image_info.image_view->vk_image_view,
+                .imageLayout = convert_image_layout(descriptor_write.image_info.layout),
+            };
+            iinfo = vk_write_image_info + i;
+            break;
         }
 
-        HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
-
-        vk_write_buffer_info[i] = (VkDescriptorBufferInfo) {
-            .buffer = buffer->vulkan_buffer,
-            .offset = descriptor_write.buffer_info.offset,
-            .range = descriptor_write.buffer_info.range,
-        };
 
         vk_writes[i] = (VkWriteDescriptorSet) {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = descriptor_write.descriptor_set->vk_set,
             .dstBinding = 0,
             .dstArrayElement = 0,
-            .descriptorType = descriptor_type,
+            .descriptorType = dtype,
             .descriptorCount = 1,
-            .pBufferInfo = vk_write_buffer_info + i,
-            .pImageInfo = NULL,
+            .pBufferInfo = binfo,
+            .pImageInfo = iinfo,
             .pTexelBufferView = NULL,
         };
     }
@@ -893,10 +1015,11 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
     vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
     mem_free(vk_writes, hd_alloc);
     mem_free(vk_write_buffer_info, hd_alloc);
+    mem_free(vk_write_image_info, hd_alloc);
     mem_free(vk_copies, hd_alloc);
 }
 
-HedronPipeline *create_pipeline(AddrPiList descriptor_set_layouts,
+HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
                                 BindingDescriptionPiList bdesc,
                                 AttributeDescriptionPiList adesc,
                                 AddrPiList shaders,
@@ -1184,7 +1307,7 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size) {
 
     HedronBuffer* out = mem_alloc(sizeof(HedronBuffer), hd_alloc);
     *out = (HedronBuffer) {
-        .vulkan_buffer = vertex_buffer,
+        .vk_buffer = vertex_buffer,
         .device_memory = vertex_buffer_memory,
         .size = size,
     };
@@ -1194,7 +1317,7 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size) {
 
 void destroy_buffer(HedronBuffer *buffer) {
     vkFreeMemory(logical_device, buffer->device_memory, NULL);
-    vkDestroyBuffer(logical_device, buffer->vulkan_buffer, NULL);
+    vkDestroyBuffer(logical_device, buffer->vk_buffer, NULL);
     mem_free(buffer, hd_alloc);
 }
 
@@ -1205,18 +1328,7 @@ void set_buffer_data(HedronBuffer* buffer, void* source) {
     vkUnmapMemory(logical_device, buffer->device_memory);
 }
 
-struct HedronImage {
-    VkImage image;
-    VkDeviceMemory image_memory;
-};
-
 HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
-    uint64_t image_format = 0;
-    switch (format) {
-    case R8G8B8A8_SRGB:
-        image_format = VK_FORMAT_R8G8B8A8_SRGB;
-    }
-
     VkImageCreateInfo imageInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -1225,7 +1337,7 @@ HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
         .extent.depth = 1,
         .mipLevels = 1,
         .arrayLayers = 1,
-        .format = image_format,
+        .format = convert_image_format(format),
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -1256,7 +1368,7 @@ HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
 
     HedronImage* out = mem_alloc(sizeof(HedronImage), hd_alloc);
     *out = (HedronImage) {
-        .image = vk_image,
+        .vk_image = vk_image,
         .image_memory = image_memory,
     };
     
@@ -1264,9 +1376,78 @@ HedronImage* create_image(uint32_t width, uint32_t height, ImageFormat format) {
 }
 
 void destroy_image(HedronImage* image) {
-    vkDestroyImage(logical_device, image->image, NULL);
+    vkDestroyImage(logical_device, image->vk_image, NULL);
     vkFreeMemory(logical_device, image->image_memory, NULL);
     mem_free(image, hd_alloc);
+}
+
+HedronImageView* create_image_view(HedronImage *image, ImageFormat format) {
+    VkImageViewCreateInfo createInfo = (VkImageViewCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image->vk_image,
+
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = convert_image_format(format),
+
+        .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+        .components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+        .components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+        .components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+
+        .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .subresourceRange.baseMipLevel = 0,
+        .subresourceRange.levelCount = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount = 1,
+    };
+
+    VkImageView vk_image_view;
+    if (vkCreateImageView(logical_device, &createInfo, NULL, &vk_image_view) != VK_SUCCESS) {
+        panic(mv_string("failed to create image views!"));
+    }
+    HedronImageView* image_view = mem_alloc(sizeof(HedronImageView), hd_alloc);
+    image_view->vk_image_view = vk_image_view;
+    return image_view;
+}
+
+void destroy_image_view(HedronImageView *image_view) {
+    vkDestroyImageView(logical_device, image_view->vk_image_view, NULL);
+    mem_free(image_view, hd_alloc);
+}
+
+HedronSampler* create_sampler() {
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+    VkSamplerCreateInfo sampler_info = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .anisotropyEnable = VK_TRUE,
+        .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipLodBias = 0.0f,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+    };
+
+    HedronSampler* out_sampler = mem_alloc(sizeof(HedronSampler), hd_alloc);
+    if (vkCreateSampler(logical_device, &sampler_info, NULL, &out_sampler->vk_sampler) != VK_SUCCESS) {
+        panic(mv_string("failed to create texture sampler!"));
+    }
+    return out_sampler;
+}
+
+void destroy_sampler(HedronSampler* sampler) {
+    vkDestroySampler(logical_device, sampler->vk_sampler, NULL);
+    mem_free(sampler, hd_alloc);
 }
 
 // -----------------------------------------------------------------------------
@@ -1430,11 +1611,7 @@ void queue_submit(HedronCommandBuffer *buffer, PtrOption fence, SemaphoreStagePa
     VkPipelineStageFlags* wait_stages = mem_alloc(sizeof(VkPipelineStageFlags) * wait.len, hd_alloc);
     for (size_t i = 0; i < wait.len; i++) {
         wait_semaphores[i] = wait.data[i].semaphore->semaphore;
-        wait_stages[i] = 0; // Null-initialize
-        switch (wait.data[i].stage) {
-        case StageColourAttachmentOutput:
-            wait_stages[i] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        }
+        wait_stages[i] = convert_pipeline_stage(wait.data[i].stage);
     }
 
     VkSemaphore* signal_semaphores = mem_alloc(sizeof(VkSemaphore) * signals.len, hd_alloc);
@@ -1520,6 +1697,86 @@ void command_end_render_pass(HedronCommandBuffer *buffer) {
     vkCmdEndRenderPass(buffer->buffer);
 }
 
+void command_pipeline_barrier(HedronCommandBuffer* commands,
+                              PipelineStage source_stage,
+                              PipelineStage dest_stage,
+                              MemoryBarrierPiList memory_barriers,
+                              BufferMemoryBarrierPiList buffer_memory_barriers,
+                              ImageMemoryBarrierPiList image_memory_barriers) {
+    VkMemoryBarrier* vk_barriers = mem_alloc(sizeof(VkMemoryBarrier), hd_alloc);
+    VkBufferMemoryBarrier* vk_buffer_barriers = mem_alloc(sizeof(VkBufferMemoryBarrier), hd_alloc);
+    VkImageMemoryBarrier* vk_image_barriers = mem_alloc(sizeof(VkImageMemoryBarrier), hd_alloc);
+
+    for (size_t i = 0; i < memory_barriers.size; i++) {
+        panic(mv_string("command-pipeline-barrier does not yet support memory-barriers"));
+    }
+    for (size_t i = 0; i < buffer_memory_barriers.size; i++) {
+        panic(mv_string("command-pipeline-barrier does not yet support buffer-memory-barriers"));
+    }
+    for (size_t i = 0; i < image_memory_barriers.size; i++) {
+        ImageMemoryBarrier ibarrier = image_memory_barriers.data[i];
+        vk_image_barriers[i] = (VkImageMemoryBarrier) {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = convert_image_layout(ibarrier.old_layout),
+            .newLayout = convert_image_layout(ibarrier.new_layout),
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = ibarrier.image->vk_image,
+            .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .subresourceRange.baseMipLevel = 0,
+            .subresourceRange.levelCount = 1,
+            .subresourceRange.baseArrayLayer = 0,
+            .subresourceRange.layerCount = 1,
+            .srcAccessMask = convert_access_flags(ibarrier.src_access_flags),
+            .dstAccessMask = convert_access_flags(ibarrier.dest_access_flags),
+        };
+    }
+
+    vkCmdPipelineBarrier(commands->buffer,
+                         convert_pipeline_stage(source_stage),
+                         convert_pipeline_stage(dest_stage),
+                         0, // VkDependencyFlags dependencyFlags,
+                         memory_barriers.len,
+                         vk_barriers,
+                         buffer_memory_barriers.len,
+                         vk_buffer_barriers,
+                         image_memory_barriers.len,
+                         vk_image_barriers);
+
+    mem_free(vk_barriers , hd_alloc);
+    mem_free(vk_buffer_barriers, hd_alloc);
+    mem_free(vk_image_barriers, hd_alloc);
+}
+
+void command_copy_buffer_to_image(HedronCommandBuffer *commands,
+                                  HedronBuffer *buffer, HedronImage *image,
+                                  uint32_t width, uint32_t height) {
+    VkBufferImageCopy region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+
+        .imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .imageSubresource.mipLevel = 0,
+        .imageSubresource.baseArrayLayer = 0,
+        .imageSubresource.layerCount = 1,
+
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {
+            width,
+            height,
+            1
+        },
+    };
+
+    vkCmdCopyBufferToImage(commands->buffer,
+                           buffer->vk_buffer,
+                           image->vk_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1,
+                           &region);
+}
+
 void command_bind_descriptor_set(HedronCommandBuffer *commands,
                                  HedronPipeline *pipeline,
                                  HedronDescriptorSet *descriptor_set) {
@@ -1534,13 +1791,13 @@ void command_bind_pipeline(HedronCommandBuffer *commands, HedronPipeline *pipeli
 }
 
 void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer) {
-    VkBuffer vertex_buffers[1] = {buffer->vulkan_buffer};
+    VkBuffer vertex_buffers[1] = {buffer->vk_buffer};
     VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
 }
 
 void command_bind_index_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer, IndexFormat format) {
-    vkCmdBindIndexBuffer(commands->buffer, buffer->vulkan_buffer, 0, (VkIndexType)format);
+    vkCmdBindIndexBuffer(commands->buffer, buffer->vk_buffer, 0, (VkIndexType)format);
 }
 
 void command_set_surface(HedronCommandBuffer *buffer, HedronSurface *surface) {

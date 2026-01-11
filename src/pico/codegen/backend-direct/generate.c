@@ -35,7 +35,8 @@ static void generate_entry(size_t out_sz, Target target, Allocator* a, ErrorPoin
 static void generate_exit(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
 void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
 
-LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
@@ -57,9 +58,9 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, All
         AddressEnv* a_env = mk_address_env(env, recsym, a);
         size_t out_sz = pi_size_of(*top.def.value->ptype);
 
-        generate_entry(out_sz, target, a, point);
-        generate_i(*top.def.value, a_env, target, &links, a, point);
-        generate_exit(out_sz, target, a, point);
+        generate_entry(out_sz, ctx.target, a, ctx.point);
+        generate_i(*top.def.value, a_env, ctx.target, &links, a, ctx.point);
+        generate_exit(out_sz, ctx.target, a, ctx.point);
 
         delete_address_env(a_env, a);
         break;
@@ -76,9 +77,9 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, All
         AddressEnv* a_env = mk_address_env(env, NULL, a);
 
         size_t out_sz = pi_size_of(*top.expr->ptype);
-        generate_entry(out_sz, target, a, point);
-        generate_i(*top.expr, a_env, target, &links, a, point);
-        generate_exit(out_sz, target, a, point);
+        generate_entry(out_sz, ctx.target, a, ctx.point);
+        generate_i(*top.expr, a_env, ctx.target, &links, a, ctx.point);
+        generate_exit(out_sz, ctx.target, a, ctx.point);
 
         delete_address_env(a_env, a);
         break;
@@ -90,24 +91,25 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, Target target, All
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
 
     return links.links;
 }
 
-LinkData bd_generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+LinkData bd_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
@@ -123,9 +125,9 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, Target target, Allocato
     };
 
     size_t out_sz = pi_size_of(*syn->ptype);
-    generate_entry(out_sz, target, a, point);
-    generate_i(*syn, a_env, target, &links, a, point);
-    generate_exit(out_sz, target, a, point);
+    generate_entry(out_sz, ctx.target, a, ctx.point);
+    generate_i(*syn, a_env, ctx.target, &links, a, ctx.point);
+    generate_exit(out_sz, ctx.target, a, ctx.point);
 
     delete_address_env(a_env, a);
 
@@ -134,24 +136,25 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, Target target, Allocato
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
     }
 
     return links.links;
 }
 
-void bd_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
+void bd_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
@@ -166,9 +169,9 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* 
     };
 
     size_t out_sz = pi_size_of(*syn->ptype);
-    generate_entry(out_sz, target, a, point);
-    generate_i(*syn, a_env, target, &links, a, point);
-    generate_exit(out_sz, target, a, point);
+    generate_entry(out_sz, ctx.target, a, ctx.point);
+    generate_i(*syn, a_env, ctx.target, &links, a, ctx.point);
+    generate_exit(out_sz, ctx.target, a, ctx.point);
 
     delete_address_env(a_env, a);
 }
@@ -266,6 +269,7 @@ void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* li
 #ifdef DEBUG_ASSERT
     int64_t old_head = get_stack_head(env);
 #endif
+
 
     Assembler* ass = target.target;
     switch (syn.type) {

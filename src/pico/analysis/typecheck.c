@@ -827,9 +827,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // Check if any fields are missing when a new struct is being created
             // error message:
             if (untyped->structure.base->ptype->sort == TKind) {
-                PtrArray docs = mk_ptr_array(4, a);
-                docs.len++;
-                bool missing_fields = false;
+                SymbolArray missing_fields = mk_symbol_array(4, a);
                 for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                     Symbol field = struct_type->structure.fields.data[i].key;
                     bool has_field = false;
@@ -838,13 +836,28 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                             has_field = true;
                     }
                     if (!has_field) {
-                        push_ptr(mk_str_doc(symbol_to_string(field, a), a), &docs);
-                        missing_fields = true;
+                        push_symbol(field, &missing_fields);
                     }
                 }
                 
-                if (missing_fields) {
-                    docs.data[0] = mv_cstr_doc("Structure value definition is missing the field(s):", a);
+                if (missing_fields.len > 0) {
+                    PtrArray docs = mk_ptr_array(2 + missing_fields.len, a);
+                    if (missing_fields.len == 1) {
+                        push_ptr(mv_cstr_doc("Structure value definition is missing the field:", a), &docs);
+                        push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[0]), a), &docs);
+                    } else {
+                        push_ptr(mv_cstr_doc("Structure value definition is missing the fields:", a), &docs);
+                        for (size_t i = 0; i < missing_fields.len; i++) {
+                            if (i < missing_fields.len - 2) {
+                                push_ptr(mv_str_doc(string_cat(view_symbol_string(missing_fields.data[i]), mv_string(","), a), a), &docs);
+                            } else if (i == missing_fields.len - 2) {
+                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+                                push_ptr(mv_cstr_doc("and", a), &docs);
+                            } else {
+                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+                            }
+                        }
+                    }
                     err.message = mv_hsep_doc(docs, a);
                     throw_pi_error(point, err);
                 }
@@ -2470,7 +2483,10 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     if (catch_error(cleanup_point)) goto on_error;
 
     // TODO (INVESTIGATE): is LinkData needed
-    generate_type_expr(typed, env, gen_target, a, &cleanup_point);
+    CodegenContext cg_ctx = {
+        .a = a, .point = &cleanup_point, .target = gen_target, 
+    };
+    generate_type_expr(typed, env, cg_ctx);
 
     void* result = pico_run_expr(gen_target, pi_size_of(*typed->ptype), a, &cleanup_point);
 

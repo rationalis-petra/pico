@@ -92,13 +92,16 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
     Logger* logger = get_structured_logger(log);
-    TypeCheckContext ctx = (TypeCheckContext) {
+    TypeCheckContext tc_ctx = {
         .a = &ra, .pia = pia, .point = &pi_point, .target = target, .logger = logger,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     clear_target(target);
-    LinkData links = generate_toplevel(abs, env, target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = target, .logger = logger,
+    };
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
     EvalResult evres = pico_run_toplevel(abs, target, links, module, &ra, &point);
 
     if (evres.type == ERValue) {

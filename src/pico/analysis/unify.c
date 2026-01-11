@@ -281,10 +281,16 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             Symbol rhs_sym = rhs->structure.fields.data[i].key;
             PiType* rhs_ty = rhs->structure.fields.data[i].val;
 
+            PtrArray nodes = mk_ptr_array(5, a);
+            push_ptr(mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a), &nodes);
+            push_ptr(mv_cstr_doc("The types are:", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+            push_ptr(mv_cstr_doc("and", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
             if (!symbol_eq(rhs_sym, lhs_sym)) {
                 return (UnifyResult) {
                     .type = USimpleError,
-                    .message = mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a)
+                    .message = mk_vsep_doc(nodes, a),
                 };
             }
 

@@ -1149,7 +1149,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         *out = ADDRESS_SIZE;
         return Ok;
     case TStruct: {
-        size_t align = 0;
+        size_t align = 1;
         size_t total = 0; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             size_t tmp_align;
@@ -1172,7 +1172,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TEnum: {
-        size_t align = 0;
+        size_t align = 1;
         size_t max = 0; 
         size_t tag_size = type.enumeration.tag_size / 8;
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
@@ -1315,7 +1315,7 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
             *out = type.structure.fields.len == 0 ? 0 : 1;
             return Ok;
         }
-        size_t align = 0; 
+        size_t align = 1; 
         for (size_t i = 0; i < type.structure.fields.len; i++) {
             size_t field_align;
             Result_t res = pi_maybe_align_of(*(PiType*)type.structure.fields.data[i].val, &field_align);

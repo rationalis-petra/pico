@@ -1063,13 +1063,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        if (index < raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
-            throw_pi_error(ctx.point, err);
-        }
+        RawTree* raw_body = (raw.branch.nodes.len == index + 1)
+            ? &raw.branch.nodes.data[index]
+            : raw_slice(&raw, index, ctx.pia);
 
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
+        Syntax* body = abstract_expr_i(*raw_body, ctx);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {

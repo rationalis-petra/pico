@@ -115,10 +115,10 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        TypeCheckContext ctx = (TypeCheckContext) {
+        TypeCheckContext tc_ctx = {
             .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = target
         };
-        type_check(&abs, env, ctx);
+        type_check(&abs, env, tc_ctx);
 
         // -------------------------------------------------------------------------
         // Code Generation
@@ -126,7 +126,10 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
 
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
-        LinkData links = generate_toplevel(abs, env, target, &itera, &point);
+        CodegenContext cg_ctx = {
+            .a = &itera, .point = &point, .target = target
+        };
+        LinkData links = generate_toplevel(abs, env, cg_ctx);
 
         // -------------------------------------------------------------------------
         // Evaluation
@@ -225,10 +228,10 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        TypeCheckContext ctx = (TypeCheckContext) {
+        TypeCheckContext tc_ctx = {
             .a = &itera, .pia = &pia, .point = &pi_point, .target = target
         };
-        type_check(&abs, env, ctx);
+        type_check(&abs, env, tc_ctx);
 
         // -------------------------------------------------------------------------
         // Code Generation
@@ -236,7 +239,10 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
 
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
-        LinkData links = generate_toplevel(abs, env, target, &itera, &point);
+        CodegenContext cg_ctx = {
+            .a = &itera, .point = &point, .target = target
+        };
+        LinkData links = generate_toplevel(abs, env, cg_ctx);
 
         // -------------------------------------------------------------------------
         // Evaluation

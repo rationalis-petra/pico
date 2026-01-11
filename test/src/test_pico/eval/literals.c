@@ -13,9 +13,14 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
         .target = target,
     };
 
-    if (test_start(log, mv_string("function-large-body"))) {
+    if (test_start(log, mv_string("positive-int-literal"))) {
         int64_t expected = 10;
         TEST_EQ("10");
+    }
+
+    if (test_start(log, mv_string("underscore-int-literal"))) {
+        int64_t expected = 101020;
+        TEST_EQ("10_1_020");
     }
 
     if (test_start(log, mv_string("negative-int-literal"))) {

@@ -125,10 +125,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    TypeCheckContext ctx = (TypeCheckContext) {
+    TypeCheckContext tc_ctx = {
         .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
@@ -147,7 +147,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     // -------------------------------------------------------------------------
 
     clear_target(gen_target);
-    LinkData links = generate_toplevel(abs, env, gen_target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = gen_target,
+    };
+    type_check(&abs, env, tc_ctx);
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
 
     if (opts.debug_print) {
         start_underline(cout);

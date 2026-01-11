@@ -314,10 +314,10 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
-        TypeCheckContext ctx = (TypeCheckContext) {
+        TypeCheckContext tc_ctx = {
             .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, 
         };
-        type_check(&abs, env, ctx);
+        type_check(&abs, env, tc_ctx);
 
         // -------------------------------------------------------------------------
         // Code Generation
@@ -325,7 +325,10 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
         // Ensure the target is 'fresh' for code-gen
         clear_target(gen_target);
-        LinkData links = generate_toplevel(abs, env, gen_target, &itera, &err_point);
+        CodegenContext cg_ctx = {
+            .a = &itera, .point = &err_point, .target = gen_target, 
+        };
+        LinkData links = generate_toplevel(abs, env, cg_ctx);
 
         // -------------------------------------------------------------------------
         // Evaluation
