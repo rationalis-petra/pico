@@ -229,7 +229,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     if (!bd_can_reinterpret(ctype->proc.ret, ptype->proc.ret)) {
         // TODO (IMPROVEMENT): Move this check/assert to debug builds?
         PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function reuturn types -", a), &nodes);
+        push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function return types -", a), &nodes);
         push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
         push_ptr(mv_cstr_doc("and", a), &nodes);
         push_ptr(pretty_type(ptype->proc.ret, a), &nodes);
@@ -318,14 +318,17 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               } else {
                   Regname next_reg = integer_registers[current_integer_register++];
                   // I8 max = 127
-                  if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
-                  }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
-                  build_binary_op(Mov, reg(next_reg, sz_64),
-                                  rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
-                                  ass, a, point);
+                  if (arg_offsets.data[i + 1] > 127) {
+                      build_binary_op(Mov, reg(next_reg, sz_64),
+                                      rref32(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
+                                      ass, a, point);
+                  } else {
+                      build_binary_op(Mov, reg(next_reg, sz_64),
+                                      rref8(RSP, arg_offsets.data[i + 1] + 0x8 * j, sz_64),
+                                      ass, a, point);
+                  }
               }
               break;
           }
@@ -339,7 +342,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
                   Regname next_reg = float_registers[current_float_register++];
                   // I8 max = 127
                   if (arg_offsets.data[i + 1] > 127) {
-                      throw_error(point, mv_string("bd_convert_c_fn: arg offset exeeds I8 max."));
+                      throw_error(point, mv_cstr_doc("bd_convert_c_fn: arg offset exeeds I8 max.", a));
                   }
                   // Explanation - copy into current register
                   // copy from RSP + current offset + return address offset + eightbyte_index
@@ -649,7 +652,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               break;
           }
           case Win64M128: {
-              throw_error(point, mv_string("Not implemented: register arg of class Win64 __m128 "));
+              throw_error(point, mv_cstr_doc("Not implemented: register arg of class Win64 __m128 ", a));
           }
           }
       } else {
@@ -943,6 +946,10 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
     }
     case TStruct: {
         if (ptype->structure.fields.len != ctype->structure.fields.len) {
+            return false;
+        }
+        if (ptype->structure.packed) {
+            // TODO (FEATURE): add support for packed c structs.
             return false;
         }
 

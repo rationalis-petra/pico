@@ -342,9 +342,11 @@ typedef struct {
 
 typedef struct {
     SymSynAMap fields;
+    bool packed;
 } SynStructType;
 
 typedef struct {
+    uint8_t tag_size;
     SymPtrAMap variants;
 } SynEnumType;
 
@@ -447,6 +449,7 @@ struct Syntax {
 };
 
 /* Other instances */
+String syntax_type_to_string(Syntax_t type);
 Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 // -----------------------------------------------------------------------------

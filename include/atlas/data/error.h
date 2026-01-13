@@ -4,7 +4,7 @@
 #include "platform/jump.h"
 #include "components/pretty/document.h"
 
-#include "pico/data/range.h"
+#include "pico/data/error.h"
 
 typedef struct {
     Document* message;
@@ -14,10 +14,17 @@ typedef struct {
 } AtlasError;
 
 typedef struct {
-    volatile AtlasError error;
+    MultiError error;
+    String captured_file;
+    String filename;
+} AtlasMultiError;
+
+typedef struct {
+    volatile AtlasMultiError error;
     jump_buf buf; 
 } AtErrorPoint;
 
 _Noreturn void throw_at_error(AtErrorPoint* point, AtlasError err); 
+_Noreturn void throw_at_multi_error(AtErrorPoint* point, AtlasMultiError err); 
 
 #endif

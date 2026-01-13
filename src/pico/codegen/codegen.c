@@ -18,32 +18,32 @@ void teardown_codegen() {
 }
 
 
-LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+LinkData generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
     switch (global_backend) {
     case CodegenDirect:
-        return bd_generate_toplevel(top, env, target, a, point);
+        return bd_generate_toplevel(top, env, ctx);
     case CodegenPVM:
-        return pvm_generate_toplevel(top, env, target, a, point);
+        return pvm_generate_toplevel(top, env, ctx);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }
 
-LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+LinkData generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
     switch (global_backend) {
     case CodegenDirect:
-        return bd_generate_expr(syn, env, target, a, point);
+        return bd_generate_expr(syn, env, ctx);
     case CodegenPVM:
-        return pvm_generate_expr(syn, env, target, a, point);
+        return pvm_generate_expr(syn, env, ctx);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }
 
-void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
+void generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
     switch (global_backend) {
     case CodegenDirect:
-        return bd_generate_type_expr(syn, env, target, a, point);
+        return bd_generate_type_expr(syn, env, ctx);
     case CodegenPVM:
-        return pvm_generate_type_expr(syn, env, target, a, point);
+        return pvm_generate_type_expr(syn, env, ctx);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }

@@ -86,6 +86,8 @@ void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size
     if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
 
     if ((dest_stack_offset + size) > 127 || (src_stack_offset + size) > 127)  {
+        // TODO: instead of generating a memcpy call when src/dest offset + sise
+        // exceeds a certain amount, how about only when size > 128?64?
         // TODO: check to ensure offsets don't exceed 32 bit max
 
 #if ABI == SYSTEM_V_64
@@ -214,16 +216,16 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 
     // first, assert that size_t is divisible by 8 (as we generally expect 8-byte alignment to be maintained on the stack at all times.)
     if (size > 127)  {
-        throw_error(point, mv_string("Error in generate_stack_copy expected copy size to be divisible by 8"));
+        throw_error(point, mv_cstr_doc("Error in generate_stack_copy expected copy size to be divisible by 8", a));
     };
 
     // Then, check that using an 8-bit immediate offset is ok
     if (size > 127)  {
-        throw_error(point, mv_string("Error in generate_stack_copy: copy size must be smaller than 127!"));
+        throw_error(point, mv_cstr_doc("Error in generate_stack_copy: copy size must be smaller than 127!", a));
     };
 
     if (src == RAX || dest == RAX)  {
-        throw_error(point, mv_string("Error in generate_stack_copy: cannoy copy from/to RAX"));
+        throw_error(point, mv_cstr_doc("Error in generate_stack_copy: cannoy copy from/to RAX", a));
     };
 
     for (size_t i = 0; i < size / 8; i++) {
@@ -236,11 +238,11 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size > 127)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_copy: copy size must be smaller than 127!"));
+        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: copy size must be smaller than 127!", a));
     };
 
     if (src == RAX || dest == RAX)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_copy: cannoy copy from/to RAX"));
+        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: cannoy copy from/to RAX", a));
     };
 
     for (size_t i = 0; i < size / 8; i++) {
@@ -269,15 +271,15 @@ void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler
 void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
     if (size % 8 != 0)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_swap expected copy size to be divisible by 8"));
+        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_swap expected copy size to be divisible by 8", a));
     };
 
     if (size > 127)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_swap copy size must be smaller than 127!"));
+        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_swap copy size must be smaller than 127!", a));
     };
 
     if (loc1 == RDI || loc2 == RDI || loc1 == RSI || loc2 == RSI)  {
-        throw_error(point, mv_string("Error in generate_monomorphic_swap cannot swap with RDI or RSI"));
+        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_swap cannot swap with RDI or RSI", a));
     };
 
     for (size_t i = 0; i < size / 8; i++) {
@@ -388,12 +390,13 @@ void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint*
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
-void* mk_struct_ty(size_t len, void* data) {
+void* mk_struct_ty(size_t len, bool packed, void* data) {
     PiAllocator pia = get_std_temp_allocator();
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TStruct,
+        .structure.packed = packed,
         .structure.fields.data = data,
         .structure.fields.len = len,
         .structure.fields.capacity = len,
@@ -402,13 +405,15 @@ void* mk_struct_ty(size_t len, void* data) {
     return ty;
 }
 
-void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_struct_ty(Location dest, Location nfields,  Location data, bool packed, Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), imm32(packed), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm32(packed), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), data, ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
@@ -455,7 +460,7 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     }
 }
 
-void* mk_enum_ty(size_t len, uint64_t* shape, SymAddrPiCell* data) {
+void* mk_enum_ty(size_t len, uint8_t tagsize, uint64_t* shape, SymAddrPiCell* data) {
     PiAllocator pia = get_std_temp_allocator();
 
     SymAddrPiAMap variants = mk_sym_addr_piamap(len, &pia);
@@ -475,12 +480,13 @@ void* mk_enum_ty(size_t len, uint64_t* shape, SymAddrPiCell* data) {
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TEnum,
+        .enumeration.tag_size = tagsize,
         .enumeration.variants = variants,
     };
     return ty;
 }
 
-void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
+void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location data, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // Generate a dynamic allocation
     // Note: this allocation is fine for definitions as types get copied,
     // probably not fine if we have a proc which returns an enum!
@@ -492,12 +498,14 @@ void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* 
 
 #if ABI == SYSTEM_V_64
     build_binary_op(Mov, reg(RDI, sz_64), imm64(shape.variants.len), ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_8), imm8(tagsize), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
     build_binary_op(Mov, reg(RCX, sz_64), imm64(shape.variants.len), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), data, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_8), imm8((uint8_t)tagsize), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), imm64((uint64_t)sml_shape), ass, a, point);
+    build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif

@@ -32,7 +32,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.1.3";
+static const char* version = "0.1.4";
 
 typedef struct {
     bool debug_print;
@@ -125,10 +125,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    TypeCheckContext ctx = (TypeCheckContext) {
+    TypeCheckContext tc_ctx = {
         .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
@@ -147,7 +147,11 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     // -------------------------------------------------------------------------
 
     clear_target(gen_target);
-    LinkData links = generate_toplevel(abs, env, gen_target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = gen_target,
+    };
+    type_check(&abs, env, tc_ctx);
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
 
     if (opts.debug_print) {
         start_underline(cout);
@@ -192,7 +196,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_error:
-    write_fstring(point.error_message, cout);
+    write_doc_formatted(point.error_message, 120, cout);
     write_fstring(mv_string("\n"), cout);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);

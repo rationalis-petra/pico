@@ -61,6 +61,12 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(u16.+ 1026 5467)");
     }
 
+    // Unsigned Int 32
+    if (test_start(log, mv_string("unsigned-bswap"))) {
+        uint64_t expected = 262144;
+        TEST_EQ("(u32.byte-swap 1024)");
+    }
+
     // Unsigned Int 8
     if (test_start(log, mv_string("unsigned-add"))) {
         uint64_t expected = 129;

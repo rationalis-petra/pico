@@ -12,6 +12,7 @@
 #include "data/stringify.h"
 
 #include "components/pretty/stream_printer.h"
+#include "components/pretty/string_printer.h"
 
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
@@ -75,28 +76,32 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
     ParseResult res = parse_rawtree(cin, pia, &ra);
     if (res.type == ParseNone) {
-        throw_error(&point, mv_string("Parse Returned None!"));
+        throw_error(&point, mv_cstr_doc("Parse Returned None!", &ra));
     }
     if (res.type == ParseFail) {
         throw_pi_error(&pi_point, res.error);
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
-        throw_error(&point, mv_string("Parse Returned Invalid Result!\n"));
+        throw_error(&point, mv_cstr_doc("Parse Returned Invalid Result!\n", &ra));
     }
 
     // -------------------------------------------------------------------------
     // Resolution
     // -------------------------------------------------------------------------
-
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
-    TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = target,
+
+    Logger* logger = get_structured_logger(log);
+    TypeCheckContext tc_ctx = {
+        .a = &ra, .pia = pia, .point = &pi_point, .target = target, .logger = logger,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     clear_target(target);
-    LinkData links = generate_toplevel(abs, env, target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = target, .logger = logger,
+    };
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
     EvalResult evres = pico_run_toplevel(abs, target, links, module, &ra, &point);
 
     if (evres.type == ERValue) {
@@ -124,7 +129,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
  on_error:
     if (callbacks.on_error) {
-        callbacks.on_error(point.error_message, log);
+        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), log);
     }
     delete_istream(sin, &ra);
     return;
@@ -524,14 +529,14 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
     ParseResult res = parse_rawtree(cin, pia, &ra);
     if (res.type == ParseNone) {
-        throw_error(&point, mv_string("Parse Returned None!"));
+        throw_error(&point, mv_cstr_doc("Parse Returned None!", &ra));
     }
     if (res.type == ParseFail) {
         throw_pi_error(&pi_point, res.error);
     }
     if (res.type != ParseSuccess) {
         // If parse is invalid, means internal bug, so better exit soon!
-        throw_error(&point, mv_string("Parse Returned Invalid Result!\n"));
+        throw_error(&point, mv_cstr_doc("Parse Returned Invalid Result!\n", &ra));
     }
 
     // -------------------------------------------------------------------------
@@ -540,8 +545,9 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
+    Logger* logger = get_structured_logger(log);
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target,
+        .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target, .logger = logger,
     };
     type_check(&abs, env, ctx);
 
@@ -574,7 +580,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
  on_error:
     if (callbacks.on_error) {
-        callbacks.on_error(point.error_message, log);
+        callbacks.on_error(doc_to_str(point.error_message, 120, &ra), log);
     }
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);

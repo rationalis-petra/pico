@@ -65,6 +65,7 @@ typedef enum {
     // ------------------
     SHL, // Left shift
     SHR, // Right shift
+    XCHG, // Exchange 2 bytes of a 2-byte register.
 
     // ------------------
     //  Memory & Registers
@@ -98,12 +99,12 @@ typedef enum {
     // ------------------
     Call,
     Push, // p 1250.
-    Pop,  // 
+    Pop,  //
 
     // ------------------
     //  Jumps
     // ------------------
-    JE,  // p658, jump if equal
+    JE, // p658, jump if equal
 
 
     JNE, // p658, jump if equal
@@ -118,7 +119,7 @@ typedef enum {
     SetB,  // Set below   (unsigned)
     SetBE, // Set below or equal
     SetA,  // Set above   (unsigned)
-    SetAE, // Set above or equal   
+    SetAE, // Set above or equal
     SetL,  // Set lesser  (signed)
     SetLE, // Set lesser or equal
     SetG,  // Set greater (signed)
@@ -130,8 +131,11 @@ typedef enum {
     Neg,
     Mul,
     Div,
-    IMul, 
+    IMul,
     IDiv,
+
+    // Bit manipulation
+    BSwap, // Reverse bytes in a 4 or 8 byte register. 
 
     // ------------------
     //  Meta
