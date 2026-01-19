@@ -1,6 +1,8 @@
 #include "platform/memory/executable.h"
 #include "platform/signals.h"
 
+#include "components/pretty/stream_printer.h"
+
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/values/modular.h"
 
@@ -202,6 +204,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     RegionAllocator* iter_region = make_subregion(region);
     Allocator itera = ra_to_gpa(iter_region);
     Allocator exec = mk_executable_allocator(&ra);
+    Logger* logger = NULL;
 
     PiAllocator pico_itera = convert_to_pallocator(&itera);
 
@@ -315,7 +318,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, 
+            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, .logger = logger 
         };
         type_check(&abs, env, tc_ctx);
 
@@ -326,7 +329,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Ensure the target is 'fresh' for code-gen
         clear_target(gen_target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &err_point, .target = gen_target, 
+            .a = &itera, .point = &err_point, .target = gen_target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 

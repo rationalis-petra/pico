@@ -5,6 +5,7 @@
 
 #include "components/assembler/assembler.h"
 #include "components/assembler/link_data.h"
+#include "components/logging/structured_logging.h"
 
 #include "pico/data/client/allocator.h"
 #include "pico/data/client/list.h"

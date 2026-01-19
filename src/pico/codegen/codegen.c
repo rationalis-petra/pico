@@ -17,7 +17,6 @@ void init_codegen(CodegenBackend backend, Allocator *alloc) {
 void teardown_codegen() {
 }
 
-
 LinkData generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
     switch (global_backend) {
     case CodegenDirect:

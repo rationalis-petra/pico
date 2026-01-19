@@ -1,3 +1,5 @@
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
@@ -220,7 +222,6 @@ void delete_module(Module* module) {
     call_free(module, &module->pico_allocator);
 }
 
-
 Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links) {
     Segments out;
     if (in_segments.data.len != 0) {
@@ -328,7 +329,7 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
                                                 &module->allocator);
 
         if (segments.code.len != 0) {
-            // Move this to thecode segment bit?
+            // Move this to the code segment bit?
             // swap out self-references
             SymPtrAMap self_ref = mk_sym_ptr_amap(1, &module->allocator);
             sym_ptr_insert(symbol, entry.value, &self_ref);

@@ -9,7 +9,10 @@
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
 
-void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, InternalContext ictx) {
+    Target target = ictx.target;
+    Allocator *a = ictx.a;
+    ErrorPoint* point = ictx.point;
     Assembler* ass = target.target;
     BindingArray vars;
     Syntax body;
@@ -72,7 +75,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
-    generate_i(body, env, target, links, a, point);
+    generate_i(body, env, ictx);
 
     // Codegen function postlude:
     // Stack now looks like:
