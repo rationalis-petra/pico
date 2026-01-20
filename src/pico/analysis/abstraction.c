@@ -1161,6 +1161,80 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         };
         return res;
     }
+    case FCond: {
+        if (raw.branch.nodes.len < 2) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'cond' expects at least one term!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        SynArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
+        for (size_t i = 1; i < raw.branch.nodes.len - 1; i++) {
+            RawTree raw_clause = raw.branch.nodes.data[i];
+            if (raw_clause.type != RawBranch) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Expected composite special term here. Got an atom instead.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (raw_clause.branch.hint != HSpecial) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Expected a composite special term here. Hint: use square brackets '[' and ']'\n"
+                                          " to produce a special term.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
+            Syntax* condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
+            
+            RawTree* branch_term = (raw_clause.branch.nodes.len == 2)
+                ? &raw_clause.branch.nodes.data[1]
+                : raw_slice(&raw_clause, 1, ctx.pia);
+            Syntax* branch = abstract_expr_i(*branch_term, ctx);
+
+            CondClause* clause = mem_alloc(sizeof(CondClause), a);
+            *clause = (CondClause) {.condition = condition, .branch = branch};
+
+            push_ptr(clause, &clauses);
+        }
+
+        RawTree else_clause = raw.branch.nodes.data[raw.branch.nodes.len - 1];
+        Syntax* otherwise = NULL;
+        {
+            if (else_clause.type != RawBranch) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("Expected composite special term here. Got an atom instead.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (else_clause.branch.hint != HSpecial) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("Expected a composite special term here. Hint: use square brackets '[' and ']'\n"
+                                          " to produce a special term.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
+            RawTree else_cond = else_clause.branch.nodes.data[0];
+            Syntax* cond = abstract_expr_i(else_cond, ctx);
+            if (!(cond->type == SLitBool && cond->boolean == true)) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("The final clause in a 'cond' must always have a condition that is\n"
+                                          " the literal :true.", a);
+                throw_pi_error(ctx.point, err);
+            }
+
+            RawTree* branch_term = (else_clause.branch.nodes.len == 2)
+                ? &else_clause.branch.nodes.data[1]
+                : raw_slice(&else_clause, 1, ctx.pia);
+            otherwise = abstract_expr_i(*branch_term, ctx);
+        }
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SCond,
+            .ptype = NULL,
+            .range = raw.range,
+            .cond.clauses = clauses,
+            .cond.otherwise = otherwise,
+        };
+        return res;
+    }
     case FLabels: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;

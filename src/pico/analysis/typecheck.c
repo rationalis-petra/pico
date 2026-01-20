@@ -1071,6 +1071,20 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = out_type;
         break;
     }
+    case SCond: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType) {.sort = TPrim,.prim = Bool};
+
+        PiType* out_type = mk_uvar(ctx.pia);
+        for (size_t i = 0; i < untyped->cond.clauses.len; i++) {
+            CondClause* clause = untyped->cond.clauses.data[i];
+            type_check_i(clause->condition, t, env, ctx);
+            type_check_i(clause->branch, out_type, env, ctx);
+        }
+        type_check_i(untyped->cond.otherwise, out_type, env, ctx);
+        untyped->ptype = out_type;
+        break;
+    }
     case SGoTo: {
         PtrArray* args = lookup_label(untyped->go_to.label, env);
         if (args) {
@@ -1982,6 +1996,15 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
         post_unify(syn->if_expr.true_branch, env, pia, a, point);
         post_unify(syn->if_expr.false_branch, env, pia, a, point);
         break;
+    case SCond: {
+        for (size_t i = 0; i < syn->cond.clauses.len; i++) {
+            CondClause* clause = syn->cond.clauses.data[i];
+            post_unify(clause->condition, env, pia, a, point);
+            post_unify(clause->branch, env, pia, a, point);
+        }
+        post_unify(syn->cond.otherwise, env, pia, a, point);
+        break;
+    }
     case SLabels:
         post_unify(syn->labels.entry, env, pia, a, point);
         for (size_t i = 0; i < syn->labels.terms.len; i++) {
@@ -2279,6 +2302,15 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
         squash_types(typed->if_expr.condition, ctx);
         squash_types(typed->if_expr.true_branch, ctx);
         squash_types(typed->if_expr.false_branch, ctx);
+        break;
+    }
+    case SCond: {
+        for (size_t i = 0; i < typed->cond.clauses.len; i++) {
+            CondClause* clause = typed->cond.clauses.data[i];
+            squash_types(clause->condition, ctx);
+            squash_types(clause->branch, ctx);
+        }
+        squash_types(typed->cond.otherwise, ctx);
         break;
     }
     case SLabels:

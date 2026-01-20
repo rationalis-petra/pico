@@ -1881,6 +1881,53 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         set_i32_backlink(ass, jmp_loc, end_pos - start_pos);
         break;
     }
+    case SCond: {
+        // Generate the condition
+        U64Array end_jumps;
+        U64Array end_jump_locs;
+
+        for (size_t i = 0; i < syn.cond.clauses.len; i++) {
+            CondClause* clause = syn.cond.clauses.data[i];
+            generate_i(*clause->condition, env, ictx);
+
+            // Pop the bool into R9; compare with 0
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
+            data_stack_shrink(env, ADDRESS_SIZE);
+
+            // ---------- JUMP TO NEXT BRANCH ----------
+            // compare the value to 0
+            // jump to next condition if equal to 0 -- the 32-bit immediate is a placeholder
+            AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
+            size_t prev_false = get_pos(ass);
+            size_t prev_false_loc = out.backlink;
+
+            // ---------- BRANCH IF TRUE ----------
+            // now, generate the code to run (if true)
+            generate_i(*clause->branch, env, ictx);
+            data_stack_shrink(env, is_variable_in(syn.ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
+
+            // ---------- JUMP TO END ----------
+            // Generate code for the false branch
+            out = build_unary_op(JMP, imm32(0), ass, a, point);
+            push_u64(get_pos(ass), &end_jumps);
+            push_u64(out.backlink, &end_jump_locs);
+
+            // Jump to here if branch was not true (continue searching for condition)
+            size_t curr_pos = get_pos(ass);
+            set_i32_backlink(ass, prev_false_loc, curr_pos - prev_false);
+        }
+
+        // ---------- OTHERWISE BRANCH ----------
+        generate_i(*syn.cond.otherwise, env, ictx);
+
+        // All branches should jump to this point
+        size_t curr_pos = get_pos(ass);
+        for (size_t i = 0; i < end_jumps.len; i++) {
+            set_i32_backlink(ass, end_jump_locs.data[i], curr_pos - end_jumps.data[i]);
+        }
+        break;
+    }
     case SLabels: {
         // Labels: The code-generation for labels is as follows: 
         // 1. Push the current variable stack head ($r14)  

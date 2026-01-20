@@ -297,6 +297,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
         break;
+    case FCond:
+        out = mk_str_doc(mv_string("::cond"), a);
+        break;
     case FLabels:
         out = mk_str_doc(mv_string("::labels"), a);
         break;

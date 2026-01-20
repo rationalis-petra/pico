@@ -71,6 +71,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("let");
     case SIf:
         return mv_string("if");
+    case SCond:
+        return mv_string("cond");
     case SLabels:
         return mv_string("labels");
     case SGoTo:
@@ -605,6 +607,20 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         push_ptr(pretty_syntax_internal(syntax->if_expr.condition, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->if_expr.true_branch, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->if_expr.false_branch, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap )out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
+    case SCond: {
+        PtrArray nodes = mk_ptr_array(2 + syntax->cond.clauses.len, a);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("cond", a), a), &nodes);
+        for (size_t i = 0; i < syntax->cond.clauses.len; i++) {
+            PtrArray clause_nodes = mk_ptr_array(2, a);
+            CondClause* clause = syntax->cond.clauses.data[i];
+            push_ptr(pretty_syntax_internal(clause->condition, ctx, a), &nodes);
+            push_ptr(pretty_syntax_internal(clause->branch, ctx, a), &nodes);
+            push_ptr(mv_group_doc(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(clause_nodes, a), a), a), a), &nodes);
+        }
         out = mv_sep_doc(nodes, a);
         if (should_wrap )out = mk_paren_doc("(", ")", out, a);
         break;

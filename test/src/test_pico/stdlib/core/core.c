@@ -249,6 +249,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(if-make-maybe :true)");
     }
 
+    if (test_start(log, mv_string("cond-one-clause"))) {
+        int64_t expected = 2;
+        TEST_EQ("(cond [:true 2])");
+    }
+
+    /* if (test_start(log, mv_string("cond-two-clauses"))) { */
+    /*     int64_t expected = 2; */
+    /*     TEST_EQ("(cond [:false 3] [:true 2])"); */
+    /* } */
+
     // -----------------------------------------------------
     // 
     //      Struct

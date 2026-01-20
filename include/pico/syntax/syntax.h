@@ -62,6 +62,7 @@ typedef enum {
     // Control Flow & Binding
     SLet,
     SIf,
+    SCond,
     SLabels,
     SGoTo,
     SSequence,
@@ -290,6 +291,16 @@ typedef struct {
 } SynIf;
 
 typedef struct {
+    Syntax* condition;
+    Syntax* branch;
+} CondClause;
+
+typedef struct {
+    PtrArray clauses;
+    Syntax* otherwise;
+} SynCond;
+
+typedef struct {
     SymbolArray vars;
     SymPtrAMap fields;
 } SynTrait;
@@ -405,6 +416,7 @@ struct Syntax {
 
         SynLet let_expr;
         SynIf if_expr;
+        SynCond cond;
         SynLabels labels;
         SynGoTo go_to;
         SynWithReset with_reset;

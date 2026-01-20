@@ -298,6 +298,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("if"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FCond;
+    sym = string_to_symbol(mv_string("cond"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FLabels;
     sym = string_to_symbol(mv_string("labels"));
     add_def(module, sym, type, &former, null_segments, NULL);

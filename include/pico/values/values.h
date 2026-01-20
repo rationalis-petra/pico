@@ -84,6 +84,7 @@ typedef enum TermFormer {
     // Term Formers: Control flow + binding
     FLet,
     FIf,
+    FCond,
     FLabels,
     FGoTo,
     FWithReset,
