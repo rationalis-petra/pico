@@ -15,11 +15,11 @@
 static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
 static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
 static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -103,10 +103,10 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 out = parse_rawstring(is, pia, a);
             }
             else if (point == '#') {
-                out = parse_char(is, pia, a);
+                out = parse_hash(is, pia, a);
             }
             else if (is_numchar(point) || point == '-') {
-                out = parse_number(is, pia, a);
+                out = parse_number(10, is, pia, a);
             }
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -400,7 +400,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
     return out;
 }
 
-ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -470,15 +470,31 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
     if (floating) {
         int64_t lhs_result = 0;
         uint64_t rhs_result = 0;
-        uint64_t tens = 1;
+        uint64_t exp = 1;
         for (size_t i = lhs.len; i > 0; i--) {
-            lhs_result += tens * lhs.data[i-1];
-            tens *= 10;
+            if (lhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            lhs_result += exp * lhs.data[i-1];
+            exp *= base;
         }
-        tens = 1;
+        exp = 1;
         for (size_t i = rhs.len; i > 0; i--) {
-            rhs_result += tens * rhs.data[i-1];
-            tens *= 10;
+            if (rhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            rhs_result += exp * rhs.data[i-1];
+            exp *= 10;
         }
         double dlhs = (double)lhs_result;
         double drhs = (double)rhs_result;
@@ -496,10 +512,18 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
         };
     } else {
         int64_t int_result = 0;
-        uint64_t tens = 1;
+        uint64_t exp = 1;
         for (size_t i = lhs.len; i > 0; i--) {
-            int_result += tens * lhs.data[i-1];
-            tens *= 10;
+            if (lhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            int_result += exp * lhs.data[i-1];
+            exp *= base;
         }
         int_result *= is_positive ? 1 : -1;
 
@@ -682,7 +706,7 @@ ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     uint32_t codepoint;
     size_t start = bytecount(is);
@@ -698,15 +722,44 @@ ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a) {
         };
     }
 
-    //next(is, &codepoint); // consume token (")
-    return (ParseResult) {
-        .type = ParseSuccess,
-        .result.type = RawAtom,
-        .result.range.start = start,
-        .result.range.end = bytecount(is),
-        .result.atom.type = AIntegral,
-        .result.atom.int_64 = codepoint,
-    };
+    uint32_t char_lit = codepoint;
+    peek(is, &codepoint);
+    if (is_whitespace(codepoint)) {
+        return (ParseResult) {
+            .type = ParseSuccess,
+            .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
+            .result.atom.type = AIntegral,
+            .result.atom.int_64 = char_lit,
+        };
+    } else if (codepoint == '_') {
+        switch (char_lit) {
+        case 'b':
+            next(is, &codepoint);
+            return parse_number(2, is, pia, a);
+        case 'o':
+            return parse_number(8, is, pia, a);
+        default:
+            return (ParseResult) {
+                .type = ParseFail,
+                .error.message = mv_cstr_doc("Invalid base indicator: please use one of (b)inary or (o)ctal", a),
+                .error.range.start = bytecount(is),
+                .error.range.end = bytecount(is),
+            };
+            break;
+        }
+    } else {
+        return (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_cstr_doc("Unexpected literal beginning with '#': if you meant a char literal\n "
+                                         "ensure there is only one character following the '#' then a space.\n"
+                                         "If you wanted a numeric literal, follow the '#' with a base indicator\n" 
+                                         "character then an underscore, e.g. #b_11 for binary 3" , a),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
+        };
+    }
 }
 
 StreamResult consume_until(uint32_t stop, IStream* is) {

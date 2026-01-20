@@ -53,6 +53,16 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
         TEST_EQ("1342.734375");
     }
 
+    if (test_start(log, mv_string("base-2-positive-int-literal"))) {
+        int64_t expected = 10;
+        TEST_EQ("#b_1010");
+    }
+
+    if (test_start(log, mv_string("base-8-positive-int-literal"))) {
+        int64_t expected = 520;
+        TEST_EQ("#o_1010");
+    }
+
     if (test_start(log, mv_string("1-dimensional-array-literal"))) {
         int64_t expected_data[] = {1, 2, 3, 4, 5};
         uint64_t expected_shape[] = {5};

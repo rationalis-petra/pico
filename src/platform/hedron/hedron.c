@@ -383,8 +383,9 @@ bool is_device_suitable(VkPhysicalDevice device, Allocator* a) {
 
     const bool extensions_supported = check_device_extension_support(device, a);
 
+    // TODO: move some (or all) of these checks into the hedron API
     return (device_features.geometryShader
-            && device_features.samplerAnisotropy
+            && device_features.samplerAnisotropy 
             && extensions_supported
             && (indices.available & required_indices));
 }
