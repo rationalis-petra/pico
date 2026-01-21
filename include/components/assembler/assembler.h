@@ -136,6 +136,8 @@ typedef enum {
 
     // Bit manipulation
     BSwap, // Reverse bytes in a 4 or 8 byte register. 
+    SHLCL, // Shift target register left by amount in CL
+    SHRCL, // Shift target register right by amount in CL
 
     // ------------------
     //  Meta

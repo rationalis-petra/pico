@@ -1883,8 +1883,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SCond: {
         // Generate the condition
-        U64Array end_jumps;
-        U64Array end_jump_locs;
+        U64Array end_jumps = mk_u64_array(syn.cond.clauses.len, a);
+        U64Array end_jump_locs = mk_u64_array(syn.cond.clauses.len, a);
 
         for (size_t i = 0; i < syn.cond.clauses.len; i++) {
             CondClause* clause = syn.cond.clauses.data[i];

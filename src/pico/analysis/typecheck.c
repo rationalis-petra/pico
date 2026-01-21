@@ -404,7 +404,13 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             type_infer_i(untyped, env, ctx);
         } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
-                err.message = mv_cstr_doc("Incorrect number of family arguments", a);
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of arguments to a type family - expeted", a), &nodes);
+                push_ptr(pretty_u64(fn_type.kind.nargs, a), &nodes);
+                push_ptr(mv_cstr_doc("but got", a), &nodes);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
+
+                err.message = mv_sep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 

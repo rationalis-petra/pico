@@ -49,10 +49,20 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(i64.mod 20594361 9232)");
     }
 
+    if (test_start(log, mv_string("unsigned-64-shr"))) {
+        uint64_t expected = 16384;
+        TEST_EQ("(u64.shl 10 16)");
+    }
+
     // Unsigned Int 32
     if (test_start(log, mv_string("unsigned-add"))) {
-        uint64_t expected = 188628;
+        uint32_t expected = 188628;
         TEST_EQ("(u32.+ 65535 123093)");
+    }
+
+    if (test_start(log, mv_string("unsigned-shr"))) {
+        uint32_t expected = 128;
+        TEST_EQ("(u32.shl 3 16)");
     }
 
     // Unsigned Int 16
@@ -71,6 +81,11 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
     if (test_start(log, mv_string("unsigned-add"))) {
         uint64_t expected = 129;
         TEST_EQ("(u8.+ 100 29)");
+    }
+
+    if (test_start(log, mv_string("unsigned-8-shl"))) {
+        uint8_t expected = 2;
+        TEST_EQ("(u8.shr 3 16)");
     }
 
     if (test_start(log, mv_string("signed-add"))) {

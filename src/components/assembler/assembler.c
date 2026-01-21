@@ -1770,6 +1770,24 @@ void build_unary_opcode_table() {
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0xC8, .init_rex_byte = 0b01001000, /*REX.W*/ .order = O};
     unary_opcode_table[BSwap][uindex(Dest_Register, sz_32)] =
         (UnaryOpEntry) {.opcode_prefix = 0x0F, .opcode = 0xC8, .order = O};
+
+    unary_opcode_table[SHLCL][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .init_rex_byte = 0b01001000, .opcode_modrm = 0x4, /*REX.W*/ .order = M};
+    unary_opcode_table[SHLCL][uindex(Dest_Register, sz_32)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .opcode_modrm = 0x4, .order = M};
+    unary_opcode_table[SHLCL][uindex(Dest_Register, sz_16)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .opcode_modrm = 0x4, .order = M,};
+    unary_opcode_table[SHLCL][uindex(Dest_Register, sz_8)] =
+        (UnaryOpEntry) {.opcode = 0xD2, .opcode_modrm = 0x4, .order = M,};
+
+    unary_opcode_table[SHRCL][uindex(Dest_Register, sz_64)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .init_rex_byte = 0b01001000, .opcode_modrm = 0x4, /*REX.W*/ .order = M};
+    unary_opcode_table[SHRCL][uindex(Dest_Register, sz_32)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .opcode_modrm = 0x5, .order = M};
+    unary_opcode_table[SHRCL][uindex(Dest_Register, sz_16)] =
+        (UnaryOpEntry) {.opcode = 0xD3, .opcode_modrm = 0x5, .order = M,};
+    unary_opcode_table[SHRCL][uindex(Dest_Register, sz_8)] =
+        (UnaryOpEntry) {.opcode = 0xD2, .opcode_modrm = 0x5, .order = M,};
 }
 
 AsmResult build_unary_op(UnaryOp op, Location loc, Assembler* assembler, Allocator* err_allocator, ErrorPoint* point) {
@@ -2147,6 +2165,8 @@ Document* pretty_unary_op(UnaryOp op, Allocator* a) {
         "IMul",
         "IDiv",
         "BSwap",
+        "SHLCL",
+        "SHRCL",
     };
     if (op >= Unary_Op_Count) {
         return mk_cstr_doc("<Invalid UnOp>", a);

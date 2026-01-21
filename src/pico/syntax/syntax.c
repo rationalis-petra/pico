@@ -62,7 +62,7 @@ String syntax_type_to_string(Syntax_t type) {
     case SDynamicUse:
         return mv_string("use");
     case SDynamicSet:
-        return mv_string("set");
+        return mv_string("modfiy");
     case SDynamicLet:
         return mv_string("bind");
 
@@ -559,7 +559,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
     }
     case SDynamicSet: {
         PtrArray nodes = mk_ptr_array(3, a);
-        push_ptr(mv_style_doc(former_style, mk_cstr_doc("set", a), a), &nodes);
+        push_ptr(mv_style_doc(former_style, mk_cstr_doc("modify", a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->dynamic_set.dynamic, ctx, a), &nodes);
         push_ptr(pretty_syntax_internal(syntax->dynamic_set.new_val, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);

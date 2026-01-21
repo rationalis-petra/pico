@@ -26,6 +26,16 @@ static void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Alloca
     build_nullary_op(Ret, ass, a, point);
 }
 
+static void build_shift_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(op, reg(RDX, sz), ass, a, point);
+    build_unary_op(Push, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
+}
+
 static void build_unary_fn(Assembler* ass,  UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -257,8 +267,27 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
+    // Type Change
+    typep = mk_binop_type(pia, UInt_8, prim, prim);
+
+    build_shift_fn(ass, SHLCL, sz, a, &point);
+    sym = string_to_symbol(mv_string("shl"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_shift_fn(ass, SHRCL, sz, a, &point);
+    sym = string_to_symbol(mv_string("shr"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // Type Change
     typep = mk_binop_type(pia, prim, prim, Bool);
+
+    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
     sym = string_to_symbol(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);

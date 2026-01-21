@@ -121,7 +121,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     // -------------------------------------------------------------------------
     //
-    //     Dynamic binding - dynamic/use/bind/set
+    //     Dynamic binding - dynamic/use/bind/modify
     //
     // -------------------------------------------------------------------------
 
@@ -131,9 +131,9 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(use dvar)");
     }
 
-    if (test_start(log, mv_string("dynamic-set"))) {
+    if (test_start(log, mv_string("dynamic-modify"))) {
         int64_t expected = 3;
-        RUN("(set dvar 3)");
+        RUN("(modify dvar 3)");
         TEST_EQ("(use dvar)");
     }
 
@@ -143,10 +143,9 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     // TODO: Add test with small (non-stack aligned) values.
-
     if (test_start(log, mv_string("bind-reverts-dynamic-to-corect-val"))) {
         int64_t expected = 9;
-        TEST_EQ("(seq (set dvar 9) (bind [dvar 12] 3) (use dvar))");
+        TEST_EQ("(seq (modify dvar 9) (bind [dvar 12] 3) (use dvar))");
     }
 
     if (test_start(log, mv_string("bind-provides-correct-value"))) {
@@ -254,10 +253,20 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(cond [:true 2])");
     }
 
-    /* if (test_start(log, mv_string("cond-two-clauses"))) { */
-    /*     int64_t expected = 2; */
-    /*     TEST_EQ("(cond [:false 3] [:true 2])"); */
-    /* } */
+    if (test_start(log, mv_string("cond-first-clause"))) {
+        int64_t expected = 3;
+        TEST_EQ("(cond [:true 3] [:true 2])");
+    }
+
+    if (test_start(log, mv_string("cond-second-clauses"))) {
+        int64_t expected = 2;
+        TEST_EQ("(cond [:false 3] [:true 2])");
+    }
+
+    if (test_start(log, mv_string("cond-three-clauses"))) {
+        int64_t expected = 7;
+        TEST_EQ("(cond [:false 3] [:true 7] [:true 2])");
+    }
 
     // -----------------------------------------------------
     // 

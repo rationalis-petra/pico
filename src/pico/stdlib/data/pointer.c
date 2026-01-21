@@ -54,6 +54,11 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         "  p)";
     compile_toplevel(new_fn, module,target,  &point, &pi_point, region);
 
+    const char *delete_fn = 
+        "(def delete all [A] proc [(ptr (Ptr A))] \n"
+        "  (memory.free (unname ptr)))";
+    compile_toplevel(delete_fn, module,target,  &point, &pi_point, region);
+
     Result r = add_module_def(data, string_to_symbol(mv_string("pointer")), module);
     if (r.type == Err) panic(r.error_message);
 }

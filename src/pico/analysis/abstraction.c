@@ -1181,6 +1181,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                                           " to produce a special term.", a);
                 throw_pi_error(ctx.point, err);
             }
+            if (raw_clause.branch.nodes.len < 2) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Clause in a cond must have at least two terms: the condition and the body.", a);
+                throw_pi_error(ctx.point, err);
+            }
             
             Syntax* condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
             

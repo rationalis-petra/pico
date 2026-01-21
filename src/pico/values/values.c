@@ -279,7 +279,7 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::bind"), a);
         break;
     case FDynamicSet:
-        out = mk_str_doc(mv_string("::set"), a);
+        out = mk_str_doc(mv_string("::modify"), a);
         break;
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);

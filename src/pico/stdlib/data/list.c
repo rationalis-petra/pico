@@ -152,14 +152,14 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
         "  let [lst (use l)]\n"
         "    (if (u64.< lst.len lst.capacity)\n"
-        "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
+        "      (seq (eset lst.len val lst) (modify l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
 
     const char *list_pop_fn =
         "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
         "  [let! old (use lst)]\n"
-        "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
+        "  (modify lst (struct old [.len (u64.- old.len 1)]))\n"
         "  (elt (u64.- old.len 1) old))\n";
     compile_toplevel(list_pop_fn, module, target, &point, &pi_point, region);
 

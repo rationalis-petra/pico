@@ -271,7 +271,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FDynamicSet;
-    sym = string_to_symbol(mv_string("set"));
+    sym = string_to_symbol(mv_string("modify"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FDynamicLet;
