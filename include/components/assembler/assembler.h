@@ -73,6 +73,7 @@ typedef enum {
     Mov,   // p 769.
     MovSS, // p 857.
     MovSD, // p 848.
+    MovZx, // p 870.
     LEA,
 
     // ------------------
@@ -186,8 +187,13 @@ typedef enum {
     XMM14 = 0b11110,
     XMM15 = 0b11111,
 
+    AH  = 0b1000100, // AH shares RSP encoding for r/m8 operators
+    CH  = 0b1000101, // CH shares RBP encoding for r/m8 operators
+    DH  = 0b1000110, // DH shares RSI encoding for r/m8 operators
+    BH  = 0b1000111, // BH shares RDI encoding for r/m8 operators
+
     // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2
-    RIP = 0b100101,
+    RIP = 0b1000101,
 } Regname;
 
 typedef enum {

@@ -2303,28 +2303,34 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // is signed, 
             panic(mv_string("can't widen signed ints yet!"));
         } else if (syn.widen.val->ptype->prim < Float_32) {
-            // is unsigned, so the movzx instruction will do:
-            LocationSize sz;
+            // Is unsigned, so the movzx instruction will do:
             switch (syn.widen.val->ptype->prim) {
             case UInt_8:
-                sz = sz_8;
+                // Use MovZx (only available for bytes + words)
+                build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(MovZx, reg(RCX, sz_64), reg(RAX, sz_8), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
                 break;
             case UInt_16:
-                sz = sz_16;
+                // Use MovZx (only available for bytes + words)
+                build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(MovZx, reg(RCX, sz_64), reg(RAX, sz_16), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
                 break;
             case UInt_32:
-                sz = sz_32;
+                // In the case of 32-bit registers, moving a 32-bit register
+                // into a 32-bit register does the zero-elimination 
+                build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RCX, sz_32), reg(RAX, sz_32), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
                 break;
             case UInt_64:
-                sz = sz_64;
+                // Widening from U64 to U64 = no-op
                 break;
             default:
                 panic(mv_string("impossible code path"));
             }
 
-            build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(RCX, sz), reg(RAX, sz), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
         } else {
             panic(mv_string("can't widen this yet!"));
         }

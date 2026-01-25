@@ -73,7 +73,12 @@ void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSi
     }
     build_unary_op(op, reg(RDI, sz), ass, a, point);
 
-    build_unary_op(Push, reg(out, sz_64), ass, a, point);
+    if (sz == sz_8) {
+        build_binary_op(Mov, reg(RDX, sz), reg(out, sz), ass, a, point);
+        build_unary_op(Push, reg(RDX, sz_64), ass, a, point);
+    } else {
+        build_unary_op(Push, reg(out, sz_64), ass, a, point);
+    }
     build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
@@ -260,7 +265,25 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IDiv : Div, RDX, sz, a, &point);
+    build_binary_fn(ass, And, sz, a, &point);
+    typep = mk_binop_type(pia, prim, prim, prim);
+    sym = string_to_symbol(mv_string("and"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_fn(ass, Or, sz, a, &point);
+    typep = mk_binop_type(pia, prim, prim, prim);
+    sym = string_to_symbol(mv_string("or"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // TODO: set out to AH if size == 8
+    Regname out = sz == sz_8 ? AH : RDX;
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, out, sz, a, &point);
     sym = string_to_symbol(mv_string("mod"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);

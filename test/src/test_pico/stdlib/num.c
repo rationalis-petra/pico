@@ -34,6 +34,32 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(u64./ 20594361 9231)");
     }
 
+    // TODO: something like this crashed qoi.rl: see index code.
+    /* if (test_start(log, mv_string("test-widening"))) { */
+    /*     uint8_t expected = 2; */
+    /*     TEST_EQ("(u8.mod (u8.* 255 11) 64)"); */
+    /* } */
+
+    if (test_start(log, mv_string("small-unsigned-divide"))) {
+        uint8_t expected = 16;
+        TEST_EQ("(u8./ 128 8)");
+    }
+
+    if (test_start(log, mv_string("well-defined-overflow"))) {
+        uint8_t expected = 1;
+        TEST_EQ("(u8.+ 255 2)");
+    }
+
+    if (test_start(log, mv_string("small-unsigned-divide-with-remainder"))) {
+        uint8_t expected = 18;
+        TEST_EQ("(u8./ 128 7)");
+    }
+
+    if (test_start(log, mv_string("small-unsigned-modulo"))) {
+        uint8_t expected = 2;
+        TEST_EQ("(u8.mod 128 7)");
+    }
+
     if (test_start(log, mv_string("signed-mul"))) {
         int64_t expected = 2577581361;
         TEST_EQ("(i64.* 9231 279231)");

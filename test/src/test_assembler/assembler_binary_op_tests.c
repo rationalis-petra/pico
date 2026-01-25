@@ -64,6 +64,26 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("asm-movzx-r64-r8"))) { // MovZx RSP, AL 
+        ASM_TEST() {
+            uint8_t expected[] =  {  0x48, 0x0F, 0xB6, 0xE0 , 0x90 } ;
+            build_binary_op(MovZx, reg(RSP, sz_64), reg(RAX, sz_8), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-movzx-r64-r16"))) { // MovZx R9, R8w
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x4D, 0x0F, 0xB7, 0xC8, 0x90 } ;
+            build_binary_op(MovZx, reg(R9, sz_64), reg(R8, sz_16), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
     delete_assembler(ass);
     delete_arena_allocator(arena);
 }
