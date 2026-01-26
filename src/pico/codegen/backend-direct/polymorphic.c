@@ -9,7 +9,10 @@
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/binding/address_env.h"
 
-void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point) {
+void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, InternalContext ictx) {
+    Target target = ictx.target;
+    Allocator *a = ictx.a;
+    ErrorPoint* point = ictx.point;
     Assembler* ass = target.target;
     BindingArray vars;
     Syntax body;
@@ -72,7 +75,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Target
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
-    generate_i(body, env, target, links, a, point);
+    generate_i(body, env, ictx);
 
     // Codegen function postlude:
     // Stack now looks like:
@@ -177,7 +180,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -273,7 +276,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -430,7 +433,7 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
                 break;
             }
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             }
@@ -466,7 +469,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
                 build_unary_op(Push, reg(R8, sz_64), ass, a, point);
                 break;
             case ATooManyLocals: {
-                throw_error(point, mk_string("Too Many Local variables!", a));
+                throw_error(point, mv_cstr_doc("Too Many Local variables!", a));
                 break;
             }
             default: {
@@ -523,7 +526,7 @@ void generate_align_to(Regname sz_reg, Regname align, Assembler* ass, Allocator*
     // RDX, RAX, RCX
     if (sz_reg == RAX || sz_reg == RCX || sz_reg == RDX ||
         align == RAX  || align == RCX  || align == RDX) {
-        throw_error(point, mv_string("Error in generate_align_to: sz or align registers were either RAX, RCX or RDX!"));
+        throw_error(point, mv_cstr_doc("Error in generate_align_to: sz or align registers were either RAX, RCX or RDX!", a));
     }
 
     /* size_t rem = size % 8; */

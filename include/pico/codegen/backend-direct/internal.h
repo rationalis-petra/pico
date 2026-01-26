@@ -30,15 +30,23 @@ typedef struct {
     LinkData links;
 } InternalLinkData;
 
-void generate_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+typedef struct {
+    Target target;
+    InternalLinkData* links;
+    Allocator *a;
+    ErrorPoint* point;
+    Logger* logger;
+} InternalContext;
+
+void generate_i(Syntax syn, AddressEnv* env, InternalContext ctx);
+void generate_polymorphic_i(Syntax syn, AddressEnv* env, InternalContext ctx);
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 size_t calc_variant_size(PtrArray* types);
 size_t calc_variant_stack_size(PtrArray* types);
-void* const_fold(Syntax *syn, AddressEnv *env, Target target, InternalLinkData* links, Allocator *a, ErrorPoint *point);
+void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ctx);
 
 // Codegen utilities - generate specific things
 void backlink_global(Target target, Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
@@ -62,8 +70,8 @@ void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allo
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point);
-void gen_mk_struct_ty(Location dest, Location nfields, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
-void gen_mk_enum_ty(Location dest, SynEnumType shape, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_struct_ty(Location dest, Location nfields, Location data, bool packed, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_dynamic_ty(Assembler* ass, Allocator* a, ErrorPoint* point);
 

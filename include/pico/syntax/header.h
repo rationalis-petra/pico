@@ -3,7 +3,9 @@
 
 #include "data/meta/array_header.h"
 #include "components/pretty/document.h"
+
 #include "pico/values/values.h"
+#include "pico/data/range.h"
 #include "pico/data/symbol_array.h"
 
 //------------------------------------------------------------------------------
@@ -69,6 +71,7 @@ typedef struct {
     Symbol name;
     Imports imports;
     Exports exports;
+    Range range;
 } ModuleHeader;
 
 ModuleHeader copy_module_header(ModuleHeader h, Allocator* a);

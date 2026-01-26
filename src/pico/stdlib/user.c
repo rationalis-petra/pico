@@ -19,6 +19,7 @@ void add_user_module(Package* base, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 1, "meta");
     add_import(&imports.clauses, &ra, 1, "foreign");
     add_import(&imports.clauses, &ra, 1, "debug");
+    add_import(&imports.clauses, &ra, 1, "dev");
 
     Exports exports = (Exports) {
         .export_all = true,

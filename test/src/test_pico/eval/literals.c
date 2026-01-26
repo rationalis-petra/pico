@@ -13,9 +13,14 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
         .target = target,
     };
 
-    if (test_start(log, mv_string("function-large-body"))) {
+    if (test_start(log, mv_string("positive-int-literal"))) {
         int64_t expected = 10;
         TEST_EQ("10");
+    }
+
+    if (test_start(log, mv_string("underscore-int-literal"))) {
+        int64_t expected = 101020;
+        TEST_EQ("10_1_020");
     }
 
     if (test_start(log, mv_string("negative-int-literal"))) {
@@ -46,6 +51,16 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
     if (test_start(log, mv_string("complicated-float-literal"))) {
         double expected = 1342.734375;
         TEST_EQ("1342.734375");
+    }
+
+    if (test_start(log, mv_string("base-2-positive-int-literal"))) {
+        int64_t expected = 10;
+        TEST_EQ("#b_1010");
+    }
+
+    if (test_start(log, mv_string("base-8-positive-int-literal"))) {
+        int64_t expected = 520;
+        TEST_EQ("#o_1010");
     }
 
     if (test_start(log, mv_string("1-dimensional-array-literal"))) {

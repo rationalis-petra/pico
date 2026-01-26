@@ -32,7 +32,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.1.3";
+static const char* version = "0.1.4";
 
 typedef struct {
     bool debug_print;
@@ -46,8 +46,8 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
 
-    cin = mk_capturing_istream(cin, &ra);
-    reset_bytecount(cin);
+    IStream* volatile  cp_in = mk_capturing_istream(cin, &ra);
+    reset_bytecount(cp_in);
 
     Target gen_target = {
         .target = mk_assembler(current_cpu_feature_flags(), exec),
@@ -74,7 +74,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
         write_fstring(mv_string(" > "), cout);
     }
 
-    ParseResult res = parse_rawtree(cin, &pico_region, &ra);
+    ParseResult res = parse_rawtree(cp_in, &pico_region, &ra);
 
     if (res.type == ParseNone) {
         write_fstring(mv_string("\n"), cout);
@@ -85,7 +85,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("stdin"), stdalloc);
+        display_error(multi, *get_captured_buffer(cp_in), get_formatted_stdout(), mv_string("stdin"), stdalloc);
         return true;
     }
     if (res.type != ParseSuccess) {
@@ -125,10 +125,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
 
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
-    TypeCheckContext ctx = (TypeCheckContext) {
+    TypeCheckContext tc_ctx = {
         .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
     };
-    type_check(&abs, env, ctx);
+    type_check(&abs, env, tc_ctx);
 
     if (opts.debug_print) {
         PiType* ty = toplevel_type(abs);
@@ -147,7 +147,10 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     // -------------------------------------------------------------------------
 
     clear_target(gen_target);
-    LinkData links = generate_toplevel(abs, env, gen_target, &ra, &point);
+    CodegenContext cg_ctx = {
+        .a = &ra, .point = &point, .target = gen_target,
+    };
+    LinkData links = generate_toplevel(abs, env, cg_ctx);
 
     if (opts.debug_print) {
         start_underline(cout);
@@ -186,13 +189,13 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cin), cout, mv_string("stdin"), &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cp_in), cout, mv_string("stdin"), &ra);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     return true;
 
  on_error:
-    write_fstring(point.error_message, cout);
+    write_doc_formatted(point.error_message, 120, cout);
     write_fstring(mv_string("\n"), cout);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);

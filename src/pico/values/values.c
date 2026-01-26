@@ -279,7 +279,7 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         out = mk_str_doc(mv_string("::bind"), a);
         break;
     case FDynamicSet:
-        out = mk_str_doc(mv_string("::set"), a);
+        out = mk_str_doc(mv_string("::modify"), a);
         break;
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);
@@ -296,6 +296,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FIf:
         out = mk_str_doc(mv_string("::if"), a);
+        break;
+    case FCond:
+        out = mk_str_doc(mv_string("::cond"), a);
         break;
     case FLabels:
         out = mk_str_doc(mv_string("::labels"), a);
@@ -414,6 +417,15 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
     case FCapture:
         out = mk_str_doc(mv_string("::capture"), a);
+        break;
+    case FBreakAbstract:
+        out = mk_str_doc(mv_string("::break-abstract"), a);
+        break;
+    case FBreakTypecheck:
+        out = mk_str_doc(mv_string("::break-typecheck"), a);
+        break;
+    case FBreakGenerate:
+        out = mk_str_doc(mv_string("::break-generate"), a);
         break;
     }
 

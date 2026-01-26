@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <signal.h>
 
 #include "platform/signals.h"
@@ -14,9 +15,25 @@ const Colour pass_colour = (Colour){.r = 30, .g = 200, .b = 30};
 static TestLog* current_log = NULL;
 
 void on_segfault() {
+    // Panic will signal 'abort' by default. Usually, this would then cause the 
+    //   test to call the function associated with the 'abort' handler (below),
+    //   but in this case we don't want to do that!
+    signal(SIGABRT, SIG_DFL);  
     panic(string_cat(mv_string("Segfault in test: "),
           current_log->current_test,
           get_std_allocator()));
+}
+
+void on_abort() {
+    FormattedOStream* fout = get_formatted_stdout();
+    start_coloured_text(colour(200, 0, 0), fout);
+    write_fstring(mv_string("Program Aborted While Test Running! \n\n"), fout);
+    end_coloured_text(fout);
+    write_fstring(mv_string("Failing the test and attempting to print as much diagnostic logging info as possible\n\n"), fout);
+
+    test_fail(current_log);
+    signal(SIGABRT, SIG_DFL);  
+    abort();
 }
 
 TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
@@ -35,6 +52,7 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a) {
   };
   current_log = out;
   signal(SIGSEGV, on_segfault);
+  signal(SIGABRT, on_abort);
   return out;
 }
 
@@ -64,6 +82,11 @@ bool test_start(TestLog* log, String name) {
 void test_pass(TestLog* log) {
     log->passed_tests++;
 
+    if (log->slogger) {
+        delete_logger(log->slogger);
+        log->slogger = NULL;
+    }
+
     if (!log->in_test) {
         panic(mv_string("Ending test suite - passing a test but one has not been started!"));
     }
@@ -88,6 +111,11 @@ void test_skip(TestLog* log) {
         panic(mv_string("Ending test suite - passing a test but one has not been started!"));
     }
 
+    if (log->slogger) {
+        delete_logger(log->slogger);
+        log->slogger = NULL;
+    }
+
     log->in_test = false;
     if (log->verbosity.show_passes) {
         start_coloured_text(pass_colour, log->stream);
@@ -108,6 +136,15 @@ void test_fail(TestLog* log) {
         panic(mv_string("Ending test suite - failing a test but one has not been started!"));
     }
 
+    if (log->slogger && log->verbosity.show_fails) {
+        log_to_formatted_ostream(log->slogger, 120, log->stream);
+    }
+
+    if (log->slogger) {
+        delete_logger(log->slogger);
+        log->slogger = NULL;
+    }
+
     if (log->verbosity.show_fails) {
         start_coloured_text(fail_colour, log->stream);
         write_fstring(mv_string("[Fail] "), log->stream);
@@ -124,6 +161,13 @@ void test_fail(TestLog* log) {
 void delete_test_log(TestLog* log, Allocator* a) {
     sdelete_ptr_array(log->current_suites);
     mem_free(log, a);
+}
+
+Logger* get_structured_logger(TestLog *log) {
+    if (!log->slogger && log->in_test) {
+        log->slogger = make_logger(log->gpa);
+    }
+    return log->slogger;
 }
 
 void test_log_error(TestLog* log, String message) {

@@ -330,7 +330,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     // -------------------------------------------------------------------------
     //
-    //     Dynamic binding - dynamic/use/bind/set
+    //     Dynamic binding - dynamic/use/bind/modify
     //
     // -------------------------------------------------------------------------
 
@@ -340,9 +340,9 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (use dvar)) {Unit})");
     }
 
-    if (test_start(log, mv_string("dynamic-set"))) {
+    if (test_start(log, mv_string("dynamic-modify"))) {
         int64_t expected = 3;
-        RUN("(set dvar 3)");
+        RUN("(modify dvar 3)");
         TEST_EQ("((all [A] (use dvar)) {Unit})");
     }
 
@@ -352,9 +352,9 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] (use ldvar)) {Unit})");
     }
 
-    if (test_start(log, mv_string("large-dynamic-set"))) {
+    if (test_start(log, mv_string("large-dynamic-modify"))) {
         int64_t expected[2] = {100, -100};
-        RUN("((all [A] (set ldvar struct [.x 100] [.y -100])) {Unit})");
+        RUN("((all [A] (modify ldvar struct [.x 100] [.y -100])) {Unit})");
         TEST_EQ("(use ldvar)");
     }
 

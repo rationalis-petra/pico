@@ -2,6 +2,8 @@
 #include "platform/signals.h"
 #include "platform/memory/platform.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/data/client/allocator.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
@@ -238,7 +240,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments prepped;
@@ -310,8 +312,6 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
 
     PiAllocator nul_alloc = (PiAllocator){};
     std_temp_allocator = mk_dynamic_var(sizeof(PiAllocator), &nul_alloc); 
-
-    typep = mk_dynamic_type(pia, mk_prim_type(pia, Address));
     sym = string_to_symbol(mv_string("temp-allocator"));
     add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
     clear_assembler(ass);

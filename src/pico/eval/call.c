@@ -9,10 +9,7 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
     EvalResult res;
     switch (top.type) {
     case TLExpr: {
-        PiType indistinct_type = *top.expr->ptype;
-        while (indistinct_type.sort == TDistinct) { indistinct_type = *indistinct_type.distinct.type; }
-        size_t sz = pi_size_of(indistinct_type);
-
+        size_t sz = pi_size_of(*top.expr->ptype);
         res.type = ERValue;
         res.val.type = top.expr->ptype;
         res.val.val = pico_run_expr(target, sz, a, point);

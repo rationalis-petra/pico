@@ -2,6 +2,8 @@
 #include "platform/signals.h"
 #include "platform/memory/region.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/debug.h"
 
@@ -9,13 +11,6 @@
 #include <signal.h>
 #endif
 
-void debug_break() {  
-#if OS_FAMILY == WINDOWS
-    __debugbreak();
-#elif OS_FAMILY == UNIX
-    raise(SIGTRAP);
-#endif
-}
 
 void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
@@ -47,7 +42,7 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     //PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     // TODO: we use int64_t as it has the requisite size (8 bytes)

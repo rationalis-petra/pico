@@ -28,7 +28,8 @@ ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 // Implementation details
 static void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point);
 
-LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
+LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     LinkData links = (LinkData) {
         .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(32, a),
@@ -45,7 +46,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Al
         Symbol* recsym = top.def.value->ptype->sort != TKind ? 
             &top.def.bind : NULL;
         AddressEnv* a_env = mk_address_env(env, recsym, a);
-        generate(*top.def.value, a_env, target, &links, a, point);
+        generate(*top.def.value, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
     }
@@ -59,7 +60,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Al
     }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
-        generate(*top.expr, a_env, target, &links, a, point);
+        generate(*top.expr, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
     }
@@ -70,25 +71,25 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Al
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.ed_links.len; i++) {
         LinkMetaData link = links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.cd_links.len; i++) {
         LinkMetaData link = links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.dd_links.len; i++) {
         LinkMetaData link = links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        set_unaligned_ptr(address_ptr, target.data_aux->data + link.dest_offset);
+        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
 
     return links;
 }
 
-LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point) {
-    
+LinkData pvm_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     LinkData links = (LinkData) {
         .external_code_links = mk_sym_sarr_amap(8, a),
@@ -98,7 +99,7 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocat
         .cd_links = mk_link_meta_array(8, a),
         .dd_links = mk_link_meta_array(8, a),
     };
-    generate(*syn, a_env, target, &links, a, point);
+    generate(*syn, a_env, ctx.target, &links, a, ctx.point);
     delete_address_env(a_env, a);
 
     // The data chunk may be moved around during code-generation via 'realloc'
@@ -106,24 +107,25 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocat
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.ed_links.len; i++) {
         LinkMetaData link = links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.target).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.cd_links.len; i++) {
         LinkMetaData link = links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(target.code_aux).data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        *address_ptr = ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.dd_links.len; i++) {
         LinkMetaData link = links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)target.data_aux->data + link.source_offset);
-        *address_ptr= target.data_aux->data + link.dest_offset;
+        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
     }
 
     return links;
 }
 
-void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point) {
+void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
+    Allocator* a = ctx.a;
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     LinkData links = (LinkData) {
         .external_code_links = mk_sym_sarr_amap(8, a),
@@ -133,7 +135,7 @@ void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator*
         .cd_links = mk_link_meta_array(8, a),
         .dd_links = mk_link_meta_array(8, a),
     };
-    generate(*syn, a_env, target, &links, a, point);
+    generate(*syn, a_env, ctx.target, &links, a, ctx.point);
     delete_address_env(a_env, a);
 }
 

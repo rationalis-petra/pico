@@ -3,7 +3,7 @@
 
 #include <math.h>
 
-// TODO: proper float32/float64 types??
+// TODO (FEAT BUG): proper float32/float64 types??
 //typedef _Float32 float32_t;
 //typedef _Float64 float64_t;
 typedef float float32_t;

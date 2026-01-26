@@ -1,6 +1,8 @@
 #include "platform/signals.h"
 #include "platform/window/window.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/data/client/allocator.h"
 #include "pico/data/client/meta/list_header.h"
 #include "pico/data/client/meta/list_impl.h"
@@ -92,7 +94,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments prepped;

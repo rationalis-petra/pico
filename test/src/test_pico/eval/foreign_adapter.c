@@ -1,5 +1,7 @@
 #include "platform/memory/executable.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/values/ctypes.h"
 #include "pico/values/types.h"
@@ -60,7 +62,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
     if (test_start(log, mv_string("add-10"))) {
         ErrorPoint point;
         if (catch_error(point)) {
-            test_log_error(log, point.error_message);
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
             test_fail(log);
         }
 
@@ -86,7 +88,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
     if (test_start(log, mv_string("4word-struct"))) {
         ErrorPoint point;
         if (catch_error(point)) {
-            test_log_error(log, point.error_message);
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
             test_fail(log);
         }
 
@@ -122,7 +124,7 @@ void run_pico_eval_foreign_adapter_tests(TestLog *log, Module *module, Environme
     if (test_start(log, mv_string("2-4word-structs"))) {
         ErrorPoint point;
         if (catch_error(point)) {
-            test_log_error(log, point.error_message);
+            test_log_error(log, doc_to_str(point.error_message, 120, &ra));
             test_fail(log);
         }
 

@@ -62,6 +62,7 @@ typedef enum {
     // Control Flow & Binding
     SLet,
     SIf,
+    SCond,
     SLabels,
     SGoTo,
     SSequence,
@@ -109,6 +110,8 @@ typedef enum {
     SDescribe,
     SQuote,
     SCapture,
+
+    SDevBreak,
 } Syntax_t;
 
 
@@ -290,6 +293,16 @@ typedef struct {
 } SynIf;
 
 typedef struct {
+    Syntax* condition;
+    Syntax* branch;
+} CondClause;
+
+typedef struct {
+    PtrArray clauses;
+    Syntax* otherwise;
+} SynCond;
+
+typedef struct {
     SymbolArray vars;
     SymPtrAMap fields;
 } SynTrait;
@@ -342,9 +355,11 @@ typedef struct {
 
 typedef struct {
     SymSynAMap fields;
+    bool packed;
 } SynStructType;
 
 typedef struct {
+    uint8_t tag_size;
     SymPtrAMap variants;
 } SynEnumType;
 
@@ -369,6 +384,17 @@ typedef struct {
     PiType* type;
     void* value;
 } SynCapture;
+
+typedef enum {
+    DBAbstract,
+    DBTypecheck,
+    DBGenerate,
+} SynDevType;
+
+typedef struct {
+    SynDevType dev_type;
+    Syntax* inner;
+} SynDev;
 
 struct Syntax {
     Syntax_t type;
@@ -403,6 +429,7 @@ struct Syntax {
 
         SynLet let_expr;
         SynIf if_expr;
+        SynCond cond;
         SynLabels labels;
         SynGoTo go_to;
         SynWithReset with_reset;
@@ -441,12 +468,14 @@ struct Syntax {
         SymbolArray to_describe;
         RawTree quoted;
         SynCapture capture;
+        SynDev dev;
     };
     PiType* ptype;
     Range range;
 };
 
 /* Other instances */
+String syntax_type_to_string(Syntax_t type);
 Document* pretty_syntax(Syntax* syntax, Allocator* a);
 
 // -----------------------------------------------------------------------------
