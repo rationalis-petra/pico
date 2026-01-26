@@ -1,27 +1,13 @@
-#include "platform/machine_info.h"
 #include "platform/signals.h"
 #include "platform/memory/region.h"
 
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/debug.h"
+#include "pico/stdlib/dev.h"
 
-#if OS_FAMILY == UNIX
-#include <signal.h>
-#endif
-
-
-void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
-
-    convert_c_fn(debug_break, &fn_ctype, type, ass, a, point); 
-}
-
-void add_debug_module(Target target, Package* base, RegionAllocator* region) {
+void add_dev_module(Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
-    PiAllocator pico_region = convert_to_pallocator(&ra);
-    PiAllocator* pia = &pico_region;
 
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -31,7 +17,7 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("debug")),
+        .name = string_to_symbol(mv_string("dev")),
         .imports = imports,
         .exports = exports,
     };
@@ -64,26 +50,19 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("describe"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    // ------------------------------------------------------------------------
-    // Functions
-    // ------------------------------------------------------------------------
+    former = FBreakAbstract;
+    sym = string_to_symbol(mv_string("break-abstract"));
+    add_def(module, sym, type, &former, null_segments, NULL);
 
-    Segments fn_segments = (Segments) {
-        .code = get_instructions(target.code_aux),
-        .data = *target.data_aux,
-    };
-    Segments prepped;
+    former = FBreakTypecheck;
+    sym = string_to_symbol(mv_string("break-typecheck"));
+    add_def(module, sym, type, &former, null_segments, NULL);
 
-    PiType* typep;
-    typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
-    build_debug_break_fn(typep, target.target, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("debug-break"));
-    fn_segments.code = get_instructions(target.target);
-    prepped = prep_target(module, fn_segments, target.target, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(target.target);
+    former = FBreakGenerate;
+    sym = string_to_symbol(mv_string("break-codegen"));
+    add_def(module, sym, type, &former, null_segments, NULL);
 
-    Result r = add_module(string_to_symbol(mv_string("debug")), module, base);
+    Result r = add_module(string_to_symbol(mv_string("dev")), module, base);
     if (r.type == Err) panic(r.error_message);
 }
 

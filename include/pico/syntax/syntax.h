@@ -110,6 +110,8 @@ typedef enum {
     SDescribe,
     SQuote,
     SCapture,
+
+    SDevBreak,
 } Syntax_t;
 
 
@@ -383,6 +385,17 @@ typedef struct {
     void* value;
 } SynCapture;
 
+typedef enum {
+    DBAbstract,
+    DBTypecheck,
+    DBGenerate,
+} SynDevType;
+
+typedef struct {
+    SynDevType dev_type;
+    Syntax* inner;
+} SynDev;
+
 struct Syntax {
     Syntax_t type;
     union {
@@ -455,6 +468,7 @@ struct Syntax {
         SymbolArray to_describe;
         RawTree quoted;
         SynCapture capture;
+        SynDev dev;
     };
     PiType* ptype;
     Range range;

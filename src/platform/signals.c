@@ -1,8 +1,12 @@
 #include "platform/signals.h"
 #include "platform/terminal/terminal.h"
-#include "data/stream.h"
+#include "platform/machine_info.h"
 
 #include <stdlib.h>
+
+#if OS_FAMILY == UNIX
+#include <signal.h>
+#endif
 
 _Noreturn void panic(String message) {
     FormattedOStream* stdout = get_formatted_stdout();
@@ -28,4 +32,12 @@ _Noreturn void panic(String message) {
     // When in release, we don't really care about cleaning up in a panic, so
     // quick_exit is fine anyways.
     abort(); 
+}
+
+void debug_break() {  
+#if OS_FAMILY == WINDOWS
+    __debugbreak();
+#elif OS_FAMILY == UNIX
+    raise(SIGTRAP);
+#endif
 }

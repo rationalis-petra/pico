@@ -46,8 +46,8 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
 
-    cin = mk_capturing_istream(cin, &ra);
-    reset_bytecount(cin);
+    IStream* volatile  cp_in = mk_capturing_istream(cin, &ra);
+    reset_bytecount(cp_in);
 
     Target gen_target = {
         .target = mk_assembler(current_cpu_feature_flags(), exec),
@@ -74,7 +74,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
         write_fstring(mv_string(" > "), cout);
     }
 
-    ParseResult res = parse_rawtree(cin, &pico_region, &ra);
+    ParseResult res = parse_rawtree(cp_in, &pico_region, &ra);
 
     if (res.type == ParseNone) {
         write_fstring(mv_string("\n"), cout);
@@ -85,7 +85,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             .has_many = false,
             .error = res.error,
         };
-        display_error(multi, *get_captured_buffer(cin), get_formatted_stdout(), mv_string("stdin"), stdalloc);
+        display_error(multi, *get_captured_buffer(cp_in), get_formatted_stdout(), mv_string("stdin"), stdalloc);
         return true;
     }
     if (res.type != ParseSuccess) {
@@ -190,7 +190,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     return true;
 
  on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cin), cout, mv_string("stdin"), &ra);
+    display_error(pi_point.multi, *get_captured_buffer(cp_in), cout, mv_string("stdin"), &ra);
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
     return true;

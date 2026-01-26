@@ -2858,6 +2858,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
+    case SDevBreak: {
+        if (syn.dev.dev_type == DBGenerate)
+            debug_break();
+
+        generate_i(*syn.dev.inner, env, ictx);
+        break;
+    }
 
     default: {
         panic(mv_string("Invalid abstract term in polymorphic codegen."));

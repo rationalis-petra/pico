@@ -1681,6 +1681,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = get_syntax_type();
         break;
     }
+    case SDevBreak: {
+        if (untyped->dev.dev_type == DBTypecheck)
+            debug_break();
+
+        type_infer_i(untyped->dev.inner, env, ctx);
+        untyped->ptype = untyped->dev.inner->ptype; 
+        break;
+    }
 
     }
 
@@ -2130,6 +2138,8 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     case SQuote: 
     case SCapture: 
         break;
+    case SDevBreak:
+        post_unify(syn->dev.inner, env, pia, a, point);
     }
 }
 
@@ -2473,6 +2483,9 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
     case SDescribe:
     case SQuote:
     case SCapture: 
+        break;
+    case SDevBreak: 
+        squash_types(typed->dev.inner, ctx);
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));

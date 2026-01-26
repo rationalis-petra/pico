@@ -2279,6 +2279,45 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             return res;
         }
     }
+    case FBreakAbstract: 
+    case FBreakTypecheck:
+    case FBreakGenerate: {
+        if (raw.branch.nodes.len != 2) {
+            err.range = raw.range;
+            err.message = mk_cstr_doc("Development break expects a single (inner) argument", a);
+            throw_pi_error(ctx.point, err);
+        }
+
+        SynDevType dev_type;
+        switch (former) {
+        case FBreakAbstract: 
+            dev_type = DBAbstract;
+            break;
+        case FBreakTypecheck:
+            dev_type = DBTypecheck;
+            break;
+        case FBreakGenerate:
+            dev_type = DBGenerate;
+            break;
+        default:
+            // Error!
+            dev_type = -1;
+        }
+        if (dev_type == DBAbstract)
+            debug_break();
+
+        Syntax* inner = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDevBreak,
+            .ptype = NULL,
+            .range = raw.range,
+            .dev.dev_type = dev_type,
+            .dev.inner = inner,
+        };
+        return res;
+    }
     }
     panic(mv_string("Invalid term-former provided to mk_term."));
 }

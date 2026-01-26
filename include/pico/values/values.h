@@ -92,7 +92,7 @@ typedef enum TermFormer {
     FSequence,
     FModule,
 
-    // Special Term formers, usually manipulating types 
+    // Special Term formers, usually manipulating types
     // or being pseudo-functions
     FIs,
     FInTo,
@@ -137,6 +137,11 @@ typedef enum TermFormer {
     FDescribe,
     FQuote,
     FCapture,
+
+    // Development/Debugging Terms
+    FBreakAbstract,
+    FBreakTypecheck,
+    FBreakGenerate,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

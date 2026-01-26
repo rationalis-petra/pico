@@ -418,6 +418,15 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FCapture:
         out = mk_str_doc(mv_string("::capture"), a);
         break;
+    case FBreakAbstract:
+        out = mk_str_doc(mv_string("::break-abstract"), a);
+        break;
+    case FBreakTypecheck:
+        out = mk_str_doc(mv_string("::break-typecheck"), a);
+        break;
+    case FBreakGenerate:
+        out = mk_str_doc(mv_string("::break-generate"), a);
+        break;
     }
 
     if (out == NULL) {

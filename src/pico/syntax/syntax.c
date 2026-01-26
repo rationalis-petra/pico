@@ -157,6 +157,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("quote");
     case SCapture:
         return mv_string("capture");
+    case SDevBreak:
+        return mv_string("development-debug-break");
     }
     panic(mv_string("Invalid syntax type provided to syntax_type_to_string"));
 }
@@ -713,6 +715,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
             if (arg_nodes.len > 0) {
                 push_ptr(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), a), &label_nodes);
             }
+            ctx.should_wrap = false;
             push_ptr(mv_nest_doc(2, pretty_syntax_internal(branch->body, ctx, a), a), &label_nodes);
             push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(label_nodes, a), a), &label_terms);
         }
@@ -1048,6 +1051,11 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         out = mk_paren_doc("(capture ", ")", mv_nest_doc(2, raw_doc, a), a);
         break;
     }
+    case SDevBreak: {
+        Document* raw = pretty_syntax(syntax->dev.inner, a);
+        out = mk_paren_doc("(dev-break ", ")", mv_nest_doc(2, raw, a), a);
+        break;
+    }
     }
 
     if (out == NULL)  {
@@ -1060,7 +1068,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
 Document* pretty_syntax(Syntax* syntax, Allocator* a) {
     DocStyle text_style = scolour(colour(195, 195, 209), dstyle);
     PrettyContext ctx = {
-        .should_wrap = false,
+        .should_wrap = true,
     };
     return mv_style_doc(text_style, pretty_syntax_internal(syntax, ctx, a), a);
 }

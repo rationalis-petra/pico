@@ -9,6 +9,7 @@
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/debug.h"
+#include "pico/stdlib/dev.h"
 #include "pico/stdlib/foreign.h"
 #include "pico/stdlib/user.h"
 
@@ -33,6 +34,8 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     add_meta_module(ass, base, subregion);
     reset_subregion(subregion);
     add_debug_module(target, base, subregion);
+    reset_subregion(subregion);
+    add_dev_module(target, base, subregion);
     reset_subregion(subregion);
 
     // Extra happens AFTER meta, as extra has `loop` - a macro!
