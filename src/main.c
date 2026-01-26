@@ -150,7 +150,6 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
     CodegenContext cg_ctx = {
         .a = &ra, .point = &point, .target = gen_target,
     };
-    type_check(&abs, env, tc_ctx);
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 
     if (opts.debug_print) {
