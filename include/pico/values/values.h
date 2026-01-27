@@ -139,9 +139,7 @@ typedef enum TermFormer {
     FCapture,
 
     // Development/Debugging Terms
-    FBreakAbstract,
-    FBreakTypecheck,
-    FBreakGenerate,
+    FDevAnnotation,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

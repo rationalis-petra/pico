@@ -1,3 +1,5 @@
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "data/num.h"
@@ -5,9 +7,11 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
+#include "platform/terminal/terminal.h"
 
+#include "data/stream.h"
 #include "components/pretty/string_printer.h"
-#include "components/pretty/standard_types.h"
+#include "components/pretty/stream_printer.h"
 
 #include "pico/data/error.h"
 #include "pico/codegen/backend-direct/generate.h"
@@ -416,11 +420,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             data_stack_grow(env, size);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(size), ass, a, point);
 
-            // The size | 7 "rounds up" size to the nearet multiple of eight. 
-            // All local variables on the stack are stored with size rounded up
-            // to nearest eight, so this allows objects with size, e.g. 5, 12,
-            // etc. to have all their data copied  
-            size = size | 7;
             if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
                 for (size_t i = 0; i < size / 8; i++) {
                     build_binary_op(Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
@@ -2858,11 +2857,32 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         break;
     }
-    case SDevBreak: {
-        if (syn.dev.dev_type == DBGenerate)
+    case SDevAnnotation: {
+        if (syn.dev.flags & DBGenerate)
             debug_break();
 
+        size_t current_loc = get_pos(ass);
         generate_i(*syn.dev.inner, env, ictx);
+
+        if (syn.dev.flags & DPGenerate) {
+            write_string(mv_string("Developer Debug Aid: Generated section\n"), get_stdout_stream());
+
+            U8Array instrs = get_instructions(ass);
+            PtrArray nodes = mk_ptr_array(4 + (instrs.len - current_loc), a);
+
+            for (size_t i = current_loc; i < instrs.len; i++) {
+                int len = snprintf(NULL, 0, "%02x", instrs.data[i]) + 1;
+                char* str = (char*)mem_alloc(sizeof(char) * len, a);
+                snprintf(str, len, "%02" PRIx8, instrs.data[i]);
+                Document* arg = mv_cstr_doc(str, a);
+
+                push_ptr(arg, &nodes);
+            }
+             
+            Document* doc = mv_hsep_doc(nodes, a);
+            write_doc_formatted(doc, 120, get_formatted_stdout());
+            write_string(mv_string("\n"), get_stdout_stream());
+        }
         break;
     }
 

@@ -45,6 +45,8 @@ ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx);
 SymbolArray* try_get_path(Syntax* syn, Allocator* a);
+DevFlag check_dev_flags(RawTree curr, AbstractionCtx ctx);
+bool is_special(RawTree curr);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -372,6 +374,7 @@ Syntax* mk_application(RawTree raw, AbstractionCtx ctx) {
     return mk_application_body(fn_syn, raw, ctx);
 }
 
+
 Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     Allocator* a = ctx.gpa;
     PicoError err;
@@ -408,8 +411,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
              
-        if (raw.branch.nodes.data[args_index].type == RawBranch
-            && raw.branch.nodes.data[args_index].branch.hint == HSpecial) {
+        if (is_special(raw.branch.nodes.data[args_index])) {
             Result args_out = get_annotated_symbol_list(&arguments, raw.branch.nodes.data[args_index], ctx);
             err.range = raw.branch.nodes.data[args_index].range;
             err.message = mv_str_doc(args_out.error_message, a);
@@ -1035,14 +1037,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
-        bool is_special = true;
-        while (is_special && index < raw.branch.nodes.len) {
+        bool special = true;
+        while (special && index < raw.branch.nodes.len) {
             RawTree bind = raw.branch.nodes.data[index];
             // bind [x₁ e₁]
             //      [x₂ e₂]
             //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
+            special = is_special(bind);
+            if (special) {
                 index++;
                 DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
                 if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
@@ -1083,14 +1085,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
-        bool is_special = true;
-        while (is_special) {
+        bool special = true;
+        while (special) {
             RawTree bind = raw.branch.nodes.data[index];
             // let [x₁ e₁]
             //     [x₂ e₂]
             //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
+            special = is_special(bind);
+            if (special) {
                 index++;
                 Symbol sym;
                 if (bind.type != RawBranch || bind.branch.nodes.len < 2) {
@@ -2279,41 +2281,56 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             return res;
         }
     }
-    case FBreakAbstract: 
-    case FBreakTypecheck:
-    case FBreakGenerate: {
-        if (raw.branch.nodes.len != 2) {
+    case FDevAnnotation: {
+        DevFlag flags = DevNone;
+        size_t curr_node = 1;
+        while (curr_node < raw.branch.nodes.len && is_special(raw.branch.nodes.data[curr_node])) {
+            RawTree curr = raw.branch.nodes.data[curr_node];
+            curr_node++;
+            if (curr.branch.nodes.len < 1) {
+                err.range = curr.range;
+                err.message = mv_cstr_doc("Developer node expects annotations to have a type, this one is empty", a);
+                throw_pi_error(ctx.point, err);
+            }
+                
+            RawTree head = curr.branch.nodes.data[0];
+            if (is_symbol(head) && symbol_eq(head.atom.symbol, string_to_symbol(mv_string("break")))) {
+                flags = flags | check_dev_flags(curr, ctx);
+            } else if (is_symbol(head) && symbol_eq(head.atom.symbol, string_to_symbol(mv_string("print")))) {
+                DevFlag prn_flags = check_dev_flags(curr, ctx);
+                flags = flags | (prn_flags << 3);
+            } else {
+                err.range = head.range;
+                err.message = mv_cstr_doc("Expected head of annotation in developer node to be either the symbol 'break' or the symbol 'print'", a);
+                throw_pi_error(ctx.point, err);
+            }
+                      
+        }
+
+        if (curr_node >= raw.branch.nodes.len) {
             err.range = raw.range;
-            err.message = mk_cstr_doc("Development break expects a single (inner) argument", a);
+            err.message = mv_cstr_doc("This developer node lacks a body!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        if (curr_node + 1!= raw.branch.nodes.len) {
+            err.range = raw.branch.nodes.data[curr_node].range;
+            err.message = mv_cstr_doc("This developer node has multiple bodies! This should eb the only body", a);
             throw_pi_error(ctx.point, err);
         }
 
-        SynDevType dev_type;
-        switch (former) {
-        case FBreakAbstract: 
-            dev_type = DBAbstract;
-            break;
-        case FBreakTypecheck:
-            dev_type = DBTypecheck;
-            break;
-        case FBreakGenerate:
-            dev_type = DBGenerate;
-            break;
-        default:
-            // Error!
-            dev_type = -1;
-        }
-        if (dev_type == DBAbstract)
+        if (flags & DBAbstract)
             debug_break();
+        if (flags & DPAbstract)
+            panic(mv_string("not implemented: developer-print abstract."));
 
-        Syntax* inner = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        Syntax* inner = abstract_expr_i(raw.branch.nodes.data[curr_node], ctx);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
-            .type = SDevBreak,
+            .type = SDevAnnotation,
             .ptype = NULL,
             .range = raw.range,
-            .dev.dev_type = dev_type,
+            .dev.flags = flags,
             .dev.inner = inner,
         };
         return res;
@@ -3127,6 +3144,38 @@ SymbolArray* try_get_path(Syntax* syn, Allocator* a) {
     SymbolArray* out = mem_alloc(sizeof(SymbolArray), a);
     *out = arr;
     return out;
+}
+
+DevFlag check_dev_flags(RawTree raw, AbstractionCtx ctx) {
+    DevFlag flags = DevNone;
+    for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        RawTree ann = raw.branch.nodes.data[i];
+        if (!is_symbol(ann)) {
+            PicoError err = (PicoError) {
+                .range = ann.range,
+                .message = mv_cstr_doc("Expected a symbol which is either 'abstract', 'typecheck' or 'codegen' here.", ctx.gpa)
+            };
+            throw_pi_error(ctx.point, err);
+        }
+        if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("abstract")))) {
+            flags |= DBAbstract;
+        } else if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("typecheck")))) {
+            flags |= DBTypecheck;
+        } else if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("codegen")))) {
+            flags |= DBGenerate;
+        } else {
+            PicoError err = (PicoError) {
+                .range = ann.range,
+                .message = mv_cstr_doc("Expected a symbol which is either 'abstract', 'typecheck' or 'codegen' here.", ctx.gpa)
+            };
+            throw_pi_error(ctx.point, err);
+        }
+    }
+    return flags;
+}
+
+bool is_special(RawTree raw) {
+    return raw.type == RawBranch && raw.branch.hint == HSpecial; 
 }
 
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx) {

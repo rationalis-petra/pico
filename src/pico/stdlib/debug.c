@@ -1,4 +1,3 @@
-#include "platform/machine_info.h"
 #include "platform/signals.h"
 #include "platform/memory/region.h"
 
@@ -6,11 +5,6 @@
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/debug.h"
-
-#if OS_FAMILY == UNIX
-#include <signal.h>
-#endif
-
 
 void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});

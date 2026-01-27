@@ -64,6 +64,16 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("asm-mov-r64-m64-big-offset"))) { // Mov [RSI + 8]b, DIL, 
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x48, 0x8B, 0x85, 0xA8, 0xFE, 0xFF, 0xFF, 0x90 } ;
+            build_binary_op(Mov, reg(RAX, sz_64), rref32(RBP, -344, sz_64), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
     if (test_start(log, mv_string("asm-movzx-r64-r8"))) { // MovZx RSP, AL 
         ASM_TEST() {
             uint8_t expected[] =  {  0x48, 0x0F, 0xB6, 0xE0 , 0x90 } ;

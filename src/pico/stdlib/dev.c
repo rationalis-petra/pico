@@ -50,16 +50,8 @@ void add_dev_module(Target target, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("describe"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FBreakAbstract;
-    sym = string_to_symbol(mv_string("break-abstract"));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
-    former = FBreakTypecheck;
-    sym = string_to_symbol(mv_string("break-typecheck"));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
-    former = FBreakGenerate;
-    sym = string_to_symbol(mv_string("break-codegen"));
+    former = FDevAnnotation;
+    sym = string_to_symbol(mv_string("dev"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     Result r = add_module(string_to_symbol(mv_string("dev")), module, base);

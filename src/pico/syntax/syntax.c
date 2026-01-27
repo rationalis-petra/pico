@@ -157,8 +157,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("quote");
     case SCapture:
         return mv_string("capture");
-    case SDevBreak:
-        return mv_string("development-debug-break");
+    case SDevAnnotation:
+        return mv_string("developer-annnotation");
     }
     panic(mv_string("Invalid syntax type provided to syntax_type_to_string"));
 }
@@ -1051,9 +1051,34 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         out = mk_paren_doc("(capture ", ")", mv_nest_doc(2, raw_doc, a), a);
         break;
     }
-    case SDevBreak: {
+    case SDevAnnotation: {
         Document* raw = pretty_syntax(syntax->dev.inner, a);
-        out = mk_paren_doc("(dev-break ", ")", mv_nest_doc(2, raw, a), a);
+        PtrArray nodes = mk_ptr_array(2, a);
+        DevFlag flags = syntax->dev.flags;
+        {
+            // Breakpoints
+            PtrArray bp_nodes = mk_ptr_array(4, a);
+            push_ptr(mv_cstr_doc(".break", a), &bp_nodes);
+            if (flags & DBAbstract) push_ptr(mv_cstr_doc(":abstraction", a), &bp_nodes);
+            if (flags & DBTypecheck) push_ptr(mv_cstr_doc(":typecheck", a), &bp_nodes);
+            if (flags & DBGenerate) push_ptr(mv_cstr_doc(":codegen", a), &bp_nodes);
+            if (bp_nodes.len == 1) push_ptr(mv_cstr_doc(":none", a), &bp_nodes);
+            push_ptr(mv_group_doc(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(bp_nodes, a), a), a), a), &nodes);
+        }
+
+        {
+            // Diagnostic Printing
+            PtrArray dp_nodes = mk_ptr_array(4, a);
+            push_ptr(mv_cstr_doc(".print", a), &dp_nodes);
+            if (flags & DPAbstract) push_ptr(mv_cstr_doc(":abstraction", a), &dp_nodes);
+            if (flags & DPTypecheck) push_ptr(mv_cstr_doc(":typecheck", a), &dp_nodes);
+            if (flags & DPGenerate) push_ptr(mv_cstr_doc(":codegen", a), &dp_nodes);
+            if (dp_nodes.len == 1) push_ptr(mv_cstr_doc(":none", a), &dp_nodes);
+            push_ptr(mv_group_doc(mv_nest_doc(2, mk_paren_doc("[", "]", mv_sep_doc(dp_nodes, a), a), a), a), &nodes);
+        }
+
+        push_ptr(mv_nest_doc(2, raw, a), &nodes);
+        out = mk_paren_doc("(dev ", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     }

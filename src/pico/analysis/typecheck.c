@@ -1681,9 +1681,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = get_syntax_type();
         break;
     }
-    case SDevBreak: {
-        if (untyped->dev.dev_type == DBTypecheck)
+    case SDevAnnotation: {
+        if (untyped->dev.flags & DBTypecheck)
             debug_break();
+        if (untyped->dev.flags & DPTypecheck)
+            panic(mv_string("not implemented: developer-print typecheck."));
 
         type_infer_i(untyped->dev.inner, env, ctx);
         untyped->ptype = untyped->dev.inner->ptype; 
@@ -2138,7 +2140,7 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     case SQuote: 
     case SCapture: 
         break;
-    case SDevBreak:
+    case SDevAnnotation:
         post_unify(syn->dev.inner, env, pia, a, point);
     }
 }
@@ -2484,7 +2486,7 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
     case SQuote:
     case SCapture: 
         break;
-    case SDevBreak: 
+    case SDevAnnotation: 
         squash_types(typed->dev.inner, ctx);
         break;
     default:

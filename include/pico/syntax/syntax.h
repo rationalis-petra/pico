@@ -111,7 +111,7 @@ typedef enum {
     SQuote,
     SCapture,
 
-    SDevBreak,
+    SDevAnnotation,
 } Syntax_t;
 
 
@@ -386,13 +386,19 @@ typedef struct {
 } SynCapture;
 
 typedef enum {
-    DBAbstract,
-    DBTypecheck,
-    DBGenerate,
-} SynDevType;
+    DevNone     = 0,
+    // breaks
+    DBAbstract  = 0x1,
+    DBTypecheck = 0x2,
+    DBGenerate  = 0x4,
+    // print
+    DPAbstract  = 0x8,
+    DPTypecheck = 0x10,
+    DPGenerate  = 0x20,
+} DevFlag;
 
 typedef struct {
-    SynDevType dev_type;
+    DevFlag flags;
     Syntax* inner;
 } SynDev;
 
