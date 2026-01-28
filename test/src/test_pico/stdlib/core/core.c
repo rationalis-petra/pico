@@ -119,6 +119,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)])");
     }
 
+    if (test_start(log, mv_string("nested-labels"))) {
+        int64_t expected = 4;
+        TEST_EQ("(labels (go-to start) [start (labels (go-to end) [end 4])] [end 3])");
+    }
+
     // -------------------------------------------------------------------------
     //
     //     Dynamic binding - dynamic/use/bind/modify

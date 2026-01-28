@@ -1,5 +1,13 @@
+#include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "platform/memory/executable.h"
 #include "platform/signals.h"
+
+#include "data/stream.h"
+#include "data/stringify.h"
+#include "components/pretty/stream_printer.h"
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/values/modular.h"

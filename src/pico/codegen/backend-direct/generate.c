@@ -51,7 +51,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
         },
-        .gotolinks = mk_sym_sarr_amap(8, a),
+        .gotolinks = mk_sym_sarr_assoc(8, a),
     };
 
     switch(top.type) {
@@ -142,7 +142,7 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
         },
-        .gotolinks = mk_sym_sarr_amap(8, a),
+        .gotolinks = mk_sym_sarr_assoc(8, a),
     };
 
     InternalContext ictx = {
@@ -194,7 +194,7 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
         },
-        .gotolinks = mk_sym_sarr_amap(8, a),
+        .gotolinks = mk_sym_sarr_assoc(8, a),
     };
 
     InternalContext ictx = {
@@ -1941,8 +1941,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         /* data_stack_grow(env, ADDRESS_SIZE); */
 
         SymbolArray labels = mk_symbol_array(syn.labels.terms.len, a);
-        for (size_t i = 0; i < syn.labels.terms.len; i++) 
+        for (size_t i = 0; i < syn.labels.terms.len; i++)  {
             push_symbol(syn.labels.terms.data[i].key, &labels);
+            sym_sarr_bind(syn.labels.terms.data[i].key, mk_size_array(4, a), &links->gotolinks);
+        }
 
         address_start_labels(labels, env);
 
@@ -2010,7 +2012,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
 
             // Step 2: fill out each jump to this label.
-            SizeArray* arr = sym_sarr_lookup(sym, links->gotolinks);
+            SizeArray* arr = sym_sarr_alookup(sym, links->gotolinks);
             if (!arr) panic(mv_string("Can't find size array when backlinking label!"));
 
             for (size_t i = 0; i < arr->len; i++) {
@@ -2024,6 +2026,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             }
         }
 
+        sym_sarr_unbindn(syn.labels.terms.len, &links->gotolinks);
         address_end_labels(env);
         break;
     }
@@ -2865,10 +2868,15 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         generate_i(*syn.dev.inner, env, ictx);
 
         if (syn.dev.flags & DPGenerate) {
-            write_string(mv_string("Developer Debug Aid: Generated section\n"), get_stdout_stream());
 
             U8Array instrs = get_instructions(ass);
             PtrArray nodes = mk_ptr_array(4 + (instrs.len - current_loc), a);
+
+            write_string(mv_string("Developer Debug Aid: Generated section (bytes "), get_stdout_stream());
+            write_string(string_u64(current_loc, a), get_stdout_stream());
+            write_string(mv_string(" - "), get_stdout_stream());
+            write_string(string_u64(instrs.len, a), get_stdout_stream());
+            write_string(mv_string(")\n"), get_stdout_stream());
 
             for (size_t i = current_loc; i < instrs.len; i++) {
                 int len = snprintf(NULL, 0, "%02x", instrs.data[i]) + 1;

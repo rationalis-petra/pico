@@ -4,7 +4,7 @@
 #include "data/meta/array_header.h"
 #include "components/assembler/assembler.h"
 
-#include "pico/data/sym_sarr_amap.h"
+#include "pico/data/sym_sarr_assoc.h"
 #include "pico/binding/address_env.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/values.h"
@@ -26,7 +26,7 @@ typedef struct {
 ARRAY_HEADER(ToGenerate, to_gen, ToGen);
 
 typedef struct {
-    SymSArrAMap gotolinks;
+    SymSArrAssoc gotolinks;
     LinkData links;
 } InternalLinkData;
 

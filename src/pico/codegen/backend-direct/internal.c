@@ -1,6 +1,7 @@
 #include "data/meta/array_impl.h"
 
 #include "platform/machine_info.h"
+#include "platform/signals.h"
 
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
@@ -70,12 +71,15 @@ void backlink_data_data(Target target, size_t location, size_t offset, InternalL
 
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     // Step 1: Try lookup or else create & insert 
-    SizeArray* sarr = sym_sarr_lookup(sym, links->gotolinks);
+    SizeArray* sarr = sym_sarr_alookup(sym, links->gotolinks);
 
     if (!sarr) {
         // Create & Insert
-        sym_sarr_insert(sym, mk_size_array(4, a), &links->gotolinks);
-        sarr = sym_sarr_lookup(sym, links->gotolinks);
+        /*
+        sym_sarr_bind(sym, mk_size_array(4, a), &links->gotolinks);
+        sarr = sym_sarr_alookup(sym, links->gotolinks);
+        */
+        panic(mv_string("Internal error in code-generation: backlink-goto unexpectedly could not find a symbol."));
     }
 
     // Step 2: insert offset into array
