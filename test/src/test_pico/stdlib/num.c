@@ -29,6 +29,16 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(u64.mod 20594361 9232)");
     }
 
+    if (test_start(log, mv_string("unsigned-modulo-u8"))) {
+        uint8_t expected = 47;
+        TEST_EQ("(u8.mod 239 64)");
+    }
+
+    if (test_start(log, mv_string("unsigned-div-diverror"))) {
+        uint8_t expected = 3;
+        TEST_EQ("(u8./ (narrow 42991 U8) 64)");
+    }
+
     if (test_start(log, mv_string("unsigned-divide"))) {
         uint64_t expected = 2231;
         TEST_EQ("(u64./ 20594361 9231)");

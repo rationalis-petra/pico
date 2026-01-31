@@ -6,7 +6,7 @@
 #include "test_assembler/test_assembler.h"
 #include "test_assembler/helper.h"
 
-#define ASM_TEST() ErrorPoint point; if (catch_error(point)) { test_log_error(log, doc_to_str(point.error_message, 120, a)); test_fail(log); clear_assembler(ass); } else 
+#define ASM_TEST() ErrorPoint point; if (catch_error(point)) { test_log_error(log, doc_to_str(point.error_message, 120, &gpa)); test_fail(log); clear_assembler(ass); } else 
 
 void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
     Assembler* ass = mk_assembler(current_cpu_feature_flags(), a);
@@ -58,6 +58,17 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         ASM_TEST() {
             uint8_t expected[] =  { 0x40, 0x88, 0x7E, 0x08, 0x90 } ;
             build_binary_op(Mov, rref8(RSI, 8, sz_8), reg(RDI, sz_8), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+
+    if (test_start(log, mv_string("asm-mov-dl-ah"))) { // Mov RSP, AH 
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x8a, 0xD4, 0x90 };
+            build_binary_op(Mov, reg(RDX, sz_8), reg(AH, sz_8), ass, &gpa, &point);
 
             check_asm_eq(expected, ass, &gpa, log);
             clear_assembler(ass);

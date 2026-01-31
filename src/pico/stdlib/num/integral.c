@@ -57,18 +57,23 @@ static void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
     switch (sz) {
     case sz_64:
     case sz_32:
+        build_unary_op(Pop, reg(RAX , sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz), imm32(0), ass, a, point);
         break;
     case sz_16:
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz), imm16(0), ass, a, point);
         break;
     case sz_8:
         build_binary_op(Mov, reg(RDX, sz), imm8(0), ass, a, point);
+        build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+        // 8-bit division actually divides by the 16-bit ax register, so we zero
+        // out the uppder bits just in case
+        build_binary_op(MovZx, reg(RAX, sz_64), reg(RSI, sz_8), ass, a, point);
         break;
     }
     build_unary_op(op, reg(RDI, sz), ass, a, point);
