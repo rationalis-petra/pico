@@ -49,6 +49,11 @@ void relic_write_string(String str) {
     write_string(str, current_ostream);
 }
 
+void relic_set_terminal_bg_colour(uint8_t r, uint8_t g, uint8_t b) {
+    FormattedOStream* out = get_formatted_stdout();
+    set_bg_colour((Colour){.r  = r, .g = g, .b= b}, out);
+}
+
 void build_read_codepoint_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
 
@@ -63,6 +68,18 @@ void build_write_codepoint_fn(PiType* type, Assembler* ass, PiAllocator* pia, Al
                                (CType){.sort = CSVoid});
 
     convert_c_fn(relic_write_codepoint, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_set_background_colour_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 3,
+                                 "r", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CChar}),
+                                 "g", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CChar}),
+                                 "b", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CChar}),
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(relic_set_terminal_bg_colour, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, pia);
 }
@@ -132,6 +149,15 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
     build_write_string_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("write-string"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, pia);
+
+    typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_8), mk_prim_type(pia, UInt_8), mk_prim_type(pia, UInt_8), mk_prim_type(pia, Unit));
+    build_set_background_colour_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("set-bg-colour"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -321,12 +321,13 @@ U8Array read_chunk(File *file, bool limit, uint64_t max_size, Allocator *region)
         bytes.len = fread(bytes.data, sizeof(uint8_t), max_size, (FILE*)file);
         return bytes;
     } else {
+        long start_pos = ftell((FILE*)file);
         fseek((FILE*)file, 0, SEEK_END);
         long fsize = ftell((FILE*)file);
-        fseek((FILE*)file, 0, SEEK_SET);  /* same as rewind(f); */
-        U8Array bytes = mk_u8_array(fsize, region);
+        fseek((FILE*)file, start_pos, SEEK_SET);  /* same as rewind(f); */
+        U8Array bytes = mk_u8_array(fsize - start_pos, region);
 
-        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize, (FILE*)file);
+        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize - start_pos, (FILE*)file);
         return bytes;
     }
 

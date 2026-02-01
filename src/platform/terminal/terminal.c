@@ -1,7 +1,6 @@
 #include "platform/terminal/terminal.h"
 #include "platform/signals.h"
 #include "platform/machine_info.h"
-#include "components/encodings/utf8.h"
 #include "data/stream.h"
 
 #include <stdio.h>
@@ -17,7 +16,9 @@ struct FormattedOStream {
     OStream* os;
 
     Colour* colours;
+    Colour* bg_colours;
     size_t colour_len;
+    size_t bg_colour_len;
 
     FontBoldness* boldness;
     size_t boldness_len;
@@ -36,11 +37,14 @@ void init_terminal(Allocator *a) {
 #endif
 
     static Colour stdout_colours[128];
+    static Colour stdout_bg_colours[128];
     static FontBoldness bolds[128];
     form_stdout = (FormattedOStream) {
         .os = get_stdout_stream(),
         .colours = stdout_colours,
+        .bg_colours = stdout_bg_colours,
         .colour_len = 0,
+        .bg_colour_len = 0,
         .boldness_len = 0,
         .boldness = bolds,
     };
@@ -105,6 +109,36 @@ void end_coloured_text(FormattedOStream* os) {
         Colour colour = os->colours[os->colour_len];
         printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
     }
+}
+
+void start_bg_colour(Colour colour, FormattedOStream *os) {
+  if (++os->bg_colour_len >= 128) {
+      panic(mv_string("Don't support nesting of > 128 background colours"));
+  } else {
+      os->bg_colours[os->bg_colour_len] = colour;
+      printf("\x1b[48;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+  }
+}
+
+void end_bg_colour(FormattedOStream *os) {
+    // TODO (feature): check for underflow in debug mode
+#ifdef DEBUG
+    if (os->bg_colour_len == 0) {
+        panic(mv_string("Underflow on end_bg_colour_text"));
+    }
+#endif
+
+    os->bg_colour_len--;
+    if (os->bg_colour_len == 0) {
+        printf("\x1b[39m");
+    } else {
+        Colour colour = os->bg_colours[os->colour_len];
+        printf("\x1b[48;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+    }
+}
+
+void set_bg_colour(Colour colour, FormattedOStream *os) {
+    printf("\x1b[48;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
 }
 
 void start_boldness(FontBoldness boldness, FormattedOStream* os) {

@@ -35,6 +35,10 @@ Colour colour(uint8_t r, uint8_t g, uint8_t b);
 void start_coloured_text(Colour colour, FormattedOStream* os);
 void end_coloured_text(FormattedOStream* os);
 
+void start_bg_colour(Colour colour, FormattedOStream* os);
+void end_bg_colour(FormattedOStream* os);
+void set_bg_colour(Colour colour, FormattedOStream* os);
+
 void start_boldness(FontBoldness boldness, FormattedOStream* os);
 void end_boldness(FormattedOStream* os);
 

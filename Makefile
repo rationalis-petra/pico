@@ -1,4 +1,8 @@
-# Based on the makefile by Job Vranish (https://spin.atomicobject.com/2016/08/26/makefile-c-projects/)
+## -----------------------------------------------------------------------------
+##
+##    Makefile for Pico
+##
+## -----------------------------------------------------------------------------
 
 TARGET_EXEC := pico
 MAIN_SRC := ./src/main.c
@@ -189,10 +193,14 @@ release: $(RELEASE_DIR)/$(TARGET_EXEC)
 .PHONY: debug
 debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 
+
+# Run tests with make test
 .PHONY: test
 test: $(TEST_DIR)/$(TARGET_TEST)
+	$(TEST_DIR)/$(TARGET_TEST)
 
-.PHONY: build_test
+# only build tests with make build-test
+.PHONY: build-test
 test: $(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: install
@@ -209,10 +217,6 @@ run-release: $(RELEASE_DIR)/$(TARGET_EXEC)
 .PHONY: run-debug
 run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
-
-.PHONY: run-test
-run-test: $(TEST_DIR)/$(TARGET_TEST)
-	$(TEST_DIR)/$(TARGET_TEST)
 
 .PHONY: all
 all: debug release test
