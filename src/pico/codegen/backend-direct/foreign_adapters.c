@@ -567,15 +567,14 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     if (pass_in_memory) {
         input_area_size += pi_stack_align(return_arg_size);
     }
-    for (size_t i = 0; i < ctype->proc.args.len; i++) {
-      if (i < 4) {
-          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
-          if (class == Win64LargeAggregate || class == Win64LargeAggregate) {
-              input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
-          }
-      } else {
-          input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
-      }
+
+    // skip the first 4 arguments as they go in registers
+    for (size_t i = 4; i < ctype->proc.args.len; i++) {
+        Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
+        if (class == Win64LargeAggregate) {
+            input_area_size += ADDRESS_SIZE;
+        }
+        input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
     }
 
     // Use RBX as an indexing register, to point to the 'base' (before runtime offsets are added)
@@ -610,45 +609,49 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
     // rightmost argument is at the bottom of the stack. 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
-      if (current_register < 4) {
-          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
-          switch (class) {
-          case Win64None: // Do nothing!
-            break;
-          case Win64Floating:
-              Regname next_reg = float_registers[current_register++];
-              build_binary_op(MovSD, reg(next_reg, sz_64),
-                              rref8(RBX, arg_offsets.data[i + 1], sz_64),
-                              ass, a, point);
-              break;
-          case Win64Integer:
-          case Win64SmallAggregate: {
-              Regname next_reg = integer_registers[current_register++];
-              build_binary_op(Mov, reg(next_reg, sz_64),
-                              rref8(RBX, arg_offsets.data[i + 1], sz_64),
-                              ass, a, point);
+        Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
+        if (current_register < 4)
+        {
+            switch (class)
+            {
+            case Win64None: // Do nothing!
+                break;
+            case Win64Floating:
+                Regname next_reg = float_registers[current_register++];
+                build_binary_op(MovSD, reg(next_reg, sz_64),
+                                rref8(RBX, arg_offsets.data[i + 1], sz_64),
+                                ass, a, point);
+                break;
+            case Win64Integer:
+            case Win64SmallAggregate:
+            {
+                Regname next_reg = integer_registers[current_register++];
+                uint64_t offset = arg_offsets.data[i + 1];
+                if (offset < INT8_MAX)
+                {
+                    build_binary_op(Mov, reg(next_reg, sz_64),
+                                    rref8(RBX, offset, sz_64),
+                                    ass, a, point);
+                } else {
+                  build_binary_op(Mov, reg(next_reg, sz_64),
+                                  rref32(RBX, offset, sz_64),
+                                  ass, a, point);
+              }
               break;
           }
           case Win64LargeAggregate: {
               Regname next_reg = integer_registers[current_register++];
-              // we know that next_reg is about to hold a pointer to this
-              // argument, so we can safely use it as a scratch register.
-              // In this case, it stores the source of the stack argument (to copy)
+              // In the case of large aggregates being passed in registers,
+              // we actually just pass a pointer in their place, so we can
+              // simply place the stack location of the argument in next_reg
+
+              // TODO (IMPROVEMENT): replace with LEA instruction.
               build_binary_op(Mov, reg(next_reg, sz_64), reg(RBX, sz_64), ass, a, point);
               if (arg_offsets.data[i+1] > INT8_MAX) {
                   build_binary_op(Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), ass, a, point);
               } else {
                   build_binary_op(Add, reg(next_reg, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
               }
-
-              // TODO (IMPROVEMENT) what if different sizes?
-              // Copy the argument to the bottom of the stack.
-              size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
-              build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
-              generate_monomorphic_copy(RSP, next_reg, arg_size, ass, a, point);
-
-              // Now, update the register to point to the argument.
-              build_binary_op(Mov, reg(next_reg, sz_64), reg(RSP, sz_64), ass, a, point);
               break;
           }
           case Win64M128: {
@@ -656,14 +659,23 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
           }
           }
       } else {
-          build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
-          build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
+        if (class != Win64LargeAggregate) {
+            // This is NOT a large aggregate, and can be passed normally
+            build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
+            build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
 
-          // TODO (IMPROVEMENT) what if different sizes?
-          // Copy the argument to the bottom of the stack.
-          size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
-          build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
-          generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
+            // TODO (IMPROVEMENT) what if different sizes?
+            // TODO (BUG) align correctly!
+            // Copy the argument to the bottom of the stack.
+            size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
+            build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
+            generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
+        } else {
+            // This *is* a large aggregate - pass a pointer to the argument!
+            build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
+            build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
+            build_unary_op(Push, reg(R10, sz_64), ass, a, point);
+        }
       }
     }
     
