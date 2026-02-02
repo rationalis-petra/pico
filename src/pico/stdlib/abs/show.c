@@ -1,5 +1,7 @@
 #include "platform/signals.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/stdlib/abs/submodules.h"
 #include "pico/stdlib/helpers.h"
 
@@ -27,12 +29,12 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
-        panic(mv_string("pico error in abs/string.c"));
+        panic(mv_string("pico error in pico/stdlib/abs/show.c"));
     }
 
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     const char* num_trait = 

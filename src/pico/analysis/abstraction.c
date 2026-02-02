@@ -45,6 +45,8 @@ ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx);
 SymbolArray* try_get_path(Syntax* syn, Allocator* a);
+DevFlag check_dev_flags(RawTree curr, AbstractionCtx ctx);
+bool is_special(RawTree curr);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -197,6 +199,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         .name = module_name,
         .imports = imports,
         .exports = exports,
+        .range = raw.range,
     };
     return out;
 }
@@ -371,6 +374,7 @@ Syntax* mk_application(RawTree raw, AbstractionCtx ctx) {
     return mk_application_body(fn_syn, raw, ctx);
 }
 
+
 Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     Allocator* a = ctx.gpa;
     PicoError err;
@@ -407,8 +411,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
              
-        if (raw.branch.nodes.data[args_index].type == RawBranch
-            && raw.branch.nodes.data[args_index].branch.hint == HSpecial) {
+        if (is_special(raw.branch.nodes.data[args_index])) {
             Result args_out = get_annotated_symbol_list(&arguments, raw.branch.nodes.data[args_index], ctx);
             err.range = raw.branch.nodes.data[args_index].range;
             err.message = mv_str_doc(args_out.error_message, a);
@@ -416,7 +419,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
 
-        // TODO (BUG): shadow the arguments!
         SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
         for (size_t i = 0; i < arguments.len; i++) {
             push_symbol(arguments.data[i].key, &to_shadow);
@@ -847,6 +849,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
             Syntax* syn = abstract_expr_i(*val_desc, ctx);
 
+            // Check that there are no duplicates, then insert
+            size_t found_idx;
+            if (sym_ptr_find(&found_idx, field, fields)) {
+                err.range = fdesc.range;
+                err.message = mv_cstr_doc("Duplicate field in structure.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
             sym_ptr_insert(field, syn, &fields);
         }
 
@@ -1027,14 +1037,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         PtrArray bindings = mk_ptr_array(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
-        bool is_special = true;
-        while (is_special && index < raw.branch.nodes.len) {
+        bool special = true;
+        while (special && index < raw.branch.nodes.len) {
             RawTree bind = raw.branch.nodes.data[index];
             // bind [x₁ e₁]
             //      [x₂ e₂]
             //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
+            special = is_special(bind);
+            if (special) {
                 index++;
                 DynBinding* dbind = mem_alloc(sizeof(DynBinding), a);
                 if (bind.type != RawBranch || bind.branch.nodes.len != 2) {
@@ -1055,14 +1065,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        if (index < raw.branch.nodes.len - 1) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Bind expression multiple bodies!", a);
-            throw_pi_error(ctx.point, err);
-        }
+        RawTree* raw_body = (raw.branch.nodes.len == index + 1)
+            ? &raw.branch.nodes.data[index]
+            : raw_slice(&raw, index, ctx.pia);
 
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
-        shadow_pop(bindings.len, ctx.env);
+        Syntax* body = abstract_expr_i(*raw_body, ctx);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
@@ -1078,14 +1085,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
-        bool is_special = true;
-        while (is_special) {
+        bool special = true;
+        while (special) {
             RawTree bind = raw.branch.nodes.data[index];
             // let [x₁ e₁]
             //     [x₂ e₂]
             //  body
-            is_special = bind.type == RawBranch && bind.branch.hint == HSpecial;
-            if (is_special) {
+            special = is_special(bind);
+            if (special) {
                 index++;
                 Symbol sym;
                 if (bind.type != RawBranch || bind.branch.nodes.len < 2) {
@@ -1153,6 +1160,85 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .if_expr.condition = terms.data[0],
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
+        };
+        return res;
+    }
+    case FCond: {
+        if (raw.branch.nodes.len < 2) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'cond' expects at least one term!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        SynArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
+        for (size_t i = 1; i < raw.branch.nodes.len - 1; i++) {
+            RawTree raw_clause = raw.branch.nodes.data[i];
+            if (raw_clause.type != RawBranch) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Expected composite special term here. Got an atom instead.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (raw_clause.branch.hint != HSpecial) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Expected a composite special term here. Hint: use square brackets '[' and ']'\n"
+                                          " to produce a special term.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (raw_clause.branch.nodes.len < 2) {
+                err.range = raw_clause.range;
+                err.message = mv_cstr_doc("Clause in a cond must have at least two terms: the condition and the body.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
+            Syntax* condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
+            
+            RawTree* branch_term = (raw_clause.branch.nodes.len == 2)
+                ? &raw_clause.branch.nodes.data[1]
+                : raw_slice(&raw_clause, 1, ctx.pia);
+            Syntax* branch = abstract_expr_i(*branch_term, ctx);
+
+            CondClause* clause = mem_alloc(sizeof(CondClause), a);
+            *clause = (CondClause) {.condition = condition, .branch = branch};
+
+            push_ptr(clause, &clauses);
+        }
+
+        RawTree else_clause = raw.branch.nodes.data[raw.branch.nodes.len - 1];
+        Syntax* otherwise = NULL;
+        {
+            if (else_clause.type != RawBranch) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("Expected composite special term here. Got an atom instead.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (else_clause.branch.hint != HSpecial) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("Expected a composite special term here. Hint: use square brackets '[' and ']'\n"
+                                          " to produce a special term.", a);
+                throw_pi_error(ctx.point, err);
+            }
+            
+            RawTree else_cond = else_clause.branch.nodes.data[0];
+            Syntax* cond = abstract_expr_i(else_cond, ctx);
+            if (!(cond->type == SLitBool && cond->boolean == true)) {
+                err.range = else_clause.range;
+                err.message = mv_cstr_doc("The final clause in a 'cond' must always have a condition that is\n"
+                                          " the literal :true.", a);
+                throw_pi_error(ctx.point, err);
+            }
+
+            RawTree* branch_term = (else_clause.branch.nodes.len == 2)
+                ? &else_clause.branch.nodes.data[1]
+                : raw_slice(&else_clause, 1, ctx.pia);
+            otherwise = abstract_expr_i(*branch_term, ctx);
+        }
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SCond,
+            .ptype = NULL,
+            .range = raw.range,
+            .cond.clauses = clauses,
+            .cond.otherwise = otherwise,
         };
         return res;
     }
@@ -1606,7 +1692,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     case FStructType: {
         SymSynAMap field_types = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        size_t start_idx = 1;
+        bool packed = false;
+        RawTree ispacked = raw.branch.nodes.data[1];
+        if (ispacked.type == RawAtom && ispacked.atom.type == ASymbol) {
+            start_idx++;
+            if (symbol_eq(ispacked.atom.symbol, string_to_symbol(mv_string("packed")))) {
+                packed = true;
+            } else {
+                err.range = ispacked.range;
+                err.message = mv_cstr_doc("Expecting either the symbol 'packed' or a field descriptor.", a);
+                throw_pi_error(ctx.point, err);
+            }
+        }
+
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
@@ -1639,13 +1739,35 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .ptype = NULL,
             .range = raw.range,
             .struct_type.fields = field_types,
+            .struct_type.packed = packed,
         };
         return res;
     }
     case FEnumType: {
         SymPtrAMap enum_variants = mk_sym_ptr_amap(raw.branch.nodes.len, a);
 
-        for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        uint8_t tag_size = 64;
+        size_t start_idx = 1;
+        RawTree esz = raw.branch.nodes.data[1];
+        if (esz.type == RawAtom && esz.atom.type == AIntegral) {
+            start_idx++;
+            int64_t ilit = esz.atom.int_64;
+            if (ilit == 8) {
+                tag_size = 8;
+            } else if (ilit == 16) {
+                tag_size = 16;
+            } else if (ilit == 32) {
+                tag_size = 32;
+            } else if (ilit == 64) {
+                tag_size = 64;
+            } else {
+                err.range = esz.range;
+                err.message = mv_cstr_doc("The enumeration tagsize (in bits) must be one of 8, 16, 32 or 64.", a);
+                throw_pi_error(ctx.point, err);
+            }
+        }
+
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree edesc = raw.branch.nodes.data[i];
 
             if (edesc.type != RawBranch) {
@@ -1700,6 +1822,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SEnumType,
             .ptype = NULL,
             .range = raw.range,
+            .enum_type.tag_size = tag_size,
             .enum_type.variants = enum_variants,
         };
         return res;
@@ -2158,6 +2281,60 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             return res;
         }
     }
+    case FDevAnnotation: {
+        DevFlag flags = DevNone;
+        size_t curr_node = 1;
+        while (curr_node < raw.branch.nodes.len && is_special(raw.branch.nodes.data[curr_node])) {
+            RawTree curr = raw.branch.nodes.data[curr_node];
+            curr_node++;
+            if (curr.branch.nodes.len < 1) {
+                err.range = curr.range;
+                err.message = mv_cstr_doc("Developer node expects annotations to have a type, this one is empty", a);
+                throw_pi_error(ctx.point, err);
+            }
+                
+            RawTree head = curr.branch.nodes.data[0];
+            if (is_symbol(head) && symbol_eq(head.atom.symbol, string_to_symbol(mv_string("break")))) {
+                flags = flags | check_dev_flags(curr, ctx);
+            } else if (is_symbol(head) && symbol_eq(head.atom.symbol, string_to_symbol(mv_string("print")))) {
+                DevFlag prn_flags = check_dev_flags(curr, ctx);
+                flags = flags | (prn_flags << 3);
+            } else {
+                err.range = head.range;
+                err.message = mv_cstr_doc("Expected head of annotation in developer node to be either the symbol 'break' or the symbol 'print'", a);
+                throw_pi_error(ctx.point, err);
+            }
+                      
+        }
+
+        if (curr_node >= raw.branch.nodes.len) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("This developer node lacks a body!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        if (curr_node + 1!= raw.branch.nodes.len) {
+            err.range = raw.branch.nodes.data[curr_node].range;
+            err.message = mv_cstr_doc("This developer node has multiple bodies! This should eb the only body", a);
+            throw_pi_error(ctx.point, err);
+        }
+
+        if (flags & DBAbstract)
+            debug_break();
+        if (flags & DPAbstract)
+            panic(mv_string("not implemented: developer-print abstract."));
+
+        Syntax* inner = abstract_expr_i(raw.branch.nodes.data[curr_node], ctx);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDevAnnotation,
+            .ptype = NULL,
+            .range = raw.range,
+            .dev.flags = flags,
+            .dev.inner = inner,
+        };
+        return res;
+    }
     }
     panic(mv_string("Invalid term-former provided to mk_term."));
 }
@@ -2325,6 +2502,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
 }
 
 Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
+    // TODO: add debug checks that shadow_env.len is preserved 
     PicoError err = {.range = raw.range};
     Allocator* a = ctx.gpa;
     Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -2653,6 +2831,55 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
     return syms;
 }
 
+SymbolArray get_path(RawTree raw, Allocator *a, PiErrorPoint *point) {
+    PicoError err;
+    err.range = raw.range;
+
+    SymbolArray path = mk_symbol_array(4, a);
+    bool running = true;
+    while (running) {
+        if (raw.type == RawBranch) {
+            if (raw.branch.nodes.len == 3) {
+                RawTree rhead = raw.branch.nodes.data[0];
+                if (!(rhead.type == RawAtom && rhead.atom.type == ASymbol) ||
+                    !symbol_eq(rhead.atom.symbol, string_to_symbol(mv_string(".")))) {
+                    err.range = rhead.range;
+                    err.message = mv_cstr_doc("Invalid path separator: expected '.'", a);
+                    throw_pi_error(point, err);
+                }
+
+                RawTree path_part = raw.branch.nodes.data[1];
+                if (!(path_part.type == RawAtom && path_part.atom.type == ASymbol)) {
+                    err.range = path_part.range;
+                    err.message = mv_cstr_doc("Invalid path part: expecting a symbol here.", a);
+                    throw_pi_error(point, err);
+                }
+            
+                push_symbol(path_part.atom.symbol, &path);
+                raw = raw.branch.nodes.data[2];
+            } else {
+                err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
+                throw_pi_error(point, err);
+            }
+        } else if (raw.type == RawAtom && raw.atom.type == ASymbol) {
+            push_symbol(raw.atom.symbol, &path);
+            running = false;
+        } else {
+            err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
+            throw_pi_error(point, err);
+        }
+    }
+
+    // Reverse path:
+    for (size_t i = 0; i < path.len / 2; i++) {
+        Symbol s1 = path.data[i];
+        Symbol s2 = path.data[path.len - (i + 1)];
+        path.data[i] = s2;
+        path.data[path.len - (i + 1)] = s1;
+    }
+    return path;
+}
+
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
     if (is_symbol(*raw)) {
@@ -2664,19 +2891,10 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         };
     } else if (raw->type == RawBranch) {
         // Possibilities:
-        // (name1 )
-        // (name1 :all)
-        // (name1 :as name2)
-        // (. name2 name1)
-        // (. (list-of-names) name1)
+        // field
+        // (. field parent)
         if (raw->branch.nodes.len == 1) {
-            if (!is_symbol(raw->branch.nodes.data[0])) {
-                err.range = raw->range;
-                err.message = mv_cstr_doc("Invalid import clause - expected symbol", a);
-                throw_pi_error(point, err);
-            }
-
-            SymbolArray path = mk_symbol_array(1, a);
+            SymbolArray path = get_path(*raw, a, point);
             push_symbol(raw->atom.symbol, &path);
             return (ImportClause) {
                 .type = Import,
@@ -2702,39 +2920,55 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 .path = path,
             };
         } else if (raw->branch.nodes.len == 3) {
-            if (!is_symbol(raw->branch.nodes.data[0]) || !is_symbol(raw->branch.nodes.data[2])) {
-                err.range = raw->range;
-                err.message = mv_cstr_doc("Invalid import clause", a);
-                throw_pi_error(point, err);
-            }
-
             // Check for '.'
             if (eq_symbol(&raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
-                Symbol src;
-                if(!get_fieldname(&raw->branch.nodes.data[2], &src)) {
-                    err.range = raw->branch.nodes.data[2].range;
-                    err.message = mv_cstr_doc("Invalid import-. source", a);
+                SymbolArray path = get_module_path(*raw, a, point);
+                return (ImportClause) {
+                    .type = Import,
+                    .path = path,
+                };
+            } else {
+                Symbol middle;
+                if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
+                    err.range = raw->branch.nodes.data[1].range;
+                    err.message = mv_cstr_doc("Invalid import clause - expected a keyword such as :as or :only", a);
                     throw_pi_error(point, err);
                 }
-
-                RawTree raw_members = raw->branch.nodes.data[1];
-                if (is_symbol(raw_members)) {
-                    SymbolArray path = mk_symbol_array(1,a);
-                    push_symbol(src, &path);
-                    return (ImportClause) {
-                        .type = Import,
-                        .path = path,
-                        .member = raw_members.atom.symbol,
-                    };
-                } else if (raw_members.type == RawBranch) {
-                    SymbolArray members = mk_symbol_array(raw_members.branch.nodes.len, a);
-                    if (!get_symbol_list(&members, raw_members)) {
-                        err.range = raw->branch.nodes.data[2].range;
-                        err.message = mv_cstr_doc("Invalid import-. members", a);
+                if (symbol_eq(middle, string_to_symbol(mv_string("as")))) {
+                    Symbol rename;
+                    if(!get_fieldname(&raw->branch.nodes.data[2], &rename)) {
+                        err.range = raw->branch.nodes.data[0].range;
+                        err.message = mv_cstr_doc("Invalid import-as new name", a);
                         throw_pi_error(point, err);
                     }
-                    SymbolArray path = mk_symbol_array(1,a);
-                    push_symbol(src, &path);
+                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
+                    return (ImportClause) {
+                        .type = ImportAs,
+                        .path = path,
+                        .rename = rename,
+                    };
+                } else if (symbol_eq(middle, string_to_symbol(mv_string("only")))) {
+                    RawTree symlist = raw->branch.nodes.data[2]; 
+                    if (symlist.type != RawBranch) {
+                        err.range = raw->branch.nodes.data[2].range;
+                        err.message = mv_cstr_doc("When importing with ':only', exepect a symbol-list here.", a);
+                        throw_pi_error(point, err);
+                    }
+
+                    SymbolArray members = mk_symbol_array(4, a);
+                    for (size_t i = 0; i < symlist.branch.nodes.len; i++) {
+                        RawTree rsymbol = symlist.branch.nodes.data[i];
+                        for (size_t i = 0; i < raw->branch.nodes.len; i++) {
+                            if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
+                                push_symbol(rsymbol.atom.symbol, &members);
+                            } else {
+                                err.range = rsymbol.range;
+                                err.message = mv_cstr_doc("Expecting a symbol here.", a);
+                                throw_pi_error(point, err);
+                            }
+                        }
+                    }
+                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
                     return (ImportClause) {
                         .type = ImportMany,
                         .path = path,
@@ -2742,42 +2976,9 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                     };
                 } else {
                     err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import-. member(s)", a);
+                    err.message = mv_cstr_doc("Invalid import clause: expecting the keyword :as or :only", a);
                     throw_pi_error(point, err);
                 }
-
-            } else {
-                Symbol middle;
-                if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause", a);
-                    throw_pi_error(point, err);
-                }
-                if (!symbol_eq(middle , string_to_symbol(mv_string("as")))) {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause", a);
-                    throw_pi_error(point, err);
-                }
-
-                Symbol name;
-                Symbol rename;
-                if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
-                    err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_cstr_doc("Invalid import-as name", a);
-                    throw_pi_error(point, err);
-                }
-                if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
-                    err.range = raw->branch.nodes.data[0].range;
-                    err.message = mv_cstr_doc("Invalid import-as new name", a);
-                    throw_pi_error(point, err);
-                }
-                SymbolArray path = mk_symbol_array(1,a);
-                push_symbol(name, &path);
-                return (ImportClause) {
-                    .type = ImportAs,
-                    .path = path,
-                    .rename = rename,
-                };
             }
         } else {
             err.range = raw->range;
@@ -2824,7 +3025,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
                 err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_cstr_doc("Invalid export clause", a);
+                err.message = mv_cstr_doc("Invalid export clause - expected to get a keyword such as :as or :only", a);
                 throw_pi_error(point, err);
             }
             if (!symbol_eq(middle, string_to_symbol(mv_string("as")))) {
@@ -2943,6 +3144,38 @@ SymbolArray* try_get_path(Syntax* syn, Allocator* a) {
     SymbolArray* out = mem_alloc(sizeof(SymbolArray), a);
     *out = arr;
     return out;
+}
+
+DevFlag check_dev_flags(RawTree raw, AbstractionCtx ctx) {
+    DevFlag flags = DevNone;
+    for (size_t i = 1; i < raw.branch.nodes.len; i++) {
+        RawTree ann = raw.branch.nodes.data[i];
+        if (!is_symbol(ann)) {
+            PicoError err = (PicoError) {
+                .range = ann.range,
+                .message = mv_cstr_doc("Expected a symbol which is either 'abstract', 'typecheck' or 'codegen' here.", ctx.gpa)
+            };
+            throw_pi_error(ctx.point, err);
+        }
+        if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("abstract")))) {
+            flags |= DBAbstract;
+        } else if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("typecheck")))) {
+            flags |= DBTypecheck;
+        } else if (symbol_eq(ann.atom.symbol, string_to_symbol(mv_string("codegen")))) {
+            flags |= DBGenerate;
+        } else {
+            PicoError err = (PicoError) {
+                .range = ann.range,
+                .message = mv_cstr_doc("Expected a symbol which is either 'abstract', 'typecheck' or 'codegen' here.", ctx.gpa)
+            };
+            throw_pi_error(ctx.point, err);
+        }
+    }
+    return flags;
+}
+
+bool is_special(RawTree raw) {
+    return raw.type == RawBranch && raw.branch.hint == HSpecial; 
 }
 
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx) {

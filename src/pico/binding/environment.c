@@ -31,14 +31,14 @@ Module* path_parent(SymbolArray path, Module* root, Module* mfor, ErrorPoint* po
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for module "),
                                            symbol_to_string(module_name(mfor), ea));
-              throw_error(point, message);
+              throw_error(point, mv_str_doc(message, ea));
           }
         } else {
               String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for module "),
                                            symbol_to_string(module_name(mfor), ea));
-              throw_error(point, message);
+              throw_error(point, mv_str_doc(message, ea));
         }
     }
     return current;
@@ -58,14 +58,14 @@ Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point
                                            symbol_to_string(path.data[i], ea),
                                            mv_string(" while constructing environment for module "),
                                            symbol_to_string(module_name(mfor), ea));
-              throw_error(point, message);
+              throw_error(point, mv_str_doc(message, ea));
           }
         } else {
             String message = string_ncat(ea, 4, mv_string("Module not found: "),
                                          symbol_to_string(path.data[i], ea),
                                          mv_string(" while constructing environment for module "),
                                          symbol_to_string(module_name(mfor), ea));
-            throw_error(point, message);
+            throw_error(point, mv_str_doc(message, ea));
         }
     }
     return current;
@@ -148,9 +148,79 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         case ImportAs:
             panic(mv_string("Do not support renaming import yet!"));
             break;
-        case ImportMany:
-            panic(mv_string("Do not support import many yet!"));
+        case ImportMany: {
+            // Find the package
+            Module* importee = path_all(clause.path, root_module, module, point, a);
+            SymbolArray syms = clause.members;
+            for (size_t j = 0; j < syms.len; j++ ) {
+                name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
+            }
+            for (size_t j = 0; j < syms.len; j++ ) {
+                ModuleEntry* e = get_def(syms.data[j], importee);
+                if (!e) {
+                    PtrArray nodes = mk_ptr_array(4, a);
+                    push_ptr(mv_cstr_doc("Symbol '", a), &nodes);
+                    push_ptr(mk_str_doc(view_symbol_string(syms.data[j]), a), &nodes);
+                    push_ptr(mv_cstr_doc("' not found in module '", a), &nodes);
+                    push_ptr(mk_str_doc(view_symbol_string(module_name(importee)), a), &nodes);
+                    push_ptr(mv_cstr_doc("'.", a), &nodes);
+                    throw_error(point, mv_cat_doc(nodes, a));
+                }
+
+                if (e->type.sort == TTraitInstance) {
+                    PtrArray* arr = NULL;
+                    PtrArray** p = (PtrArray**)name_ptr_lookup(e->type.instance.instance_of, env->instances);
+                    if (p == NULL) {
+                        arr = mem_alloc(sizeof(PtrArray), a);
+                        *arr = mk_ptr_array(8, a);
+                        // TODO: we know this isn't in the instances; could perhaps
+                        // speed up the process?
+                        name_ptr_insert(e->type.instance.instance_of, arr, &env->instances);
+                    } else {
+                        arr = *p;
+                    }
+
+                    InstanceSrc* instance = mem_alloc(sizeof(InstanceSrc), a);
+                    *instance = (InstanceSrc) {
+                        .id = e->type.instance.instance_of,
+                        .args = e->type.instance.args,
+                        .src_sym = syms.data[j],
+                        .src = importee,
+                    };
+
+                    // Add this instance to the array
+                    push_ptr(instance, arr);
+                }
+            }
+            sdelete_symbol_array(syms);
+
+            // Get all implicits
+            PtrArray instances = get_defined_instances(importee, a);
+            for (size_t j = 0; j < instances.len; j++) {
+                InstanceSrc* instance = instances.data[j];
+
+                PtrArray* arr = NULL;
+                PtrArray** p = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
+                if (p == NULL) {
+                    arr = mem_alloc(sizeof(PtrArray), a);
+                    *arr = mk_ptr_array(8, a);
+                    // TODO: we know this isn't in the instances; could perhaps
+                    // speed up the process?
+                    name_ptr_insert(instance->id, arr, &env->instances);
+                } else {
+                    arr = *p;
+                }
+
+                // Add this instance to the array
+                push_ptr(instance, arr);
+            }
+
+            // We do not delete instance entries are they are now in
+            // the environment's instances - just delete the array.
+            sdelete_ptr_array(instances);
+
             break;
+        }
         case ImportAll: {
             // Find the package
             Module* importee = path_all(clause.path, root_module, module, point, a);

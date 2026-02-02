@@ -466,7 +466,21 @@ TODO: document me!
 TODO: document me!
 
 ### Small and Large Programs: Scripts and Modules
-TODO: document me!
+
+```clojure
+;; showing off different kinds of importing
+(module my-module 
+  (import 
+    (core :all) ;; import all symbols in core
+    platform.terminal ;; import the module, under the name 'terminal'
+    (platform.window) ;; alternative syntax for above
+
+    (platform.filesystem :as fs) ;; renaming import
+    (abs.show :only ())
+    )
+ )
+```
+
 
 ### Standard Library
 TODO: document me!

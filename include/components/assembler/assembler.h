@@ -65,6 +65,7 @@ typedef enum {
     // ------------------
     SHL, // Left shift
     SHR, // Right shift
+    XCHG, // Exchange 2 bytes of a 2-byte register.
 
     // ------------------
     //  Memory & Registers
@@ -72,6 +73,7 @@ typedef enum {
     Mov,   // p 769.
     MovSS, // p 857.
     MovSD, // p 848.
+    MovZx, // p 870.
     LEA,
 
     // ------------------
@@ -98,12 +100,12 @@ typedef enum {
     // ------------------
     Call,
     Push, // p 1250.
-    Pop,  // 
+    Pop,  //
 
     // ------------------
     //  Jumps
     // ------------------
-    JE,  // p658, jump if equal
+    JE, // p658, jump if equal
 
 
     JNE, // p658, jump if equal
@@ -118,7 +120,7 @@ typedef enum {
     SetB,  // Set below   (unsigned)
     SetBE, // Set below or equal
     SetA,  // Set above   (unsigned)
-    SetAE, // Set above or equal   
+    SetAE, // Set above or equal
     SetL,  // Set lesser  (signed)
     SetLE, // Set lesser or equal
     SetG,  // Set greater (signed)
@@ -130,8 +132,13 @@ typedef enum {
     Neg,
     Mul,
     Div,
-    IMul, 
+    IMul,
     IDiv,
+
+    // Bit manipulation
+    BSwap, // Reverse bytes in a 4 or 8 byte register. 
+    SHLCL, // Shift target register left by amount in CL
+    SHRCL, // Shift target register right by amount in CL
 
     // ------------------
     //  Meta
@@ -180,8 +187,13 @@ typedef enum {
     XMM14 = 0b11110,
     XMM15 = 0b11111,
 
+    AH  = 0b1000100, // AH shares RSP encoding for r/m8 operators
+    CH  = 0b1000101, // CH shares RBP encoding for r/m8 operators
+    DH  = 0b1000110, // DH shares RSI encoding for r/m8 operators
+    BH  = 0b1000111, // BH shares RDI encoding for r/m8 operators
+
     // Special! See RIP-Relative addressing, p50 of the Intel Manual Vol. 2
-    RIP = 0b100101,
+    RIP = 0b1000101,
 } Regname;
 
 typedef enum {

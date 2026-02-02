@@ -1,0 +1,60 @@
+#include "platform/signals.h"
+#include "platform/memory/region.h"
+
+#include "components/pretty/string_printer.h"
+
+#include "pico/codegen/codegen.h"
+#include "pico/stdlib/dev.h"
+
+void add_dev_module(Target target, Package* base, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
+    Exports exports = (Exports) {
+        .export_all = true,
+        .clauses = mk_export_clause_array(0, &ra),
+    };
+    ModuleHeader header = (ModuleHeader) {
+        .name = string_to_symbol(mv_string("dev")),
+        .imports = imports,
+        .exports = exports,
+    };
+    Module* module = mk_module(header, base, NULL);
+    Symbol sym;
+
+    PiType type;
+    //PiType* typep;
+    ErrorPoint point;
+    if (catch_error(point)) {
+        panic(doc_to_str(point.error_message, 120, &ra));
+    }
+
+    // TODO: we use int64_t as it has the requisite size (8 bytes)
+    // for pico values: currently don't support non-64 bit values 
+    TermFormer former;
+    //TermFormer former;
+    type.sort = TPrim;
+    type.prim = TFormer;
+
+    Segments null_segments = (Segments) {
+        .code = mk_u8_array(0, &ra),
+        .data = mk_u8_array(0, &ra),
+    };
+
+    // ------------------------------------------------------------------------
+    // Term Formers
+    // ------------------------------------------------------------------------
+    former = FDescribe;
+    sym = string_to_symbol(mv_string("describe"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FDevAnnotation;
+    sym = string_to_symbol(mv_string("dev"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    Result r = add_module(string_to_symbol(mv_string("dev")), module, base);
+    if (r.type == Err) panic(r.error_message);
+}
+

@@ -3,8 +3,6 @@
 #include "platform/memory/region.h"
 #include "platform/filesystem/filesystem.h"
 
-#include "components/pretty/stream_printer.h"
-
 #include "atlas/atlas.h"
 
 #include "atlas/data/error.h"
@@ -59,7 +57,7 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     Allocator ra = ra_to_gpa(region);
 
     Project project;
-    ProjectRecord record;
+    ProjectRecord record = {};
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) goto on_pi_error;
@@ -84,9 +82,13 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
         }
     }
 
-    // TODO: check all fields were filled out!
+    if (!record.package) {
+        write_fstring(mv_string("atlas-project file was missing 'package' stanza.\n"), out);
+        return true; // signal failure
+    }
+
     set_instance_project(instance, project);
-    return 0;
+    return false; // success
 
  on_pi_error:
     display_error(pi_point.multi, *get_captured_buffer(in), out, filename, &ra);
@@ -96,7 +98,12 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
 
 bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instance, RegionAllocator* region) {
     Allocator* stda = get_std_allocator();
-    Directory* dir = open_directory(path, stda);
+    DirectoryResult dir_res = open_directory(path, stda);
+    if (dir_res.type == Err) {
+        write_fstring(mv_string("Failed to open directory while loading atlas files."), out);
+    }
+
+    Directory* dir = dir_res.directory;
     DirEntArray entries = list_children(dir, stda);
 
     bool fail = false;
@@ -149,7 +156,7 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
 
     switch (command.type) {
     case CInit:
-        write_fstring(mv_string("TODO: Implement atlas init "), out);
+        write_fstring(mv_string("TODO (FEAT): Implement atlas init "), out);
         write_fstring(command.init.name, out);
         write_fstring(mv_string("\n"), out);
         break;
@@ -160,24 +167,16 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
 
         RegionAllocator* region = make_region_allocator(4096, true, stda);
         String cwd = get_current_directory(stda);
-        load_atlas_files(cwd, out, instance, region);
+        bool fail = load_atlas_files(cwd, out, instance, region);
         mem_free(cwd.bytes, stda);
-
         AtErrorPoint point;
         if (catch_error(point)) {
             Allocator ra = ra_to_gpa(region);
-            MultiError error = (MultiError) {
-              .has_many = false,
-              .error = (PicoError) {.range = point.error.range, .message = point.error.message},
-            };
-            if (point.error.filename.bytes == NULL) {
-                write_doc_formatted(point.error.message, 120, out);
-                write_fstring(mv_string("\n"), out);
-            } else {
-                display_error(error, point.error.captured_file, out, point.error.filename, &ra);
-            }
+            display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
         } else {
-            atlas_run(instance, command.run.target, region, &point);
+            if (!fail) {
+                atlas_run(instance, command.run.target, region, &point);
+            }
         }
         delete_region_allocator(region);
         delete_atlas_instance(instance);

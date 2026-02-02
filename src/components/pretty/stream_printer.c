@@ -115,7 +115,6 @@ void write_doc(Document* doc, uint16_t width, OStream* os) {
     render_doc(doc, initial_state, os);
 }
 
-
 void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
     switch (doc->type) {
     case LineDocument:

@@ -29,9 +29,45 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(u64.mod 20594361 9232)");
     }
 
+    if (test_start(log, mv_string("unsigned-modulo-u8"))) {
+        uint8_t expected = 47;
+        TEST_EQ("(u8.mod 239 64)");
+    }
+
+    if (test_start(log, mv_string("unsigned-div-diverror"))) {
+        uint8_t expected = 3;
+        TEST_EQ("(u8./ (narrow 42991 U8) 64)");
+    }
+
     if (test_start(log, mv_string("unsigned-divide"))) {
         uint64_t expected = 2231;
         TEST_EQ("(u64./ 20594361 9231)");
+    }
+
+    // TODO: something like this crashed qoi.rl: see index code.
+    /* if (test_start(log, mv_string("test-widening"))) { */
+    /*     uint8_t expected = 2; */
+    /*     TEST_EQ("(u8.mod (u8.* 255 11) 64)"); */
+    /* } */
+
+    if (test_start(log, mv_string("small-unsigned-divide"))) {
+        uint8_t expected = 16;
+        TEST_EQ("(u8./ 128 8)");
+    }
+
+    if (test_start(log, mv_string("well-defined-overflow"))) {
+        uint8_t expected = 1;
+        TEST_EQ("(u8.+ 255 2)");
+    }
+
+    if (test_start(log, mv_string("small-unsigned-divide-with-remainder"))) {
+        uint8_t expected = 18;
+        TEST_EQ("(u8./ 128 7)");
+    }
+
+    if (test_start(log, mv_string("small-unsigned-modulo"))) {
+        uint8_t expected = 2;
+        TEST_EQ("(u8.mod 128 7)");
     }
 
     if (test_start(log, mv_string("signed-mul"))) {
@@ -49,10 +85,20 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(i64.mod 20594361 9232)");
     }
 
+    if (test_start(log, mv_string("unsigned-64-shr"))) {
+        uint64_t expected = 16384;
+        TEST_EQ("(u64.shl 10 16)");
+    }
+
     // Unsigned Int 32
     if (test_start(log, mv_string("unsigned-add"))) {
-        uint64_t expected = 188628;
+        uint32_t expected = 188628;
         TEST_EQ("(u32.+ 65535 123093)");
+    }
+
+    if (test_start(log, mv_string("unsigned-shr"))) {
+        uint32_t expected = 128;
+        TEST_EQ("(u32.shl 3 16)");
     }
 
     // Unsigned Int 16
@@ -61,10 +107,21 @@ void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, T
         TEST_EQ("(u16.+ 1026 5467)");
     }
 
+    // Unsigned Int 32
+    if (test_start(log, mv_string("unsigned-bswap"))) {
+        uint64_t expected = 262144;
+        TEST_EQ("(u32.byte-swap 1024)");
+    }
+
     // Unsigned Int 8
     if (test_start(log, mv_string("unsigned-add"))) {
         uint64_t expected = 129;
         TEST_EQ("(u8.+ 100 29)");
+    }
+
+    if (test_start(log, mv_string("unsigned-8-shl"))) {
+        uint8_t expected = 2;
+        TEST_EQ("(u8.shr 3 16)");
     }
 
     if (test_start(log, mv_string("signed-add"))) {

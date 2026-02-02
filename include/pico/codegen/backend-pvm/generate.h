@@ -3,10 +3,10 @@
 
 #include "pico/codegen/codegen.h"
 
-LinkData pvm_generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point);
+LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx);
 
-LinkData pvm_generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point);
+LinkData pvm_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx);
 
-void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point);
+void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx);
 
 #endif

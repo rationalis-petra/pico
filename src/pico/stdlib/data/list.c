@@ -1,5 +1,7 @@
 #include "platform/signals.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/stdlib/helpers.h"
 #include "pico/stdlib/data/submodules.h"
 
@@ -33,7 +35,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     // TODO (FEAT): add/implement the following:
@@ -56,6 +58,15 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "    [.len len]\n"
         "    [.data (alloc (u64.* (size-of A) capacity))]))";
     compile_toplevel(mk_list_fn, module, target, &point, &pi_point, region);
+
+    const char *mk_null_list_fn = 
+        "(def null-list all [A] proc []\n"
+        "  (struct (List A)\n"
+        "    [.gpa (use current-allocator)]\n"
+        "    [.capacity 0]\n"
+        "    [.len 0]\n"
+        "    [.data (num-to-address 0)]))";
+    compile_toplevel(mk_null_list_fn, module, target, &point, &pi_point, region);
     
     // TODO (BUG): use list allocator
     const char *mk_free_fn = 
@@ -141,14 +152,14 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
         "  let [lst (use l)]\n"
         "    (if (u64.< lst.len lst.capacity)\n"
-        "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
+        "      (seq (eset lst.len val lst) (modify l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
 
     const char *list_pop_fn =
         "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
         "  [let! old (use lst)]\n"
-        "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
+        "  (modify lst (struct old [.len (u64.- old.len 1)]))\n"
         "  (elt (u64.- old.len 1) old))\n";
     compile_toplevel(list_pop_fn, module, target, &point, &pi_point, region);
 

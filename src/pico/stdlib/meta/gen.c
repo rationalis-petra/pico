@@ -1,5 +1,7 @@
 #include "platform/signals.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/data/range.h"
 #include "pico/syntax/concrete.h"
 #include "pico/values/modular.h"
@@ -161,7 +163,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     // TODO: we use int64_t as it has the requisite size (8 bytes)

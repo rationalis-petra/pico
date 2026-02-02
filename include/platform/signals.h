@@ -6,4 +6,6 @@
 
 _Noreturn void panic(String message);
 
+void debug_break();
+
 #endif

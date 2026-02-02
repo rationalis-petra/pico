@@ -1,6 +1,8 @@
 #ifndef __PICO_CODEGEN_CODEGEN_H
 #define __PICO_CODEGEN_CODEGEN_H
 
+#include "components/logging/structured_logging.h"
+
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
 #include "pico/syntax/syntax.h"
@@ -16,14 +18,21 @@ typedef enum {
     CodegenPVM,
 } CodegenBackend;
 
+typedef struct {
+    Target target;
+    Allocator *a;
+    ErrorPoint* point;
+    Logger* logger;
+} CodegenContext;
+
 void init_codegen(CodegenBackend backend, Allocator* alloc);
 void teardown_codegen();
 
-LinkData generate_toplevel(TopLevel top, Environment* env, Target target, Allocator* a, ErrorPoint* point);
+LinkData generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx);
 
-LinkData generate_expr(Syntax* syn, Environment* env, Target target, Allocator* a, ErrorPoint* point);
+LinkData generate_expr(Syntax* syn, Environment* env, CodegenContext ctx);
 
-void generate_type_expr(Syntax* syn, TypeEnv* env, Target target, Allocator* a, ErrorPoint* point);
+void generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx);
 
 void clear_target(Target target);
 

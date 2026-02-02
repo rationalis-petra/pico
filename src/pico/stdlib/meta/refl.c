@@ -1,5 +1,7 @@
 #include "platform/signals.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/values/modular.h"
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
@@ -153,7 +155,7 @@ void add_refl_module(Assembler* ass, Module* base, RegionAllocator* region) {
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments null_segments = (Segments) {

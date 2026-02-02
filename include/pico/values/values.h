@@ -84,6 +84,7 @@ typedef enum TermFormer {
     // Term Formers: Control flow + binding
     FLet,
     FIf,
+    FCond,
     FLabels,
     FGoTo,
     FWithReset,
@@ -91,7 +92,7 @@ typedef enum TermFormer {
     FSequence,
     FModule,
 
-    // Special Term formers, usually manipulating types 
+    // Special Term formers, usually manipulating types
     // or being pseudo-functions
     FIs,
     FInTo,
@@ -125,7 +126,7 @@ typedef enum TermFormer {
     // style typechecker.
     FLiftCType,
 
-    // Temporary formers: TODO delegate to macros.
+    // Temporary formers: TODO (STRUCTURE): delegate to macros.
     FReinterpretNative,
     FReinterpretRelic,
     FConvertNative,
@@ -136,6 +137,9 @@ typedef enum TermFormer {
     FDescribe,
     FQuote,
     FCapture,
+
+    // Development/Debugging Terms
+    FDevAnnotation,
 } TermFormer;
 
 Document* pretty_former(TermFormer op, Allocator* a);

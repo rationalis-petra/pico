@@ -97,7 +97,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx);
 void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx);
-void squash_types(Syntax* untyped, PiAllocator* pia, Allocator* a, PiErrorPoint* point);
+void squash_types(Syntax* untyped, TypeCheckContext ctx);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
 void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* point);
@@ -107,12 +107,12 @@ void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* 
 // -----------------------------------------------------------------------------
 void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i (untyped, env, ctx);
-    squash_types(untyped, ctx.pia, ctx.a, ctx.point);
+    squash_types(untyped, ctx);
 }
 
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx) {
     type_check_i (untyped, &type, env, ctx);
-    squash_types(untyped, ctx.pia, ctx.a, ctx.point);
+    squash_types(untyped, ctx);
 }
 
 // -----------------------------------------------------------------------------
@@ -146,7 +146,12 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContex
 
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i(untyped, env, ctx);
-    UnifyResult out = unify(type, untyped->ptype, ctx.pia, ctx.a);
+    UnifyContext uctx = (UnifyContext) {
+        .a = ctx.a,
+        .pia = ctx.pia,
+        .logger = ctx.logger,
+    };
+    UnifyResult out = unify(type, untyped->ptype, uctx);
     check_result_out(out, untyped->range, ctx.a, ctx.point);
 }
 
@@ -159,6 +164,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     // Sometimes we go back and typecheck a term again, e.g. checking an
     // Application to an All generates a new term and typecheckes that.
     if (untyped->ptype) return;
+    if (ctx.logger) {
+        String str = string_cat(mv_string("Inferring type for: "), syntax_type_to_string(untyped->type), a);
+        start_section(str, ctx.logger);
+    }
 
     switch (untyped->type) {
     case SLitUntypedIntegral:
@@ -339,12 +348,24 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected ", a), &nodes);
-                push_ptr(pretty_u64(fn_type.proc.args.len, a), &nodes);
-                push_ptr(mv_cstr_doc("but got ", a), &nodes);
-                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
-                err.message = mv_hsep_doc(nodes, a);
+                PtrArray err_nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected", a), &err_nodes);
+                push_ptr(pretty_u64(fn_type.proc.args.len, a), &err_nodes);
+                push_ptr(mv_cstr_doc("but got ", a), &err_nodes);
+
+                PtrArray cat_nodes = mk_ptr_array(2, a);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &cat_nodes);
+                push_ptr(mv_cstr_doc(".", a), &cat_nodes);
+                push_ptr(mv_cat_doc(cat_nodes, a), &err_nodes);
+
+                PtrArray supplement_nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("The function being applied has type:", a), &supplement_nodes);
+                push_ptr(mv_nest_doc(2, pretty_type(&fn_type, a), a), &supplement_nodes);
+
+                PtrArray nodes = mk_ptr_array(2, a);
+                push_ptr(mv_hsep_doc(err_nodes, a), &nodes);
+                push_ptr(mv_hsep_doc(supplement_nodes, a), &nodes);
+                err.message = mv_vsep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 
@@ -375,12 +396,21 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 .args = untyped->application.args
             };
 
+            if (ctx.logger) {
+                log_str(mv_string("function is 'all', substituting app for all-app"), ctx.logger);
+            }
             untyped->type = SAllApplication;
             untyped->all_application = new_app;
             type_infer_i(untyped, env, ctx);
         } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
-                err.message = mv_cstr_doc("Incorrect number of family arguments", a);
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("Incorrect number of arguments to a type family - expeted", a), &nodes);
+                push_ptr(pretty_u64(fn_type.kind.nargs, a), &nodes);
+                push_ptr(mv_cstr_doc("but got", a), &nodes);
+                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
+
+                err.message = mv_sep_doc(nodes, a);
                 throw_pi_error(point, err);
             }
 
@@ -496,8 +526,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                              env, ctx);
             }
 
-            PiType* ret_type = pi_type_subst(proc_type->proc.ret, type_binds, ctx.pia, a);
-            untyped->ptype = ret_type;
+            // Note: substitution has already happened above, so no need to do
+            //   it again! 
+            untyped->ptype = proc_type->proc.ret;
         }
         break;
     }
@@ -603,7 +634,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             untyped->ptype = mk_uvar(ctx.pia);
             AddrPiList types = mk_addr_list(0, ctx.pia);
 
-            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, ctx.pia, a);
+            UnifyContext uctx = {
+                .a = a,
+                .pia = ctx.pia,
+                .logger = ctx.logger,
+            };
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, uctx);
             check_result_out(out, untyped->range, a, point);
         }
         break;
@@ -658,7 +694,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 type_infer_i(untyped->variant.args.data[i], env, ctx);
                 push_addr(((Syntax*)untyped->variant.args.data[i])->ptype, &types);
             }
-            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, ctx.pia, a);
+            UnifyContext uctx = {
+                .a = a,
+                .pia = ctx.pia,
+                .logger = ctx.logger,
+            };
+            UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, uctx);
             check_result_out(out, untyped->range, a, point);
         }
         break;
@@ -732,6 +773,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* enum_type = call_alloc(sizeof(PiType), ctx.pia);
             *enum_type = (PiType) {
                 .sort = TEnum,
+                .enumeration.tag_size = 64,
                 .enumeration.variants = mk_sym_addr_piamap(untyped->match.clauses.len, ctx.pia),
             };
 
@@ -791,9 +833,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // Check if any fields are missing when a new struct is being created
             // error message:
             if (untyped->structure.base->ptype->sort == TKind) {
-                PtrArray docs = mk_ptr_array(4, a);
-                docs.len++;
-                bool missing_fields = false;
+                SymbolArray missing_fields = mk_symbol_array(4, a);
                 for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
                     Symbol field = struct_type->structure.fields.data[i].key;
                     bool has_field = false;
@@ -802,20 +842,34 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                             has_field = true;
                     }
                     if (!has_field) {
-                        push_ptr(mk_str_doc(symbol_to_string(field, a), a), &docs);
-                        missing_fields = true;
+                        push_symbol(field, &missing_fields);
                     }
                 }
                 
-                if (missing_fields) {
-                    docs.data[0] = mv_cstr_doc("Structure value definition is missing the field(s):", a);
+                if (missing_fields.len > 0) {
+                    PtrArray docs = mk_ptr_array(2 + missing_fields.len, a);
+                    if (missing_fields.len == 1) {
+                        push_ptr(mv_cstr_doc("Structure value definition is missing the field:", a), &docs);
+                        push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[0]), a), &docs);
+                    } else {
+                        push_ptr(mv_cstr_doc("Structure value definition is missing the fields:", a), &docs);
+                        for (size_t i = 0; i < missing_fields.len; i++) {
+                            if (i < missing_fields.len - 2) {
+                                push_ptr(mv_str_doc(string_cat(view_symbol_string(missing_fields.data[i]), mv_string(","), a), a), &docs);
+                            } else if (i == missing_fields.len - 2) {
+                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+                                push_ptr(mv_cstr_doc("and", a), &docs);
+                            } else {
+                                push_ptr(mk_str_doc(view_symbol_string(missing_fields.data[i]), a), &docs);
+                            }
+                        }
+                    }
                     err.message = mv_hsep_doc(docs, a);
                     throw_pi_error(point, err);
                 }
             }
 
             for (size_t i = 0; i < struct_type->structure.fields.len; i++) {
-                // TODO (BUG): check for no duplicates!
                 Syntax** field_syn = (Syntax**)sym_ptr_lookup(struct_type->structure.fields.data[i].key, untyped->structure.fields);
                 if (field_syn) {
                     PiType* field_ty = struct_type->structure.fields.data[i].val;
@@ -833,11 +887,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             for (size_t i = 0; i < untyped->structure.fields.len; i++) {
                 // TODO (FEATURE): allow the inference algorithm to later
                 //                 reorder the fields!
-                // TODO (BUG): check for no duplicates!
                 SymPtrCell cell = untyped->structure.fields.data[i];
                 type_infer_i(cell.val, env, ctx);
                 sym_addr_insert(cell.key, ((Syntax*)cell.val)->ptype, &struct_type.structure.fields);
             }
+
             untyped->ptype = call_alloc(sizeof(PiType), ctx.pia);
             *untyped->ptype = struct_type;
         }
@@ -877,7 +931,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         } else if (source_type.sort == TUVar) {
             untyped->ptype = mk_uvar(ctx.pia);
-            UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, ctx.pia, a);
+            UnifyContext uctx = {
+                .a = a,
+                .pia = ctx.pia,
+                .logger = ctx.logger,
+            };
+            UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, uctx);
             check_result_out(out, untyped->range, a, point);
         } else {
             PtrArray nodes = mk_ptr_array(2, a);
@@ -1015,6 +1074,20 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         type_check_i(untyped->if_expr.true_branch, out_type, env, ctx);
 
         type_check_i(untyped->if_expr.false_branch, out_type, env, ctx);
+        untyped->ptype = out_type;
+        break;
+    }
+    case SCond: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType) {.sort = TPrim,.prim = Bool};
+
+        PiType* out_type = mk_uvar(ctx.pia);
+        for (size_t i = 0; i < untyped->cond.clauses.len; i++) {
+            CondClause* clause = untyped->cond.clauses.data[i];
+            type_check_i(clause->condition, t, env, ctx);
+            type_check_i(clause->branch, out_type, env, ctx);
+        }
+        type_check_i(untyped->cond.otherwise, out_type, env, ctx);
         untyped->ptype = out_type;
         break;
     }
@@ -1608,7 +1681,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         untyped->ptype = get_syntax_type();
         break;
     }
+    case SDevAnnotation: {
+        if (untyped->dev.flags & DBTypecheck)
+            debug_break();
+        if (untyped->dev.flags & DPTypecheck)
+            panic(mv_string("not implemented: developer-print typecheck."));
 
+        type_infer_i(untyped->dev.inner, env, ctx);
+        untyped->ptype = untyped->dev.inner->ptype; 
+        break;
+    }
+
+    }
+
+    if (ctx.logger) {
+        PtrArray docs = mk_ptr_array(2, a);
+        push_ptr(mv_str_doc(mv_string("Inferred type:"), a), &docs);
+        push_ptr(pretty_type(untyped->ptype, a), &docs);
+        log_doc(mv_sep_doc(docs, a), ctx.logger);
+        end_section(ctx.logger);
     }
     if (untyped->ptype == NULL) {
         panic(mv_string("Internal Error: typecheck failed to infer type."));
@@ -1921,6 +2012,15 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
         post_unify(syn->if_expr.true_branch, env, pia, a, point);
         post_unify(syn->if_expr.false_branch, env, pia, a, point);
         break;
+    case SCond: {
+        for (size_t i = 0; i < syn->cond.clauses.len; i++) {
+            CondClause* clause = syn->cond.clauses.data[i];
+            post_unify(clause->condition, env, pia, a, point);
+            post_unify(clause->branch, env, pia, a, point);
+        }
+        post_unify(syn->cond.otherwise, env, pia, a, point);
+        break;
+    }
     case SLabels:
         post_unify(syn->labels.entry, env, pia, a, point);
         for (size_t i = 0; i < syn->labels.terms.len; i++) {
@@ -2040,15 +2140,21 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     case SQuote: 
     case SCapture: 
         break;
+    case SDevAnnotation:
+        post_unify(syn->dev.inner, env, pia, a, point);
     }
 }
 
 // This function recursively descends into a term and squashes all types.
 // In this case, to squash a type removes all unification vars from 
 // the type. (see squash_type in unify.h)
-void squash_types(Syntax* typed, PiAllocator* pia, Allocator* a, PiErrorPoint* point) {
-    PicoError err;
-    err.range = typed->range;
+void squash_types(Syntax* typed, TypeCheckContext ctx) {
+    UnifyContext uctx = {
+        .a = ctx.a,
+        .pia = ctx.pia,
+        .logger = ctx.logger,
+    };
+    PicoError err = {.range = typed->range};
     switch (typed->type) {
     case SLitUntypedIntegral:
     case SLitTypedIntegral:
@@ -2062,237 +2168,253 @@ void squash_types(Syntax* typed, PiAllocator* pia, Allocator* a, PiErrorPoint* p
         break;
     case SLitArray: {
         for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
-            squash_types(typed->array_lit.subterms.data[i], pia, a, point);
+            squash_types(typed->array_lit.subterms.data[i], ctx);
         }
         break;
     }
     case SProcedure: {
-        // squash body
-        // TODO (BUG): Need to squash types of annotated arguments!
-        squash_types(typed->procedure.body, pia, a, point);
+        squash_types(typed->procedure.body, ctx);
         break;
     }
     case SAll: {
         // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
-        squash_types(typed->all.body, pia, a, point);
+        squash_types(typed->all.body, ctx);
         break;
     }
     case SMacro: { 
-        squash_types(typed->transformer, pia, a, point);
+        squash_types(typed->transformer, ctx);
         break;
     }
     case SApplication: {
-        squash_types(typed->application.function, pia, a, point);
+        squash_types(typed->application.function, ctx);
         
         for (size_t i = 0; i < typed->application.implicits.len; i++) {
-            squash_types(typed->application.implicits.data[i], pia, a, point);
+            squash_types(typed->application.implicits.data[i], ctx);
         }
 
         for (size_t i = 0; i < typed->application.args.len; i++) {
-            squash_types(typed->application.args.data[i], pia, a, point);
+            squash_types(typed->application.args.data[i], ctx);
         }
         break;
     }
     case SAllApplication: {
-        squash_types(typed->application.function, pia, a, point);
+        squash_types(typed->application.function, ctx);
 
         for (size_t i = 0; i < typed->all_application.types.len; i++) {
-            squash_types(typed->all_application.types.data[i], pia, a, point);
+            squash_types(typed->all_application.types.data[i], ctx);
+            Syntax* checked = typed->all_application.types.data[i];
+            if (checked->type_val->sort == TUVar) {
+                PtrArray nodes = mk_ptr_array(4, ctx.a);
+                push_ptr(mk_str_doc(mv_string("Typechecking error: All application type not instantiated"), ctx.a), &nodes);
+                push_ptr(pretty_type(checked->type_val, ctx.a), &nodes);
+
+                err.message = mv_vsep_doc(nodes, ctx.a);
+                throw_pi_error(ctx.point, err);
+            }
         }
 
         for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
-            squash_types(typed->all_application.implicits.data[i], pia, a, point);
+            squash_types(typed->all_application.implicits.data[i], ctx);
         }
         
         for (size_t i = 0; i < typed->all_application.args.len; i++) {
-            squash_types(typed->all_application.args.data[i], pia, a, point);
+            squash_types(typed->all_application.args.data[i], ctx);
         }
         break;
     }
     case SSeal: {
-        squash_types(typed->seal.body, pia, a, point);
+        squash_types(typed->seal.body, ctx);
 
         for (size_t i = 0; i < typed->seal.types.len; i++) {
-            squash_types(typed->seal.types.data[i], pia, a, point);
+            squash_types(typed->seal.types.data[i], ctx);
         }
 
         for (size_t i = 0; i < typed->seal.implicits.len; i++) {
-            squash_types(typed->seal.implicits.data[i], pia, a, point);
+            squash_types(typed->seal.implicits.data[i], ctx);
         }
         break;
     }
     case SUnseal: {
-        squash_types(typed->unseal.sealed, pia, a, point);
+        squash_types(typed->unseal.sealed, ctx);
 
         // TODO (BUG!): ensure that there are no free types in typed->unseal.body->ptype
-        squash_types(typed->unseal.body, pia, a, point);
+        squash_types(typed->unseal.body, ctx);
         break;
     }
     case SConstructor: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, pia, a, point);
+            squash_types(typed->variant.enum_type, ctx);
         }
         break;
     }
     case SVariant: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, pia, a, point);
+            squash_types(typed->variant.enum_type, ctx);
         }
         
         for (size_t i = 0; i < typed->variant.args.len; i++) {
-            squash_types(typed->variant.args.data[i], pia, a, point);
+            squash_types(typed->variant.args.data[i], ctx);
         }
         break;
     }
     case SMatch: {
-        squash_types(typed->match.val, pia, a, point);
+        squash_types(typed->match.val, ctx);
 
         for (size_t i = 0; i < typed->match.clauses.len; i++) {
             SynClause* clause = (SynClause*)typed->match.clauses.data[i];
-            squash_types(clause->body, pia, a, point);
+            squash_types(clause->body, ctx);
         }
         break;
     }
     case SStructure: {
         if (typed->structure.base) {
-            squash_types(typed->structure.base, pia, a, point);
+            squash_types(typed->structure.base, ctx);
         }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
-            squash_types(syn, pia, a, point);
+            squash_types(syn, ctx);
         }
         break;
     }
     case SProjector:
-        squash_types(typed->projector.val, pia, a, point);
+        squash_types(typed->projector.val, ctx);
         break;
     case SInstance:
-        squash_types(typed->instance.constraint, pia, a, point);
+        squash_types(typed->instance.constraint, ctx);
 
         for (size_t i = 0; i < typed->instance.implicits.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, pia, a, point);
+            squash_types(syn, ctx);
         }
 
         for (size_t i = 0; i < typed->instance.fields.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, pia, a, point);
+            squash_types(syn, ctx);
         }
         break;
     case SDynamic:
-        squash_types(typed->dynamic, pia, a, point);
+        squash_types(typed->dynamic, ctx);
         break;
     case SDynamicUse:
-        squash_types(typed->use, pia, a, point);
+        squash_types(typed->use, ctx);
         break;
     case SDynamicSet:
-        squash_types(typed->dynamic_set.dynamic, pia, a, point);
-        squash_types(typed->dynamic_set.new_val, pia, a, point);
+        squash_types(typed->dynamic_set.dynamic, ctx);
+        squash_types(typed->dynamic_set.new_val, ctx);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
-            squash_types(dbind->var, pia, a, point);
-            squash_types(dbind->expr, pia, a, point);
+            squash_types(dbind->var, ctx);
+            squash_types(dbind->expr, ctx);
         }
-        squash_types(typed->dyn_let_expr.body, pia, a, point);
+        squash_types(typed->dyn_let_expr.body, ctx);
         break;
     case SLet:
         for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
-            squash_types(typed->let_expr.bindings.data[i].val, pia, a, point);
+            squash_types(typed->let_expr.bindings.data[i].val, ctx);
         }
-        squash_types(typed->let_expr.body, pia, a, point);
+        squash_types(typed->let_expr.body, ctx);
         break;
     case SIf: {
-        squash_types(typed->if_expr.condition, pia, a, point);
-        squash_types(typed->if_expr.true_branch, pia, a, point);
-        squash_types(typed->if_expr.false_branch, pia, a, point);
+        squash_types(typed->if_expr.condition, ctx);
+        squash_types(typed->if_expr.true_branch, ctx);
+        squash_types(typed->if_expr.false_branch, ctx);
+        break;
+    }
+    case SCond: {
+        for (size_t i = 0; i < typed->cond.clauses.len; i++) {
+            CondClause* clause = typed->cond.clauses.data[i];
+            squash_types(clause->condition, ctx);
+            squash_types(clause->branch, ctx);
+        }
+        squash_types(typed->cond.otherwise, ctx);
         break;
     }
     case SLabels:
-        squash_types(typed->labels.entry, pia, a, point);
+        squash_types(typed->labels.entry, ctx);
         for (size_t i = 0; i < typed->labels.terms.len; i++) {
             SynLabelBranch* branch = typed->labels.terms.data[i].val;
-            squash_types(branch->body, pia, a, point);
+            squash_types(branch->body, ctx);
         }
         break;
     case SGoTo:
         for (size_t i = 0; i < typed->go_to.args.len; i++) {
-            squash_types(typed->go_to.args.data[i], pia, a, point);
+            squash_types(typed->go_to.args.data[i], ctx);
         }
         break;
     case SWithReset:
-        squash_types(typed->with_reset.expr, pia, a, point);
-        squash_types(typed->with_reset.handler, pia, a, point);
+        squash_types(typed->with_reset.expr, ctx);
+        squash_types(typed->with_reset.handler, ctx);
 
         if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
-            squash_type(typed->with_reset.in_arg_ty, pia, a);
+            squash_type(typed->with_reset.in_arg_ty, uctx);
         } else {
-            err.message = mv_cstr_doc("reset argument type not instantiated", a);
-            throw_pi_error(point, err);
+            err.message = mv_cstr_doc("reset argument type not instantiated", ctx.a);
+            throw_pi_error(ctx.point, err);
         }
         if (!has_unification_vars_p(*typed->with_reset.cont_arg_ty)) {
-            squash_type(typed->with_reset.cont_arg_ty, pia, a);
+            squash_type(typed->with_reset.cont_arg_ty, uctx);
         } else {
-            err.message = mv_cstr_doc("resume argument type not instantiated", a);
-            throw_pi_error(point, err);
+            err.message = mv_cstr_doc("resume argument type not instantiated", ctx.a);
+            throw_pi_error(ctx.point, err);
         }
         break;
     case SResetTo:
-        squash_types(typed->reset_to.point, pia, a, point);
-        squash_types(typed->reset_to.arg, pia, a, point);
+        squash_types(typed->reset_to.point, ctx);
+        squash_types(typed->reset_to.arg, ctx);
         break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.elements.len; i++) {
             SeqElt* elt = typed->sequence.elements.data[i];
-            squash_types(elt->expr, pia, a, point);
+            squash_types(elt->expr, ctx);
         }
         break;
     case SIs:
-        squash_type(typed->is.type->type_val, pia, a);
-        squash_types(typed->is.val, pia, a, point);
+        squash_type(typed->is.type->type_val, uctx);
+        squash_types(typed->is.val, ctx);
         break;
     case SInTo:
-        squash_type(typed->into.type->type_val, pia, a);
-        squash_types(typed->into.val, pia, a, point);
+        squash_type(typed->into.type->type_val, uctx);
+        squash_types(typed->into.val, ctx);
         break;
     case SOutOf:
-        squash_type(typed->out_of.type->type_val, pia, a);
-        squash_types(typed->out_of.val, pia, a, point);
+        squash_type(typed->out_of.type->type_val, uctx);
+        squash_types(typed->out_of.val, ctx);
         break;
     case SName:
-        squash_type(typed->name.type->type_val, pia, a);
-        squash_types(typed->name.val, pia, a, point);
+        squash_type(typed->name.type->type_val, uctx);
+        squash_types(typed->name.val, ctx);
         break;
     case SUnName:
-        squash_types(typed->unname, pia, a, point);
+        squash_types(typed->unname, ctx);
         break;
     case SWiden:
-        squash_type(typed->widen.type->type_val, pia, a);
-        squash_types(typed->widen.val, pia, a, point);
+        squash_type(typed->widen.type->type_val, uctx);
+        squash_types(typed->widen.val, ctx);
         break;
     case SNarrow:
-        squash_type(typed->narrow.type->type_val, pia, a);
-        squash_types(typed->narrow.val, pia, a, point);
+        squash_type(typed->narrow.type->type_val, uctx);
+        squash_types(typed->narrow.val, ctx);
         break;
     case SSizeOf:
     case SAlignOf:
-        squash_types(typed->size, pia, a, point);
+        squash_types(typed->size, ctx);
         break;
     case SOffsetOf:
-        squash_types(typed->offset_of.body, pia, a, point);
+        squash_types(typed->offset_of.body, ctx);
         break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {
-            squash_types(typed->proc_type.args.data[i], pia, a, point);
+            squash_types(typed->proc_type.args.data[i], ctx);
         }
 
-        squash_types(typed->proc_type.return_type, pia, a, point);
+        squash_types(typed->proc_type.return_type, ctx);
         break;
     }
     case SStructType: {
         for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
-            squash_types(typed->struct_type.fields.data[i].val, pia, a, point);
+            squash_types(typed->struct_type.fields.data[i].val, ctx);
         }
         break;
     }
@@ -2301,64 +2423,71 @@ void squash_types(Syntax* typed, PiAllocator* pia, Allocator* a, PiErrorPoint* p
             PtrArray* args = typed->enum_type.variants.data[i].val;
 
             for (size_t j = 0; j < args->len; j++) {
-                squash_types(args->data[j], pia, a, point);
+                squash_types(args->data[j], ctx);
             }
         }
         break;
     }
     case SResetType: {
-        squash_types(typed->reset_type.in, pia, a, point);
-        squash_types(typed->reset_type.out, pia, a, point);
+        squash_types(typed->reset_type.in, ctx);
+        squash_types(typed->reset_type.out, ctx);
         break;
     }
     case SDynamicType: {
-        squash_types(typed->dynamic_type, pia, a, point);
+        squash_types(typed->dynamic_type, ctx);
         break;
     }
     case SAllType:
-        squash_types(typed->bind_type.body, pia, a, point);
+        squash_types(typed->bind_type.body, ctx);
         break;
     case SSealedType:
-        squash_types(typed->sealed_type.body, pia, a, point);
+        squash_types(typed->sealed_type.body, ctx);
         break;
     case STypeFamily:
-        squash_types(typed->bind_type.body, pia, a, point);
+        squash_types(typed->bind_type.body, ctx);
         break;
     case SLiftCType:
-        squash_types(typed->c_type, pia, a, point);
+        squash_types(typed->c_type, ctx);
         break;
     case SNamedType:
-        squash_types(typed->named_type.body, pia, a, point);
+        squash_types(typed->named_type.body, ctx);
         break;
     case SDistinctType:
-        squash_types(typed->distinct_type, pia, a, point);
+        squash_types(typed->distinct_type, ctx);
         break;
     case SOpaqueType:
-        squash_types(typed->opaque_type, pia, a, point);
+        squash_types(typed->opaque_type, ctx);
         break;
     case STraitType:
         for (size_t i = 0; i < typed->trait.fields.len; i++) {
-            squash_types(typed->trait.fields.data[i].val, pia, a, point);
+            squash_types(typed->trait.fields.data[i].val, ctx);
         }
         break;
-    case SCheckedType:
-        squash_type(typed->type_val, pia, a);
+    case SCheckedType: {
+        // TODO: it seems like *sometimes* we want for this to be allowed as a
+        //   uvar (notably when calling eval_type), but otherwise don't want
+        //   to throw an error here.
+        squash_type(typed->type_val, uctx);
         break;
+    }
     case SReinterpret:
-        squash_types(typed->reinterpret.type, pia, a, point);
-        squash_types(typed->reinterpret.body, pia, a, point);
+        squash_types(typed->reinterpret.type, ctx);
+        squash_types(typed->reinterpret.body, ctx);
         break;
     case SConvert:
-        squash_types(typed->convert.type, pia, a, point);
-        squash_types(typed->convert.body, pia, a, point);
+        squash_types(typed->convert.type, ctx);
+        squash_types(typed->convert.body, ctx);
         break;
     case STypeOf: {
-        squash_types(typed->type_of, pia, a, point);
+        squash_types(typed->type_of, ctx);
         break;
     }
     case SDescribe:
     case SQuote:
     case SCapture: 
+        break;
+    case SDevAnnotation: 
+        squash_types(typed->dev.inner, ctx);
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));
@@ -2367,19 +2496,19 @@ void squash_types(Syntax* typed, PiAllocator* pia, Allocator* a, PiErrorPoint* p
 
     // has_unification_vars only returns true if those vars don't go anywhere!
     if (!has_unification_vars_p(*typed->ptype)) {
-        squash_type(typed->ptype, pia, a);
+        squash_type(typed->ptype, uctx);
     }
     else {
-        squash_type(typed->ptype, pia, a);
+        squash_type(typed->ptype, uctx);
 
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), a), &nodes);
-        push_ptr(pretty_syntax(typed, a), &nodes);
-        push_ptr(mk_str_doc(mv_string("Type:"), a), &nodes);
-        push_ptr(pretty_type(typed->ptype, a), &nodes);
+        PtrArray nodes = mk_ptr_array(4, ctx.a);
+        push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), ctx.a), &nodes);
+        push_ptr(pretty_syntax(typed, ctx.a), &nodes);
+        push_ptr(mk_str_doc(mv_string("Type:"), ctx.a), &nodes);
+        push_ptr(pretty_type(typed->ptype, ctx.a), &nodes);
 
-        err.message = mv_vsep_doc(nodes, a);
-        throw_pi_error(point, err);
+        err.message = mv_vsep_doc(nodes, ctx.a);
+        throw_pi_error(ctx.point, err);
     }
 }
 
@@ -2389,7 +2518,17 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     Target gen_target = ctx.target;
     clear_target(gen_target);
 
-    squash_types(typed, ctx.pia, a, point);
+    if (ctx.logger) {
+        String str = string_cat(mv_string("evaluating: "), syntax_type_to_string(typed->type), a);
+        start_section(str, ctx.logger);
+
+        PtrArray docs = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("syntax:"), a), &docs);
+        push_ptr(mv_nest_doc(2, pretty_syntax(typed, a), a), &docs);
+        log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
+    }
+
+    squash_types(typed, ctx);
     post_unify(typed, env, ctx.pia, a, point);
     
     // Catch error here; so can cleanup after self before further unwinding.
@@ -2397,15 +2536,29 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     if (catch_error(cleanup_point)) goto on_error;
 
     // TODO (INVESTIGATE): is LinkData needed
-    generate_type_expr(typed, env, gen_target, a, &cleanup_point);
+    CodegenContext cg_ctx = {
+        .a = a, .point = &cleanup_point, .target = gen_target, 
+    };
+    generate_type_expr(typed, env, cg_ctx);
 
     void* result = pico_run_expr(gen_target, pi_size_of(*typed->ptype), a, &cleanup_point);
+
+    if (ctx.logger) {
+        PiType** ptype = result;
+
+        PtrArray docs = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("evaluated to:"), a), &docs);
+        push_ptr(mv_nest_doc(2, pretty_type(*ptype, a), a), &docs);
+        log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
+
+        end_section(ctx.logger);
+    }
     return result;
 
  on_error: {
         PicoError err;
         err.range = typed->range;
-        err.message = mv_str_doc(cleanup_point.error_message, a);
+        err.message = cleanup_point.error_message;
         throw_pi_error(point, err);
     }
 }

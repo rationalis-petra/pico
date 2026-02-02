@@ -2,6 +2,8 @@
 #include "platform/dynamic_library.h"
 #include "platform/memory/std_allocator.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/core.h"
 #include "pico/stdlib/foreign.h"
@@ -134,7 +136,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
     Symbol sym;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     Segments null_segments = (Segments) {

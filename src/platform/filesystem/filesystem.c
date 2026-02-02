@@ -29,7 +29,8 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 
 #if OS_FAMILY == WINDOWS
 #include <windows.h>
-    struct Directory {
+
+struct Directory {
     HANDLE handle;
     Allocator* gpa;
 };
@@ -37,16 +38,37 @@ ARRAY_COMMON_IMPL(DirectoryEntry, dirent, DirEnt)
 #else
 #include <dirent.h>
 #include <unistd.h>
+#include <errno.h>
 #include <linux/limits.h>
 
-    struct Directory {
+struct Directory {
     DIR* handle;
     Allocator* gpa;
 };
 #endif
 
+FileOpenError get_file_error_code() {
+    // TODO: account for all documented possible error codes.
+#if OS_FAMILY == WINDOWS
+  switch (GetLastError()) {
+  default:
+      // TODO: surely there's a better solution than to panic?
+      panic(mv_string("Unrecognized error code."));
+  }
+#else
+  switch (errno) {
+  case EACCES:
+      return ErrFilePermissionDenied;
+  case ENOENT:
+      return ErrFileDoesNotExist;
+  default:
+      // TODO: surely there's a better solution than to panic?
+      panic(mv_string("Unrecognized error code."));
+  }
+#endif
+}
 
-Directory* open_directory(String name, Allocator* alloc) {
+DirectoryResult open_directory(String name, Allocator* alloc) {
     // TODO: what encoding to filenames use?
 #if OS_FAMILY == WINDOWS
 // TODO: the name here is ascii, but our strings are UTF-8!
@@ -65,9 +87,9 @@ Directory* open_directory(String name, Allocator* alloc) {
             .handle = handle,
             .gpa = alloc,
         };
-        return dir;
+        return (DirectoryResult) {.type = Ok, .directory = dir};
     } else {
-        return NULL;
+        return (DirectoryResult) {.type = Err, .error = get_file_error_code()};
     }
 #else
     DIR* handle = opendir((char*)name.bytes);
@@ -77,9 +99,9 @@ Directory* open_directory(String name, Allocator* alloc) {
             .handle = handle,
             .gpa = alloc,
         };
-        return dir;
+        return (DirectoryResult) {.type = Ok, .directory = dir};
     } else {
-        return NULL;
+        return (DirectoryResult) {.type = Err, .error = get_file_error_code()};
     }
 #endif
     
@@ -214,7 +236,7 @@ void set_current_directory(String path) {
 //     Directories 
 // ---------------------------------------------------------------------------
 
-File *open_file(String name, FilePermissions perms, Allocator *alloc) {
+FileResult open_file(String name, FilePermissions perms, Allocator *alloc) {
     const char *mode = NULL;
     switch (perms) {
     case Read:
@@ -238,11 +260,22 @@ File *open_file(String name, FilePermissions perms, Allocator *alloc) {
 
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
-    return (File*)fopen((char*)name.bytes, mode);
+    File* file = (File*)fopen((char*)name.bytes, mode);
+    if (file) {
+        return (FileResult) {.type = Ok, .file = file};
+    } else {
+        return (FileResult) {.type = Err, .error = get_file_error_code()};
+    }
+
 }
 
-File *open_tempfile(Allocator *alloc) {
-    return (File*) tmpfile();
+FileResult open_tempfile(Allocator *alloc) {
+    File* file = (File*)tmpfile();
+    if (file) {
+        return (FileResult) {.type = Ok, .file = file};
+    } else {
+        return (FileResult) {.type = Err, .error = get_file_error_code()};
+    }
 }
 
 void close_file(File *file) {
@@ -288,12 +321,13 @@ U8Array read_chunk(File *file, bool limit, uint64_t max_size, Allocator *region)
         bytes.len = fread(bytes.data, sizeof(uint8_t), max_size, (FILE*)file);
         return bytes;
     } else {
+        long start_pos = ftell((FILE*)file);
         fseek((FILE*)file, 0, SEEK_END);
         long fsize = ftell((FILE*)file);
-        fseek((FILE*)file, 0, SEEK_SET);  /* same as rewind(f); */
-        U8Array bytes = mk_u8_array(fsize, region);
+        fseek((FILE*)file, start_pos, SEEK_SET);  /* same as rewind(f); */
+        U8Array bytes = mk_u8_array(fsize - start_pos, region);
 
-        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize, (FILE*)file);
+        bytes.len = fread(bytes.data, sizeof(uint8_t), fsize - start_pos, (FILE*)file);
         return bytes;
     }
 

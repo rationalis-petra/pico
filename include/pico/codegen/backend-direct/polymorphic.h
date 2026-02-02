@@ -6,7 +6,7 @@
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
 
-void generate_polymorphic(SymbolArray arr, Syntax syn, AddressEnv* env, Target target, InternalLinkData* links, Allocator* a, ErrorPoint* point);
+void generate_polymorphic(SymbolArray arr, Syntax syn, AddressEnv* env, InternalContext ictx);
 
 // Type Info
 void generate_pi_type(PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);

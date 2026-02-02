@@ -1,6 +1,8 @@
 #include <math.h>
 #include "pico/parse/parse.h"
 
+#include "components/pretty/standard_types.h"
+
 // The main parsing functions, which parse different types of expressions. 
 // The entry point, parse_expr, which an arbitrary expression, inspects the head
 // of the input sream and delegates to a number of secondary parsing functions:  
@@ -13,11 +15,11 @@
 static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
 static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
 static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a);
+static ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a);
 
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
@@ -101,10 +103,10 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 out = parse_rawstring(is, pia, a);
             }
             else if (point == '#') {
-                out = parse_char(is, pia, a);
+                out = parse_hash(is, pia, a);
             }
             else if (is_numchar(point) || point == '-') {
-                out = parse_number(is, pia, a);
+                out = parse_number(10, is, pia, a);
             }
             else if (is_whitespace(point)) {
                 // Whitespace always terminates a unit, e.g. 
@@ -180,13 +182,17 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         // Check that there is an appropriate (odd) number of terms for infix operator
         //   unrolling to function
         if (terms.len % 2 == 0) {
-          out = (ParseResult) {
-            .type = ParseFail,
-            .error.message = mv_cstr_doc("Inappropriate number of terms for infix-operator", a),
-            .error.range.start = terms.data[0].range.start,
-            .error.range.end = terms.data[terms.len - 1].range.end,
-          };
-          return out;
+            PtrArray nodes = mk_ptr_array(3, a);
+            push_ptr(mv_cstr_doc("Inappropriate number of terms for infix-operator, expecting odd number but got", a), &nodes);
+            push_ptr(pretty_u64(terms.len, a), &nodes);
+
+            out = (ParseResult) {
+                .type = ParseFail,
+                .error.message = mv_sep_doc(nodes, a),
+                .error.range.start = terms.data[0].range.start,
+                .error.range.end = terms.data[terms.len - 1].range.end,
+            };
+            return out;
         }
 
         // Now that the list has been accumulated, 'unroll' the list appropriately, 
@@ -272,7 +278,15 @@ ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllo
     return out;
 }
 
+static ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a);
+
 ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
+    U32Array symchars = mk_u32_array(16, a);
+    size_t start = bytecount(is);
+    return parse_atom_prepped(symchars, start, is, pia, a);
+} 
+
+ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
      * and ':' such as Maybe:none and foo.var are also considered by the parser
@@ -284,10 +298,8 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     ParseResult out = {.type = ParseNone};
-    U32Array arr = mk_u32_array(16, a);
 
     RawTreePiList terms = mk_rawtree_list(8, pia);
-    size_t start = bytecount(is);
 
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
@@ -295,7 +307,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
-            push_u32(codepoint, &arr);
+            push_u32(codepoint, &symchars);
         } else if (codepoint == '.' || codepoint == ':') {
             size_t op_start = bytecount(is);
             next(is, &codepoint);
@@ -312,7 +324,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
             };
 
             // Store symbol
-            String str = string_from_UTF_32(arr, a);
+            String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
                 .range.start = start,
@@ -324,11 +336,11 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
             start = op_end;
 
             push_rawtree(val, &terms);
-            arr.len = 0; // reset array
+            symchars.len = 0; // reset array
 
             push_rawtree(op, &terms);
         } else {
-            String str = string_from_UTF_32(arr, a);
+            String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
                 .type = RawAtom,
                 .range.start = start,
@@ -343,7 +355,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
         }
     }
     if (result == StreamEnd) {
-        String str = string_from_UTF_32(arr, a);
+        String str = string_from_UTF_32(symchars, a);
         RawTree val = (RawTree) {
             .type = RawAtom,
             .range.start = start,
@@ -388,7 +400,7 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     return out;
 }
 
-ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t codepoint;
     StreamResult result;
     U8Array lhs = mk_u8_array(10, a);
@@ -404,35 +416,45 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
         is_positive = false;
     }
 
-    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
         just_negation = false;
         next(is, &codepoint);
-        // the cast is safe as is-numchar ensures codepoint < 256
-        uint8_t val = (uint8_t) codepoint - 48;
-        push_u8(val, &lhs);
+        if (codepoint != '_') {
+            // The cast is safe as is-numchar ensures codepoint < 256
+            uint8_t val = (uint8_t) codepoint - 48;
+            push_u8(val, &lhs);
+        }
     }
 
     if (result == StreamSuccess && codepoint == '.') {
         floating = true;
         just_negation = false;
         next(is, &codepoint);
-        while (((result = peek(is, &codepoint)) == StreamSuccess) && is_numchar(codepoint)) {
+        while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
             next(is, &codepoint);
-            // the cast is safe as is-numchar ensures codepoint < 256
-            uint8_t val = (uint8_t) codepoint - 48;
-            push_u8(val, &rhs);
+            if (codepoint != '_') {
+                // The cast is safe as is-numchar ensures codepoint < 256
+                uint8_t val = (uint8_t) codepoint - 48;
+                push_u8(val, &rhs);
+            }
         }
     }
 
     if (just_negation) {
-        return (ParseResult) {
-            .type = ParseSuccess,
-            .result.type = RawAtom,
-            .result.range.start = start,
-            .result.range.end = bytecount(is),
-            .result.atom.type = ASymbol,
-            .result.atom.symbol = string_to_symbol(mv_string("-")),
-        };
+        if (is_whitespace(codepoint)) {
+            return (ParseResult) {
+                .type = ParseSuccess,
+                .result.type = RawAtom,
+                .result.range.start = start,
+                .result.range.end = bytecount(is),
+                .result.atom.type = ASymbol,
+                .result.atom.symbol = string_to_symbol(mv_string("-")),
+            };
+        } else {
+            U32Array symchars = mk_u32_array(16, a);
+            push_u32('-', &symchars);
+            return parse_atom_prepped(symchars, start, is, pia, a);
+        }
     }
 
 
@@ -448,15 +470,31 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
     if (floating) {
         int64_t lhs_result = 0;
         uint64_t rhs_result = 0;
-        uint64_t tens = 1;
+        uint64_t exp = 1;
         for (size_t i = lhs.len; i > 0; i--) {
-            lhs_result += tens * lhs.data[i-1];
-            tens *= 10;
+            if (lhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            lhs_result += exp * lhs.data[i-1];
+            exp *= base;
         }
-        tens = 1;
+        exp = 1;
         for (size_t i = rhs.len; i > 0; i--) {
-            rhs_result += tens * rhs.data[i-1];
-            tens *= 10;
+            if (rhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            rhs_result += exp * rhs.data[i-1];
+            exp *= 10;
         }
         double dlhs = (double)lhs_result;
         double drhs = (double)rhs_result;
@@ -474,10 +512,18 @@ ParseResult parse_number(IStream* is, PiAllocator* pia, Allocator* a) {
         };
     } else {
         int64_t int_result = 0;
-        uint64_t tens = 1;
+        uint64_t exp = 1;
         for (size_t i = lhs.len; i > 0; i--) {
-            int_result += tens * lhs.data[i-1];
-            tens *= 10;
+            if (lhs.data[i - 1] >= base) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Digit size exceeds base size in number literal", a),
+                    .error.range.start = bytecount(is),
+                    .error.range.end = bytecount(is),
+                };
+            }
+            int_result += exp * lhs.data[i-1];
+            exp *= base;
         }
         int_result *= is_positive ? 1 : -1;
 
@@ -660,7 +706,7 @@ ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a) {
     };
 }
 
-ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a) {
+ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     uint32_t codepoint;
     size_t start = bytecount(is);
@@ -676,15 +722,44 @@ ParseResult parse_char(IStream* is, PiAllocator* pia, Allocator* a) {
         };
     }
 
-    //next(is, &codepoint); // consume token (")
-    return (ParseResult) {
-        .type = ParseSuccess,
-        .result.type = RawAtom,
-        .result.range.start = start,
-        .result.range.end = bytecount(is),
-        .result.atom.type = AIntegral,
-        .result.atom.int_64 = codepoint,
-    };
+    uint32_t char_lit = codepoint;
+    peek(is, &codepoint);
+    if (is_whitespace(codepoint)) {
+        return (ParseResult) {
+            .type = ParseSuccess,
+            .result.type = RawAtom,
+            .result.range.start = start,
+            .result.range.end = bytecount(is),
+            .result.atom.type = AIntegral,
+            .result.atom.int_64 = char_lit,
+        };
+    } else if (codepoint == '_') {
+        switch (char_lit) {
+        case 'b':
+            next(is, &codepoint);
+            return parse_number(2, is, pia, a);
+        case 'o':
+            return parse_number(8, is, pia, a);
+        default:
+            return (ParseResult) {
+                .type = ParseFail,
+                .error.message = mv_cstr_doc("Invalid base indicator: please use one of (b)inary or (o)ctal", a),
+                .error.range.start = bytecount(is),
+                .error.range.end = bytecount(is),
+            };
+            break;
+        }
+    } else {
+        return (ParseResult) {
+            .type = ParseFail,
+            .error.message = mv_cstr_doc("Unexpected literal beginning with '#': if you meant a char literal\n "
+                                         "ensure there is only one character following the '#' then a space.\n"
+                                         "If you wanted a numeric literal, follow the '#' with a base indicator\n" 
+                                         "character then an underscore, e.g. #b_11 for binary 3" , a),
+            .error.range.start = bytecount(is),
+            .error.range.end = bytecount(is),
+        };
+    }
 }
 
 StreamResult consume_until(uint32_t stop, IStream* is) {

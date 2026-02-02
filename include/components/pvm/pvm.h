@@ -140,7 +140,7 @@ typedef struct {
             PVMOperand arg1;
             PVMOperand arg2;
         };
-        // TODO: operations like GEP, which have a type/projection set/array
+        // TODO (FEAT): operations like GEP, which have a type/projection set/array
     };
     PVMVariable asssignee; 
 } PVMInstruction; 
@@ -168,7 +168,7 @@ typedef enum {
     CallWin64,
 } CallingConvention;
 
-// TODO: consider how the PVM would integrate with a JIT?
+// TODO (DESIGN): consider how the PVM would integrate with a JIT?
 //   - Should PVM have modules?
 //   - Matching PVM code to module definitions?
 //     - Inlining.

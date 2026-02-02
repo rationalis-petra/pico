@@ -1,30 +1,22 @@
 #include <inttypes.h>
 #include "platform/signals.h"
 #include "data/stringify.h"
-#include "data/float.h"
+
+#include "components/pretty/string_printer.h"
 
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/num.h"
+#include "pico/stdlib/num/submodules.h"
 #include "pico/codegen/codegen.h"
 
-PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
+static PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
 }
 
-PiType* mk_unop_type(PiAllocator* pia, PrimType arg, PrimType r) {
+static PiType* mk_unop_type(PiAllocator* pia, PrimType arg, PrimType r) {
     return mk_proc_type(pia, 1, mk_prim_type(pia, arg), mk_prim_type(pia, r));
 }
 
-void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-    build_binary_op(Xor, reg(RAX, sz_64), imm8(1), ass, a, point);
-    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-    build_nullary_op(Ret, ass, a, point);
-}
-
-void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+static void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -34,20 +26,30 @@ void build_binary_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a,
     build_nullary_op(Ret, ass, a, point);
 }
 
-void build_unary_float_fn(PiType* type, LocationSize sz, void* cfn, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType arg_type = sz == sz_64 ? (CType){.sort = CSDouble} : (CType){.sort = CSFloat};
-    CType fn_ctype = mk_fn_ctype(pia, 1, "x", arg_type, arg_type);
-    convert_c_fn(cfn, &fn_ctype, type, ass, a, point); 
+static void build_shift_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(op, reg(RDX, sz), ass, a, point);
+    build_unary_op(Push, reg(RDX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
 }
 
-void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
-    BinaryOp mov_op = sz == sz_32 ? MovSS : MovSD;
+static void build_unary_fn(Assembler* ass,  UnaryOp op, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
-    build_binary_op(mov_op, reg(XMM1, sz), rref8(RSP, 0, sz), ass, a, point);
-    build_binary_op(mov_op, reg(XMM0, sz), rref8(RSP, 8, sz), ass, a, point);
-    build_binary_op(op, reg(XMM0, sz), reg(XMM1, sz), ass, a, point);
-    build_binary_op(Add, reg(RSP, sz_64), imm8(8), ass, a, point);
-    build_binary_op(mov_op, rref8(RSP, 0, sz), reg(XMM0, sz), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(op, reg(RAX, sz), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+    build_nullary_op(Ret, ass, a, point);
+}
+
+static void build_not_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
+    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    build_binary_op(Xor, reg(RAX, sz_64), imm8(1), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
@@ -55,23 +57,33 @@ void build_binary_float_fn(Assembler* ass, BinaryOp op, LocationSize sz, Allocat
 void build_special_binary_fn(Assembler* ass, UnaryOp op, Regname out, LocationSize sz, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
     switch (sz) {
     case sz_64:
     case sz_32:
+        build_unary_op(Pop, reg(RAX , sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz), imm32(0), ass, a, point);
         break;
     case sz_16:
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz), imm16(0), ass, a, point);
         break;
     case sz_8:
         build_binary_op(Mov, reg(RDX, sz), imm8(0), ass, a, point);
+        build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+        // 8-bit division actually divides by the 16-bit ax register, so we zero
+        // out the uppder bits just in case
+        build_binary_op(MovZx, reg(RAX, sz_64), reg(RSI, sz_8), ass, a, point);
         break;
     }
     build_unary_op(op, reg(RDI, sz), ass, a, point);
 
-    build_unary_op(Push, reg(out, sz_64), ass, a, point);
+    if (sz == sz_8) {
+        build_binary_op(Mov, reg(RDX, sz), reg(out, sz), ass, a, point);
+        build_unary_op(Push, reg(RDX, sz_64), ass, a, point);
+    } else {
+        build_unary_op(Push, reg(out, sz_64), ass, a, point);
+    }
     build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
@@ -90,6 +102,7 @@ void build_comp_fn(Assembler* ass, UnaryOp op, LocationSize sz, Allocator* a, Er
     build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
+
 
 String relic_u64_to_string(uint64_t u64) {
     PiAllocator pia = get_std_current_allocator();
@@ -139,19 +152,7 @@ String relic_i8_to_string(int8_t i8) {
     return string_u8(i8, &a);
 }
 
-String relic_f32_to_string(float32_t f32) {
-    PiAllocator pia = get_std_current_allocator();
-    Allocator a = convert_to_callocator(&pia);
-    return string_f32(f32, &a);
-}
-
-String relic_f64_to_string(float64_t f64) {
-    PiAllocator pia = get_std_current_allocator();
-    Allocator a = convert_to_callocator(&pia);
-    return string_f64(f64, &a);
-}
-
-void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType argty;
     void* cfn;
     switch (prim) {
@@ -187,14 +188,6 @@ void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator
         argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Signed});
         cfn = relic_i8_to_string;
         break;
-    case Float_32:
-        argty = (CType){.sort = CSFloat};
-        cfn = relic_f32_to_string;
-        break;
-    case Float_64:
-        argty = (CType){.sort = CSDouble};
-        cfn = relic_f64_to_string;
-        break;
     default:
         panic(mv_string("num.c: unrecognized primitive to build_to_string_fn"));
     }
@@ -226,7 +219,7 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, a));
     }
 
     PrimType prims[2][4] = {
@@ -237,6 +230,16 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
     Segments prepped;
+
+    if (sz > sz_16) {
+        typep = mk_unop_type(pia, prim, prim);
+        build_unary_fn(ass, BSwap, sz, a, &point);
+        sym = string_to_symbol(mv_string("byte-swap"));
+        fn_segments.code = get_instructions(ass);
+        prepped = prep_target(module, fn_segments, ass, NULL);
+        add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+        clear_assembler(ass);
+    }
 
     build_binary_fn(ass, Add, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
@@ -267,15 +270,52 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IDiv : Div, RDX, sz, a, &point);
+    build_binary_fn(ass, And, sz, a, &point);
+    typep = mk_binop_type(pia, prim, prim, prim);
+    sym = string_to_symbol(mv_string("and"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_binary_fn(ass, Or, sz, a, &point);
+    typep = mk_binop_type(pia, prim, prim, prim);
+    sym = string_to_symbol(mv_string("or"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // TODO: set out to AH if size == 8
+    Regname out = sz == sz_8 ? AH : RDX;
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, out, sz, a, &point);
     sym = string_to_symbol(mv_string("mod"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
+    // Type Change
+    typep = mk_binop_type(pia, UInt_8, prim, prim);
+
+    build_shift_fn(ass, SHLCL, sz, a, &point);
+    sym = string_to_symbol(mv_string("shl"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_shift_fn(ass, SHRCL, sz, a, &point);
+    sym = string_to_symbol(mv_string("shr"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    // Type Change
     typep = mk_binop_type(pia, prim, prim, Bool);
+
+    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
     sym = string_to_symbol(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -351,7 +391,7 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, a));
     }
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
@@ -385,128 +425,3 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     if (r.type == Err) panic(r.error_message);
 }
 
-void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
-    PiAllocator pico_allocator = convert_to_pallocator(a);
-    PiAllocator* pia = &pico_allocator;
-
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
-    };
-    Exports exports = (Exports) {
-        .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
-    };
-    ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
-        .imports = imports,
-        .exports = exports,
-    };
-    Module* module = mk_module(header, get_package(num), NULL);
-    Symbol sym;
-
-    PiType* typep;
-    ErrorPoint point;
-    if (catch_error(point)) {
-        panic(point.error_message);
-    }
-
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
-    Segments prepped;
-    LocationSize sz = prim == Float_64 ? sz_64 : sz_32;
-
-    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
-    build_to_string_fn(typep, prim, ass, pia, a, &point);
-    sym = string_to_symbol(mv_string("to-string"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    BinaryOp add_op = prim == Float_64 ? AddSD : AddSS;
-    BinaryOp sub_op = prim == Float_64 ? SubSD : SubSS;
-    BinaryOp mul_op = prim == Float_64 ? MulSD : MulSS;
-    BinaryOp div_op = prim == Float_64 ? DivSD : DivSS;
-
-    typep = mk_binop_type(pia, prim, prim, prim);
-
-    build_binary_float_fn(ass, add_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("+"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_binary_float_fn(ass, sub_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("-"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_binary_float_fn(ass, mul_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("*"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    build_binary_float_fn(ass, div_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("/"));
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_prim_type(pia, prim));
-    sym = string_to_symbol(mv_string("sin"));
-    build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)sin_f64 : (void*)sin_f32, ass, pia, a, &point);
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    sym = string_to_symbol(mv_string("cos"));
-    build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)cos_f64 : (void*)cos_f32, ass, pia, a, &point);
-    fn_segments.code = get_instructions(ass);
-    prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
-    clear_assembler(ass);
-
-    Result r = add_module_def(num, string_to_symbol(name), module);
-    if (r.type == Err) panic(r.error_message);
-}
-
-void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
-    Allocator ra = ra_to_gpa(region);
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, &ra),
-    };
-    Exports exports = (Exports) {
-        .export_all = true,
-        .clauses = mk_export_clause_array(0, &ra),
-    };
-    ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
-        .imports = imports,
-        .exports = exports,
-    };
-    Module* module = mk_module(header, base, NULL);
-
-    add_bool_module(ass, module, &ra);
-
-    add_integral_module(mv_string("u8"), sz_8, false, ass, module, &ra);
-    add_integral_module(mv_string("u16"), sz_16, false, ass, module, &ra);
-    add_integral_module(mv_string("u32"), sz_32, false, ass, module, &ra);
-    add_integral_module(mv_string("u64"), sz_64, false, ass, module, &ra);
-
-    add_integral_module(mv_string("i8"), sz_8, true, ass, module, &ra);
-    add_integral_module(mv_string("i16"), sz_16, true, ass, module, &ra);
-    add_integral_module(mv_string("i32"), sz_32, true, ass, module, &ra);
-    add_integral_module(mv_string("i64"), sz_64, true, ass, module, &ra);
-
-    add_float_module(mv_string("f32"), Float_32, ass, module, &ra);
-    add_float_module(mv_string("f64"), Float_64, ass, module, &ra);
-
-    Result r =add_module(string_to_symbol(mv_string("num")), module, base);
-    if (r.type == Err) panic(r.error_message);
-}

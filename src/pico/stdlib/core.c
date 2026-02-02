@@ -3,6 +3,8 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
+#include "components/pretty/string_printer.h"
+
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/stdlib/core.h"
 
@@ -24,6 +26,11 @@ PiType* get_maybe_type() {
 static PiType* either_type;
 PiType* get_either_type() {
     return either_type;
+}
+
+static PiType* result_type;
+PiType* get_result_type() {
+    return result_type;
 }
 
 static PiType* pair_type;
@@ -199,7 +206,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     ErrorPoint point;
     PiAllocator pia = convert_to_pallocator(&ra);
     if (catch_error(point)) {
-        panic(point.error_message);
+        panic(doc_to_str(point.error_message, 120, &ra));
     }
 
     TermFormer former;
@@ -264,7 +271,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FDynamicSet;
-    sym = string_to_symbol(mv_string("set"));
+    sym = string_to_symbol(mv_string("modify"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FDynamicLet;
@@ -289,6 +296,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
     former = FIf;
     sym = string_to_symbol(mv_string("if"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FCond;
+    sym = string_to_symbol(mv_string("cond"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FLabels;
@@ -593,6 +604,24 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
         e = get_def(sym, module);
         either_type = e->value;
+
+        // Result Type 
+        vars = mk_sym_list(2, &pia);
+        push_sym(string_to_symbol(mv_string("Value")), &vars);
+        push_sym(string_to_symbol(mv_string("Error")), &vars);
+        type.kind.nargs = 2;
+
+        type_val = mk_named_type(&pia, "Result", mk_type_family(&pia,
+                                                             vars,
+                                                             mk_enum_type(&pia, 2,
+                                                                          "ok", 1, mk_var_type(&pia, "Value"),
+                                                                          "error", 1, mk_var_type(&pia, "Error"))));
+        type_data = type_val;
+        sym = string_to_symbol(mv_string("Result"));
+        add_def(module, sym, type, &type_data, null_segments, NULL);
+
+        e = get_def(sym, module);
+        result_type = e->value;
 
         // Pair Type 
         vars = mk_sym_list(2, &pia);
