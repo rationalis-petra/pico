@@ -573,8 +573,9 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
         if (class == Win64LargeAggregate) {
             input_area_size += ADDRESS_SIZE;
+        } else {
+            input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
         }
-        input_area_size += pi_stack_align(c_size_of(ctype->proc.args.data[i].val));
     }
 
     // Use RBX as an indexing register, to point to the 'base' (before runtime offsets are added)
@@ -609,9 +610,9 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     // Note: for Win 64 ABI, arguments are push left-to-right, meaning the
     // rightmost argument is at the bottom of the stack. 
     for (size_t i = 0; i < ctype->proc.args.len; i++) {
-        Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
         if (current_register < 4)
         {
+            Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
             switch (class)
             {
             case Win64None: // Do nothing!
@@ -646,6 +647,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
               // simply place the stack location of the argument in next_reg
 
               // TODO (IMPROVEMENT): replace with LEA instruction.
+              // TODO (BUG): ensure pointer is 16-byte aligned
               build_binary_op(Mov, reg(next_reg, sz_64), reg(RBX, sz_64), ass, a, point);
               if (arg_offsets.data[i+1] > INT8_MAX) {
                   build_binary_op(Add, reg(next_reg, sz_64), imm32(arg_offsets.data[i + 1]), ass, a, point);
@@ -659,21 +661,30 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
           }
           }
       } else {
-        if (class != Win64LargeAggregate) {
-            // This is NOT a large aggregate, and can be passed normally
-            build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
-            build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
+          Win64ArgClass class = win_64_arg_class(&ctype->proc.args.data[i].val);
 
-            // TODO (IMPROVEMENT) what if different sizes?
-            // TODO (BUG) align correctly!
-            // Copy the argument to the bottom of the stack.
-            size_t arg_size = arg_offsets.data[i] - arg_offsets.data[i + 1];
-            build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
-            generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
-        } else {
+          // We need to reverse the order of the arguments pushed on the, where the usual 
+          // formula is (len - 1) - i. However, we only start reversing when i = 4, meaning
+          // we want j to be 4 when i is at (proc.args.len - 1). Therefore, we add 4 to the 
+          // total output, giving (len - 1) - i + 4 = (len + 3) - i
+          size_t j = (ctype->proc.args.len + 3) - i;
+          if (class != Win64LargeAggregate)
+          {
+              // This is NOT a large aggregate, and can be passed normally
+              build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
+              build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[j + 1]), ass, a, point);
+
+              // TODO (IMPROVEMENT) what if different sizes?
+              // Copy the argument to the bottom of the stack.
+              // TOOD (BUG): ensure value is stack-aligned
+              size_t arg_size = arg_offsets.data[j] - arg_offsets.data[j + 1];
+              build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
+              generate_monomorphic_copy(RSP, R10, arg_size, ass, a, point);
+          } else {
             // This *is* a large aggregate - pass a pointer to the argument!
+            // TODO (BUG): ensure pointer is 16-byte aligned
             build_binary_op(Mov, reg(R10, sz_64), reg(RBX, sz_64), ass, a, point);
-            build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[i + 1]), ass, a, point);
+            build_binary_op(Add, reg(R10, sz_64), imm8(arg_offsets.data[j + 1]), ass, a, point);
             build_unary_op(Push, reg(R10, sz_64), ass, a, point);
         }
       }
