@@ -44,6 +44,10 @@ void mutex_unlock(Mutex* mutex) {
     ReleaseMutex(*mutex);
 }
 
+void sleep_for(Microseconds time) {
+    Sleep(time.us / 1000);
+}
+
 #else 
 #error "Do not support threads for this operating system."
 #endif

@@ -14,7 +14,7 @@ void relic_sleep_for(float64_t seconds) {
 }
 
 void build_sleep_for_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 1, (CType){.sort = CSDouble}, (CType){.sort = CSVoid});
+    CType fn_ctype = mk_fn_ctype(pia, 1, "time", (CType){.sort = CSDouble}, (CType){.sort = CSVoid});
     convert_c_fn(relic_sleep_for, &fn_ctype, type, ass, a, point); 
 }
 
