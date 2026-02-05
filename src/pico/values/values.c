@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/threads.h"
+#include "platform/thread.h"
 #include "data/array.h"
 #include "components/pretty/standard_types.h"
 
@@ -77,7 +77,6 @@ Name copy_name(Name n, Allocator* a) { return n; };
 // 
 // Implementation of dynamic variables
 // Each thread has an array, sized for # of dynamic vars
-//static 
 _Thread_local PtrArray thread_dynamic_vars;
 static Allocator* dynamic_var_allocator;
 static PtrArray dynamic_var_metadata;

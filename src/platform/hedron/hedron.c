@@ -141,11 +141,14 @@ static PiAllocator hd_pi_alloc;
 VkDescriptorType convert_descriptor_type(DescriptorType desc) {
     VkDescriptorType vk_desc = 0;
     switch (desc) {
+    case CombinedImageSamplerDesc: 
+        vk_desc = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        break;
     case UniformBufferDesc: 
         vk_desc = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         break;
-    case CombinedImageSamplerDesc: 
-        vk_desc = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    case StorageBufferDesc: 
+        vk_desc = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         break;
     }
     return vk_desc;
@@ -853,7 +856,7 @@ HedronDescriptorSetLayout* create_descriptor_set_layout(DescriptorBindingPiList 
 
     for (size_t i = 0; i < bdesc.len; i++) {
         VkDescriptorSetLayoutBinding layoutBinding = {
-            .binding = 0,
+            .binding = i,
             .descriptorType = convert_descriptor_type(bdesc.data[i].type),
             .stageFlags = convert_shader_type(bdesc.data[i].shader_type),
             .descriptorCount = 1,
@@ -899,7 +902,7 @@ HedronDescriptorPool* create_descriptor_pool(HedronDescriptorPoolSizePiList size
 
     VkDescriptorPoolCreateInfo pool_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .poolSizeCount = 1,
+        .poolSizeCount = sizes.len,
         .pPoolSizes = pool_sizes,
         .maxSets = max_sets,
     };
@@ -957,50 +960,57 @@ AddrPiList alloc_descriptor_sets(uint32_t set_count, HedronDescriptorSetLayout* 
 }
 
 void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDescriptorSetPiList copies) {
-    VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet), hd_alloc);
-    VkDescriptorBufferInfo* vk_write_buffer_info = mem_alloc(sizeof(VkDescriptorBufferInfo), hd_alloc);
-    VkDescriptorImageInfo* vk_write_image_info = mem_alloc(sizeof(VkDescriptorImageInfo), hd_alloc);
+    VkWriteDescriptorSet* vk_writes = mem_alloc(sizeof(VkWriteDescriptorSet) * writes.len, hd_alloc);
+    PtrArray to_free = mk_ptr_array(4, hd_alloc);
 
     for (size_t i = 0; i < writes.len; i++) {
-        HedronWriteDescriptorSet descriptor_write = writes.data[i];
+        HedronWriteDescriptorSet write_set = writes.data[i];
 
-
-        VkDescriptorType dtype = 0;
+        VkDescriptorType dtype = convert_descriptor_type(write_set.descriptor_type);
         VkDescriptorBufferInfo* binfo = NULL;
         VkDescriptorImageInfo* iinfo = NULL; 
-        switch (descriptor_write.descriptor_type) {
+        switch (write_set.write_type) {
+        case ImageInfo: {
+            VkDescriptorImageInfo* vk_write_image_info = mem_alloc(sizeof(VkDescriptorImageInfo) * write_set.image_writes.len, hd_alloc);
+            iinfo = vk_write_image_info;
+            push_ptr(iinfo, &to_free);
+            for (size_t j = 0; j < write_set.image_writes.len; j++) {
+                HedronDescriptorImageInfo image_info = write_set.image_writes.data[j];
+                vk_write_image_info[j] = (VkDescriptorImageInfo) {
+                    .sampler = image_info.sampler->vk_sampler,
+                    .imageView = image_info.image_view->vk_image_view,
+                    .imageLayout = convert_image_layout(image_info.layout),
+                };
+                // using a 'break' seems to break us out of the loop...
+            }
+            break;
+        }
+
         case BufferInfo: {
-            HedronBuffer* buffer = descriptor_write.buffer_info.buffer;
-            dtype = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-            vk_write_buffer_info[i] = (VkDescriptorBufferInfo) {
-                .buffer = buffer->vk_buffer,
-                .offset = descriptor_write.buffer_info.offset,
-                .range = descriptor_write.buffer_info.range,
-            };
-            binfo = vk_write_buffer_info + i;
+            VkDescriptorBufferInfo* vk_write_buffer_info = mem_alloc(sizeof(VkDescriptorBufferInfo) * write_set.buffer_writes.len, hd_alloc);
+            binfo = vk_write_buffer_info;
+            push_ptr(binfo, &to_free);
+            for (size_t j = 0; j < write_set.buffer_writes.len; j++) {
+                HedronDescriptorBufferInfo buffer_info = write_set.buffer_writes.data[j];
+                vk_write_buffer_info[j] = (VkDescriptorBufferInfo) {
+                    .buffer = buffer_info.buffer->vk_buffer,
+                    .offset = buffer_info.offset,
+                    .range = buffer_info.range,
+                };
+                // using a 'break' seems to break us out of the loop...
+            }
             break;
         }
-        case ImageInfo: 
-            dtype = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
-            vk_write_image_info[i] = (VkDescriptorImageInfo) {
-                .sampler = descriptor_write.image_info.sampler->vk_sampler,
-                .imageView = descriptor_write.image_info.image_view->vk_image_view,
-                .imageLayout = convert_image_layout(descriptor_write.image_info.layout),
-            };
-            iinfo = vk_write_image_info + i;
-            break;
         }
-
 
         vk_writes[i] = (VkWriteDescriptorSet) {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = descriptor_write.descriptor_set->vk_set,
-            .dstBinding = 0,
+            .dstSet = write_set.descriptor_set->vk_set,
+            .dstBinding = i,
             .dstArrayElement = 0,
             .descriptorType = dtype,
-            .descriptorCount = 1,
+            // Safe to do as all list types have identical layout!
+            .descriptorCount = write_set.buffer_writes.len,
             .pBufferInfo = binfo,
             .pImageInfo = iinfo,
             .pTexelBufferView = NULL,
@@ -1015,8 +1025,11 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
 
     vkUpdateDescriptorSets(logical_device, writes.len, vk_writes, copies.len, vk_copies);
     mem_free(vk_writes, hd_alloc);
-    mem_free(vk_write_buffer_info, hd_alloc);
-    mem_free(vk_write_image_info, hd_alloc);
+
+    for (size_t i = 0; i < to_free.len; i++) {
+        mem_free(to_free.data[i], hd_alloc);
+    }
+    mem_free(to_free.data, hd_alloc);
     mem_free(vk_copies, hd_alloc);
 }
 
@@ -1272,6 +1285,8 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size) {
         break;
     case UniformBuffer: buffer_usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         break;
+    case StorageBuffer: buffer_usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        break;
     case TransferSourceBuffer: buffer_usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         break;
     case TransferDestinationBuffer: buffer_usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -1416,18 +1431,21 @@ void destroy_image_view(HedronImageView *image_view) {
     mem_free(image_view, hd_alloc);
 }
 
-HedronSampler* create_sampler() {
+HedronSampler* create_sampler(bool enable_anisotropy, ImageFilterType min_filter, ImageFilterType mag_filter) {
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical_device, &properties);
 
     VkSamplerCreateInfo sampler_info = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
+        // We don't need a function to convert the sampler types, for now we
+        //   know that the filter types match with the corresponding vulkan types
+        //   in encoding
+        .minFilter = (VkFilter)min_filter,
+        .magFilter = (VkFilter)mag_filter,
         .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .anisotropyEnable = VK_TRUE,
+        .anisotropyEnable = enable_anisotropy,
         .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
         .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
         .unnormalizedCoordinates = VK_FALSE,
@@ -1795,6 +1813,21 @@ void command_bind_vertex_buffer(HedronCommandBuffer *commands, HedronBuffer *buf
     VkBuffer vertex_buffers[1] = {buffer->vk_buffer};
     VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(commands->buffer, 0, 1, vertex_buffers, offsets);
+}
+
+void command_bind_vertex_buffers(HedronCommandBuffer *commands, AddrPiList buffers) {
+    VkBuffer* vertex_buffers = mem_alloc(sizeof(VkBuffer) * buffers.len, hd_alloc);
+    // {buffer->vk_buffer};
+    for (size_t i = 0; i < buffers.len; i++) {
+        HedronBuffer* buf = buffers.data[i];
+        vertex_buffers[i] = buf->vk_buffer;
+    }
+    VkDeviceSize* offsets = mem_alloc(sizeof(VkDeviceSize) * buffers.len, hd_alloc);
+    for (size_t i = 0; i < buffers.len; i++) {
+        offsets[i] = 0;
+    }
+    vkCmdBindVertexBuffers(commands->buffer, 0, buffers.len, vertex_buffers, offsets);
+    mem_free(offsets, hd_alloc);
 }
 
 void command_bind_index_buffer(HedronCommandBuffer *commands, HedronBuffer *buffer, IndexFormat format) {
