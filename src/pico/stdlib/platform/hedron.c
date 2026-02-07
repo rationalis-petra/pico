@@ -44,6 +44,7 @@ static PiType* image_view_ty;
 static PiType* image_format_ty;
 static PiType* image_layout_ty;
 static PiType* sampler_ty;
+static PiType* sampler_filter_ty;
 
 static PiType* command_pool_ty;
 static PiType* command_buffer_ty;
@@ -234,7 +235,10 @@ void build_destroy_image_view_fn(PiType* type, Assembler* ass, PiAllocator* pia,
 }
 
 void build_create_sampler_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 0, 
+    CType fn_ctype = mk_fn_ctype(pia, 3, 
+                                 "enable-anisotropy", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CChar,}),
+                                 "min-filter", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
+                                 "mag-filter", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong,}),
                                  mk_voidptr_ctype(pia));
 
     convert_c_fn(create_sampler, &fn_ctype, type, ass, a, point); 
@@ -417,6 +421,13 @@ void build_command_bind_vertex_buffer_fn(PiType* type, Assembler* ass, PiAllocat
                                  "buffer", mk_voidptr_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(command_bind_vertex_buffer, &fn_ctype, type, ass, a, point); 
+}
+
+void build_command_bind_vertex_buffers_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 2, "command_buffer", mk_voidptr_ctype(pia),
+                                 "buffers", mk_list_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(command_bind_vertex_buffers, &fn_ctype, type, ass, a, point); 
 }
 
 void build_command_bind_index_buffer_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -619,6 +630,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     sampler_ty = e->value;
 
+    typep = mk_named_type(pia, "Filter", mk_enum_type(pia, 2, "nearest", 0, "linear", 0));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Filter"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    sampler_filter_ty = e->value;
+
     typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandPool", mk_prim_type(pia, Address)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
@@ -710,7 +729,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     binder_desc_ty = e->value;
 
-    typep = mk_enum_type(pia, 2, "uniform-buffer", 0, "combined-image-sampler", 0);
+    typep = mk_enum_type(pia, 3, "combined-image-sampler", 0, "uniform-buffer", 0, "storage-buffer", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DecriptorType"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -775,10 +794,11 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     descriptor_image_info_ty = e->value;
 
     typep = mk_struct_type(pia, 3,
-                           "info", mk_enum_type(pia, 2, "buffer-info", 1, descriptor_buffer_info_ty,
-                                                "image-info", 1, descriptor_image_info_ty),
+                           "descriptor-set", descriptor_set_ty,
                            "descriptor-type", descriptor_type_ty,
-                           "descriptor-set", descriptor_set_ty);
+                           "info", mk_enum_type(pia, 2, 
+                                                "buffer-info", 1, mk_app_type(pia, get_list_type(), descriptor_buffer_info_ty),
+                                                "image-info", 1, mk_app_type(pia, get_list_type(), descriptor_image_info_ty)));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DescriptorWrite"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -846,7 +866,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     attribute_desc_ty = e->value;
 
-    typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "transfer-source", 0, "transfer-destination", 0);
+    typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "storage", 0, "transfer-source", 0, "transfer-destination", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("BufferSort"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -978,7 +998,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 0, sampler_ty);
+    typep = mk_proc_type(pia, 3, mk_prim_type(pia, Bool), sampler_filter_ty, sampler_filter_ty, sampler_ty);
     build_create_sampler_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("create-sampler"));
     fn_segments.code = get_instructions(ass);
@@ -1249,6 +1269,14 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 2, command_buffer_ty, buffer_ty, mk_prim_type(pia, Unit));
     build_command_bind_vertex_buffer_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("command-bind-vertex-buffer"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, command_buffer_ty, mk_app_type(pia, get_list_type(), buffer_ty), mk_prim_type(pia, Unit));
+    build_command_bind_vertex_buffers_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("command-bind-vertex-buffers"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -303,9 +303,15 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
     }
     case TEnum: {
         if (lhs->enumeration.variants.len != rhs->enumeration.variants.len) {
+            PtrArray nodes = mk_ptr_array(5, a);
+            push_ptr(mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a), &nodes);
+            push_ptr(mv_cstr_doc("The types are:", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+            push_ptr(mv_cstr_doc("and", a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
             return (UnifyResult) {
                 .type = USimpleError,
-                .message = mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a)
+                .message = mk_vsep_doc(nodes, a),
             };
         }
         if (lhs->enumeration.tag_size != rhs->enumeration.tag_size) {

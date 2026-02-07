@@ -16,6 +16,7 @@
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
+static PiType* key_ty;
 
 PICO_LIST_HEADER(WinMessage, msg, WinMessage);
 PICO_LIST_COMMON_IMPL(WinMessage, msg, WinMessage);
@@ -112,19 +113,29 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
     e = get_def(sym, module);
     window_ty = e->value;
-    delete_pi_type_p(typep, pia);
 
     // Message Type
-    
-    typep = mk_enum_type(pia, 1,
-                         "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32));
+
+    typep = mk_enum_type(pia, 27, "A", 0, "B", 0, "C", 0, "D", 0, "E", 0, "F",
+                         0, "G", 0, "H", 0, "I", 0, "J", 0, "K", 0, "L", 0, "M",
+                         0, "N", 0, "O", 0, "P", 0, "Q", 0, "R", 0, "S", 0, "T",
+                         0, "U", 0, "V", 0, "W", 0, "X", 0, "Y", 0, "Z", 0, "space", 0);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("Key"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    key_ty = e->value;
+
+    typep = mk_enum_type(pia, 2,
+                         "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                         "key-event", 3, key_ty, mk_prim_type(pia, UInt_16), mk_prim_type(pia, Bool));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Message"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def(sym, module);
     window_message_ty = e->value;
-    delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 3, mk_string_type(pia), mk_prim_type(pia, Int_32), mk_prim_type(pia, Int_32), copy_pi_type_p(window_ty, pia));
     build_create_window_fn(typep, ass, pia, &ra, &point);
@@ -133,7 +144,6 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Unit));
     build_destroy_window_fn(typep, ass, pia, &ra, &point);
@@ -142,7 +152,6 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(window_ty, pia), mk_prim_type(pia, Bool));
     build_window_should_close_fn(typep, ass, pia, &ra, &point);
@@ -151,7 +160,6 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     //typep = mk_proc_type(a, 0, copy_pi_type_p(window_message_ty, a));
     typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_list_type(), window_message_ty));
@@ -161,7 +169,6 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-    delete_pi_type_p(typep, pia);
 
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);

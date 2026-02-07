@@ -1931,9 +1931,26 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     }
     case SMatch: {
         post_unify(syn->match.val, env, pia, a, point);
+        PiType* enum_type = unwrap_type(syn->match.val->ptype, pia, a); 
 
         for (size_t i = 0; i < syn->match.clauses.len; i++) {
             SynClause* clause = syn->match.clauses.data[i];
+            bool found_tag = false;
+            for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
+                if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
+                    found_tag = true;
+                    clause->tag = j;
+                }
+            }
+
+            if (!found_tag) {
+                PtrArray nodes = mk_ptr_array(4, a);
+                push_ptr(mv_cstr_doc("The clause", a), &nodes);
+                push_ptr(mk_str_doc(symbol_to_string(clause->tagname, a), a), &nodes);
+                push_ptr(mv_cstr_doc("does not correspond to any variant in the enum type.", a), &nodes);
+                err.message = mv_sep_doc(nodes, a);
+                throw_pi_error(point, err);
+            }
 
             // TODO BUG: bind types/vars from clause
             post_unify(clause->body, env, pia, a, point);

@@ -1,8 +1,8 @@
-#include "platform/threads.h"
-
+#include "platform/thread.h"
 
 #if OS_FAMILY == UNIX
-#include "pthread.h"
+#include <unistd.h>
+#include <pthread.h>
 
 void mutex_init(Mutex* mutex) {
     pthread_mutex_init(mutex, NULL);
@@ -18,6 +18,10 @@ void mutex_lock(Mutex* mutex) {
 
 void mutex_unlock(Mutex* mutex) {
     pthread_mutex_unlock(mutex);
+}
+
+void sleep_for(Microseconds time) {
+    usleep(time.us);
 }
 
 #elif OS_FAMILY == WINDOWS
@@ -38,6 +42,10 @@ void mutex_lock(Mutex* mutex) {
 
 void mutex_unlock(Mutex* mutex) {
     ReleaseMutex(*mutex);
+}
+
+void sleep_for(Microseconds time) {
+    Sleep(time.us / 1000);
 }
 
 #else 
