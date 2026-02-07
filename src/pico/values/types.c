@@ -626,7 +626,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     DocStyle cstyle = scolour(colour(209, 118, 219), dstyle);
     DocStyle vstyle = scolour(colour(38, 181, 43), dstyle);
     DocStyle pstyle = scolour(colour(52, 216, 235), dstyle);
-    DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
+    DocStyle field_style = scolour(colour(149, 187, 191), dstyle);
 
     Document* out = NULL;
     switch (type->sort) {
@@ -746,7 +746,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
             Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -774,7 +774,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             PtrArray name_nodes= mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc(":", a), &name_nodes);
             push_ptr(mk_str_doc(view_symbol_string(type->enumeration.variants.data[i].key), a), &name_nodes);
-            Document* fname = mv_style_doc(fstyle, mv_cat_doc(name_nodes, a), a);
+            Document* fname = mv_style_doc(field_style, mv_cat_doc(name_nodes, a), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
@@ -912,7 +912,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->trait.fields.data[i].key, a), a), a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->trait.fields.data[i].key, a), a), a);
             Document* arg = pretty_type_internal(type->trait.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -927,14 +927,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TTraitInstance: {
         PtrArray head_nodes = mk_ptr_array(2, a);
-        push_ptr(mv_style_doc(fstyle, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
+        push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
         push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
 
         PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
             Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -1172,8 +1172,8 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TEnum: {
-        size_t align = 1;
         size_t max = 0; 
+        size_t align = type.enumeration.tag_size / 8;
         size_t tag_size = type.enumeration.tag_size / 8;
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             size_t total = tag_size;
@@ -1197,7 +1197,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
 
         // Add 1 for tag!
-        *out = max;
+        *out = pi_size_align(max, align);
         return Ok;
     }
 

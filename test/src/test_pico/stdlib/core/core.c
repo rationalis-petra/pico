@@ -478,6 +478,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(Mixed:large -1086 1937987)");
     }
 
+    // This test was added due to experiencinng issues with the typechecking
+    // stage not inserting correct tag values when the (value) type of a match
+    // had not yet been inferred.
+    if (test_start(log, mv_string("enum-type-inferred"))) {
+        int64_t expected = 127;
+        TEST_EQ("(match :bar\n"
+                "  [:foo 1]"
+                "  [:bar 127])");
+    }
+
 
     // -----------------------------------------------------
     // 
@@ -495,7 +505,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(size-of (Struct [.x U8] [.y I32] [.z U16]))");
     }
 
-    if (test_start(log, mv_string("test-size-of-structs"))) {
+    if (test_start(log, mv_string("size-of-enum"))) {
+        uint64_t expected = 24;
+        TEST_EQ("(size-of (Enum [:pr U32 U32] [:nest (Enum :a :b) U16 Bool]))");
+    }
+
+    if (test_start(log, mv_string("test-size-of-packed-structs"))) {
         uint64_t expected = 7;
         TEST_EQ("(size-of (Struct packed [.x U8] [.y I32] [.z U16]))");
     }
@@ -586,7 +601,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     if (test_start(log, mv_string("size-enum-payload"))) {
-        uint64_t expected = 10;
+        uint64_t expected = 16;
         TEST_EQ("(size-of (Enum [:x I16] :y))");
     }
 

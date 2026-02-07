@@ -11,14 +11,23 @@
 #include <fcntl.h> // for O_ constants
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <linux/input.h>
 
 // for more info, it may be good to read
 // /usr/include/wayland-client-protocol.h
 // /usr/include/wayland-client-core.h
 #include <wayland-client.h>
 
+// GLOBAL DATA FOR OUR FUNCTIONS (CALLBACKS)
+
+// The allocator for the window system
 static Allocator* wsa = NULL;
 
+// The array of currently created/extant windows
+static PtrArray windows = {};
+
+
+// GLOBAL WAYLAND DATA
 // The wayland display represents the "connection" between this application
 // and the wayland display
 static struct wl_display* wl_display;
@@ -138,7 +147,106 @@ void kb_leave(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surfac
 	
 }
 
-void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t t, uint32_t key, uint32_t stat) {
+void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed, uint32_t key, uint32_t stat) {
+    // Key event
+    Key outkey = UINT32_MAX;
+    switch (key) {
+    case KEY_A:
+        outkey = WKEY_A;
+        break;
+    case KEY_B:
+        outkey = WKEY_B;
+        break;
+    case KEY_C:
+        outkey = WKEY_C;
+        break;
+    case KEY_D:
+        outkey = WKEY_D;
+        break;
+    case KEY_E:
+        outkey = WKEY_E;
+        break;
+    case KEY_F:
+        outkey = WKEY_F;
+        break;
+    case KEY_G:
+        outkey = WKEY_G;
+        break;
+    case KEY_H:
+        outkey = WKEY_H;
+        break;
+    case KEY_I:
+        outkey = WKEY_I;
+        break;
+    case KEY_J:
+        outkey = WKEY_J;
+        break;
+    case KEY_K:
+        outkey = WKEY_K;
+        break;
+    case KEY_L:
+        outkey = WKEY_L;
+        break;
+    case KEY_M:
+        outkey = WKEY_M;
+        break;
+    case KEY_N:
+        outkey = WKEY_N;
+        break;
+    case KEY_O:
+        outkey = WKEY_O;
+        break;
+    case KEY_P:
+        outkey = WKEY_P;
+        break;
+    case KEY_Q:
+        outkey = WKEY_Q;
+        break;
+    case KEY_R:
+        outkey = WKEY_R;
+        break;
+    case KEY_S:
+        outkey = WKEY_S;
+        break;
+    case KEY_T:
+        outkey = WKEY_T;
+        break;
+    case KEY_U:
+        outkey = WKEY_U;
+        break;
+    case KEY_V:
+        outkey = WKEY_V;
+        break;
+    case KEY_W:
+        outkey = WKEY_W;
+        break;
+    case KEY_X:
+       outkey = WKEY_X;
+        break;
+    case KEY_Y:
+        outkey = WKEY_Y;
+        break;
+    case KEY_Z:
+        outkey = WKEY_Z;
+        break;
+    case KEY_SPACE:
+        outkey = WKEY_SPACE;
+        break;
+    }
+
+    if (outkey != UINT32_MAX) {
+        PtrArray* windows = data;
+
+        // TODO: select currently active window!!!
+        PlWindow* window = windows->data[0];
+        WinMessage message = (WinMessage) {
+            .type = KeyEvent,
+            .key_event.key_id = outkey,
+            .key_event.modifier_key_mask = 0,
+            .key_event.key_pressed = stat,
+        };
+        push_wm(message, &window->messages);
+    }
 }
 
 void kb_mod(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t grp) {
@@ -149,7 +257,7 @@ void kb_rep(void* data, struct wl_keyboard* kb, int32_t rate, int32_t del) {
 	
 }
 
-struct wl_keyboard_listener kb_listener = {
+static struct wl_keyboard_listener kb_listener = {
 	.keymap = kb_map,
 	.enter = kb_enter,
 	.leave = kb_leave,
@@ -205,7 +313,7 @@ void reg_glob(void *data, struct wl_registry *reg, uint32_t name, const char *in
 		xdg_wm_base_add_listener(xdg_shell, &shell_listener, 0);
 	} else if (!strcmp(intf, wl_seat_interface.name)) {
 		seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
-		wl_seat_add_listener(seat, &seat_listener, 0);
+		wl_seat_add_listener(seat, &seat_listener, data);
 	}
 }
 
@@ -222,8 +330,10 @@ int pl_init_window_system(Allocator* a) {
     wsa = a;
     wl_display = wl_display_connect(NULL);
     if (!wl_display) return 1;
+    windows = mk_ptr_array(1, wsa);
+
     wl_registry = wl_display_get_registry(wl_display);
-    wl_registry_add_listener(wl_registry, &wl_listener, 0);
+    wl_registry_add_listener(wl_registry, &wl_listener, &windows);
 
     wl_display_roundtrip(wl_display); // tell the server that we are looking for data
     return 0;
@@ -260,6 +370,7 @@ PlWindow *pl_create_window(String name, int width, int height) {
     xdg_toplevel_set_title(top, (char*)name.bytes);
 
     wl_surface_commit(surface); // TOOD: necessary?
+    push_ptr(window, &windows);
 
     return window;
 }
