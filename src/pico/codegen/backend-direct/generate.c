@@ -416,21 +416,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         switch (e.type) {
         case ALocalDirect: {
             // Copy to the current level 
-            size_t size = pi_stack_size_of(*syn.ptype);
-            data_stack_grow(env, size);
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(size), ass, a, point);
-
-            if (e.stack_offset + size > INT8_MAX || (e.stack_offset - (int64_t)size) < INT8_MIN) {
-                for (size_t i = 0; i < size / 8; i++) {
-                    build_binary_op(Mov, reg(RAX, sz_64), rref32(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
-                    build_binary_op(Mov, rref32(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
-                }
-            } else {
-                for (size_t i = 0; i < size / 8; i++) {
-                    build_binary_op(Mov, reg(RAX, sz_64), rref8(RBP, e.stack_offset + (i * 8) , sz_64), ass, a, point);
-                    build_binary_op(Mov, rref8(RSP, (i * 8), sz_64), reg(RAX, sz_64), ass, a, point);
-                }
-            }
+            size_t size = pi_size_of(*syn.ptype);
+            size_t stack_size = pi_stack_align(size);
+            data_stack_grow(env, stack_size);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
+            // TODO: LEA
+            build_binary_op(Mov, reg(R11, sz_64), reg(RBP, sz_64), ass, a, point);
+            build_binary_op(Add, reg(R11, sz_64), imm32(e.stack_offset), ass, a, point);
+            generate_monomorphic_copy(RSP, R11, size, ass, a, point);
             break;
         }
         case ALocalIndexed: {
@@ -1837,7 +1830,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         // Pop the bool into R9; compare with 0
         build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
-        build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
+        build_binary_op(Cmp, reg(R9, sz_8), imm8(0), ass, a, point);
         data_stack_shrink(env, ADDRESS_SIZE);
 
         // ---------- CONDITIONAL JUMP ----------
@@ -1891,7 +1884,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Pop the bool into R9; compare with 0
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
-            build_binary_op(Cmp, reg(R9, sz_64), imm32(0), ass, a, point);
+            build_binary_op(Cmp, reg(R9, sz_8), imm8(0), ass, a, point);
             data_stack_shrink(env, ADDRESS_SIZE);
 
             // ---------- JUMP TO NEXT BRANCH ----------

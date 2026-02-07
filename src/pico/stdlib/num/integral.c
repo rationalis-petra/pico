@@ -152,10 +152,20 @@ String relic_i8_to_string(int8_t i8) {
     return string_u8(i8, &a);
 }
 
+String relic_bool_to_string(uint64_t u64) {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return string_bool(u64, &a);
+}
+
 static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType argty;
     void* cfn;
     switch (prim) {
+    case Bool:
+        argty = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
+        cfn = relic_bool_to_string;
+        break;
     case UInt_64:
         argty = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
         cfn = relic_u64_to_string;
@@ -416,6 +426,14 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     typep = mk_unop_type(pia, Bool, Bool);
     build_not_fn(ass, a, &point);
     sym = string_to_symbol(mv_string("not"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, mk_prim_type(pia, Bool), mk_string_type(pia));
+    build_to_string_fn(typep, Bool, ass, pia, a, &point);
+    sym = string_to_symbol(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

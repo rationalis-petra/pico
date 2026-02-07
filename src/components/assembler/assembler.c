@@ -758,8 +758,8 @@ void build_binary_opcode_tables() {
     }
 
     {   // Cmp Operation. Source - Intel Manual Vol 2. p1407
-        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
-        static BinOpBytes ops[7];
+        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8 | RM8_Imm8;
+        static BinOpBytes ops[8];
         add_op_ext(0x83, 0x7, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x7, RM64_Imm32, sup, ops);
 
@@ -769,6 +769,7 @@ void build_binary_opcode_tables() {
         add_op(0x3B, R32_RM32, sup, ops);
         add_op(0x3B, R16_RM16, sup, ops);
         add_op(0x3A, R8_RM8, sup, ops);
+        add_op(0x80, RM8_Imm8, sup, ops);
         binary_opcode_tables[Cmp] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
@@ -1359,6 +1360,14 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
 
     uint8_t num_disp_bytes = 0;
     uint8_t disp_bytes [4];
+
+    // Check if registers are in the R9-R15 range
+    if ((R8 <= src.reg && src.reg <= R15) || (R8 <= dest.reg && dest.reg <= R15)) {
+        if (!be.use_rex_byte) {
+            be.use_rex_byte = true;
+            rex_byte = 0b01000000;
+        }
+    }
 
     // TODO: ensure not attempting to encode SPL, BPL SIL, DIL if 
     // using AH, BH, CH, DH

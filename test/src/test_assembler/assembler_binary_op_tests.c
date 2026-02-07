@@ -54,6 +54,26 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    if (test_start(log, mv_string("asm-mov-r32-m32"))) { // Mov [RSI + 8]b, DIL, 
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x41, 0x8B, 0x43, 0x08, 0x90 } ;
+            build_binary_op(Mov, reg(RAX, sz_32), rref8(R11, 8, sz_32), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
+    if (test_start(log, mv_string("asm-mov-r32-m32"))) { // Mov [RSI + 8]b, DIL, 
+        ASM_TEST() {
+            uint8_t expected[] =  { 0x41, 0x8B, 0x43, 0x08, 0x90 } ;
+            build_binary_op(Mov, reg(RAX, sz_32), rref8(R11, 8, sz_32), ass, &gpa, &point);
+
+            check_asm_eq(expected, ass, &gpa, log);
+            clear_assembler(ass);
+        }
+    }
+
     if (test_start(log, mv_string("asm-mov-m8-r8"))) { // Mov [RSI + 8]b, DIL, 
         ASM_TEST() {
             uint8_t expected[] =  { 0x40, 0x88, 0x7E, 0x08, 0x90 } ;

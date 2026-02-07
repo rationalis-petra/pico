@@ -489,6 +489,14 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
 
+    RUN("(def HasBool Enum [:just U16 Bool])");
+    if (test_start(log, mv_string("enum-match-branch"))) {
+        int64_t expected = 127;
+        TEST_EQ("(match (HasBool:just 12 :false)\n"
+                "  [[:just x t] (if t -91723 127)])");
+    }
+
+
     // -----------------------------------------------------
     // 
     //      Type Metadata (size, align, offset)

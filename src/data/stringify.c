@@ -1,7 +1,23 @@
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "data/stringify.h"
+
+
+String string_bool(bool val, Allocator* a) {
+    if (val) {
+        char truestr[] = "true";
+        char* str = mem_alloc(sizeof(truestr), a);
+        strcpy(str, truestr);
+        return mv_string(str);
+    } else {
+        char falsestr[] = "false";
+        char* str = mem_alloc(sizeof(falsestr), a);
+        strcpy(str, falsestr);
+        return mv_string(str);
+    }
+}
 
 String string_i64(int64_t val, Allocator* a) {
     int len = snprintf(NULL, 0, "%" PRId64, val) + 1;

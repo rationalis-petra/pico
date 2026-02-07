@@ -243,7 +243,7 @@ void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed
             .type = KeyEvent,
             .key_event.key_id = outkey,
             .key_event.modifier_key_mask = 0,
-            .key_event.key_pressed = stat,
+            .key_event.key_pressed = stat ? true : false,
         };
         push_wm(message, &window->messages);
     }
