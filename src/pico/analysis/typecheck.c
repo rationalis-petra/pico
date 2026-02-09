@@ -713,49 +713,57 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // Typecheck each variant, ensure they are the same
             PiType* out_ty = mk_uvar(ctx.pia);
             untyped->ptype = out_ty;
-            U8Array used_indices = mk_u8_array(untyped->match.clauses.len, a);
-            for (size_t i = 0; i < untyped->match.clauses.len; i++)
+            U8Array used_indices = mk_u8_array(enum_type->enumeration.variants.len, a);
+            for (size_t i = 0; i < enum_type->enumeration.variants.len; i++)
                 push_u8(0, &used_indices);
 
             for (size_t i = 0; i < untyped->match.clauses.len; i++) {
                 SynClause* clause = untyped->match.clauses.data[i];
-                bool found_tag = false;
-                for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
-                    if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
-                        found_tag = true;
-                        clause->tag = j;
-                        if (used_indices.data[j] != 0) {
-                            err.message = mv_cstr_doc("Same tag occurs twice in match body.", a);
-                            throw_pi_error(point, err);
-                        }
-                        used_indices.data[j] = 1;
+                if (clause->is_wildcard) {
+                    // Use all indices
+                    for (size_t i = 0; i < used_indices.len; i++) {
+                        used_indices.data[i] = 1;
                     }
-                }
+                    type_check_i(clause->body, out_ty, env, ctx);
+                } else {
+                    bool found_tag = false;
+                    for (size_t j = 0; j < enum_type->enumeration.variants.len; j++) {
+                        if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
+                            found_tag = true;
+                            clause->tag = j;
+                            if (used_indices.data[j] != 0) {
+                                err.message = mv_cstr_doc("Same tag occurs twice in match body.", a);
+                                throw_pi_error(point, err);
+                            }
+                            used_indices.data[j] = 1;
+                        }
+                    }
 
-                if (!found_tag) {
-                    PtrArray nodes = mk_ptr_array(4, a);
-                    push_ptr(mv_cstr_doc("The tag", a), &nodes);
-                    push_ptr(mk_str_doc(symbol_to_string(clause->tagname, a), a), &nodes);
-                    push_ptr(mv_cstr_doc("does not correspond to any tag in the enum type.", a), &nodes);
-                    err.message = mv_sep_doc(nodes, a);
-                    throw_pi_error(point, err);
-                }
+                    if (!found_tag) {
+                        PtrArray nodes = mk_ptr_array(4, a);
+                        push_ptr(mv_cstr_doc("The tag", a), &nodes);
+                        push_ptr(mk_str_doc(symbol_to_string(clause->tagname, a), a), &nodes);
+                        push_ptr(mv_cstr_doc("does not correspond to any tag in the enum type.", a), &nodes);
+                        err.message = mv_sep_doc(nodes, a);
+                        throw_pi_error(point, err);
+                    }
 
-                // Now we've found the tag, typecheck the body
-                PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
-                if (types_to_bind->len != clause->vars.len) {
-                    err.message = mv_cstr_doc("Bad number of binds!", a);
-                    throw_pi_error(point, err);
-                }
+                    // Now we've found the tag, typecheck the body
+                    PtrArray* types_to_bind = enum_type->enumeration.variants.data[clause->tag].val;
+                    if (types_to_bind->len != clause->vars.len) {
+                        err.message = mv_cstr_doc("Bad number of binds!", a);
+                        throw_pi_error(point, err);
+                    }
 
-                for (size_t j = 0; j < types_to_bind->len; j++) {
-                    Symbol arg = clause->vars.data[j];
-                    PiType* aty = types_to_bind->data[j];
-                    type_var(arg, aty, env);
-                }
+                    for (size_t j = 0; j < types_to_bind->len; j++) {
+                        Symbol arg = clause->vars.data[j];
+                        PiType* aty = types_to_bind->data[j];
+                        type_var(arg, aty, env);
+                    }
 
-                type_check_i(clause->body, out_ty, env, ctx);
-                pop_types(env, types_to_bind->len);
+                    type_check_i(clause->body, out_ty, env, ctx);
+                    pop_types(env, types_to_bind->len);
+                }
             }
 
             // Finally, check that all indices are accounted for;
@@ -770,8 +778,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // TODO (FEAT): Adjust this so there is room for re-ordering! 
             //   possibly placing constraints on the enum, but constraining it
             //   to only have the provided fields?? a special unification??
-            PiType* enum_type = call_alloc(sizeof(PiType), ctx.pia);
-            *enum_type = (PiType) {
+            PiType* new_enum_type = call_alloc(sizeof(PiType), ctx.pia);
+            *new_enum_type = (PiType) {
                 .sort = TEnum,
                 .enumeration.tag_size = 64,
                 .enumeration.variants = mk_sym_addr_piamap(untyped->match.clauses.len, ctx.pia),
@@ -779,25 +787,48 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
             PiType* out_ty = mk_uvar(ctx.pia);
             untyped->ptype = out_ty;
+            bool was_wildcard = false;
             for (size_t i = 0; i < untyped->match.clauses.len; i++) {
                 SynClause* clause = untyped->match.clauses.data[i];
 
-                AddrPiList types = mk_addr_list(clause->vars.len, ctx.pia);
-                for (size_t j = 0; j < clause->vars.len; j++) {
-                    Symbol arg = clause->vars.data[j];
-                    PiType* aty = mk_uvar(ctx.pia);
-                    push_addr(aty, &types);
-                    type_var(arg, aty, env);
+                if (clause->is_wildcard) {
+                    type_check_i(clause->body, out_ty, env, ctx);
+                    was_wildcard = true;
+                } else {
+                    AddrPiList types = mk_addr_list(clause->vars.len, ctx.pia);
+                    for (size_t j = 0; j < clause->vars.len; j++) {
+                        Symbol arg = clause->vars.data[j];
+                        PiType* aty = mk_uvar(ctx.pia);
+                        push_addr(aty, &types);
+                        type_var(arg, aty, env);
+                    }
+
+                    type_check_i(clause->body, out_ty, env, ctx);
+                    pop_types(env, types.len);
+
+                    AddrPiList* to_insert = mem_alloc(sizeof(AddrPiList), a);
+                    *to_insert = types;
+                    sym_addr_insert(clause->tagname, to_insert, &new_enum_type->enumeration.variants);
                 }
-
-                type_check_i(clause->body, out_ty, env, ctx);
-                pop_types(env, types.len);
-
-                AddrPiList* to_insert = mem_alloc(sizeof(AddrPiList), a);
-                *to_insert = types;
-                sym_addr_insert(clause->tagname, to_insert, &enum_type->enumeration.variants);
             }
-            type_check_i(untyped->match.val, enum_type, env, ctx);
+            if (was_wildcard) {
+                // was_wildcard: Each branch in the match clause imposes a
+                //   constraint, not
+                for (size_t i = 0; i < new_enum_type->enumeration.variants.len; i++) {
+                    UnifyContext uctx = {
+                        .a = a,
+                        .pia = ctx.pia,
+                        .logger = ctx.logger,
+                    };
+                    SymAddrPiCell cell = new_enum_type->enumeration.variants.data[i];
+
+                    UnifyResult res = add_variant_constraint(enum_type->uvar, untyped->range, cell.key, (*(AddrPiList*)cell.val), uctx);
+                    check_result_out(res, untyped->range, a, point);
+                }
+            } else {
+                // No wildcard: the match enumerates all possibilities
+                type_check_i(untyped->match.val, new_enum_type, env, ctx);
+            }
         } else {
             err.range = untyped->match.val->range;
             PtrArray nodes;
@@ -1940,6 +1971,9 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
                 if (symbol_eq(clause->tagname, enum_type->enumeration.variants.data[j].key)) {
                     found_tag = true;
                     clause->tag = j;
+                }
+                if (clause->is_wildcard) {
+                    found_tag = true;
                 }
             }
 

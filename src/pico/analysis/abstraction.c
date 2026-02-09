@@ -735,49 +735,61 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             // Get the pattern
+
+            Symbol clause_tagname = {}; 
+            SymbolArray clause_binds = {};
+            bool is_wildcard = false;
             RawTree raw_pattern = raw_clause.branch.nodes.data[0];
             if (raw_pattern.type != RawBranch) {
-                err.range = raw_pattern.range;
-                err.message = mv_cstr_doc("Match Pattern should be a list!", a);
-                throw_pi_error(ctx.point, err);
-            }
-
-            // The pattern has two parts: the variables & the tag
-            // The tag should be in a constructor (i.e. list)
-
-            Symbol clause_tagname; 
-            SymbolArray clause_binds;
-            RawTree mcol = raw_pattern.branch.nodes.data[0];
-            if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
-                RawTree mname = raw_pattern.branch.nodes.data[1];
-                if (!is_symbol(mname)) {
-                    err.range = mname.range;
-                    err.message = mv_cstr_doc("Bad pattern in match clause", a);
-                    throw_pi_error(ctx.point, err);
-                }
-
-                clause_tagname = mname.atom.symbol;
-                clause_binds = mk_symbol_array(0, a);
-            } else {
-                if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
-                    PtrArray nodes = mk_ptr_array(2, a);
-                    push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
-                    push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
-                    Document* doc = mv_sep_doc(nodes, a);
-                    err.range = raw_clause.range;
-                    err.message = doc;
-                    throw_pi_error(ctx.point, err);
-                }
-
-                clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
-                for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
-                    RawTree raw_name = raw_pattern.branch.nodes.data[s];
-                    if (!is_symbol(raw_name)) {
+                if (eq_symbol(&raw_pattern, string_to_symbol(mv_string("_")))) {
+                    if (i + 1 != raw.branch.nodes.len) {
                         err.range = raw_clause.range;
-                        err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+                        err.message = mv_cstr_doc("A wildcard pattern must be the last pattern in a match clause.", a);
                         throw_pi_error(ctx.point, err);
                     }
-                    push_symbol(raw_name.atom.symbol, &clause_binds); 
+
+                    is_wildcard = true;
+                } else {
+                    err.range = raw_clause.range;
+                    err.message = mv_cstr_doc("Expecting pattern but got a symbol instead. This is not yet supported.", a);
+                    throw_pi_error(ctx.point, err);
+                }
+            } else {
+                // The pattern has two parts: the variables & the tag
+                // The tag should be in a constructor (i.e. list)
+
+                RawTree mcol = raw_pattern.branch.nodes.data[0];
+                if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+                    RawTree mname = raw_pattern.branch.nodes.data[1];
+                    if (!is_symbol(mname)) {
+                        err.range = mname.range;
+                        err.message = mv_cstr_doc("Bad pattern in match clause", a);
+                        throw_pi_error(ctx.point, err);
+                    }
+
+                    clause_tagname = mname.atom.symbol;
+                    clause_binds = mk_symbol_array(0, a);
+                } else {
+                    if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
+                        PtrArray nodes = mk_ptr_array(2, a);
+                        push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
+                        push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
+                        Document* doc = mv_sep_doc(nodes, a);
+                        err.range = raw_clause.range;
+                        err.message = doc;
+                        throw_pi_error(ctx.point, err);
+                    }
+
+                    clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
+                    for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
+                        RawTree raw_name = raw_pattern.branch.nodes.data[s];
+                        if (!is_symbol(raw_name)) {
+                            err.range = raw_clause.range;
+                            err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+                            throw_pi_error(ctx.point, err);
+                        }
+                        push_symbol(raw_name.atom.symbol, &clause_binds); 
+                    }
                 }
             }
 
@@ -792,6 +804,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 .tagname = clause_tagname,
                 .vars = clause_binds,
                 .body = clause_body,
+                .is_wildcard = is_wildcard,
             };
             push_ptr(clause, &clauses);
         }

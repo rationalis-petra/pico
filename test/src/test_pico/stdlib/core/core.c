@@ -496,6 +496,23 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [[:just x t] (if t -91723 127)])");
     }
 
+    RUN("(def ManyVars Enum :a :b :c :d :e)");
+    if (test_start(log, mv_string("enum-match-wildcard"))) {
+        int64_t expected = 127;
+        TEST_EQ("(match ManyVars:c\n"
+                "  [[:a] 12]"
+                "  [[:e] 90873]"
+                "  [_ 127])");
+    }
+
+    if (test_start(log, mv_string("enum-match-wildcard-alt"))) {
+        int64_t expected = 90873;
+        TEST_EQ("(match ManyVars:e\n"
+                "  [[:a] 12]"
+                "  [[:e] 90873]"
+                "  [_ 127])");
+    }
+
 
     // -----------------------------------------------------
     // 

@@ -43,7 +43,41 @@ typedef enum : uint64_t {
     WKEY_X,
     WKEY_Y,
     WKEY_Z,
+
+    WKEY_1,
+    WKEY_2,
+    WKEY_3,
+    WKEY_4,
+    WKEY_5,
+    WKEY_6,
+    WKEY_7,
+    WKEY_8,
+    WKEY_9,
+    WKEY_0,
+
+    WKEY_EXCLAMATION,
+    WKEY_AT,
+    WKEY_HASH,
+    WKEY_DOLLAR,
+    WKEY_PERCENT,
+    WKEY_CARET,
+    WKEY_AMPERSAND,
+    WKEY_ASTERISK,
+    WKEY_LPAREN,
+    WKEY_RPAREN,
+    WKEY_MINUS,
+    WKEY_PLUS,
+
+    WKEY_LBRACE,
+    WKEY_RBRACE,
+    WKEY_COLON,
+    WKEY_SEMICOLON,
+    WKEY_COMMA,
+    WKEY_DOT,
+    WKEY_QUERY,
+
     WKEY_SPACE,
+    WKEY_BACKSPACE,
 } Key;
 
 typedef enum : uint32_t {

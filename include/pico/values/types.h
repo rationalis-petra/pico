@@ -42,38 +42,38 @@ typedef enum {
 } PrimType;
 
 typedef enum {
-  TPrim,
-  TArray,
-  TProc,
-  TStruct,
-  TEnum,
-  TReset,
-  TResumeMark,
-  TDynamic,
-
-  // 'Special'
-  TNamed,
-  TDistinct,
-  TTrait,
-  TTraitInstance, // note: not a "real" type in the theory
-
-  TCType, // native (C) type
-
-  // Quantified Types
-  TVar,
-  TAll,
-  TSealed,
-
-  // Used by Sytem-Fω (type constructors)
-  TCApp,
-  TFam,
-
-  // Kinds (higher kinds not supported)
-  TKind,
-  TConstraint,
-
-  // Used only during unification
-  TUVar,
+    TPrim,
+    TArray,
+    TProc,
+    TStruct,
+    TEnum,
+    TReset,
+    TResumeMark,
+    TDynamic,
+  
+    // 'Special'
+    TNamed,
+    TDistinct,
+    TTrait,
+    TTraitInstance, // note: not a "real" type in the theory
+  
+    TCType, // native (C) type
+  
+    // Quantified Types
+    TVar,
+    TAll,
+    TSealed,
+  
+    // Used by Sytem-Fω (type constructors)
+    TCApp,
+    TFam,
+  
+    // Kinds (higher kinds not supported)
+    TKind,
+    TConstraint,
+  
+    // Used only during unification
+    TUVar,
 } PiType_t;
 
 typedef enum { Any, FixedDimension, Fixed } ArraySort;

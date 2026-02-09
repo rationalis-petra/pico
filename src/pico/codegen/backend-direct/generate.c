@@ -1395,8 +1395,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 SynClause clause = *(SynClause*)syn.match.clauses.data[i];
 
                 // Note: the match value is on the variable stack, so we use VSTACK_HEAD.
-                build_binary_op(Cmp, rref8(VSTACK_HEAD, 0, sz_64), imm32(clause.tag), ass, a, point);
-                AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
+                AsmResult out;
+                if (!clause.is_wildcard)  {
+                    build_binary_op(Cmp, rref8(VSTACK_HEAD, 0, sz_64), imm32(clause.tag), ass, a, point);
+                    out = build_unary_op(JE, imm32(0), ass, a, point);
+                } else {
+                    out = build_unary_op(JMP, imm32(0), ass, a, point);
+                }
                 push_size(get_pos(ass), &back_positions);
                 push_size(out.backlink, &back_refs);
             }
@@ -1550,8 +1555,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // 2. A jump to the relevant location
             for (size_t i = 0; i < syn.match.clauses.len; i++) {
                 SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-                build_binary_op(Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), ass, a, point);
-                AsmResult out = build_unary_op(JE, imm32(0), ass, a, point);
+                AsmResult out;
+                if (!clause.is_wildcard) {
+                    build_binary_op(Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), ass, a, point);
+                    out = build_unary_op(JE, imm32(0), ass, a, point);
+                } else {
+                    out = build_unary_op(JMP, imm32(0), ass, a, point);
+                }
                 push_size(get_pos(ass), &back_positions);
                 push_size(out.backlink, &back_refs);
             }
@@ -1579,11 +1589,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
                 // Bind Clause Vars 
                 BindingArray arg_sizes = mk_binding_array(variant_types.len, a);
-                for (size_t i = 0; i < variant_types.len; i++) {
+                for (size_t j = 0; j < variant_types.len; j++) {
                     Binding binder = (Binding) {
-                        .sym = clause.vars.data[i],
+                        .sym = clause.vars.data[j],
                         .is_variable = false,
-                        .size = pi_size_of(*(PiType*)variant_types.data[i]),
+                        .size = pi_size_of(*(PiType*)variant_types.data[j]),
                     };
                     push_binding(binder, &arg_sizes);
                 }

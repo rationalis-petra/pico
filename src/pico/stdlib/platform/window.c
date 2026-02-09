@@ -116,10 +116,22 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     // Message Type
 
-    typep = mk_enum_type(pia, 27, "A", 0, "B", 0, "C", 0, "D", 0, "E", 0, "F",
-                         0, "G", 0, "H", 0, "I", 0, "J", 0, "K", 0, "L", 0, "M",
-                         0, "N", 0, "O", 0, "P", 0, "Q", 0, "R", 0, "S", 0, "T",
-                         0, "U", 0, "V", 0, "W", 0, "X", 0, "Y", 0, "Z", 0, "space", 0);
+    typep = mk_enum_type(
+        pia, 57, "A", 0, "B", 0, "C", 0, "D", 0, "E", 0, "F", 0, "G", 0, "H", 0,
+        "I", 0, "J", 0, "K", 0, "L", 0, "M", 0, "N", 0, "O", 0, "P", 0, "Q", 0,
+        "R", 0, "S", 0, "T", 0, "U", 0, "V", 0, "W", 0, "X", 0, "Y", 0, "Z", 0,
+
+        "one", 0, "two", 0, "three", 0, "four", 0, "five", 0, "six", 0, "seven",
+        0, "eight", 0, "nine", 0, "zero", 0,
+
+        "exclamation", 0, "at", 0, "hash",
+        0, "dollar", 0, "percent", 0, "caret", 0, "ampersand", 0, "asterisk", 0,
+        "lparen", 0, "rparen", 0, "minus", 0, "plus", 0,
+
+        "rbrace", 0, "lbrace", 0, "colon", 0, "semicolon", 0, "comma", 0, "dot", 
+        0, "query", 0,
+
+        "space", 0, "backspace", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Key"));
     add_def(module, sym, type, &typep, null_segments, NULL);

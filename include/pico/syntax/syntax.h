@@ -198,6 +198,7 @@ typedef struct {
     size_t tag;
     SymbolArray vars;
     Syntax* body;
+    bool is_wildcard;
 } SynClause;
 
 typedef struct {

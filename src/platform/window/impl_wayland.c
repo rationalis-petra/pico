@@ -229,8 +229,52 @@ void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed
     case KEY_Z:
         outkey = WKEY_Z;
         break;
+    case KEY_1:
+        outkey = WKEY_1;
+        break;
+    case KEY_2:
+        outkey = WKEY_2;
+        break;
+    case KEY_3:
+        outkey = WKEY_3;
+        break;
+    case KEY_4:
+        outkey = WKEY_4;
+        break;
+    case KEY_5:
+        outkey = WKEY_5;
+        break;
+    case KEY_6:
+        outkey = WKEY_6;
+        break;
+    case KEY_7:
+        outkey = WKEY_7;
+        break;
+    case KEY_8:
+        outkey = WKEY_8;
+        break;
+    case KEY_9:
+        outkey = WKEY_9;
+        break;
     case KEY_SPACE:
         outkey = WKEY_SPACE;
+        break;
+
+    case KEY_MINUS:
+        outkey = WKEY_MINUS;
+        break;
+    case KEY_KPPLUS:
+        outkey = WKEY_PLUS;
+        break;
+
+    case KEY_SEMICOLON:
+        outkey = WKEY_SEMICOLON;
+        break;
+    case KEY_COMMA:
+        outkey = WKEY_COMMA;
+        break;
+    case KEY_BACKSPACE:
+        outkey = WKEY_BACKSPACE;
         break;
     }
 
