@@ -50,10 +50,12 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
             write_fstring(mv_string("\n\n"), fos);
         }
     } else {
-        display_code_region(code_buffer, multi.error.range, 5, fos, a);
-        write_fstring(mv_string("\n"), fos);
-        start_coloured_text(message_colour, fos);
+        if (code_buffer.bytes) {
+            display_code_region(code_buffer, multi.error.range, 5, fos, a);
+            write_fstring(mv_string("\n"), fos);
+        }
 
+        start_coloured_text(message_colour, fos);
         Document* iderr = mv_nest_doc(2, multi.error.message, a);
         write_doc_formatted(iderr, 120, fos);
         mem_free(iderr, a); // TODO: fix me! (fix mk doc & replace the mv with mk)

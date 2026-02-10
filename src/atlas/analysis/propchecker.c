@@ -265,9 +265,21 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
 
 }
 
+bool is_mandatory(PropType type) {
+    switch (type) {
+    case PSymbol:
+    case PString:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void check_props(PropSet* props, bool checks[], Range range, PiErrorPoint* point, Allocator* a) {
     for (size_t i = 0; i < props->props.len; i++) {
-        if (!checks[i]) {
+        Prop prop = props->props.data[i];
+
+        if (!checks[i] && is_mandatory(prop.type)) {
             PtrArray nodes = mk_ptr_array(4, a);
             push_ptr(mv_str_doc(mv_string("Missing stanza clause: "), a), &nodes);
             push_ptr(mk_str_doc(props->props.data[i].name, a), &nodes);

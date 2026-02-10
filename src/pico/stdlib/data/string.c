@@ -40,11 +40,10 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     const char* str_type = "(def String Named String Struct [.memsize U64] [.bytes Address])";
     compile_toplevel(str_type, module, target, &point, &pi_point, region);
 
-    /* const char* str_type = "(def String Named String Struct [.memsize U64] [.bytes Address])"; */
-    /* compile_toplevel(str_type, module, target, &point, &pi_point, a); */
-    // 
-    /* const char* null_fn = "(def String Named String Struct [.memsize U64] [.bytes Address])"; */
-    /* compile_toplevel(null_fn, module, target, &point, &pi_point, a); */
+    const char *str_nth_byte =
+        "(def nth-byte proc [(idx U64) (string String)] \n"
+        "  (load {U8} (num-to-address (u64.+ idx (address-to-num string.bytes)))))";
+    compile_toplevel(str_nth_byte, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("string")), module);
     if (r.type == Err) panic(r.error_message);

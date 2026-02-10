@@ -1425,7 +1425,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 set_i32_backlink(ass, branch_ref, (int32_t)(body_pos - branch_pos));
 
                 SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-                PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
+                PtrArray variant_types = {};
+
+                // Wilcards don't bind, and their 'tag' should be ignored
+                if (!clause.is_wildcard) {
+                    variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val;
+                }
 
                 // Bind Clause Vars 
                 // ------------------
@@ -1585,7 +1590,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 set_i32_backlink(ass, branch_ref, (int32_t)(body_pos - branch_pos));
 
                 SynClause clause = *(SynClause*)syn.match.clauses.data[i];
-                PtrArray variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val; 
+                PtrArray variant_types = {};
+
+                // Wilcards don't bind, and their 'tag' should be ignored
+                if (!clause.is_wildcard) {
+                    variant_types = *(PtrArray*)enum_type->enumeration.variants.data[clause.tag].val;
+                }
 
                 // Bind Clause Vars 
                 BindingArray arg_sizes = mk_binding_array(variant_types.len, a);

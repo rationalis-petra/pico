@@ -89,7 +89,7 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     if (size== 0 || dest_stack_offset == src_stack_offset) return; // nothing to do
 
-    if ((dest_stack_offset + size) > 127 || (src_stack_offset + size) > 127)  {
+    if ((dest_stack_offset + size) > INT8_MAX || (src_stack_offset + size) > INT8_MAX)  {
         // TODO: instead of generating a memcpy call when src/dest offset + sise
         // exceeds a certain amount, how about only when size > 128?64?
         // TODO: check to ensure offsets don't exceed 32 bit max
@@ -219,12 +219,12 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
     }
 
     // first, assert that size_t is divisible by 8 (as we generally expect 8-byte alignment to be maintained on the stack at all times.)
-    if (size > 127)  {
+    if (size > INT8_MAX)  {
         throw_error(point, mv_cstr_doc("Error in generate_stack_copy expected copy size to be divisible by 8", a));
     };
 
     // Then, check that using an 8-bit immediate offset is ok
-    if (size > 127)  {
+    if (size > INT8_MAX)  {
         throw_error(point, mv_cstr_doc("Error in generate_stack_copy: copy size must be smaller than 127!", a));
     };
 
@@ -241,34 +241,51 @@ void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a
 
 void generate_monomorphic_copy(Regname dest, Regname src, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
     // First, assert that size_t is divisible by 8 ( we use rax for copies )
-    if (size > 127)  {
-        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: copy size must be smaller than 127!", a));
-    };
+    if (size > INT8_MAX)  {
+#if ABI == SYSTEM_V_64
+        // stack_move (dest = rdi, src = rsi, size = rdx)
+        // copy size into RDX
+        build_binary_op(Mov, reg(RDI, sz_64), reg(dest, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RSI, sz_64), reg(src, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), imm32(size), ass, a, point);
 
-    if (src == RAX || dest == RAX)  {
-        throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: cannoy copy from/to RAX", a));
-    };
+#elif ABI == WIN_64
+        // stack_move (dest = rcx, src = rdx, size = r8)
+        build_binary_op(Mov, reg(RCX, sz_64), reg(dest, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), reg(src, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), imm32(size), ass, a, point);
+#else
+#error "Unknown calling convention"
+#endif
 
-    for (size_t i = 0; i < size / 8; i++) {
-        build_binary_op(Mov, reg(RAX, sz_64), rref8(src, i * 8, sz_64), ass, a, point);
-        build_binary_op(Mov, rref8(dest, i * 8, sz_64), reg(RAX, sz_64), ass, a, point);
-    }
+        generate_c_call(memcpy, ass, a, point);
+    } else {
 
-    size_t leftover = size % 8;
-    if (leftover >= 4) {
-        build_binary_op(Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), ass, a, point);
-        build_binary_op(Mov, rref8(dest, (size & ~7), sz_32), reg(RAX, sz_32), ass, a, point);
-        leftover -= 4;
-    }
-    if (leftover >= 2) {
-        build_binary_op(Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), ass, a, point);
-        build_binary_op(Mov, rref8(dest, (size & ~3), sz_16), reg(RAX, sz_16), ass, a, point);
-        leftover -= 2;
-    }
-    if (leftover >= 1) {
-        build_binary_op(Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), ass, a, point);
-        build_binary_op(Mov, rref8(dest, (size & ~1), sz_8), reg(RAX, sz_8), ass, a, point);
-        leftover -= 1;
+        if (src == RAX || dest == RAX)  {
+            throw_error(point, mv_cstr_doc("Error in generate_monomorphic_copy: cannoy copy from/to RAX", a));
+        };
+
+        for (size_t i = 0; i < size / 8; i++) {
+            build_binary_op(Mov, reg(RAX, sz_64), rref8(src, i * 8, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(dest, i * 8, sz_64), reg(RAX, sz_64), ass, a, point);
+        }
+
+        size_t leftover = size % 8;
+        if (leftover >= 4) {
+            build_binary_op(Mov, reg(RAX, sz_32), rref8(src, (size & ~7), sz_32), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~7), sz_32), reg(RAX, sz_32), ass, a, point);
+            leftover -= 4;
+        }
+        if (leftover >= 2) {
+            build_binary_op(Mov, reg(RAX, sz_16), rref8(src, (size & ~3), sz_16), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~3), sz_16), reg(RAX, sz_16), ass, a, point);
+            leftover -= 2;
+        }
+        if (leftover >= 1) {
+            build_binary_op(Mov, reg(RAX, sz_8), rref8(src, (size & ~1), sz_8), ass, a, point);
+            build_binary_op(Mov, rref8(dest, (size & ~1), sz_8), reg(RAX, sz_8), ass, a, point);
+            leftover -= 1;
+        }
     }
 }
 
@@ -278,7 +295,7 @@ void generate_monomorphic_swap(Regname loc1, Regname loc2, size_t size, Assemble
         throw_error(point, mv_cstr_doc("Error in generate_monomorphic_swap expected copy size to be divisible by 8", a));
     };
 
-    if (size > 127)  {
+    if (size > INT8_MAX)  {
         throw_error(point, mv_cstr_doc("Error in generate_monomorphic_swap copy size must be smaller than 127!", a));
     };
 

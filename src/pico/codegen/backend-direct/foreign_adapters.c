@@ -405,11 +405,11 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     build_binary_op(And, reg(RAX, sz_64), imm8(0xf), ass, a, point);
 
     // Do some fancy stuff
-    build_binary_op(Mov, reg(R9, sz_64), imm32(needed_stack_offset), ass, a, point);
-    build_binary_op(Sub, reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
-    build_binary_op(And, reg(R9, sz_64), imm8(0xf), ass, a, point);
-    build_binary_op(Sub, reg(RSP, sz_64), reg(R9, sz_64), ass, a, point);
-    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R11, sz_64), imm32(needed_stack_offset), ass, a, point);
+    build_binary_op(Sub, reg(R11, sz_64), reg(RAX, sz_64), ass, a, point);
+    build_binary_op(And, reg(R11, sz_64), imm8(0xf), ass, a, point);
+    build_binary_op(Sub, reg(RSP, sz_64), reg(R11, sz_64), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R11, sz_64), ass, a, point);
 
     if (pass_return_in_memory) {
         // pass in memory - reserve space on stack:
