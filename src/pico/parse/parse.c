@@ -26,6 +26,7 @@ StreamResult consume_until(uint32_t stop, IStream* is);
 StreamResult consume_whitespace(IStream* is);
 bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
+bool is_comment_start(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
 
 ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
@@ -108,7 +109,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
             else if (is_numchar(point) || point == '-') {
                 out = parse_number(10, is, pia, a);
             }
-            else if (is_whitespace(point)) {
+            else if (is_whitespace(point) || is_comment_start(point)) {
                 // Whitespace always terminates a unit, e.g. 
                 // "foo.bar" is pared as a single unit (. foo bar), while
                 // "foo . bar" requires parse_expr to be called thrice.
@@ -805,6 +806,14 @@ bool is_whitespace(uint32_t codepoint) {
     // We *may* want to change this to report an error instead. 
     // (possibly for all control/non-displayable characters?)
     return (codepoint == 32) | (9 <= codepoint && codepoint <= 13) | (codepoint == 0);
+}
+
+bool is_comment_start(uint32_t codepoint) {
+    // Take note of the (codepoint == 0). This is because we may encounter a
+    // NULL character in a file. If this happens, we treat it as whitespace (for now).
+    // We *may* want to change this to report an error instead. 
+    // (possibly for all control/non-displayable characters?)
+    return codepoint == ';';
 }
 
 bool is_symchar(uint32_t codepoint) {

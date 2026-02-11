@@ -117,7 +117,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     // Message Type
 
     typep = mk_enum_type(
-        pia, 57, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
+        pia, 58, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
         "i", 0, "j", 0, "k", 0, "l", 0, "m", 0, "n", 0, "o", 0, "p", 0, "q", 0,
         "r", 0, "s", 0, "t", 0, "u", 0, "v", 0, "w", 0, "x", 0, "y", 0, "z", 0,
 
@@ -131,7 +131,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
         "rbrace", 0, "lbrace", 0, "colon", 0, "semicolon", 0, "comma", 0, "dot", 
         0, "query", 0,
 
-        "space", 0, "backspace", 0);
+        "space", 0, "enter", 0, "backspace", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Key"));
     add_def(module, sym, type, &typep, null_segments, NULL);

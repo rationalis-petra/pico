@@ -273,6 +273,9 @@ void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed
     case KEY_COMMA:
         outkey = WKEY_COMMA;
         break;
+    case KEY_ENTER:
+        outkey = WKEY_ENTER;
+        break;
     case KEY_BACKSPACE:
         outkey = WKEY_BACKSPACE;
         break;
@@ -287,7 +290,7 @@ void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed
             .type = KeyEvent,
             .key_event.key_id = outkey,
             .key_event.modifier_key_mask = 0,
-            .key_event.key_pressed = stat ? true : false,
+            .key_event.key_pressed = stat,
         };
         push_wm(message, &window->messages);
     }

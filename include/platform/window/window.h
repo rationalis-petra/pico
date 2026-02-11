@@ -77,6 +77,8 @@ typedef enum : uint64_t {
     WKEY_QUERY,
 
     WKEY_SPACE,
+
+    WKEY_ENTER,
     WKEY_BACKSPACE,
 } Key;
 

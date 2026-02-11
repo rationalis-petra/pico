@@ -11,7 +11,6 @@ typedef struct {
     Range range;
     String captured_file;
     String filename;
-    bool is_simple_error;
 } AtlasError;
 
 typedef struct {

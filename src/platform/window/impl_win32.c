@@ -13,6 +13,141 @@ static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
 
 
+bool translate_key_id(Key* key, WPARAM windows_keycode) {
+    switch (windows_keycode) {
+    case VK_BACK:
+        *key = WKEY_BACKSPACE;
+        break;
+    case VK_RETURN:
+        *key = WKEY_ENTER;
+        break;
+    case VK_SPACE:
+        *key = WKEY_SPACE;
+        break;
+
+    case 0x30:
+        *key = WKEY_0;
+        break;
+    case 0x31:
+        *key = WKEY_1;
+        break;
+    case 0x32:
+        *key = WKEY_2;
+        break;
+    case 0x33:
+        *key = WKEY_3;
+        break;
+    case 0x34:
+        *key = WKEY_4;
+        break;
+    case 0x35:
+        *key = WKEY_5;
+        break;
+    case 0x36:
+        *key = WKEY_6;
+        break;
+    case 0x37:
+        *key = WKEY_7;
+        break;
+    case 0x38:
+        *key = WKEY_8;
+        break;
+    case 0x39:
+        *key = WKEY_9;
+        break;
+
+    case A:
+        *key = WKEY_A;
+        break;
+    case B:
+        *key = WKEY_B;
+        break;
+    case C:
+        *key = WKEY_C;
+        break;
+    case D:
+        *key = WKEY_D;
+        break;
+    case E:
+        *key = WKEY_E;
+        break;
+    case F:
+        *key = WKEY_F;
+        break;
+    case G:
+        *key = WKEY_G;
+        break;
+    case H:
+        *key = WKEY_H;
+        break;
+    case I:
+        *key = WKEY_I;
+        break;
+    case J:
+        *key = WKEY_J;
+        break;
+    case K:
+        *key = WKEY_K;
+        break;
+    case L:
+        *key = WKEY_L;
+        break;
+    case M:
+        *key = WKEY_M;
+        break;
+    case N:
+        *key = WKEY_N;
+        break;
+    case O:
+        *key = WKEY_O;
+        break;
+    case P:
+        *key = WKEY_P;
+        break;
+    case Q:
+        *key = WKEY_Q;
+        break;
+    case R:
+        *key = WKEY_R;
+        break;
+    case S:
+        *key = WKEY_S;
+        break;
+    case T:
+        *key = WKEY_T;
+        break;
+    case U:
+        *key = WKEY_U;
+        break;
+    case V:
+        *key = WKEY_V;
+        break;
+    case W:
+        *key = WKEY_W;
+        break;
+    case X:
+        *key = WKEY_X;
+        break;
+    case Y:
+        *key = WKEY_Y;
+        break;
+    case Z:
+        *key = WKEY_Z;
+        break;
+
+    case VK_OEM_MINUS:
+        outkey = WKEY_MINUS;
+        break;
+    case VK_OEM_PLUS:
+        outkey = WKEY_PLUS;
+        break;
+
+    default:
+        return false;
+    }
+    return true;
+}
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PlWindow* window;
     if (uMsg == WM_NCCREATE) {
@@ -61,6 +196,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         window->height = height;
         push_wm(message, &window->messages);
         break;
+    }
+    case WM_KEYDOWN:
+    case WM_KEYUP: {
+        Key key;
+        if (translate_key_id(&key, wParam)) {
+            WinMessage message = (WinMessage) {
+                .type = KeyEvent,
+                .key_event.key_id = key,
+                .key_event.modifier_key_mask = 0,
+                .key_event.key_pressed = uMsg == WM_KEYDOWN,
+            };
+            push_wm(message, &window->messages);
+        }
     }
     case WM_CLOSE:
         window->should_close = true;
