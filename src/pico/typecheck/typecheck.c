@@ -8,6 +8,7 @@
 #include "pico/binding/type_env.h"
 #include "pico/typecheck/unify.h"
 #include "pico/typecheck/typecheck.h"
+#include "pico/typecheck/type_errors.h"
 #include "pico/values/ctypes.h"
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
@@ -44,7 +45,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         break;
     }
     case TLDecl: {
-        PtrArray declarations = mk_ptr_array(2, ctx.a);
+        PtrArray declarations = mk_ptr_array(top->decl.properties.len, ctx.a);
         for (size_t i = 0; i < top->decl.properties.len; i++) {
             SymPtrCell cell = top->decl.properties.data[i];
             if (symbol_eq(cell.key, string_to_symbol(mv_string("type")))) {
@@ -56,11 +57,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
                 };
                 push_ptr(decl, &declarations);
             } else {
-                PicoError err = (PicoError) {
-                    .range = ((Syntax*)cell.val)->range,
-                    .message = mv_cstr_doc("unrecognized declaration", ctx.a),
-                };
-                throw_pi_error(ctx.point, err);
+                type_error_invalid_declaration(cell.key, cell.val, ctx);
             }
         }
         top->decl.decls = declarations;
@@ -70,15 +67,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
             if (!import_clause_valid(env, clause)) {
-                PtrArray nodes = mk_ptr_array(2, ctx.a);
-                push_ptr(mv_cstr_doc("Invalid import path: ", ctx.a), &nodes);
-                push_ptr(pretty_import_clause(clause, ctx.a), &nodes);
-
-                PicoError err = (PicoError) {
-                    .range = top->import.range,
-                    .message = mv_sep_doc(nodes, ctx.a),
-                };
-                throw_pi_error(ctx.point, err);
+                type_error_invalid_import(clause, top->import.range, ctx);
             }
         }
         break;
@@ -224,21 +213,18 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         TypeEntry te = type_env_lookup(untyped->variable, env);
         if (te.type != TENotFound) {
             if (te.is_module) {
-                err.message = mv_cstr_doc("Unexpected module.", a);
-                throw_pi_error(point, err);
+                // An expression cannot evaluate to a module. Paths involving 
+                // modules, e.g. num.u64 are resolved during abstraction.
+                type_error_unexpected_module(untyped, te.module, ctx);
             }
 
-            // Note: if type is unification var...
-            // then the kind is NULL? 
             untyped->ptype = te.ptype;
             if (te.value) {
                 untyped->type = SCheckedType;
                 untyped->type_val = te.value;
             }
         } else {
-            String sym = symbol_to_string(untyped->variable, a);
-            err.message = mv_str_doc(string_cat(mv_string("Couldn't find type of variable: "), sym, a), a);
-            throw_pi_error(point, err);
+            type_error_unknown_var(untyped, ctx);
         }
         break;
     }
@@ -265,8 +251,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             if (arg.val) {
                 aty = eval_type(arg.val, env, ctx);
                 if (aty->sort != TTraitInstance) {
-                    err.message = mv_cstr_doc("Instance procedure argument does not have instance type.", a);
-                    throw_pi_error(point, err);
+                    type_error_expecting_instance_arg(i, untyped, ctx);
                 }
             } else  {
                 aty = mk_uvar(ctx.pia);
@@ -349,25 +334,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
 
         } else if (fn_type.sort == TProc) {
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                PtrArray err_nodes = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("Incorrect number of function arguments - expected", a), &err_nodes);
-                push_ptr(pretty_u64(fn_type.proc.args.len, a), &err_nodes);
-                push_ptr(mv_cstr_doc("but got ", a), &err_nodes);
-
-                PtrArray cat_nodes = mk_ptr_array(2, a);
-                push_ptr(pretty_u64(untyped->application.args.len, a), &cat_nodes);
-                push_ptr(mv_cstr_doc(".", a), &cat_nodes);
-                push_ptr(mv_cat_doc(cat_nodes, a), &err_nodes);
-
-                PtrArray supplement_nodes = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("The function being applied has type:", a), &supplement_nodes);
-                push_ptr(mv_nest_doc(2, pretty_type(&fn_type, a), a), &supplement_nodes);
-
-                PtrArray nodes = mk_ptr_array(2, a);
-                push_ptr(mv_hsep_doc(err_nodes, a), &nodes);
-                push_ptr(mv_hsep_doc(supplement_nodes, a), &nodes);
-                err.message = mv_vsep_doc(nodes, a);
-                throw_pi_error(point, err);
+                type_error_incorrect_num_args(&fn_type, untyped, true, true,ctx);
             }
 
             for (size_t i = 0; i < fn_type.proc.args.len; i++) {
@@ -405,14 +372,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             type_infer_i(untyped, env, ctx);
         } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                push_ptr(mv_cstr_doc("Incorrect number of arguments to a type family - expeted", a), &nodes);
-                push_ptr(pretty_u64(fn_type.kind.nargs, a), &nodes);
-                push_ptr(mv_cstr_doc("but got", a), &nodes);
-                push_ptr(pretty_u64(untyped->application.args.len, a), &nodes);
-
-                err.message = mv_sep_doc(nodes, a);
-                throw_pi_error(point, err);
+                type_error_incorrect_num_args(&fn_type, untyped, false, true, ctx);
             }
 
             PiType* kind = mem_alloc(sizeof(PiType), a);
@@ -424,11 +384,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             *kind = (PiType) {.sort = fn_type.sort, .kind.nargs = 0};
             untyped->ptype = kind;
         } else {
-            PtrArray arr = mk_ptr_array(2, a);
-            push_ptr(mv_str_doc(mv_string("Expected LHS of application to be a function or kind. Was actually:"), a), &arr);
-            push_ptr(pretty_type(&fn_type, a), &arr);
-            err.message = mv_sep_doc(arr, a);
-            throw_pi_error(point, err);
+            type_error_invalid_application_target(&fn_type, untyped, ctx);
         }
         
         break;
@@ -436,81 +392,53 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     case SAllApplication: {
         type_infer_i(untyped->all_application.function, env, ctx);
 
-        PiType all_type = *untyped->all_application.function->ptype;
-        if (all_type.sort == TUVar) {
-            err.message = mv_cstr_doc("Expected LHS of all application must be known (not currently inferrable)", a);
-            throw_pi_error(point, err);
+        PiType* all_type = unwrap_type(untyped->all_application.function->ptype, type_env_module(env), ctx.pia, a);
+        if (all_type->sort == TUVar) {
+            type_error_invalid_application_target(all_type, untyped, ctx);
         }
-        else if (all_type.sort != TAll) {
-            err.message = mv_cstr_doc("Expected LHS of all application to be an all", a);
-            throw_pi_error(point, err);
+        else if (all_type->sort != TAll) {
+            type_error_invalid_application_target(all_type, untyped, ctx);
         }
         
-        if (all_type.binder.vars.len != untyped->all_application.types.len) {
-            PtrArray nodes = mk_ptr_array(4, a);
-            push_ptr(mk_str_doc(mv_string("Incorrect number of type arguments to all function - expected: "), a), &nodes);
-            push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
-            push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
-            push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
-            err.message = mv_cat_doc(nodes, a);
-            throw_pi_error(point, err);
+        if (all_type->binder.vars.len != untyped->all_application.types.len) {
+            type_error_incorrect_num_args(all_type, untyped, true, false, ctx);
         }
 
-        if (all_type.binder.body->sort != TProc) {
+        if (all_type->binder.body->sort != TProc) {
             // Check that all type args are actually types!
-            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
-            for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type->binder.vars.len, a);
+            for (size_t i = 0; i < all_type->binder.vars.len; i++) {
                 Syntax* type = untyped->all_application.types.data[i];
                 eval_type(type, env, ctx);
-                sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+                sym_ptr_bind(all_type->binder.vars.data[i], type->type_val, &type_binds);
             }
 
-            if (all_type.binder.vars.len != untyped->all_application.types.len) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                push_ptr(mk_str_doc(mv_string("Incorrect number of type arguments to all function - expected: "), a), &nodes);
-                push_ptr(pretty_u64(all_type.binder.vars.len, a), &nodes);
-                push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
-                push_ptr(pretty_u64(untyped->all_application.types.len, a), &nodes);
-                err.message = mv_cat_doc(nodes, a);
-                throw_pi_error(point, err);
+            if (all_type->binder.vars.len != untyped->all_application.types.len) {
+                type_error_incorrect_num_args(all_type, untyped, true, true, ctx);
             }
 
-            // Now, check that args + implicits are empty
+            // Now, check that implicits are empty
             if (untyped->all_application.implicits.len != 0) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                PtrArray implicits = untyped->all_application.implicits;
-                err.range.start = ((Syntax*)implicits.data[0])->range.start;
-                err.range.end = ((Syntax*)implicits.data[implicits.len - 1])->range.end;
-                push_ptr(mk_str_doc(mv_string("Incorrect number of implicit arguments to all function - expected: 0, got: "), a), &nodes);
-                push_ptr(pretty_u64(implicits.len, a), &nodes);
-                err.message = mv_cat_doc(nodes, a);
-                throw_pi_error(point, err);
+                type_error_incorrect_num_args_all_noproc(all_type, untyped, true, ctx);
             }
 
             if (untyped->all_application.args.len != 0) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                PtrArray arguments = untyped->all_application.args;
-                err.range.start = ((Syntax*)arguments.data[0])->range.start;
-                err.range.end = ((Syntax*)arguments.data[arguments.len - 1])->range.end;
-                push_ptr(mk_str_doc(mv_string("Incorrect number of arguments to all function - expected: 0, got: "), a), &nodes);
-                push_ptr(pretty_u64(arguments.len, a), &nodes);
-                err.message = mv_cat_doc(nodes, a);
-                throw_pi_error(point, err);
+                type_error_incorrect_num_args_all_noproc(all_type, untyped, false, ctx);
             }
             
-            PiType* ret_type = pi_type_subst(all_type.binder.body, type_binds, ctx.pia, a);
+            PiType* ret_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, a);
             untyped->ptype = ret_type;
         } else {
             // Check that all type args are actually types!
-            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type.binder.vars.len, a);
-            for (size_t i = 0; i < all_type.binder.vars.len; i++) {
+            SymPtrAssoc type_binds = mk_sym_ptr_assoc(all_type->binder.vars.len, a);
+            for (size_t i = 0; i < all_type->binder.vars.len; i++) {
                 Syntax* type = untyped->all_application.types.data[i];
                 eval_type(type, env, ctx);
-                sym_ptr_bind(all_type.binder.vars.data[i], type->type_val, &type_binds);
+                sym_ptr_bind(all_type->binder.vars.data[i], type->type_val, &type_binds);
             }
         
             // Bind the vars in the all type to specific types!
-            PiType* proc_type = pi_type_subst(all_type.binder.body, type_binds, ctx.pia, a);
+            PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, a);
             if (proc_type->proc.args.len != untyped->all_application.args.len) {
                 PtrArray nodes = mk_ptr_array(4, a);
                 push_ptr(mk_str_doc(mv_string("Incorrect number of value arguments to all function - expected: "), a), &nodes);
