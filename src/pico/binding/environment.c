@@ -119,6 +119,10 @@ void refresh_env(Environment* env) {
     sdelete_ptr_array(instances);
 }
 
+Module* env_module(Environment *env) {
+    return env->base;
+}
+
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     *env = (Environment) {

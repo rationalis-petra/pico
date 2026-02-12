@@ -233,7 +233,7 @@ bool is_narrower(PiType* wide, PiType* narrow);
 // Recursively extracts the inner type from distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 
 // (wrapped) named type within the type, then contine descending.
-PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a);
+PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);
 
 // Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);

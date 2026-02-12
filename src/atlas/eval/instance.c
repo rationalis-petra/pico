@@ -12,8 +12,8 @@
 
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
-#include "pico/analysis/abstraction.h"
-#include "pico/analysis/typecheck.h"
+#include "pico/abstraction/abstraction.h"
+#include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/platform/submodules.h"

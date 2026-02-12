@@ -6,8 +6,8 @@
 
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
-#include "pico/analysis/unify.h"
-#include "pico/analysis/typecheck.h"
+#include "pico/typecheck/unify.h"
+#include "pico/typecheck/typecheck.h"
 #include "pico/values/ctypes.h"
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
@@ -97,7 +97,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx);
 void* eval_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx);
-void squash_types(Syntax* untyped, TypeCheckContext ctx);
+void squash_types(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx);
 PiType* get_head(PiType* type, PiType_t expected_sort);
 PiType* reduce_type(PiType* type, Allocator* a);
 void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* point);
@@ -107,12 +107,12 @@ void check_result_out(UnifyResult out, Range range, Allocator* a, PiErrorPoint* 
 // -----------------------------------------------------------------------------
 void type_infer_expr(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     type_infer_i (untyped, env, ctx);
-    squash_types(untyped, ctx);
+    squash_types(untyped, env, ctx);
 }
 
 void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContext ctx) {
     type_check_i (untyped, &type, env, ctx);
-    squash_types(untyped, ctx);
+    squash_types(untyped, env, ctx);
 }
 
 // -----------------------------------------------------------------------------
@@ -149,6 +149,7 @@ void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext 
     UnifyContext uctx = (UnifyContext) {
         .a = ctx.a,
         .pia = ctx.pia,
+        .current_module = type_env_module(env),
         .logger = ctx.logger,
     };
     UnifyResult out = unify(type, untyped->ptype, uctx);
@@ -534,7 +535,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SSeal: {
         untyped->ptype = eval_type(untyped->seal.type, env, ctx);
-        PiType* sealed_type = unwrap_type(untyped->ptype, ctx.pia, a);
+        PiType* sealed_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
         if (sealed_type->sort != TSealed) {
             err.range = untyped->seal.type->range;
@@ -564,7 +565,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SUnseal: {
         type_infer_i(untyped->unseal.sealed, env, ctx);
-        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, ctx.pia, a);
+        PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, type_env_module(env), ctx.pia, a);
         if (sealed_type->sort != TSealed) {
             err.range = untyped->unseal.sealed->range;
             err.message = mv_cstr_doc("When unsealing, the unsealed value must have a 'Sealed' type.", a);
@@ -596,7 +597,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped->variant.enum_type) {
             untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
-            PiType* enum_type = unwrap_type(untyped->ptype, ctx.pia, a);
+            PiType* enum_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
                 err.message = mv_cstr_doc("Variant must be of enum type.", a);
@@ -637,6 +638,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             UnifyContext uctx = {
                 .a = a,
                 .pia = ctx.pia,
+                .current_module = type_env_module(env),
                 .logger = ctx.logger,
             };
             UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, uctx);
@@ -648,7 +650,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck variant
         if (untyped->variant.enum_type) {
             untyped->ptype = eval_type(untyped->variant.enum_type, env, ctx);
-            PiType* enum_type = unwrap_type(untyped->ptype, ctx.pia, a);
+            PiType* enum_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
                 err.message = mv_cstr_doc("Variant must be of enum type.", a);
@@ -697,6 +699,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             UnifyContext uctx = {
                 .a = a,
                 .pia = ctx.pia,
+                .current_module = type_env_module(env),
                 .logger = ctx.logger,
             };
             UnifyResult out = add_variant_constraint(untyped->ptype->uvar, untyped->range, untyped->variant.tagname, types, uctx);
@@ -708,7 +711,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         // Typecheck the input 
         type_infer_i(untyped->match.val, env, ctx);
 
-        PiType* enum_type = unwrap_type(untyped->match.val->ptype, ctx.pia, a); 
+        PiType* enum_type = unwrap_type(untyped->match.val->ptype, type_env_module(env), ctx.pia, a); 
         if (enum_type->sort == TEnum) {
             // Typecheck each variant, ensure they are the same
             PiType* out_ty = mk_uvar(ctx.pia);
@@ -818,6 +821,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     UnifyContext uctx = {
                         .a = a,
                         .pia = ctx.pia,
+                        .current_module = type_env_module(env),
                         .logger = ctx.logger,
                     };
                     SymAddrPiCell cell = new_enum_type->enumeration.variants.data[i];
@@ -851,13 +855,25 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 all_fields_required = false;
             }
 
-            PiType* struct_type = unwrap_type(untyped->ptype, ctx.pia, ctx.a);
+            PiType* struct_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, ctx.a);
 
             if (struct_type->sort != TStruct) {
-                PtrArray nodes = mk_ptr_array(2, a);
-                push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
-                push_ptr(pretty_type(struct_type, a), &nodes);
-                err.message = mv_sep_doc(nodes, a);
+                if (struct_type->sort == TDistinct) {
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_cstr_doc(
+                        "Attempting to create a structure "
+                        "based off of an opaque type. "
+                        "Note that instances of opaque types can only be "
+                        "created in the module that the opaque type is defined."
+                        , a), &nodes);
+                    push_ptr(pretty_type(struct_type, a), &nodes);
+                    err.message = mv_sep_doc(nodes, a);
+                } else {
+                    PtrArray nodes = mk_ptr_array(2, a);
+                    push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
+                    push_ptr(pretty_type(struct_type, a), &nodes);
+                    err.message = mv_sep_doc(nodes, a);
+                }
                 throw_pi_error(point, err);
             }
 
@@ -930,7 +946,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SProjector: {
         type_infer_i(untyped->projector.val, env, ctx);
-        PiType source_type = *unwrap_type(untyped->projector.val->ptype, ctx.pia, a);
+        PiType source_type = *unwrap_type(untyped->projector.val->ptype, type_env_module(env), ctx.pia, a);
 
         if (source_type.sort == TStruct) {
             // search for field
@@ -965,6 +981,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             UnifyContext uctx = {
                 .a = a,
                 .pia = ctx.pia,
+                .current_module = type_env_module(env),
                 .logger = ctx.logger,
             };
             UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, uctx);
@@ -1351,7 +1368,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         eval_type(untyped->offset_of.body, env, ctx);
         PiType* out = call_alloc(sizeof(PiType), ctx.pia);
 
-        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, ctx.pia, ctx.a);
+        PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, type_env_module(env), ctx.pia, ctx.a);
         if (struct_type->sort != TStruct) {
             err.range = untyped->offset_of.body->range;
             err.message = mv_cstr_doc("Unsupported operand: taking offset of non-struct type.",a);
@@ -1923,7 +1940,7 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     }
     case SConstructor:  {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(syn->ptype, pia, a);
+        PiType* enum_type = unwrap_type(syn->ptype, type_env_module(env), pia, a);
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
@@ -1941,7 +1958,7 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     }
     case SVariant: {
         // Resolve the variant tag
-        PiType* enum_type = unwrap_type(syn->ptype, pia, a);
+        PiType* enum_type = unwrap_type(syn->ptype, type_env_module(env), pia, a);
 
         bool found_variant = false;
         for (size_t i = 0; i < enum_type->enumeration.variants.len; i++) {
@@ -1962,7 +1979,7 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     }
     case SMatch: {
         post_unify(syn->match.val, env, pia, a, point);
-        PiType* enum_type = unwrap_type(syn->match.val->ptype, pia, a); 
+        PiType* enum_type = unwrap_type(syn->match.val->ptype, type_env_module(env), pia, a); 
 
         for (size_t i = 0; i < syn->match.clauses.len; i++) {
             SynClause* clause = syn->match.clauses.data[i];
@@ -2199,10 +2216,11 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
 // This function recursively descends into a term and squashes all types.
 // In this case, to squash a type removes all unification vars from 
 // the type. (see squash_type in unify.h)
-void squash_types(Syntax* typed, TypeCheckContext ctx) {
+void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     UnifyContext uctx = {
         .a = ctx.a,
         .pia = ctx.pia,
+        .current_module = type_env_module(env),
         .logger = ctx.logger,
     };
     PicoError err = {.range = typed->range};
@@ -2219,40 +2237,40 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
         break;
     case SLitArray: {
         for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
-            squash_types(typed->array_lit.subterms.data[i], ctx);
+            squash_types(typed->array_lit.subterms.data[i], env, ctx);
         }
         break;
     }
     case SProcedure: {
-        squash_types(typed->procedure.body, ctx);
+        squash_types(typed->procedure.body, env, ctx);
         break;
     }
     case SAll: {
         // TODO (FUTURE BUG): need to squash args when HKTs are allowed 
-        squash_types(typed->all.body, ctx);
+        squash_types(typed->all.body, env, ctx);
         break;
     }
     case SMacro: { 
-        squash_types(typed->transformer, ctx);
+        squash_types(typed->transformer, env, ctx);
         break;
     }
     case SApplication: {
-        squash_types(typed->application.function, ctx);
+        squash_types(typed->application.function, env, ctx);
         
         for (size_t i = 0; i < typed->application.implicits.len; i++) {
-            squash_types(typed->application.implicits.data[i], ctx);
+            squash_types(typed->application.implicits.data[i], env, ctx);
         }
 
         for (size_t i = 0; i < typed->application.args.len; i++) {
-            squash_types(typed->application.args.data[i], ctx);
+            squash_types(typed->application.args.data[i], env, ctx);
         }
         break;
     }
     case SAllApplication: {
-        squash_types(typed->application.function, ctx);
+        squash_types(typed->application.function, env, ctx);
 
         for (size_t i = 0; i < typed->all_application.types.len; i++) {
-            squash_types(typed->all_application.types.data[i], ctx);
+            squash_types(typed->all_application.types.data[i], env, ctx);
             Syntax* checked = typed->all_application.types.data[i];
             if (checked->type_val->sort == TUVar) {
                 PtrArray nodes = mk_ptr_array(4, ctx.a);
@@ -2265,138 +2283,138 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
         }
 
         for (size_t i = 0; i < typed->all_application.implicits.len; i++) {
-            squash_types(typed->all_application.implicits.data[i], ctx);
+            squash_types(typed->all_application.implicits.data[i], env, ctx);
         }
         
         for (size_t i = 0; i < typed->all_application.args.len; i++) {
-            squash_types(typed->all_application.args.data[i], ctx);
+            squash_types(typed->all_application.args.data[i], env, ctx);
         }
         break;
     }
     case SSeal: {
-        squash_types(typed->seal.body, ctx);
+        squash_types(typed->seal.body, env, ctx);
 
         for (size_t i = 0; i < typed->seal.types.len; i++) {
-            squash_types(typed->seal.types.data[i], ctx);
+            squash_types(typed->seal.types.data[i], env, ctx);
         }
 
         for (size_t i = 0; i < typed->seal.implicits.len; i++) {
-            squash_types(typed->seal.implicits.data[i], ctx);
+            squash_types(typed->seal.implicits.data[i], env, ctx);
         }
         break;
     }
     case SUnseal: {
-        squash_types(typed->unseal.sealed, ctx);
+        squash_types(typed->unseal.sealed, env, ctx);
 
         // TODO (BUG!): ensure that there are no free types in typed->unseal.body->ptype
-        squash_types(typed->unseal.body, ctx);
+        squash_types(typed->unseal.body, env, ctx);
         break;
     }
     case SConstructor: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, ctx);
+            squash_types(typed->variant.enum_type, env, ctx);
         }
         break;
     }
     case SVariant: {
         if (typed->variant.enum_type) {
-            squash_types(typed->variant.enum_type, ctx);
+            squash_types(typed->variant.enum_type, env, ctx);
         }
         
         for (size_t i = 0; i < typed->variant.args.len; i++) {
-            squash_types(typed->variant.args.data[i], ctx);
+            squash_types(typed->variant.args.data[i], env, ctx);
         }
         break;
     }
     case SMatch: {
-        squash_types(typed->match.val, ctx);
+        squash_types(typed->match.val, env, ctx);
 
         for (size_t i = 0; i < typed->match.clauses.len; i++) {
             SynClause* clause = (SynClause*)typed->match.clauses.data[i];
-            squash_types(clause->body, ctx);
+            squash_types(clause->body, env, ctx);
         }
         break;
     }
     case SStructure: {
         if (typed->structure.base) {
-            squash_types(typed->structure.base, ctx);
+            squash_types(typed->structure.base, env, ctx);
         }
         for (size_t i = 0; i < typed->structure.fields.len; i++) {
             Syntax* syn = typed->structure.fields.data[i].val;
-            squash_types(syn, ctx);
+            squash_types(syn, env, ctx);
         }
         break;
     }
     case SProjector:
-        squash_types(typed->projector.val, ctx);
+        squash_types(typed->projector.val, env, ctx);
         break;
     case SInstance:
-        squash_types(typed->instance.constraint, ctx);
+        squash_types(typed->instance.constraint, env, ctx);
 
         for (size_t i = 0; i < typed->instance.implicits.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, ctx);
+            squash_types(syn, env, ctx);
         }
 
         for (size_t i = 0; i < typed->instance.fields.len; i++) {
             Syntax* syn = typed->instance.fields.data[i].val;
-            squash_types(syn, ctx);
+            squash_types(syn, env, ctx);
         }
         break;
     case SDynamic:
-        squash_types(typed->dynamic, ctx);
+        squash_types(typed->dynamic, env, ctx);
         break;
     case SDynamicUse:
-        squash_types(typed->use, ctx);
+        squash_types(typed->use, env, ctx);
         break;
     case SDynamicSet:
-        squash_types(typed->dynamic_set.dynamic, ctx);
-        squash_types(typed->dynamic_set.new_val, ctx);
+        squash_types(typed->dynamic_set.dynamic, env, ctx);
+        squash_types(typed->dynamic_set.new_val, env, ctx);
         break;
     case SDynamicLet:
         for (size_t i = 0; i < typed->dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = typed->dyn_let_expr.bindings.data[i];
-            squash_types(dbind->var, ctx);
-            squash_types(dbind->expr, ctx);
+            squash_types(dbind->var, env, ctx);
+            squash_types(dbind->expr, env, ctx);
         }
-        squash_types(typed->dyn_let_expr.body, ctx);
+        squash_types(typed->dyn_let_expr.body, env, ctx);
         break;
     case SLet:
         for (size_t i = 0; i < typed->let_expr.bindings.len; i++) {
-            squash_types(typed->let_expr.bindings.data[i].val, ctx);
+            squash_types(typed->let_expr.bindings.data[i].val, env, ctx);
         }
-        squash_types(typed->let_expr.body, ctx);
+        squash_types(typed->let_expr.body, env, ctx);
         break;
     case SIf: {
-        squash_types(typed->if_expr.condition, ctx);
-        squash_types(typed->if_expr.true_branch, ctx);
-        squash_types(typed->if_expr.false_branch, ctx);
+        squash_types(typed->if_expr.condition, env, ctx);
+        squash_types(typed->if_expr.true_branch, env, ctx);
+        squash_types(typed->if_expr.false_branch, env, ctx);
         break;
     }
     case SCond: {
         for (size_t i = 0; i < typed->cond.clauses.len; i++) {
             CondClause* clause = typed->cond.clauses.data[i];
-            squash_types(clause->condition, ctx);
-            squash_types(clause->branch, ctx);
+            squash_types(clause->condition, env, ctx);
+            squash_types(clause->branch, env, ctx);
         }
-        squash_types(typed->cond.otherwise, ctx);
+        squash_types(typed->cond.otherwise, env, ctx);
         break;
     }
     case SLabels:
-        squash_types(typed->labels.entry, ctx);
+        squash_types(typed->labels.entry, env, ctx);
         for (size_t i = 0; i < typed->labels.terms.len; i++) {
             SynLabelBranch* branch = typed->labels.terms.data[i].val;
-            squash_types(branch->body, ctx);
+            squash_types(branch->body, env, ctx);
         }
         break;
     case SGoTo:
         for (size_t i = 0; i < typed->go_to.args.len; i++) {
-            squash_types(typed->go_to.args.data[i], ctx);
+            squash_types(typed->go_to.args.data[i], env, ctx);
         }
         break;
     case SWithReset:
-        squash_types(typed->with_reset.expr, ctx);
-        squash_types(typed->with_reset.handler, ctx);
+        squash_types(typed->with_reset.expr, env, ctx);
+        squash_types(typed->with_reset.handler, env, ctx);
 
         if (!has_unification_vars_p(*typed->with_reset.in_arg_ty)) {
             squash_type(typed->with_reset.in_arg_ty, uctx);
@@ -2412,60 +2430,60 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
         }
         break;
     case SResetTo:
-        squash_types(typed->reset_to.point, ctx);
-        squash_types(typed->reset_to.arg, ctx);
+        squash_types(typed->reset_to.point, env, ctx);
+        squash_types(typed->reset_to.arg, env, ctx);
         break;
     case SSequence:
         for (size_t i = 0; i < typed->sequence.elements.len; i++) {
             SeqElt* elt = typed->sequence.elements.data[i];
-            squash_types(elt->expr, ctx);
+            squash_types(elt->expr, env, ctx);
         }
         break;
     case SIs:
         squash_type(typed->is.type->type_val, uctx);
-        squash_types(typed->is.val, ctx);
+        squash_types(typed->is.val, env, ctx);
         break;
     case SInTo:
         squash_type(typed->into.type->type_val, uctx);
-        squash_types(typed->into.val, ctx);
+        squash_types(typed->into.val, env, ctx);
         break;
     case SOutOf:
         squash_type(typed->out_of.type->type_val, uctx);
-        squash_types(typed->out_of.val, ctx);
+        squash_types(typed->out_of.val, env, ctx);
         break;
     case SName:
         squash_type(typed->name.type->type_val, uctx);
-        squash_types(typed->name.val, ctx);
+        squash_types(typed->name.val, env, ctx);
         break;
     case SUnName:
-        squash_types(typed->unname, ctx);
+        squash_types(typed->unname, env, ctx);
         break;
     case SWiden:
         squash_type(typed->widen.type->type_val, uctx);
-        squash_types(typed->widen.val, ctx);
+        squash_types(typed->widen.val, env, ctx);
         break;
     case SNarrow:
         squash_type(typed->narrow.type->type_val, uctx);
-        squash_types(typed->narrow.val, ctx);
+        squash_types(typed->narrow.val, env, ctx);
         break;
     case SSizeOf:
     case SAlignOf:
-        squash_types(typed->size, ctx);
+        squash_types(typed->size, env, ctx);
         break;
     case SOffsetOf:
-        squash_types(typed->offset_of.body, ctx);
+        squash_types(typed->offset_of.body, env, ctx);
         break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {
-            squash_types(typed->proc_type.args.data[i], ctx);
+            squash_types(typed->proc_type.args.data[i], env, ctx);
         }
 
-        squash_types(typed->proc_type.return_type, ctx);
+        squash_types(typed->proc_type.return_type, env, ctx);
         break;
     }
     case SStructType: {
         for (size_t i = 0; i < typed->struct_type.fields.len; i++) {
-            squash_types(typed->struct_type.fields.data[i].val, ctx);
+            squash_types(typed->struct_type.fields.data[i].val, env, ctx);
         }
         break;
     }
@@ -2474,44 +2492,44 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
             PtrArray* args = typed->enum_type.variants.data[i].val;
 
             for (size_t j = 0; j < args->len; j++) {
-                squash_types(args->data[j], ctx);
+                squash_types(args->data[j], env, ctx);
             }
         }
         break;
     }
     case SResetType: {
-        squash_types(typed->reset_type.in, ctx);
-        squash_types(typed->reset_type.out, ctx);
+        squash_types(typed->reset_type.in, env, ctx);
+        squash_types(typed->reset_type.out, env, ctx);
         break;
     }
     case SDynamicType: {
-        squash_types(typed->dynamic_type, ctx);
+        squash_types(typed->dynamic_type, env, ctx);
         break;
     }
     case SAllType:
-        squash_types(typed->bind_type.body, ctx);
+        squash_types(typed->bind_type.body, env, ctx);
         break;
     case SSealedType:
-        squash_types(typed->sealed_type.body, ctx);
+        squash_types(typed->sealed_type.body, env, ctx);
         break;
     case STypeFamily:
-        squash_types(typed->bind_type.body, ctx);
+        squash_types(typed->bind_type.body, env, ctx);
         break;
     case SLiftCType:
-        squash_types(typed->c_type, ctx);
+        squash_types(typed->c_type, env, ctx);
         break;
     case SNamedType:
-        squash_types(typed->named_type.body, ctx);
+        squash_types(typed->named_type.body, env, ctx);
         break;
     case SDistinctType:
-        squash_types(typed->distinct_type, ctx);
+        squash_types(typed->distinct_type, env, ctx);
         break;
     case SOpaqueType:
-        squash_types(typed->opaque_type, ctx);
+        squash_types(typed->opaque_type, env, ctx);
         break;
     case STraitType:
         for (size_t i = 0; i < typed->trait.fields.len; i++) {
-            squash_types(typed->trait.fields.data[i].val, ctx);
+            squash_types(typed->trait.fields.data[i].val, env, ctx);
         }
         break;
     case SCheckedType: {
@@ -2522,15 +2540,15 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
         break;
     }
     case SReinterpret:
-        squash_types(typed->reinterpret.type, ctx);
-        squash_types(typed->reinterpret.body, ctx);
+        squash_types(typed->reinterpret.type, env, ctx);
+        squash_types(typed->reinterpret.body, env, ctx);
         break;
     case SConvert:
-        squash_types(typed->convert.type, ctx);
-        squash_types(typed->convert.body, ctx);
+        squash_types(typed->convert.type, env, ctx);
+        squash_types(typed->convert.body, env, ctx);
         break;
     case STypeOf: {
-        squash_types(typed->type_of, ctx);
+        squash_types(typed->type_of, env, ctx);
         break;
     }
     case SDescribe:
@@ -2538,7 +2556,7 @@ void squash_types(Syntax* typed, TypeCheckContext ctx) {
     case SCapture: 
         break;
     case SDevAnnotation: 
-        squash_types(typed->dev.inner, ctx);
+        squash_types(typed->dev.inner, env, ctx);
         break;
     default:
         panic(mv_string("Internal Error: invalid syntactic form provided to squash_types"));
@@ -2579,7 +2597,7 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
         log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
     }
 
-    squash_types(typed, ctx);
+    squash_types(typed, env, ctx);
     post_unify(typed, env, ctx.pia, a, point);
     
     // Catch error here; so can cleanup after self before further unwinding.

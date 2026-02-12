@@ -10,7 +10,7 @@
 #include "pico/data/rename_array.h"
 #include "components/pretty/standard_types.h"
 #include "components/pretty/string_printer.h"
-#include "pico/analysis/unify.h"
+#include "pico/typecheck/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
 #include "pico/values/array.h"
@@ -747,7 +747,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
-            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
+            Document* arg = mv_nest_doc(2, pretty_type_internal(type->structure.fields.data[i].val, ctx, a), a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -877,10 +877,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         // 'Default' path
         PtrArray nodes = mk_ptr_array(6, a);
         if (type->distinct.source_module) {
-            push_ptr(mk_str_doc(mv_string("Opaque #" ), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Opaque" ), a), a), &nodes);
         } else {
-            push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Distinct" ), a), a), &nodes);
         }
+
+        push_ptr(mk_str_doc(mv_string(" #" ), a), &nodes);
         push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
@@ -890,6 +892,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
+        ctx.should_wrap = false;
         push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
         out = mv_cat_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1457,10 +1460,11 @@ bool is_narrower(PiType *wide, PiType *narrow) {
     return false;
 }
 
-PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a) {
+PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a) {
     bool unwrapping = true;
     while (unwrapping) {
-        if (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
+      if (ty->sort == TDistinct &&
+          (ty->distinct.source_module == NULL || ty->distinct.source_module == curr_module)) {
             ty = ty->distinct.type;
         } else if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);

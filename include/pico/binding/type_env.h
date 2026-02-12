@@ -51,6 +51,8 @@ ASSOC_HEADER(Symbol, Local, sym_local, SymLocal)
 TypeEnv* mk_type_env(Environment* env, Allocator* a);
 // No delete, as we expect allocation via an arena allocator
 
+Module* type_env_module(TypeEnv* env);
+
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env);
 InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env);
 

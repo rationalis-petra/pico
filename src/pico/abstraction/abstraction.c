@@ -10,7 +10,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
-#include "pico/analysis/abstraction.h"
+#include "pico/abstraction/abstraction.h"
 
 // Internal types
 typedef enum {

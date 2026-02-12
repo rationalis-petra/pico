@@ -7,7 +7,7 @@
 #include "pico/data/client/meta/list_header.h"
 #include "pico/data/client/meta/list_impl.h"
 #include "pico/data/client/sym_addr_piamap.h"
-#include "pico/analysis/unify.h"
+#include "pico/typecheck/unify.h"
 
 // Handling of named types
 // Unification destructively modifies uvars 
@@ -534,7 +534,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
     } else {
         // TOOD (BUG): is unwrap what we want here? specifically, unwrap
         // substitutes in when recurring?
-        PiType* unwrapped = unwrap_type(type, ctx.pia, a);
+        PiType* unwrapped = unwrap_type(type, ctx.current_module, ctx.pia, a);
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
             case ConInt:
