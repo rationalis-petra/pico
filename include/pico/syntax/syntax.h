@@ -48,6 +48,7 @@ typedef enum {
     SAllApplication,
     SSeal,
     SUnseal,
+    // TODO (Refactor) can probably remove SConstructor?
     SConstructor,
     SVariant,
     SMatch,

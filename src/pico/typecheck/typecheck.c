@@ -2,7 +2,6 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
-#include "components/pretty/standard_types.h"
 
 #include "pico/binding/environment.h"
 #include "pico/binding/type_env.h"
@@ -333,8 +332,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             untyped->ptype = ret;
 
         } else if (fn_type.sort == TProc) {
+            // TODO (BUG): check for implicits!!!
+
             if (fn_type.proc.args.len != untyped->application.args.len) {
-                type_error_incorrect_num_args(&fn_type, untyped, true, true,ctx);
+                type_error_incorrect_num_args(&fn_type, untyped, InvValues, ctx);
             }
 
             for (size_t i = 0; i < fn_type.proc.args.len; i++) {
@@ -372,7 +373,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             type_infer_i(untyped, env, ctx);
         } else if (fn_type.sort == TKind || fn_type.sort == TConstraint) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
-                type_error_incorrect_num_args(&fn_type, untyped, false, true, ctx);
+                type_error_incorrect_num_args(&fn_type, untyped, InvValues, ctx);
             }
 
             PiType* kind = mem_alloc(sizeof(PiType), a);
@@ -401,7 +402,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         }
         
         if (all_type->binder.vars.len != untyped->all_application.types.len) {
-            type_error_incorrect_num_args(all_type, untyped, true, false, ctx);
+            type_error_incorrect_num_args(all_type, untyped, InvTypes, ctx);
         }
 
         if (all_type->binder.body->sort != TProc) {
@@ -414,7 +415,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             if (all_type->binder.vars.len != untyped->all_application.types.len) {
-                type_error_incorrect_num_args(all_type, untyped, true, true, ctx);
+                type_error_incorrect_num_args(all_type, untyped, InvTypes, ctx);
             }
 
             // Now, check that implicits are empty
@@ -440,13 +441,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             // Bind the vars in the all type to specific types!
             PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, a);
             if (proc_type->proc.args.len != untyped->all_application.args.len) {
-                PtrArray nodes = mk_ptr_array(4, a);
-                push_ptr(mk_str_doc(mv_string("Incorrect number of value arguments to all function - expected: "), a), &nodes);
-                push_ptr(pretty_u64(proc_type->proc.args.len, a), &nodes);
-                push_ptr(mk_str_doc(mv_string(", got: "), a), &nodes);
-                push_ptr(pretty_u64(untyped->all_application.args.len, a), &nodes);
-                err.message = mv_cat_doc(nodes, a);
-                throw_pi_error(point, err);
+                type_error_incorrect_num_args(all_type, untyped, InvValues, ctx);
             }
 
             for (size_t i = 0; i < proc_type->proc.args.len; i++) {
@@ -466,14 +461,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         PiType* sealed_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
         if (sealed_type->sort != TSealed) {
-            err.range = untyped->seal.type->range;
-            err.message = mv_cstr_doc("Must use sealed type to seal a value.", a);
-            throw_pi_error(point, err);
+            type_error_invalid_seal_type(sealed_type, untyped, ctx);
         }
 
         if (sealed_type->sealed.vars.len != untyped->seal.types.len) {
-            err.message = mv_cstr_doc("Incorrect number of type arguments provided to a seal.", a);
-            throw_pi_error(point, err);
+            type_error_incorrect_num_seal_args(sealed_type, untyped, ctx);
         }
 
         // Substitute a uvar in in for the sealed type:
@@ -495,14 +487,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         type_infer_i(untyped->unseal.sealed, env, ctx);
         PiType* sealed_type = unwrap_type(untyped->unseal.sealed->ptype, type_env_module(env), ctx.pia, a);
         if (sealed_type->sort != TSealed) {
-            err.range = untyped->unseal.sealed->range;
-            err.message = mv_cstr_doc("When unsealing, the unsealed value must have a 'Sealed' type.", a);
-            throw_pi_error(point, err);
+            type_error_invalid_unseal_type(sealed_type, untyped, ctx);
         }
 
         if (sealed_type->sealed.vars.len != untyped->unseal.types.len) {
-            err.message = mv_cstr_doc("Number of type parameeters in unseal does not match those in the sealed type.", a);
-            throw_pi_error(point, err);
+            type_error_incorrect_num_unseal_binds(sealed_type, untyped, ctx);
         }
 
         SymPtrAssoc type_binds = mk_sym_ptr_assoc(sealed_type->sealed.vars.len, a);
@@ -528,8 +517,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* enum_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
-                err.message = mv_cstr_doc("Variant must be of enum type.", a);
-                throw_pi_error(point, err);
+                type_error_invalid_variant_type(enum_type, untyped, ctx);
             }
 
             bool found_variant = false;
@@ -541,23 +529,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     // Generate variant has no args
                     PtrArray* args = enum_type->enumeration.variants.data[i].val;
                     if (args->len != 0) {
-                        PtrArray arr = mk_ptr_array(4, a);
-                        push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                        push_ptr(pretty_u64(args->len, a), &arr);
-                        push_ptr(mv_cstr_doc("but got", a), &arr);
-                        push_ptr(pretty_u64(0, a), &arr);
-                        err.message = mv_hsep_doc(arr, a);
-                        throw_pi_error(point, err);
+                        type_error_incorrect_num_variant_args(enum_type, untyped, i, ctx);
                     }
                     break;
                 }
             }
 
             if (!found_variant) {
-                String msg_origin = mv_string("Could not find variant tag: ");
-                String data = symbol_to_string(untyped->variant.tagname, a);
-                err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
-                throw_pi_error(point, err);
+                type_error_missing_variant_tag(enum_type, untyped, ctx);
             }
         } else {
             untyped->ptype = mk_uvar(ctx.pia);
@@ -581,8 +560,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             PiType* enum_type = unwrap_type(untyped->ptype, type_env_module(env), ctx.pia, a);
 
             if (enum_type->sort != TEnum) {
-                err.message = mv_cstr_doc("Variant must be of enum type.", a);
-                throw_pi_error(point, err);
+                type_error_invalid_variant_type(enum_type, untyped, ctx);
             }
 
             bool found_variant = false;
@@ -594,13 +572,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     // Generate variant has no args
                     PtrArray* args = enum_type->enumeration.variants.data[i].val;
                     if (args->len != untyped->variant.args.len) {
-                        PtrArray arr = mk_ptr_array(4, a);
-                        push_ptr(mv_cstr_doc("Incorrect number of args to variant constructor - expected", a), &arr);
-                        push_ptr(pretty_u64(args->len, a), &arr);
-                        push_ptr(mv_cstr_doc("but got", a), &arr);
-                        push_ptr(pretty_u64(untyped->variant.args.len, a), &arr);
-                        err.message = mv_hsep_doc(arr, a);
-                        throw_pi_error(point, err);
+                        type_error_incorrect_num_variant_args(enum_type, untyped, i, ctx);
                     }
 
                     for (size_t i = 0; i < args->len; i++) {
@@ -611,10 +583,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             if (!found_variant) {
-                String msg_origin = mv_string("Could not find variant tag: ");
-                String data = symbol_to_string(untyped->variant.tagname, a);
-                err.message = mv_str_doc(string_cat(msg_origin, data, a), a);
-                throw_pi_error(point, err);
+                type_error_missing_variant_tag(enum_type, untyped, ctx);
             }
         } else {
             untyped->ptype = mk_uvar(ctx.pia);
@@ -851,7 +820,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                     type_check_i(*field_syn, field_ty, env, ctx);
                 } else if (all_fields_required) {
                     panic(mv_string("An earlier typechecking step failed to ensure all fields were present in a structure"));
-                    throw_pi_error(point, err);
                 }
             }
         } else {
@@ -915,11 +883,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             UnifyResult out = add_field_constraint(source_type.uvar, untyped->range, untyped->projector.field, untyped->ptype, uctx);
             check_result_out(out, untyped->range, a, point);
         } else {
-            PtrArray nodes = mk_ptr_array(2, a);
-            push_ptr(mv_cstr_doc("Projection only works on structs and traits. Instead got:", a), &nodes);
-            push_ptr(pretty_type(untyped->projector.val->ptype, a),  &nodes);
-            err.message = mk_sep_doc(nodes, a);
-            throw_pi_error(point, err);
+            type_error_proj_invalid_type(&source_type, untyped, ctx);
         }
         break;
     }
