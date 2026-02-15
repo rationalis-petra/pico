@@ -1591,7 +1591,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         type_app_subst(body->sealed.body, subst, shadowed, pia, a);
 
-        shadowed -= body->sealed.vars.len;
+        shadowed->len -= body->sealed.vars.len;
         break;
     }
 
@@ -1600,8 +1600,11 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         panic(mv_string("Not implemetned type-app for App"));
         break;
     case TFam:
-        // Note: when implementing, consider shadowing
-        panic(mv_string("Not implemetned type-app for Fam"));
+        for (size_t i = 0; i < body->binder.vars.len; i++) {
+            push_symbol(body->binder.vars.data[i], shadowed);
+        }
+        type_app_subst(body->binder.body, subst, shadowed, pia, a);
+        shadowed->len -= body->binder.vars.len;
         break;
 
     case TUVar:

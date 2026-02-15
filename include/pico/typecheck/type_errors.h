@@ -2,6 +2,7 @@
 #define __PICO_TYPECHECK_TYPE_ERRORS_H
 
 #include "pico/typecheck/typecheck.h"
+#include "pico/typecheck/unify.h"
 
 // Variable
 _Noreturn void type_error_unexpected_module(Syntax* syn, Module* module, TypeCheckContext ctx);
@@ -15,6 +16,8 @@ _Noreturn void type_error_invalid_import(ImportClause clause, Range range, TypeC
 
 // Procedure
 _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, Syntax* proc, TypeCheckContext ctx);
+_Noreturn void type_error_proc_incorrect_num_implicits(Syntax* proc, PiType* type, TypeCheckContext ctx);
+_Noreturn void type_error_proc_incorrect_num_args(Syntax* proc, PiType* type, TypeCheckContext ctx);
 
 // Application and All Application
 typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
@@ -52,4 +55,13 @@ _Noreturn void type_error_struct_extra_field(PiType* type, Syntax* strct, TypeCh
 // Projector
 _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeCheckContext ctx);
 
+// ---------------------------------------------------------------------- 
+//
+//                              Unifictaion  
+//
+// ----------------------------------------------------------------------
+
+UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs, UnifyContext ctx);
+
 #endif
+

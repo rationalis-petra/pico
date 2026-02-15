@@ -4,7 +4,9 @@
 #include <string.h> // for memset, TODO: remove?
 
 #include "platform/window/window.h"
+#include "platform/signals.h"
 #include "platform/window/internal.h"
+#include "platform/window/xkb_translate.h"
 #include "platform/window/xdg-shell-protocol.h"
 
 #include <unistd.h>
@@ -14,20 +16,37 @@
 #include <linux/input.h>
 
 // for more info, it may be good to read
-// /usr/include/wayland-client-protocol.h
-// /usr/include/wayland-client-core.h
+//   • /usr/include/wayland-client-protocol.h
+//   • /usr/include/wayland-client-core.h
+//   • https://wayland-book.com/seat/keyboard.html
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
+
 
 // GLOBAL DATA FOR OUR FUNCTIONS (CALLBACKS)
-
+// ---------------------------------------- 
 // The allocator for the window system
 static Allocator* wsa = NULL;
 
 // The array of currently created/extant windows
 static PtrArray windows = {};
 
+static bool raw_input = false;
+
+// X Keyboard Library
+// ----------------------------------------
+// X keyboard library global context
+//   useful reference here:
+//     • https://github.com/xkbcommon/libxkbcommon/blob/master/doc/quick-guide.md
+//     • https://xkbcommon.org/doc/current/group__keysyms.html
+static struct xkb_context* xkb_context; 
+static struct xkb_keymap *xkb_keymap;
+static struct xkb_state *xkb_state;
+
 
 // GLOBAL WAYLAND DATA
+// ---------------------------------------- 
 // The wayland display represents the "connection" between this application
 // and the wayland display
 static struct wl_display* wl_display;
@@ -47,7 +66,12 @@ static struct xdg_wm_base* xdg_shell; // ??
 // device is hot plugged.
 struct wl_seat* seat;
 
+// TODO (BUG)
+// There technically may be more than one keyboard plugged in. We should
+// gracefully handle this scenario.
 static struct wl_keyboard* kb;
+
+// ---------------------------------------- 
 
 int32_t alc_shm(uint64_t sz) {
     // TODO: make a unique string/name - this can be done by, e.g. using printf
@@ -135,8 +159,24 @@ void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
 }
 
 
-void kb_map(void* data, struct wl_keyboard* kb, uint32_t frmt, int32_t fd, uint32_t sz) {
-	
+void kb_map(void* data, struct wl_keyboard* kb, uint32_t format, int32_t fd, uint32_t size) {
+    // set xkb keymap...
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+        panic(mv_string("Wayland keyboard keymap format!"));
+
+    char *map_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map_shm == MAP_FAILED)
+        panic(mv_string("Window: mapping of fd failed in kb_map (wayland callback) failed."));
+
+    xkb_keymap = xkb_keymap_new_from_string(xkb_context, map_shm,
+                                        XKB_KEYMAP_FORMAT_TEXT_V1,
+                                        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    munmap(map_shm, size);
+    close(fd);
+
+    xkb_state = xkb_state_new(xkb_keymap);
+    if (!xkb_state)
+        panic(mv_string("Failed to create xkb state"));
 }
 
 void kb_enter(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surface* srfc, struct wl_array* keys) {
@@ -147,156 +187,196 @@ void kb_leave(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surfac
 	
 }
 
-void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t depressed, uint32_t key, uint32_t stat) {
+void kb_key(void *data, struct wl_keyboard *kb, uint32_t ser,
+            uint32_t depressed, uint32_t key, uint32_t stat) {
     // Key event
-    Key outkey = UINT32_MAX;
-    switch (key) {
-    case KEY_A:
-        outkey = WKEY_A;
-        break;
-    case KEY_B:
-        outkey = WKEY_B;
-        break;
-    case KEY_C:
-        outkey = WKEY_C;
-        break;
-    case KEY_D:
-        outkey = WKEY_D;
-        break;
-    case KEY_E:
-        outkey = WKEY_E;
-        break;
-    case KEY_F:
-        outkey = WKEY_F;
-        break;
-    case KEY_G:
-        outkey = WKEY_G;
-        break;
-    case KEY_H:
-        outkey = WKEY_H;
-        break;
-    case KEY_I:
-        outkey = WKEY_I;
-        break;
-    case KEY_J:
-        outkey = WKEY_J;
-        break;
-    case KEY_K:
-        outkey = WKEY_K;
-        break;
-    case KEY_L:
-        outkey = WKEY_L;
-        break;
-    case KEY_M:
-        outkey = WKEY_M;
-        break;
-    case KEY_N:
-        outkey = WKEY_N;
-        break;
-    case KEY_O:
-        outkey = WKEY_O;
-        break;
-    case KEY_P:
-        outkey = WKEY_P;
-        break;
-    case KEY_Q:
-        outkey = WKEY_Q;
-        break;
-    case KEY_R:
-        outkey = WKEY_R;
-        break;
-    case KEY_S:
-        outkey = WKEY_S;
-        break;
-    case KEY_T:
-        outkey = WKEY_T;
-        break;
-    case KEY_U:
-        outkey = WKEY_U;
-        break;
-    case KEY_V:
-        outkey = WKEY_V;
-        break;
-    case KEY_W:
-        outkey = WKEY_W;
-        break;
-    case KEY_X:
-       outkey = WKEY_X;
-        break;
-    case KEY_Y:
-        outkey = WKEY_Y;
-        break;
-    case KEY_Z:
-        outkey = WKEY_Z;
-        break;
-    case KEY_1:
-        outkey = WKEY_1;
-        break;
-    case KEY_2:
-        outkey = WKEY_2;
-        break;
-    case KEY_3:
-        outkey = WKEY_3;
-        break;
-    case KEY_4:
-        outkey = WKEY_4;
-        break;
-    case KEY_5:
-        outkey = WKEY_5;
-        break;
-    case KEY_6:
-        outkey = WKEY_6;
-        break;
-    case KEY_7:
-        outkey = WKEY_7;
-        break;
-    case KEY_8:
-        outkey = WKEY_8;
-        break;
-    case KEY_9:
-        outkey = WKEY_9;
-        break;
-    case KEY_SPACE:
-        outkey = WKEY_SPACE;
-        break;
+    if (!raw_input) {
+        // To get from EDevice scancode (linux) to an XKB scancode, add 8
+        xkb_keycode_t keycode = key + 8;
 
-    case KEY_MINUS:
-        outkey = WKEY_MINUS;
-        break;
-    case KEY_KPPLUS:
-        outkey = WKEY_PLUS;
-        break;
+        // TODO (Investigate): check for if the 'changed' should be used anywhere?
+        //enum xkb_state_component changed;
+        if (depressed) {
+            xkb_state_update_key(xkb_state, keycode, XKB_KEY_DOWN);
+        } else {
+            xkb_state_update_key(xkb_state, keycode, XKB_KEY_UP);
+        }
 
-    case KEY_SEMICOLON:
-        outkey = WKEY_SEMICOLON;
-        break;
-    case KEY_COMMA:
-        outkey = WKEY_COMMA;
-        break;
-    case KEY_ENTER:
-        outkey = WKEY_ENTER;
-        break;
-    case KEY_BACKSPACE:
-        outkey = WKEY_BACKSPACE;
-        break;
-    }
+        xkb_keysym_t keysym = xkb_state_key_get_one_sym(xkb_state, keycode);
+        Key outkey = translate_xkb_keycode(keysym);
+        if (outkey != UINT32_MAX) {
+            PtrArray* windows = data;
 
-    if (outkey != UINT32_MAX) {
-        PtrArray* windows = data;
+            // TODO: select currently active window!!!
+            PlWindow* window = windows->data[0];
+            WinMessage message = (WinMessage) {
+                .type = KeyEvent,
+                .key_event.key_id = outkey,
+                .key_event.modifier_key_mask = 0,
+                .key_event.key_pressed = stat,
+            };
+            push_wm(message, &window->messages);
+        }
+    } else {
+        RawKey outkey = UINT32_MAX;
+        switch (key) {
+        case KEY_A:
+            outkey = WKEY_A;
+            break;
+        case KEY_B:
+            outkey = WKEY_B;
+            break;
+        case KEY_C:
+            outkey = WKEY_C;
+            break;
+        case KEY_D:
+            outkey = WKEY_D;
+            break;
+        case KEY_E:
+            outkey = WKEY_E;
+            break;
+        case KEY_F:
+            outkey = WKEY_F;
+            break;
+        case KEY_G:
+            outkey = WKEY_G;
+            break;
+        case KEY_H:
+            outkey = WKEY_H;
+            break;
+        case KEY_I:
+            outkey = WKEY_I;
+            break;
+        case KEY_J:
+            outkey = WKEY_J;
+            break;
+        case KEY_K:
+            outkey = WKEY_K;
+            break;
+        case KEY_L:
+            outkey = WKEY_L;
+            break;
+        case KEY_M:
+            outkey = WKEY_M;
+            break;
+        case KEY_N:
+            outkey = WKEY_N;
+            break;
+        case KEY_O:
+            outkey = WKEY_O;
+            break;
+        case KEY_P:
+            outkey = WKEY_P;
+            break;
+        case KEY_Q:
+            outkey = WKEY_Q;
+            break;
+        case KEY_R:
+            outkey = WKEY_R;
+            break;
+        case KEY_S:
+            outkey = WKEY_S;
+            break;
+        case KEY_T:
+            outkey = WKEY_T;
+            break;
+        case KEY_U:
+            outkey = WKEY_U;
+            break;
+        case KEY_V:
+            outkey = WKEY_V;
+            break;
+        case KEY_W:
+            outkey = WKEY_W;
+            break;
+        case KEY_X:
+            outkey = WKEY_X;
+            break;
+        case KEY_Y:
+            outkey = WKEY_Y;
+            break;
+        case KEY_Z:
+            outkey = WKEY_Z;
+            break;
+        case KEY_1:
+            outkey = WKEY_1;
+            break;
+        case KEY_2:
+            outkey = WKEY_2;
+            break;
+        case KEY_3:
+            outkey = WKEY_3;
+            break;
+        case KEY_4:
+            outkey = WKEY_4;
+            break;
+        case KEY_5:
+            outkey = WKEY_5;
+            break;
+        case KEY_6:
+            outkey = WKEY_6;
+            break;
+        case KEY_7:
+            outkey = WKEY_7;
+            break;
+        case KEY_8:
+            outkey = WKEY_8;
+            break;
+        case KEY_9:
+            outkey = WKEY_9;
+            break;
+        case KEY_SPACE:
+            outkey = WKEY_SPACE;
+            break;
 
-        // TODO: select currently active window!!!
-        PlWindow* window = windows->data[0];
-        WinMessage message = (WinMessage) {
-            .type = KeyEvent,
-            .key_event.key_id = outkey,
-            .key_event.modifier_key_mask = 0,
-            .key_event.key_pressed = stat,
-        };
-        push_wm(message, &window->messages);
+        case KEY_MINUS:
+            outkey = WKEY_MINUS;
+            break;
+        case KEY_KPPLUS:
+            outkey = WKEY_PLUS;
+            break;
+
+        case KEY_SEMICOLON:
+            outkey = WKEY_SEMICOLON;
+            break;
+        case KEY_COMMA:
+            outkey = WKEY_COMMA;
+            break;
+        case KEY_ENTER:
+            outkey = WKEY_ENTER;
+            break;
+        case KEY_BACKSPACE:
+            outkey = WKEY_BACKSPACE;
+            break;
+        }
+
+        if (outkey != UINT32_MAX) {
+            PtrArray* windows = data;
+
+            // TODO: select currently active window!!!
+            PlWindow* window = windows->data[0];
+            WinMessage message = (WinMessage) {
+                .type = RawKeyEvent,
+                .key_event.key_id = outkey,
+                .key_event.modifier_key_mask = 0,
+                .key_event.key_pressed = stat,
+            };
+            push_wm(message, &window->messages);
+        }
     }
 }
 
-void kb_mod(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t grp) {
+void kb_mod(void *data, struct wl_keyboard *kb, uint32_t serial,
+            uint32_t depressed, uint32_t latched, uint32_t locked,
+            uint32_t group) {
+
+    xkb_state_update_mask(xkb_state,
+                          depressed,
+                          latched,
+                          locked,
+                          0,
+                          0,
+                          group);
 	
 }
 
@@ -377,7 +457,11 @@ int pl_init_window_system(Allocator* a) {
     wsa = a;
     wl_display = wl_display_connect(NULL);
     if (!wl_display) return 1;
+    xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!xkb_context) return 1;
+
     windows = mk_ptr_array(1, wsa);
+
 
     wl_registry = wl_display_get_registry(wl_display);
     wl_registry_add_listener(wl_registry, &wl_listener, &windows);

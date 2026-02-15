@@ -167,7 +167,6 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                     start_coloured_text(regular_code_colour, fos);
                     write_linenum(++line_number, line_width, fos, a);
                     end_coloured_text(fos);
-                    start_coloured_text(bad_code_colour, fos);
                 }
                 write_fstring(bad_line, fos);
                 delete_string(bad_line, a);

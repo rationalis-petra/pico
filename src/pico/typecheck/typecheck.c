@@ -37,6 +37,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         } else {
             check_against = mk_uvar(ctx.pia);
         }
+        // TODO (BUG): only bind self if procedure/all etc.
         type_var(top->def.bind, check_against, t_env);
         type_check_expr(term, *check_against, t_env, ctx);
         post_unify(term, t_env, ctx.pia, ctx.a, ctx.point);
@@ -133,15 +134,70 @@ void type_check_expr(Syntax* untyped, PiType type, TypeEnv* env, TypeCheckContex
 // -----------------------------------------------------------------------------
 
 void type_check_i(Syntax* untyped, PiType* type, TypeEnv* env, TypeCheckContext ctx) {
-    type_infer_i(untyped, env, ctx);
+    // If possible, traverse into the structure and type. This is not necessary,
+    // but lets us produce better error messages.
     UnifyContext uctx = (UnifyContext) {
         .a = ctx.a,
         .pia = ctx.pia,
         .current_module = type_env_module(env),
         .logger = ctx.logger,
     };
-    UnifyResult out = unify(type, untyped->ptype, uctx);
-    check_result_out(out, untyped->range, ctx.a, ctx.point);
+
+    if (type->sort == TProc && untyped->type == SProcedure) {
+        if (untyped->procedure.implicits.len != type->proc.implicits.len) {
+            type_error_proc_incorrect_num_implicits(untyped, type, ctx);
+        }
+        if (untyped->procedure.args.len != type->proc.args.len) {
+            type_error_proc_incorrect_num_args(untyped, type, ctx);
+        }
+
+        PiType* kind0 = call_alloc(sizeof(PiType), ctx.pia);
+        *kind0 = (PiType){.sort = TKind, .kind.nargs = 0};
+        for (size_t i = 0; i < type->proc.implicits.len; i++) {
+            PiType* ann = type->proc.implicits.data[i];
+            SymPtrACell cell = untyped->procedure.implicits.data[i];
+            if (cell.val) {
+                PiType* aty = eval_type(cell.val, env, ctx);
+                UnifyResult out = unify(ann, aty, uctx);
+                check_result_out(out, untyped->range, ctx.a, ctx.point);
+            } else {
+                Syntax* aty = call_alloc(sizeof(Syntax), ctx.pia);
+                *aty = (Syntax) {
+                    .type = SCheckedType,
+                    .ptype = kind0,
+                    .type_val = ann,
+                };
+                untyped->procedure.implicits.data[i].val = aty;
+            }
+        }
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            PiType* ann = type->proc.args.data[i];
+            SymPtrACell cell = untyped->procedure.args.data[i];
+            if (cell.val) {
+                PiType* aty = eval_type(cell.val, env, ctx);
+                UnifyResult out = unify(ann, aty, uctx);
+                check_result_out(out, untyped->range, ctx.a, ctx.point);
+            } else {
+                Syntax* aty = call_alloc(sizeof(Syntax), ctx.pia);
+                *aty = (Syntax) {
+                    .type = SCheckedType,
+                    .ptype = kind0,
+                    .type_val = ann,
+                };
+                untyped->procedure.args.data[i].val = aty;
+            }
+        }
+
+        type_infer_i(untyped, env, ctx);
+        UnifyResult out = unify(type, untyped->ptype, uctx);
+        check_result_out(out, untyped->range, ctx.a, ctx.point);
+        
+    } else {
+        // If we can't easily traverse into the structure/type, ten 
+        type_infer_i(untyped, env, ctx);
+        UnifyResult out = unify(type, untyped->ptype, uctx);
+        check_result_out(out, untyped->range, ctx.a, ctx.point);
+    }
 }
 
 // "internal" type inference. Destructively mutates types.
@@ -210,6 +266,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     case SVariable: {
         TypeEntry te = type_env_lookup(untyped->variable, env);
+        if (ctx.logger) {
+            String str = string_cat(mv_string("variable: "), view_symbol_string(untyped->variable), a);
+            log_str(str, ctx.logger);
+        }
+
         if (te.type != TENotFound) {
             if (te.is_module) {
                 // An expression cannot evaluate to a module. Paths involving 

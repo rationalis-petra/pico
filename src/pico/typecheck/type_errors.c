@@ -57,6 +57,7 @@ _Noreturn void type_error_invalid_import(ImportClause clause, Range range, TypeC
     throw_pi_error(ctx.point, err);
 }
 
+// Proceudre
 _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, Syntax *proc, TypeCheckContext ctx) {
     SymPtrACell arg = proc->procedure.implicits.data[implicit_idx];
 
@@ -76,6 +77,41 @@ _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, Syntax *pr
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_proc_incorrect_num_implicits(Syntax *proc,
+                                                       PiType *type,
+                                                       TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+
+    push_ptr(mv_cstr_doc("The procedure here was previously inferred or declared to have", a), &nodes);
+    push_ptr(pretty_u64(type->proc.implicits.len, a), &nodes);
+    push_ptr(mv_cstr_doc("implicit arguments, but it actually has", a), &nodes);
+    push_ptr(pretty_u64(proc->procedure.implicits.len, a), &nodes);
+
+    PicoError err = {
+        .range = proc->range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+_Noreturn void type_error_proc_incorrect_num_args(Syntax *proc, PiType *type,
+                                                  TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+
+    push_ptr(mv_cstr_doc("The procedure here was previously inferred or declared to have", a), &nodes);
+    push_ptr(pretty_u64(type->proc.args.len, a), &nodes);
+    push_ptr(mv_cstr_doc("arguments, but it actually has", a), &nodes);
+    push_ptr(pretty_u64(proc->procedure.args.len, a), &nodes);
+
+    PicoError err = {
+        .range = proc->range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+// Application
 _Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidArgType args_type, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
     PtrArray err_nodes = mk_ptr_array(4, a);
@@ -328,7 +364,7 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
         push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj->projector.field), a), a), &nodes);
         push_ptr(mv_cstr_doc(" however, this field cannot be accessed, as the source has type", a), &nodes);
-        push_ptr(pretty_type(proj->projector.val->ptype, a),  &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(proj->projector.val->ptype, a), a),  &nodes);
         push_ptr(mv_cstr_doc("which does not allow field access.", a), &nodes);
     }
 
@@ -337,4 +373,35 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
         .message = mv_hsep_doc(nodes, a),
     };
     throw_pi_error(ctx.point, err);
+}
+
+// ---------------------------------------------------------------------- 
+//
+//                              Unifictaion  
+//
+// ----------------------------------------------------------------------
+
+UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs,
+                                              UnifyContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("Unification failed: RHS and LHS enums must have matching variant-names.",a ), &nodes);
+    {
+        PtrArray l1 = mk_ptr_array(8, a);
+        push_ptr(mv_cstr_doc("    LHS has name: ", a) ,&l1);
+        push_ptr(mv_str_doc(symbol_to_string(lhs, a), a), &l1);
+        push_ptr(mv_cat_doc(l1, a), &nodes);
+    }
+    {
+        PtrArray l2 = mk_ptr_array(8, a);
+        push_ptr(mv_cstr_doc("    RHS has name: ", a) ,&l2);
+        push_ptr(mv_str_doc(symbol_to_string(rhs, a), a), &l2);
+        push_ptr(mv_cat_doc(l2, a), &nodes);
+    }
+
+    return (UnifyResult) {
+        .type = USimpleError,
+        .message = mv_vsep_doc(nodes, a),
+    };
 }
