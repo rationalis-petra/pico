@@ -2006,12 +2006,42 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         return true;
     }
     case TEnum: {
-        uint64_t lhs_tag = *(uint64_t*)lhs;
-        uint64_t rhs_tag = *(uint64_t*)rhs;
-        if (lhs_tag != rhs_tag) return false;
+        size_t offset = type->enumeration.tag_size / 8;
+        uint64_t tag = 0;
+        switch (type->enumeration.tag_size) {
+        case 8: {
+            uint8_t lhs_tag = *(uint8_t*)lhs;
+            uint8_t rhs_tag = *(uint8_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 16:{
+            uint16_t lhs_tag = *(uint16_t*)lhs;
+            uint16_t rhs_tag = *(uint16_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 32: {
+            uint32_t lhs_tag = *(uint32_t*)lhs;
+            uint32_t rhs_tag = *(uint32_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 64: {
+            uint64_t lhs_tag = *(uint64_t*)lhs;
+            uint64_t rhs_tag = *(uint64_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        default:
+            panic(mv_string("Invalid enum tag-size"));
+        }
 
-        size_t offset = sizeof(uint64_t);
-        PtrArray* types = type->enumeration.variants.data[lhs_tag].val;
+        PtrArray* types = type->enumeration.variants.data[tag].val;
         for (size_t i = 0; i < types->len; i++) {
             PiType* ty = types->data[i];
             offset = pi_size_align(offset, pi_align_of(*ty));

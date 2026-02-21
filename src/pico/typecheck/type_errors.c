@@ -112,6 +112,8 @@ _Noreturn void type_error_proc_incorrect_num_args(Syntax *proc, PiType *type,
 }
 
 // Application
+//---------------------------------------------------------------------- 
+
 _Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidArgType args_type, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
     PtrArray err_nodes = mk_ptr_array(4, a);
@@ -220,6 +222,31 @@ _Noreturn void type_error_incorrect_num_args_all_noproc(PiType *type, Syntax *ap
     };
     throw_pi_error(ctx.point, err);
 }
+
+_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *app, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PiType* fn_ty = app->all_application.function->ptype;
+
+    PtrArray nodes = mk_ptr_array(4, a);
+    push_ptr(mv_cstr_doc("Typechecking error: When applying an all with type", a), &nodes);
+    push_ptr(pretty_type(fn_ty, a), &nodes);
+    push_ptr(mv_cstr_doc("not all types were able to be deduced. In particular, the type of ", a), &nodes);
+    push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(fn_ty->binder.vars.data[arg_idx]), a), a), &nodes);
+    push_ptr(mv_cstr_doc("is ambiguous.", a), &nodes);
+
+    PicoError err = {
+        .range = app->all_application.function->range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+
+//---------------------------------------------------------------------- 
+//
+// Sealing
+//
+//---------------------------------------------------------------------- 
 
 _Noreturn void type_error_invalid_seal_type(PiType *type, Syntax *seal, TypeCheckContext ctx) {
     Allocator* a = ctx.a;
@@ -334,8 +361,21 @@ _Noreturn void type_error_missing_variant_tag(PiType * type, Syntax * variant, T
     throw_pi_error(ctx.point, err);
 }
 
-// Match 
-_Noreturn void type_error_match_invalid_type(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
+// Match
+_Noreturn void type_error_match_invalid_type(PiType *type, Syntax *match,
+                                             TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Unexpected type provided to match. Expected an enum type, but got:", a),  &nodes);
+    push_ptr(pretty_type(match->match.val->ptype, a), &nodes);
+
+    PicoError err = {
+        .range = match->match.val->range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 _Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);

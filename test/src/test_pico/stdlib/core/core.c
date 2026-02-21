@@ -478,6 +478,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(Mixed:large -1086 1937987)");
     }
 
+    typedef struct {
+        uint32_t tag;
+        uint32_t payload;
+    } SmallTagEnum;
+    RUN("(def SmallTag Enum 32 [:left U32] [:right U32])");
+    if (test_start(log, mv_string("enum-small-tag"))) {
+        SmallTagEnum expected = {.tag = 1, .payload = 2938};
+        TEST_EQ("(SmallTag:right 2938)");
+    }
+
     // This test was added due to experiencinng issues with the typechecking
     // stage not inserting correct tag values when the (value) type of a match
     // had not yet been inferred.
@@ -511,6 +521,15 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
                 "  [[:a] 12]"
                 "  [[:e] 90873]"
                 "  [_ 127])");
+    }
+
+
+    if (test_start(log, mv_string("enum-match-smaller-tag"))) {
+        int32_t expected = 12389;
+        RUN("(def SmallTag Enum 32 [:left U32] [:right U32])");
+        TEST_EQ("(match (SmallTag:right 12389)\n"
+                "  [[:left l] 9723]"
+                "  [[:right e] e])");
     }
 
 

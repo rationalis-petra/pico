@@ -87,7 +87,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     }
 
     // -------------------------------------------------------------------------
-    // Resolution
+    // Analysis
     // -------------------------------------------------------------------------
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
@@ -102,6 +102,11 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
         .a = &ra, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
+
+
+    // -------------------------------------------------------------------------
+    // Evaluation
+    // -------------------------------------------------------------------------
     EvalResult evres = pico_run_toplevel(abs, target, links, module, &ra, &point);
 
     if (evres.type == ERValue) {

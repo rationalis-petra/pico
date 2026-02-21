@@ -7,11 +7,14 @@
 #include "platform/window/internal.h"
 #include <windows.h>
 
+// TODO: Check the 'text services framework' (TSF) for more
+//   info/help.
+// https://learn.microsoft.com/en-us/windows/win32/tsf/text-services-framework
+
 static Allocator* wsa = NULL;
 static HINSTANCE app_handle = 0;
 static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
-
 
 bool translate_key_id(Key* key, WPARAM windows_keycode) {
     switch (windows_keycode) {
@@ -24,7 +27,6 @@ bool translate_key_id(Key* key, WPARAM windows_keycode) {
     case VK_SPACE:
         *key = WKEY_SPACE;
         break;
-
     case 0x30:
         *key = WKEY_0;
         break;

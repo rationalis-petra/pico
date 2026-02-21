@@ -792,12 +792,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 type_check_i(untyped->match.val, new_enum_type, env, ctx);
             }
         } else {
-            err.range = untyped->match.val->range;
-            PtrArray nodes;
-            push_ptr(mv_cstr_doc("Unexpected type provided to match. Expected an enum type, but got:", a),  &nodes);
-            push_ptr(pretty_type(untyped->match.val->ptype, a), &nodes);
-            err.message = mv_hsep_doc(nodes, a);
-            throw_pi_error(point, err);
+            type_error_match_invalid_type(untyped->match.val->ptype, untyped, ctx);
         }
         break;
     }
@@ -2226,12 +2221,7 @@ void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
             squash_types(typed->all_application.types.data[i], env, ctx);
             Syntax* checked = typed->all_application.types.data[i];
             if (checked->type_val->sort == TUVar) {
-                PtrArray nodes = mk_ptr_array(4, ctx.a);
-                push_ptr(mk_str_doc(mv_string("Typechecking error: All application type not instantiated"), ctx.a), &nodes);
-                push_ptr(pretty_type(checked->type_val, ctx.a), &nodes);
-
-                err.message = mv_vsep_doc(nodes, ctx.a);
-                throw_pi_error(ctx.point, err);
+                type_error_all_app_couldnt_deduce_types(i, typed, ctx);
             }
         }
 

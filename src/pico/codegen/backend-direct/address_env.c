@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/binding/type_env.h"
 
 // Address Environment: Implementation
@@ -451,14 +451,14 @@ void address_pop(AddressEnv* env) {
     pop_saddr(&locals->vars);
 }
 
-void address_bind_enum_vars(BindingArray vars, bool is_variable, AddressEnv* env) {
+void address_bind_enum_vars(BindingArray vars, size_t tagsize, bool is_variable, AddressEnv* env) {
     // Note: We don't adjust the stack head
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
 
     SAddr padding = (SAddr){};
     padding.type = SASentinel;
-    stack_offset += is_variable ? 0 : REGISTER_SIZE;
+    stack_offset += is_variable ? 0 : tagsize;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &locals->vars);
 
@@ -468,6 +468,7 @@ void address_bind_enum_vars(BindingArray vars, bool is_variable, AddressEnv* env
     for (size_t i = 0; i < vars.len; i++) {
         SAddr local;
         Binding bind = vars.data[i];
+        stack_offset = pi_size_align(stack_offset, bind.align);
 
         local.type = bind.is_variable ? SAIndexed : SADirect;
         local.symbol = bind.sym;

@@ -1,3 +1,5 @@
+#include <linux/input.h>
+
 #include "platform/window/xkb_translate.h"
 
 Key translate_xkb_keycode(xkb_keysym_t key) {
@@ -203,7 +205,7 @@ Key translate_xkb_keycode(xkb_keysym_t key) {
         break;
 
     case XKB_KEY_exclam:
-        out= PKEY_EXCLAMATION;
+        out = PKEY_EXCLAMATION;
         break;
     /* case PKEY_AT: */
     /* case PKEY_HASH: */
@@ -252,4 +254,209 @@ Key translate_xkb_keycode(xkb_keysym_t key) {
         break;
     }
     return out;
+}
+
+RawKey scancode_to_rawkey(uint32_t scancode) {
+    RawKey outkey = UINT32_MAX;
+    switch (scancode) {
+    case KEY_A:
+        outkey = RKEY_A;
+        break;
+    case KEY_B:
+        outkey = RKEY_B;
+        break;
+    case KEY_C:
+        outkey = RKEY_C;
+        break;
+    case KEY_D:
+        outkey = RKEY_D;
+        break;
+    case KEY_E:
+        outkey = RKEY_E;
+        break;
+    case KEY_F:
+        outkey = RKEY_F;
+        break;
+    case KEY_G:
+        outkey = RKEY_G;
+        break;
+    case KEY_H:
+        outkey = RKEY_H;
+        break;
+    case KEY_I:
+        outkey = RKEY_I;
+        break;
+    case KEY_J:
+        outkey = RKEY_J;
+        break;
+    case KEY_K:
+        outkey = RKEY_K;
+        break;
+    case KEY_L:
+        outkey = RKEY_L;
+        break;
+    case KEY_M:
+        outkey = RKEY_M;
+        break;
+    case KEY_N:
+        outkey = RKEY_N;
+        break;
+    case KEY_O:
+        outkey = RKEY_O;
+        break;
+    case KEY_P:
+        outkey = RKEY_P;
+        break;
+    case KEY_Q:
+        outkey = RKEY_Q;
+        break;
+    case KEY_R:
+        outkey = RKEY_R;
+        break;
+    case KEY_S:
+        outkey = RKEY_S;
+        break;
+    case KEY_T:
+        outkey = RKEY_T;
+        break;
+    case KEY_U:
+        outkey = RKEY_U;
+        break;
+    case KEY_V:
+        outkey = RKEY_V;
+        break;
+    case KEY_W:
+        outkey = RKEY_W;
+        break;
+    case KEY_X:
+        outkey = RKEY_X;
+        break;
+    case KEY_Y:
+        outkey = RKEY_Y;
+        break;
+    case KEY_Z:
+        outkey = RKEY_Z;
+        break;
+    case KEY_1:
+        outkey = RKEY_1;
+        break;
+    case KEY_2:
+        outkey = RKEY_2;
+        break;
+    case KEY_3:
+        outkey = RKEY_3;
+        break;
+    case KEY_4:
+        outkey = RKEY_4;
+        break;
+    case KEY_5:
+        outkey = RKEY_5;
+        break;
+    case KEY_6:
+        outkey = RKEY_6;
+        break;
+    case KEY_7:
+        outkey = RKEY_7;
+        break;
+    case KEY_8:
+        outkey = RKEY_8;
+        break;
+    case KEY_9:
+        outkey = RKEY_9;
+        break;
+    case KEY_SPACE:
+        outkey = RKEY_SPACE;
+        break;
+
+    case KEY_MINUS:
+        outkey = RKEY_MINUS;
+        break;
+    case KEY_KPPLUS:
+        outkey = RKEY_PLUS;
+        break;
+
+    case KEY_SEMICOLON:
+        outkey = RKEY_SEMICOLON;
+        break;
+    case KEY_COMMA:
+        outkey = RKEY_COMMA;
+        break;
+    case KEY_ENTER:
+        outkey = RKEY_ENTER;
+        break;
+    case KEY_BACKSPACE:
+        outkey = RKEY_BACKSPACE;
+        break;
+    }
+    return outkey;
+}
+
+static uint32_t invert_key[] = {
+    KEY_A,
+    KEY_B,
+    KEY_C,
+    KEY_D,
+    KEY_E,
+    KEY_F,
+    KEY_G,
+    KEY_H,
+    KEY_I,
+    KEY_J,
+    KEY_K,
+    KEY_L,
+    KEY_M,
+    KEY_N,
+    KEY_O,
+    KEY_P,
+    KEY_Q,
+    KEY_R,
+    KEY_S,
+    KEY_T,
+    KEY_U,
+    KEY_V,
+    KEY_W,
+    KEY_X,
+    KEY_Y,
+    KEY_Z,
+
+    KEY_1,
+    KEY_2,
+    KEY_3,
+    KEY_4,
+    KEY_5,
+    KEY_6,
+    KEY_7,
+    KEY_8,
+    KEY_9,
+    KEY_0,
+
+    0,/* KEY_EXCLAMATION, */
+    0,/* KEY_AT, */
+    0,/* KEY_HASH, */
+    0, /* KEY_DOLLAR, */
+    0,/* KEY_PERCENT, */
+    0,/* KEY_CARET, */
+    0,/* KEY_AMPERSAND, */
+    0,/* KEY_ASTERISK, */
+    0,/* KEY_LPAREN, */
+    0,/* KEY_RPAREN, */
+    KEY_MINUS,
+    KEY_KPPLUS,
+
+    0,/* KEY_LBRACE, */
+    0,/* KEY_RBRACE, */
+    0,/* KEY_COLON, */
+    KEY_SEMICOLON,
+    KEY_COMMA,
+    KEY_DOT,
+    0,/* KEY_QUERY, */
+
+    KEY_SPACE,
+
+    KEY_ENTER,
+    KEY_BACKSPACE,
+};
+
+uint32_t rawkey_to_scancode(RawKey rawkey) {
+    return invert_key[rawkey];
 }

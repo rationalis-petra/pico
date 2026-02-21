@@ -16,6 +16,8 @@
 static PiType* window_ty;
 PiType* get_window_ty() { return window_ty; };
 static PiType* window_message_ty;
+static PiType* keystate_ty;
+static PiType* keymap_ty;
 static PiType* raw_key_ty;
 static PiType* key_ty;
 
@@ -49,6 +51,63 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, PiAllocator* pia
 
     delete_c_type(fn_ctype, pia);
 }
+           
+void build_create_keystate_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "keymap", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
+
+    convert_c_fn(create_keystate, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_destroy_keystate_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 1, "keystate",
+                               mk_voidptr_ctype(pia),
+                               (CType){.sort = CSVoid});
+
+    convert_c_fn(destroy_keystate, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_update_keystate_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 4,
+                               "key", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "modifiers", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "pressed", mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned}),
+                               "keystate", mk_voidptr_ctype(pia),
+                               (CType){.sort = CSVoid});
+
+    convert_c_fn(update_keystate_key, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_update_keystate_mod_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 5,
+                               "pressed", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "latched", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "locked", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "group", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "keystate", mk_voidptr_ctype(pia),
+                               (CType){.sort = CSVoid});
+
+    convert_c_fn(update_keystate_modifiers, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_get_key_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+  CType fn_ctype = mk_fn_ctype(pia, 2,
+                               "key", mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}),
+                               "keystate", mk_voidptr_ctype(pia),
+                               mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned}));
+
+    convert_c_fn(get_key, &fn_ctype, type, ass, a, point);
+
+    delete_c_type(fn_ctype, pia);
+}
+
 
 WinMessagePiList relic_poll_events(PlWindow* window) {
     PiAllocator pia = get_std_current_allocator();
@@ -115,10 +174,25 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     window_ty = e->value;
 
-    // Message Type
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "KeyMap", mk_prim_type(pia, Address)));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("KeyMap"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    keymap_ty = e->value;
 
-    typep = mk_named_type(pia, "RawKey", mk_enum_type(
-        pia, 58, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
+    typep = mk_opaque_type(pia, module, mk_named_type(pia, "KeyState", mk_prim_type(pia, Address)));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    sym = string_to_symbol(mv_string("KeyState"));
+    add_def(module, sym, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def(sym, module);
+    keystate_ty = e->value;
+
+    // Message Type
+    typep = mk_named_type(pia, "RawKey", mk_sz_enum_type(
+        pia, 32,  58, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
         "i", 0, "j", 0, "k", 0, "l", 0, "m", 0, "n", 0, "o", 0, "p", 0, "q", 0,
         "r", 0, "s", 0, "t", 0, "u", 0, "v", 0, "w", 0, "x", 0, "y", 0, "z", 0,
 
@@ -142,8 +216,8 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     raw_key_ty = e->value;
 
 
-    typep = mk_named_type(pia, "Key", mk_enum_type(
-        pia, 84, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
+    typep = mk_named_type(pia, "Key", mk_sz_enum_type(
+        pia, 32, 84, "a", 0, "b", 0, "c", 0, "d", 0, "e", 0, "f", 0, "g", 0, "h", 0,
         "i", 0, "j", 0, "k", 0, "l", 0, "m", 0, "n", 0, "o", 0, "p", 0, "q", 0,
         "r", 0, "s", 0, "t", 0, "u", 0, "v", 0, "w", 0, "x", 0, "y", 0, "z", 0,
 
@@ -170,10 +244,13 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     key_ty = e->value;
 
 
-    typep = mk_enum_type(pia, 3,
+    typep = mk_enum_type(pia, 4,
                          "resize", 2, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
-                         "key-event", 3, key_ty, mk_prim_type(pia, UInt_16), mk_prim_type(pia, Bool),
-                         "raw-key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_16), mk_prim_type(pia, Bool));
+                         "key-event", 3, raw_key_ty, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Bool),
+                         "modifier-key-event", 4, mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                         "keymap", 1, keymap_ty);
+
+
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Message"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -205,10 +282,60 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    //typep = mk_proc_type(a, 0, copy_pi_type_p(window_message_ty, a));
     typep = mk_proc_type(pia, 1,  copy_pi_type_p(window_ty, pia), mk_app_type(pia, get_list_type(), window_message_ty));
     build_poll_events_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("poll-events"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, keymap_ty, keystate_ty);
+    build_create_keystate_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("create-keystate"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, keystate_ty, mk_prim_type(pia, Unit));
+    build_destroy_keystate_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("destroy-keystate"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 4,
+                         raw_key_ty,
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, Bool),
+                         keystate_ty,
+                         mk_prim_type(pia, Unit));
+    build_update_keystate_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("update-keystate"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 5,
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, UInt_32),
+                         keystate_ty,
+                         mk_prim_type(pia, Unit));
+    build_update_keystate_mod_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("update-keystate-modifier"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 2, raw_key_ty, keystate_ty, key_ty);
+    build_get_key_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("get-key"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

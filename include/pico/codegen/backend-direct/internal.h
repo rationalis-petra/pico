@@ -5,7 +5,7 @@
 #include "components/assembler/assembler.h"
 
 #include "pico/data/sym_sarr_assoc.h"
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/syntax/syntax.h"
 #include "pico/values/values.h"
 #include "pico/codegen/codegen.h"
@@ -44,7 +44,7 @@ void generate_polymorphic_i(Syntax syn, AddressEnv* env, InternalContext ctx);
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
-size_t calc_variant_size(PtrArray* types);
+LocationSize tag_size_sz(uint8_t tagsize); 
 size_t calc_variant_stack_size(PtrArray* types);
 void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ctx);
 

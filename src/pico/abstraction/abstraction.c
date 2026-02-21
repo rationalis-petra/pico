@@ -1784,7 +1784,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree edesc = raw.branch.nodes.data[i];
 
             if (edesc.type != RawBranch) {
-                err.range = edesc.branch.nodes.data[0].range;
+                err.range = edesc.range;
                 err.message = mv_cstr_doc("Enumeration type expects all variant descriptors to be lists.", a);
                 throw_pi_error(ctx.point, err);
             };

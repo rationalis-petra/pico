@@ -25,6 +25,7 @@ typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
 _Noreturn void type_error_invalid_application_target(PiType* type, Syntax* app, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidArgType args_type, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_args_all_noproc(PiType* type, Syntax* app, bool is_implicit_args, TypeCheckContext ctx);
+_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg, Syntax* app, TypeCheckContext ctx);
 
 // Sealing
 _Noreturn void type_error_invalid_seal_type(PiType* type, Syntax* seal, TypeCheckContext ctx);
@@ -40,7 +41,7 @@ _Noreturn void type_error_incorrect_num_variant_args(PiType* type, Syntax* varia
 _Noreturn void type_error_missing_variant_tag(PiType* type, Syntax* variant, TypeCheckContext ctx);
 
 // Match 
-_Noreturn void type_error_match_invalid_type(PiType* type, Syntax* variant, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_invalid_type(PiType* type, Syntax* variant, TypeCheckContext ctx);
 _Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
