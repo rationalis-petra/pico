@@ -144,7 +144,7 @@ static Command internal_parse_command(StringArray args, Allocator* a) {
     } else {
         return (Command) {
             .type = CInvalid,
-            .error_message = mv_string("Unrecognized subcommand name!"),
+            .error_message = mv_string("Unrecognized subcommand name!\n  Hint: try running with 'help' to show and describe valid subcommands."),
         };
     }
 }

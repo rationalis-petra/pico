@@ -229,32 +229,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     case SLitTypedFloating:
         untyped->ptype = mk_prim_type(ctx.pia, untyped->integral.type);
         break;
-    case SLitArray: {
-        PiType* element_type = mk_uvar(ctx.pia);
-        for (size_t i = 0; i < untyped->array_lit.subterms.len; i++) {
-            type_check_i(untyped->array_lit.subterms.data[i], element_type, env, ctx);
-        }
-        AddrPiList dimensions = mk_addr_list(untyped->array_lit.shape.len, ctx.pia);
-        for (size_t i = 0; i < untyped->array_lit.shape.len; i++) {
-            ArrayDimType* dim = call_alloc(sizeof(ArrayDimType), ctx.pia);
-            *dim = (ArrayDimType) {
-                .is_any = false,
-                .value = untyped->array_lit.shape.data[i],
-            };
-            push_addr(dim, &dimensions);
-
-        }
-
-        PiType* array_type = call_alloc(sizeof(PiType), ctx.pia);
-        *array_type = (PiType) {
-            .sort = TArray,
-            .array.sort = Fixed,
-            .array.dimensions = dimensions,
-            .array.element_type = element_type,
-        };
-        untyped->ptype = array_type;
-        break;
-    }
     case SLitBool:
         untyped->ptype = mk_prim_type(ctx.pia, Bool);
         break;
@@ -1314,7 +1288,6 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     }
     case SOffsetOf: {
         eval_type(untyped->offset_of.body, env, ctx);
-        PiType* out = call_alloc(sizeof(PiType), ctx.pia);
 
         PiType* struct_type = unwrap_type(untyped->offset_of.body->type_val, type_env_module(env), ctx.pia, ctx.a);
         if (struct_type->sort != TStruct) {
@@ -1335,7 +1308,14 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             throw_pi_error(point, err); 
         }
 
-        *out = (PiType){.sort = TPrim, .prim = UInt_64};
+        PiType* out = mk_prim_type(ctx.pia, UInt_64);
+        untyped->ptype = out; 
+        break;
+    }
+    case SDynAlloc: {
+        PiType* expected = mk_prim_type(ctx.pia, UInt_64);
+        type_check_i(untyped->size, expected, env, ctx);
+        PiType* out = mk_prim_type(ctx.pia, Address);
         untyped->ptype = out; 
         break;
     }
@@ -1721,12 +1701,6 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     case SVariable:
     case SAbsVariable:
         break;
-    case SLitArray: {
-        for (size_t i = 0; i < syn->array_lit.subterms.len; i++) {
-            post_unify(syn->array_lit.subterms.data[i], env, pia, a, point);
-        }
-        break;
-    }
 
     // Terms & term formers
     case SProcedure: {
@@ -2113,6 +2087,9 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
     case SOffsetOf:
         post_unify(syn->offset_of.body, env, pia, a, point);
         break;
+    case SDynAlloc:
+        post_unify(syn->size, env, pia, a, point);
+        break;
     case SModule:
         panic(mv_string("instantiate implicits not implemented for module"));
 
@@ -2183,12 +2160,6 @@ void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
     case SVariable:
     case SAbsVariable:
         break;
-    case SLitArray: {
-        for (size_t i = 0; i < typed->array_lit.subterms.len; i++) {
-            squash_types(typed->array_lit.subterms.data[i], env, ctx);
-        }
-        break;
-    }
     case SProcedure: {
         squash_types(typed->procedure.body, env, ctx);
         break;
@@ -2415,6 +2386,9 @@ void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
         break;
     case SOffsetOf:
         squash_types(typed->offset_of.body, env, ctx);
+        break;
+    case SDynAlloc:
+        squash_types(typed->size, env, ctx);
         break;
     case SProcType: {
         for (size_t i = 0; i < typed->proc_type.args.len; i++) {

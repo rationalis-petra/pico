@@ -22,7 +22,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
-    IStream* cin = mk_capturing_istream(sin, &ra);
+    IStream* volatile cin = mk_capturing_istream(sin, &ra);
     Logger* logger = NULL;
 
     jump_buf exit_point;

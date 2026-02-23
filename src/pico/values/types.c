@@ -13,7 +13,6 @@
 #include "pico/typecheck/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
-#include "pico/values/array.h"
 
 struct UVarGenerator {
     uint64_t counter;
@@ -38,14 +37,6 @@ void delete_enum_variant_p(AddrPiList* t, PiAllocator* pia) {
 
 void delete_pi_type(PiType t, PiAllocator* pia) {
     switch(t.sort) {
-    case TArray: {
-        for (size_t i = 0; i < t.array.dimensions.len; i++) {
-            call_free(t.array.dimensions.data[i], pia);
-        }
-        sdelete_addr_list(t.array.dimensions);
-        delete_pi_type_p(t.array.element_type, pia);
-        break;
-    }
     case TProc: {
         delete_pi_type_p(t.proc.ret, pia);
         for (size_t i = 0; i < t.proc.implicits.len; i++)
@@ -186,16 +177,6 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     PiType out;
     out.sort = t.sort;
     switch(t.sort) {
-    case TArray: {
-        out.array.sort = t.array.sort;
-        out.array.dimensions = mk_addr_list(t.array.dimensions.len * sizeof(void*), pia);
-        for (size_t i = 0; i < t.array.dimensions.len; i++) {
-            ArrayDimType* ty = call_alloc(sizeof(ArrayDimType), pia);
-            push_addr(ty, &out.array.dimensions);
-        }
-        out.array.element_type = copy_pi_type_p(t.array.element_type, pia);
-        break;
-    }
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, pia);
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
@@ -380,15 +361,6 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         }
         break;
-    case TArray: {
-        PrettyElem pelem = (PrettyElem) {
-            .print_elem = (print_element)pretty_pi_value,
-            .context = type->array.element_type,
-        };
-        Array* array = (Array*) val;
-        size_t index_size = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
-        return pretty_array(*array, index_size, pelem, a);
-    }
     case TProc: {
         void** addr = (void**) val;
         PtrArray nodes = mk_ptr_array(2, a);
@@ -681,33 +653,6 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
-    case TArray: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
-
-        push_ptr(pretty_type_internal(type->array.element_type, ctx, a), &nodes);
-
-        if (type->array.sort == Any) {
-            push_ptr(mk_cstr_doc("⟨...⟩", a), &nodes);
-        } else {
-            if (type->array.dimensions.len != 0) {
-                PtrArray arg_nodes = mk_ptr_array(type->array.dimensions.len, a);
-                for (size_t i = 0; i < type->array.dimensions.len; i++) {
-                    ArrayDimType dim = *(ArrayDimType*)type->array.dimensions.data[i];
-                    if (dim.is_any) {
-                        push_ptr(mk_cstr_doc(".", a), &nodes);
-                    } else {
-                        push_ptr(pretty_u64(dim.value, a), &arg_nodes);
-                    }
-                }
-                push_ptr(mk_paren_doc("⟨", "⟩", mv_sep_doc(arg_nodes, a), a), &nodes);
-            }
-        }
-
-        out = mv_sep_doc(nodes, a);
-        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
-        break;
-    }
     case TProc: {
         PtrArray head_nodes = mk_ptr_array(4, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &head_nodes);
@@ -1145,9 +1090,6 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             panic(mv_string("pi-maybe-size-of: unrecognized primitive."));
         }
         break;
-    case TArray: 
-        *out = 3 * ADDRESS_SIZE;
-        return Ok;
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
@@ -1305,9 +1247,6 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
             panic(mv_string("pi_maybe_align_of received invalid primitive"));
         }
         return sizeof(uint64_t);
-    case TArray:
-        *out = ADDRESS_SIZE;
-        return Ok;
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
@@ -1966,24 +1905,6 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
-    case TArray: {
-        // Step 1: shape shape
-        Array* larray = (Array*)lhs;
-        Array* rarray = (Array*)rhs;
-        if (larray->shape.len != rarray->shape.len) return false;
-        size_t nelements = 1;
-        for (size_t i = 0; i < larray->shape.len; i++) {
-            if (larray->shape.data[i] != rarray->shape.data[i]) return false;
-            nelements *= larray->shape.data[i];
-        }
-        size_t index_mul = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
-        for (size_t i = 0; i < nelements; i++) {
-            void* laddr = larray->data + (i * index_mul);
-            void* raddr = larray->data + (i * index_mul);
-            if (!pi_value_eql(type->array.element_type, laddr, raddr, a)) return false;
-        }
-        return true;
-    }
     case TProc: {
         void** addrlhs = (void**) lhs;
         void** addrrhs = (void**) rhs;
@@ -2116,8 +2037,6 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         }
         return false;
     }
-    case TArray:
-        return false;
     case TProc:
         return false;
     case TStruct:

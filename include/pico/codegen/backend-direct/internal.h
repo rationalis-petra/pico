@@ -13,8 +13,8 @@
 #define VSTACK_BASE R15
 #define VSTACK_HEAD R14
 #define INDEX_REGISTER R15
-
-#define DVARS_REGISTER R13
+#define DVARS_REGISTER R13 // TODO: could this be a global?
+#define DMEM_REGISTER R12
 
 /* Utility functions shared across code generation */
 

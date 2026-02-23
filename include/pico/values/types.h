@@ -43,7 +43,6 @@ typedef enum {
 
 typedef enum {
     TPrim,
-    TArray,
     TProc,
     TStruct,
     TEnum,
@@ -75,19 +74,6 @@ typedef enum {
     // Used only during unification
     TUVar,
 } PiType_t;
-
-typedef enum { Any, FixedDimension, Fixed } ArraySort;
-
-typedef struct {
-    bool is_any;
-    uint64_t value;
-} ArrayDimType;
-
-typedef struct {
-    ArraySort sort; 
-    AddrPiList dimensions;
-    PiType* element_type; 
-} ArrayType;
 
 typedef struct {
     AddrPiList args;
@@ -164,7 +150,6 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
-        ArrayType array;
         ProcType proc;
         StructType structure;
         EnumType enumeration;

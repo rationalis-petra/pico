@@ -17,7 +17,6 @@
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/values/array.h"
 #include "pico/binding/environment.h"
 #include "pico/abstraction/abstraction.h"
 #include "pico/typecheck/typecheck.h"
@@ -113,8 +112,6 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
         if (callbacks.on_expr) {
             callbacks.on_expr(evres.val.type, evres.val.val, data, log);
         }
-        if (evres.val.type->sort == TArray)
-            free_array(evres.val.val);
     } else {
         if (callbacks.on_top) {
             callbacks.on_top(data, log);

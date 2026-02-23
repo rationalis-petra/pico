@@ -31,6 +31,7 @@ typedef struct {
     PiAllocator* pia;
     ShadowEnv* env;
     PiErrorPoint* point;
+    void* vstack_memory_ptr;
     void* dynamic_memory_ptr;
 } AbstractionCtx;
 
@@ -40,7 +41,6 @@ TopLevel abstract_i(RawTree raw, AbstractionCtx ctx);
 
 Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, AbstractionCtx ctx);
 Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx);
-Syntax* mk_array_literal(RawTree raw, AbstractionCtx ctx);
 ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx);
@@ -65,16 +65,19 @@ Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint*
     PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
     PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
 
+    void* vstack_memory_space = mem_alloc(4096, a);
     void* dynamic_memory_space = mem_alloc(4096, a);
     AbstractionCtx ctx = {
         .gpa = a,
         .pia = &pi_alloc,
         .env = s_env,
         .point = point,
-        .dynamic_memory_ptr = dynamic_memory_space + 4095,
+        .vstack_memory_ptr = vstack_memory_space + 4095,
+        .dynamic_memory_ptr = dynamic_memory_space,
     };
     Syntax* out = abstract_expr_i(raw, ctx);
     mem_free(dynamic_memory_space, a);
+    mem_free(vstack_memory_space, a);
 
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
@@ -83,6 +86,7 @@ Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint*
 
 TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point) {
     ShadowEnv* s_env = mk_shadow_env(a, env);
+    void* vstack_memory_space = mem_alloc(4096, a);
     void* dynamic_memory_space = mem_alloc(4096, a);
     PiAllocator pi_alloc = convert_to_pallocator(a);
     PiAllocator tmp_alloc = convert_to_pallocator(a);
@@ -94,11 +98,13 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* poi
         .pia = &pi_alloc,
         .env = s_env,
         .point = point,
-        .dynamic_memory_ptr = dynamic_memory_space + 4095,
+        .vstack_memory_ptr = vstack_memory_space + 4095,
+        .dynamic_memory_ptr = dynamic_memory_space,
     };
     TopLevel out = abstract_i(raw, ctx);
 
     mem_free(dynamic_memory_space, a);
+    mem_free(vstack_memory_space, a);
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
     return out;
@@ -419,6 +425,25 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
 
+        bool preserve_dyn_memory = false;
+        if (is_special(raw.branch.nodes.data[args_index])) {
+            RawTree props = raw.branch.nodes.data[args_index];
+            for (size_t i = 0; i < props.branch.nodes.len; i++) {
+                RawTree prop = props.branch.nodes.data[i];
+                if (eq_symbol(&prop, string_to_symbol(mv_string("preserve-dyn-memory")))) {
+                    preserve_dyn_memory = true;
+                } else {
+                    err.range = raw.branch.nodes.data[args_index].range;
+                    err.message = mv_cstr_doc("Unrecognized proc property: must be one of [preserve-dyn-memory]", a);
+                    throw_pi_error(ctx.point, err);
+                }
+            }
+
+            args_index++;
+        }
+
+
+
         SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
         for (size_t i = 0; i < arguments.len; i++) {
             push_symbol(arguments.data[i].key, &to_shadow);
@@ -441,7 +466,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .range = raw.range,
             .procedure.args = arguments,
             .procedure.implicits = implicits, 
-            .procedure.body = body
+            .procedure.body = body,
+            .procedure.preserve_dyn_memory = preserve_dyn_memory,
         };
         return res;
     }
@@ -510,7 +536,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SynArray types = mk_ptr_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
-            if (raw_types.type != RawBranch && raw_types.branch.hint != HSpecial) {
+            if (!is_special(raw_types)) {
                 err.range = raw_types.range;
                 err.message = mv_cstr_doc("Seal expects second argument to be a set of types", a);
                 throw_pi_error(ctx.point, err);
@@ -567,8 +593,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         {
 
             RawTree raw_binder = raw.branch.nodes.data[1];
-            if (raw_binder.type != RawBranch
-                || raw_binder.branch.hint != HSpecial
+            if (!is_special(raw_binder)
                 || raw_binder.branch.nodes.len != 2
                 || !is_symbol(raw_binder.branch.nodes.data[0])) {
 
@@ -584,7 +609,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SymbolArray types = mk_symbol_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
-            if (!get_symbol_list(&types, raw_types) || raw_types.branch.hint != HSpecial) {
+            if (!is_special(raw_types) || !get_symbol_list(&types, raw_types)) {
                 err.range = raw_types.range;
                 err.message = mv_cstr_doc("Invalid type binding provided to unseal", a);
                 throw_pi_error(ctx.point, err);
@@ -829,7 +854,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         Syntax* sbase;
         size_t start_idx = 1;
         // Get the type of the structure
-        if (raw.branch.nodes.data[1].type != RawBranch || raw.branch.nodes.data[1].branch.hint != HSpecial) {
+        if (!is_special(raw.branch.nodes.data[1])) {
             start_idx = 2;
             sbase = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         } else {
@@ -988,10 +1013,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         };
         return res;
     }
-    case FGenArray:
-        panic(mv_string("abstract for gen-array not implemented"));
-    case FWith:
-        panic(mv_string("abstract for with not implemented"));
     case FDynamic: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -1282,8 +1303,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             
             size_t index = 1;
             SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
-            if (label_expr->branch.nodes.data[index].type == RawBranch
-                && label_expr->branch.nodes.data[index].branch.hint == HSpecial) {
+            if (is_special(label_expr->branch.nodes.data[index])) {
                 Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], ctx);
                 if (args_out.type == Err) {
                     err.range = label_expr->branch.nodes.data[index].range;
@@ -1422,7 +1442,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         size_t num_binds = 0;
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
             RawTree tree = raw.branch.nodes.data[i];
-            if (tree.type == RawBranch && tree.branch.hint == HSpecial) {
+            if (is_special(tree)) {
                 if (tree.type != RawBranch
                     || !eq_symbol(&tree.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                     err.range = tree.branch.nodes.data[0].range;
@@ -1666,8 +1686,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         };
         return res;
     }
-    case FArrayType: {
-        panic(mv_string("Array type former not implemented."));
+    case FDynAlloc: {
+        if (raw.branch.nodes.len != 2) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'dyn-alloc' expects precisely 1 argument!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynAlloc,
+            .ptype = NULL,
+            .range = raw.range,
+            .size = term,
+        };
+        return res;
     }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
@@ -2393,30 +2427,13 @@ void mk_array_inner(PtrArray* terms, uint64_t depth, U64Array expected_shape, Ra
     }
 }
 
-Syntax *mk_array_literal(RawTree raw, AbstractionCtx ctx) {
-    Allocator* a = ctx.gpa;
-    PtrArray terms = mk_ptr_array(8, a);
-    U64Array shape = mk_u64_array(8, a);
-    get_array_shape(raw, &shape, a, ctx.point);
-    mk_array_inner(&terms, 0, shape, raw, ctx);
-
-    Syntax* res = mem_alloc(sizeof(Syntax), a);
-    *res = (Syntax) {
-        .type = SLitArray,
-        .ptype = NULL,
-        .range = raw.range,
-        .array_lit.shape = shape,
-        .array_lit.subterms = terms,
-    };
-    return res;
-}
-
 MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
     // Call the function (uses Pico ABI)
     MacroResult output;
     RawTreePiList input = raw.branch.nodes;
     void* dvars = get_dynamic_memory();
-    void* dynamic_memory_ptr = ctx.dynamic_memory_ptr; // ??
+    void* vstack_memory_ptr = ctx.vstack_memory_ptr; 
+    void* dynamic_memory_ptr = ctx.dynamic_memory_ptr; 
 
     PiAllocator old_temp_alloc = set_std_temp_allocator(*ctx.pia);
 
@@ -2433,22 +2450,23 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %3, %%r13    \n"
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r12    \n"
                          "mov %2, %%r14    \n"
                          "mov %2, %%r15    \n"
 
                          // Push output ptr & sizeof (MacroResult), resp
-                         "push %5          \n" // output ptr
-                         "push %6          \n" // sizeof (MacroResult)
+                         "push %6          \n" // output ptr
+                         "push %7          \n" // sizeof (MacroResult)
 
                          // Push arg (array) onto stack
                          //"push 0x30(%4)       \n"
-                         "push 0x28(%4)       \n"
-                         "push 0x20(%4)       \n"
-                         "push 0x18(%4)       \n"
-                         "push 0x10(%4)       \n"
-                         "push 0x8(%4)        \n"
-                         "push (%4)         \n"
+                         "push 0x28(%5)       \n"
+                         "push 0x20(%5)       \n"
+                         "push 0x18(%5)       \n"
+                         "push 0x10(%5)       \n"
+                         "push 0x8(%5)        \n"
+                         "push (%5)         \n"
 
                          // First store the function to call in RAX, in case
                          // the compiler has stored it as an offset to rbp
@@ -2501,6 +2519,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                          : "=r" (out)
 
                          : "r" (head.macro_addr)
+                           , "r" (vstack_memory_ptr)
                            , "r" (dynamic_memory_ptr)
                            , "r" (dvars)
                            , "r" (&input)
@@ -2588,9 +2607,6 @@ Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
-        if (raw.branch.hint == HData) {
-            return mk_array_literal(raw, ctx);
-        }
 
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
@@ -2765,13 +2781,6 @@ TopLevel abstract_i(RawTree raw, AbstractionCtx ctx) {
     bool unique_toplevel = false;
 
     if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
-        if (raw.branch.hint == HData) {
-            return (TopLevel) {
-                .type = TLExpr,
-                .expr = mk_array_literal(raw, ctx),
-            };
-        }
-
         ComptimeHead head = comptime_head(raw.branch.nodes.data[0], ctx);
         switch (head.type) {
         case HeadSyntax:

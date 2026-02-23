@@ -285,9 +285,9 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
 
     SAddr padding = (SAddr){};
     padding.type = SASentinel;
-    stack_offset += 3 * ADDRESS_SIZE; // We add 2x the register size to account for the
-                                      // return address, rbp and the dynamic
-                                      // memory ptr.
+    stack_offset += 4 * ADDRESS_SIZE; // We add 4x the register size to account for 
+                                      // (1) the return address, (2) rbp, (3) the dynamic
+                                      // memory ptr and (4) the dynamic var ptr.
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
@@ -464,7 +464,6 @@ void address_bind_enum_vars(BindingArray vars, size_t tagsize, bool is_variable,
 
     // Variables are in reverse order!
     // due to how the stack pushes/pops args.
-
     for (size_t i = 0; i < vars.len; i++) {
         SAddr local;
         Binding bind = vars.data[i];

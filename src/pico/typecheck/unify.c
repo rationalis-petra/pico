@@ -654,9 +654,6 @@ bool has_unification_vars_p(PiType type) {
     switch (type.sort) {
     case TPrim:
         return false;
-    case TArray: {
-        return has_unification_vars_p(*type.array.element_type);
-    }
     case TProc: {
         for (size_t i = 0; i < type.proc.implicits.len; i++) {
             if (has_unification_vars_p(*(PiType*)type.proc.implicits.data[i]))
@@ -783,10 +780,6 @@ void squash_type(PiType* type, UnifyContext ctx) {
     switch (type->sort) {
     case TPrim:
         break;
-    case TArray: {
-        squash_type(type->array.element_type, ctx);
-        break;
-    }
     case TProc: {
         for (size_t i = 0; i < type->proc.implicits.len; i++) {
             squash_type((PiType*)(type->proc.implicits.data[i]), ctx);

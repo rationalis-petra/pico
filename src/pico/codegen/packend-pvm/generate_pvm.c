@@ -166,10 +166,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         not_implemented(mv_string("PVM Unit Generation"));
         break;
     }
-    case SLitArray: {
-        not_implemented(mv_string("PVM Array Constant Generation"));
-        break;
-    }
     case SVariable: 
     case SAbsVariable: {
         not_implemented(mv_string("PVM Variable Generation"));
