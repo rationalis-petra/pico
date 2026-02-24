@@ -36,7 +36,6 @@ typedef enum {
     SLitString,
     SLitBool,
     SLitUnit,
-    SLitArray,
     SVariable,
     SAbsVariable,
 
@@ -48,6 +47,7 @@ typedef enum {
     SAllApplication,
     SSeal,
     SUnseal,
+    // TODO (Refactor) can probably remove SConstructor?
     SConstructor,
     SVariant,
     SMatch,
@@ -80,6 +80,7 @@ typedef enum {
     SSizeOf,
     SAlignOf,
     SOffsetOf,
+    SDynAlloc,
     SModule,
 
     // Types & Type formers
@@ -131,11 +132,6 @@ typedef struct {
 } SynFloatingLiteral;
 
 typedef struct {
-    U64Array shape;
-    PtrArray subterms;
-} SynArrayLiteral;
-
-typedef struct {
     Symbol symbol;
     size_t index;
     void* value;
@@ -145,6 +141,7 @@ typedef struct {
     SymPtrAssoc args;
     SymPtrAssoc implicits;
     Syntax* body;
+    bool preserve_dyn_memory;
 } SynProcedure;
 
 typedef struct {
@@ -408,7 +405,6 @@ struct Syntax {
     union {
         SynIntegralLiteral integral;
         SynFloatingLiteral floating;
-        SynArrayLiteral array_lit;
         bool boolean;
         String string;
 

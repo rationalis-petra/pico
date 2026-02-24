@@ -55,26 +55,28 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
 
 void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point) {
     void* dvars = get_dynamic_memory();
-    void* dynamic_memory_space = mem_alloc(4096, a);
-    void* dynamic_memory_ptr = dynamic_memory_space + 4096; 
+    void* dynamic_memory = mem_alloc(4096, a);
+    void* vstack_memory_space = mem_alloc(4096, a);
+    void* vstack_memory_ptr = vstack_memory_space + 4096; 
 
     PiAllocator new_temp_alloc = convert_to_pallocator(a);
     PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
-    typedef void*(*RunExpression)(void*, void*, void*); 
+    typedef void*(*RunExpression)(void*, void*, void*, void*); 
     RunExpression run = (RunExpression)get_instructions(target.target).data;
 
     void* out = mem_alloc(rsize, a);
 
 #ifdef DEBUG_ASSERT
-    void* new_dmp = run(out, dynamic_memory_ptr, dvars);
-    if (new_dmp != dynamic_memory_ptr) {
+    void* new_dmp = run(out, vstack_memory_ptr, dvars, dynamic_memory);
+    if (new_dmp != vstack_memory_ptr) {
         panic(mv_string("Variable Stack Head (R14) register constraint violated."));
     }
 #else
-    run(out, dynamic_memory_ptr, dvars);
+    run(out, vstack_memory_ptr, dvars, dynamic_memory);
 #endif
 
-    mem_free(dynamic_memory_space, a);
+    mem_free(vstack_memory_space, a);
+    mem_free(dynamic_memory, a);
     set_std_temp_allocator(old_temp_alloc);
 
     return out;
@@ -83,7 +85,8 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
 void call_unit_fn(void *function, Allocator *a) {
     void* dvars = get_dynamic_memory();
     void* dynamic_memory = mem_alloc(4096, a);
-    void* dynamic_memory_ptr = dynamic_memory + 4095; 
+    void* vstack_memory = mem_alloc(4096, a);
+    void* vstack_memory_ptr = vstack_memory + 4095; 
 
     // TODO: swap so this is backend independent (use foreign_adapters to call) 
     int64_t out;
@@ -98,7 +101,8 @@ void call_unit_fn(void *function, Allocator *a) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %3, %%r13    \n"
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r12    \n"
                          "mov %2, %%r14    \n"
                          "mov %2, %%r15    \n"
 
@@ -123,7 +127,8 @@ void call_unit_fn(void *function, Allocator *a) {
                          : "=r" (out)
 
                          : "r" (function)
-                           , "r" (dynamic_memory_ptr)
+                           , "r" (vstack_memory_ptr)
+                           , "r" (dynamic_memory)
                            , "r" (dvars)
                            // Clobbers are either registers we change (output cannot be trusted)
                            // or registers we don't want compiler to assign to input values

@@ -4,6 +4,8 @@
 #include "data/meta/array_header.h"
 #include "data/string.h"
 
+#include "platform/window/keycodes.h"
+
 typedef struct PlWindow PlWindow;
 
 // Initialize the window system
@@ -17,88 +19,10 @@ void pl_destroy_window(PlWindow* window);
 bool pl_window_should_close(PlWindow* window);
 
 typedef enum : uint64_t {
-    WKEY_A,
-    WKEY_B,
-    WKEY_C,
-    WKEY_D,
-    WKEY_E,
-    WKEY_F,
-    WKEY_G,
-    WKEY_H,
-    WKEY_I,
-    WKEY_J,
-    WKEY_K,
-    WKEY_L,
-    WKEY_M,
-    WKEY_N,
-    WKEY_O,
-    WKEY_P,
-    WKEY_Q,
-    WKEY_R,
-    WKEY_S,
-    WKEY_T,
-    WKEY_U,
-    WKEY_V,
-    WKEY_W,
-    WKEY_X,
-    WKEY_Y,
-    WKEY_Z,
-
-    WKEY_1,
-    WKEY_2,
-    WKEY_3,
-    WKEY_4,
-    WKEY_5,
-    WKEY_6,
-    WKEY_7,
-    WKEY_8,
-    WKEY_9,
-    WKEY_0,
-
-    WKEY_EXCLAMATION,
-    WKEY_AT,
-    WKEY_HASH,
-    WKEY_DOLLAR,
-    WKEY_PERCENT,
-    WKEY_CARET,
-    WKEY_AMPERSAND,
-    WKEY_ASTERISK,
-    WKEY_LPAREN,
-    WKEY_RPAREN,
-    WKEY_MINUS,
-    WKEY_PLUS,
-
-    WKEY_LBRACE,
-    WKEY_RBRACE,
-    WKEY_COLON,
-    WKEY_SEMICOLON,
-    WKEY_COMMA,
-    WKEY_DOT,
-    WKEY_QUERY,
-
-    WKEY_SPACE,
-
-    WKEY_ENTER,
-    WKEY_BACKSPACE,
-} Key;
-
-typedef enum : uint32_t {
-    MOD_SHIFT,
-    MOD_CTRL,
-    MOD_META,
-} ModifierKey;
-
-typedef enum : uint64_t {
     WindowResized,
     KeyEvent,
-
-    MouseMoved,
-    MouseLButtonDown,
-    MouseRButtonDown,
-    MouseMButtonDown,
-    MouseLButtonUp,
-    MouseRButtonUp,
-    MouseMButtonUp,
+    ModifierKeyEvent,
+    KeymapChanged,
 } MessageType;
 
 typedef struct {
@@ -107,28 +31,53 @@ typedef struct {
 } MousePos;
 
 typedef struct {
-    uint64_t key_id;
-    uint16_t modifier_key_mask;
+    RawKey key_id;
+    uint32_t modifier_key_mask;
     bool key_pressed;
 } KeyEventData;
+
+typedef struct {
+    uint32_t depressed;
+    uint32_t latched;
+    uint32_t locked;
+    uint32_t group;
+} ModifierKeyEventData;
 
 typedef struct {
     uint32_t width;
     uint32_t height;
 } WindowDimensions;
 
+
+typedef struct KeyMap KeyMap;
+typedef struct KeyState KeyState;
+
 typedef struct {
     MessageType type;
     union {
         WindowDimensions dims;
         KeyEventData key_event;
+        ModifierKeyEventData mod_event;
+        KeyMap* keymap;
     };
 } WinMessage;
 
 ARRAY_HEADER(WinMessage, wm, WinMessage);
 
+// TODO (IMPROVEMENT):
+//  - separate window events from regular events?
+//  - add window ID to window events?
 WinMessageArray pl_poll_events(PlWindow* window, Allocator* a);
 
-bool is_key_pressed();
+bool is_key_pressed(RawKey raw);
+
+KeyState* create_keystate(KeyMap* keymap);
+void destroy_keystate(KeyState*);
+
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyState* state);
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyState* state);
+Key get_key(RawKey raw, KeyState* state);
+
+
 
 #endif

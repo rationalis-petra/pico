@@ -1,8 +1,8 @@
 #include "platform/signals.h"
 
 #include "pico/data/error.h"
-#include "pico/binding/address_env.h"
 #include "pico/codegen/codegen.h"
+#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/codegen/backend-direct/generate.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
 #include "pico/codegen/backend-pvm/generate.h"

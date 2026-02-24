@@ -7,7 +7,7 @@
 
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/internal.h"
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 
 void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, InternalContext ictx) {
     Target target = ictx.target;

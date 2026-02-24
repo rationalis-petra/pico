@@ -23,6 +23,10 @@ TypeEnv* mk_type_env(Environment* env, Allocator* a) {
     return t_env; 
 }
 
+Module* type_env_module(TypeEnv* env) {
+    return env_module(env->env);
+}
+
 TypeEntry type_env_lookup(Symbol s, TypeEnv* env) {
     static PiType kind = {.sort = TKind, .kind.nargs = 0};
     // Search locally

@@ -985,10 +985,28 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
         return true;
     }
     case TEnum: {
+        PiType tag_type;
+        switch (ptype->enumeration.tag_size) {
+        case 8:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_8 };
+            break;
+        case 16:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_16 };
+            break;
+        case 32:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_32 };
+            break;
+        case 64:
+            tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
+            break;
+        default:
+            panic(mv_string("bad tagsize"));
+        }
+
         // If it's a "simple enum" (all variants have 0 args), check against the tag
         if (ctype->sort == CSPrimInt) {
             // Check against UInt 64
-            if (!can_reinterpret_prim(ctype->prim, UInt_64)) return false;
+            if (!can_reinterpret_prim(ctype->prim, tag_type.prim)) return false;
             for (size_t i = 0; i < ptype->enumeration.variants.len; i++) {
                 PtrArray* variant = ptype->enumeration.variants.data[i].val;
                 if (variant->len != 0) return false;
@@ -996,13 +1014,10 @@ bool bd_can_reinterpret(CType* ctype, PiType* ptype) {
             return true;
         }
 
-        // TODO: compare 0-member enums with actual c enums/ints.
         if (ctype->sort != CSStruct) return false;
         else if (ctype->structure.fields.len != 2) return false;
 
-        // check that the 0th struct field is reinterpretable as a 64-bit int
-        // TODO (FEATURE): change tag size based on number of enum vals 
-        PiType tag_type = (PiType) { .sort = TPrim, .prim = UInt_64 };
+        // check that the 0th struct field is reinterpretable as the tag type
         if (!bd_can_reinterpret(&ctype->structure.fields.data[0].val, &tag_type)) return false;
         
         CType* cunion = &ctype->structure.fields.data[1].val;

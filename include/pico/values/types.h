@@ -43,7 +43,6 @@ typedef enum {
 
 typedef enum {
     TPrim,
-    TArray,
     TProc,
     TStruct,
     TEnum,
@@ -75,19 +74,6 @@ typedef enum {
     // Used only during unification
     TUVar,
 } PiType_t;
-
-typedef enum { Any, FixedDimension, Fixed } ArraySort;
-
-typedef struct {
-    bool is_any;
-    uint64_t value;
-} ArrayDimType;
-
-typedef struct {
-    ArraySort sort; 
-    AddrPiList dimensions;
-    PiType* element_type; 
-} ArrayType;
 
 typedef struct {
     AddrPiList args;
@@ -164,7 +150,6 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
-        ArrayType array;
         ProcType proc;
         StructType structure;
         EnumType enumeration;
@@ -233,7 +218,7 @@ bool is_narrower(PiType* wide, PiType* narrow);
 // Recursively extracts the inner type from distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 
 // (wrapped) named type within the type, then contine descending.
-PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a);
+PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);
 
 // Recursively extracts the inner type from named, distinct and opaque types.
 PiType* strip_type(PiType* ty);

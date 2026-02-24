@@ -19,7 +19,7 @@
 #include "pico/codegen/backend-direct/polymorphic.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
 #include "pico/values/modular.h"
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/eval/call.h"
 
 #define STACK_ALIGN 8
@@ -225,7 +225,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
     build_unary_op(Push, reg(R15, sz_64), ass, a, point);
     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
     build_unary_op(Push, reg(DVARS_REGISTER, sz_64), ass, a, point);
-    build_unary_op(Push, reg(R12, sz_64), ass, a, point);
+    build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
 
     // Push the argument onto the stack
 #if ABI == SYSTEM_V_64
@@ -237,6 +237,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
     build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
     build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RSI, sz_64), ass, a, point);
     build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(RCX, sz_64), ass, a, point);
 #elif ABI == WIN_64
     if (out_sz != 0) {
         build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
@@ -245,6 +246,7 @@ static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoin
     build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(R8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(R9, sz_64), ass, a, point);
 #endif
 
     // Code generated here may assume $RBP is the base of the stack, they are
@@ -289,7 +291,7 @@ static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint
 
     build_binary_op(Mov, reg(RAX, sz_64), reg(R14, sz_64), ass, a, point);
 
-    build_unary_op(Pop, reg(R12, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(DMEM_REGISTER, sz_64), ass, a, point);
     build_unary_op(Pop, reg(DVARS_REGISTER, sz_64), ass, a, point);
     build_unary_op(Pop, reg(VSTACK_HEAD, sz_64), ass, a, point);
     build_unary_op(Pop, reg(R15, sz_64), ass, a, point);
@@ -370,41 +372,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
 
         data_stack_grow(env, pi_stack_size_of(*syn.ptype));
-        break;
-    }
-    case SLitArray: {
-        size_t element_size = pi_size_of(*syn.ptype->array.element_type);
-        size_t element_stack_size = pi_stack_align(element_size);
-        size_t index_mul = pi_size_align(element_size, pi_align_of(*syn.ptype->array.element_type));
-        data_stack_grow(env, ADDRESS_SIZE);
-
-        // array - memory/data
-        generate_perm_malloc(reg(RAX, sz_64), imm32(index_mul * syn.array_lit.subterms.len), ass, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-
-        for (size_t i = 0; i < syn.array_lit.subterms.len; i++) {
-            generate_i(*(Syntax*)syn.array_lit.subterms.data[i], env, ictx);
-
-            // Copy the element into the array-block
-            size_t offset = i * index_mul;
-            build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, element_stack_size, sz_64), ass, a, point);
-            build_binary_op(Add, reg(RDI, sz_64), imm32(offset), ass, a, point);
-            generate_monomorphic_copy(RDI,RSP, element_size, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm32(element_stack_size), ass, a, point);
-            
-            data_stack_shrink(env, element_stack_size);
-        }
-
-        // Shape - len + data
-        generate_perm_malloc(reg(RAX, sz_64), imm32(ADDRESS_SIZE * syn.array_lit.shape.len), ass, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        for (size_t i = 0; i < syn.array_lit.shape.len; i++) {
-            size_t dimension_len = syn.array_lit.shape.data[i];
-            build_binary_op(Mov, rref32(RAX, i * ADDRESS_SIZE, sz_64), imm32(dimension_len), ass, a, point);
-        }
-
-        build_unary_op(Push, imm32(syn.array_lit.shape.len), ass, a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype) - ADDRESS_SIZE);
         break;
     }
     case SVariable:
@@ -539,6 +506,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         // Codegen function setup
         build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
         build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
@@ -573,19 +541,23 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // Storage of function output 
         size_t ret_size = pi_stack_size_of(*syn.procedure.body->ptype);
 
-        // Note: R9, VSTACK_HEAD, RBP were saved previously (in the prolog)
-        //       R12 is for the return address
-        build_binary_op(Mov, reg(R12, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
+        // Note: R9, DMEM_REGISTER, VSTACK_HEAD, RBP were saved previously (in the prolog)
+        //       RBX is for the return address, as it is non-volatile on SysV
+        //       and Windows (important as stack_mode may call c code!)
+        build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 24, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
+        if (!syn.procedure.preserve_dyn_memory) {
+          build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
+        }
         build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
 
-        generate_stack_move(args_size + 3 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
+        generate_stack_move(args_size + 4 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
 
         // Pop args
-        build_binary_op(Add, reg(RSP, sz_64), imm32(args_size + 3 * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm32(args_size + 4 * ADDRESS_SIZE), ass, a, point);
 
         // push return address 
-        build_unary_op(Push, reg(R12, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
         build_nullary_op(Ret, ass, a, point);
         break;
     }
@@ -1249,10 +1221,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         } else {
             PiType* enum_type = strip_type(syn.ptype);
             size_t enum_size = pi_stack_size_of(*enum_type);
-
+            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
-
+            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
             data_stack_grow(env, enum_size);
         }
         break;
@@ -1266,7 +1237,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             int64_t head = get_stack_head(env);
 
             // Set the tag
-            build_binary_op(Mov, rref8(VSTACK_HEAD, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
+            PiType* enum_type = strip_type(syn.ptype);
+            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+            build_binary_op(Mov, rref8(VSTACK_HEAD, 0, sz), imm32(syn.constructor.tag), ass, a, point);
 
             // Generate each argument
             for (size_t i = 0; i < syn.variant.args.len; i++) {
@@ -1329,18 +1302,18 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
         } else {
-            // TODO (BUG): account for differently sized enums!
-            const size_t tag_size = sizeof(uint64_t);
             PiType* enum_type = strip_type(syn.ptype);
-            size_t enum_size = pi_size_of(*enum_type);
+            size_t enum_stack_size = pi_size_of(*enum_type);
             size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
             // Make space to fit the (final) variant
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
-            data_stack_grow(env, enum_size);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_stack_size), ass, a, point);
+            data_stack_grow(env, enum_stack_size);
 
             // Set the tag
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), imm32(syn.constructor.tag), ass, a, point);
+            size_t tag_size = enum_type->enumeration.tag_size / 8;
+            LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+            build_binary_op(Mov, rref8(RSP, 0, sz), imm32(syn.constructor.tag), ass, a, point);
 
             // Generate each argument
             for (size_t i = 0; i < syn.variant.args.len; i++) {
@@ -1350,13 +1323,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
 
             // Note: items are placed on the stack in reverse order, i.e. the
-            // 'first' element in the enum is highest up in the stack. We will
-            // copy in the same order as they were generated, i.e. 'highest'
-            // goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
-            // as the 'subtraction' happens in the loop, we just initialize to
-            // variant_stack_size (same as dest)
-            size_t src_stack_offset = variant_stack_size - tag_size;
-            size_t dest_stack_offset = variant_stack_size;
+            //  'first' element in the enum is highest up in the stack. We will
+            //  copy in the same order as they were generated, i.e. 'highest'
+            //  goes first, meanig that the first source is (variant_stack_size - tag) - stack_size_of(first_elt)
+            //  as the 'subtraction' happens in the loop, we just initialize to
+            //  variant_stack_size (same as dest)
+            size_t src_stack_offset = variant_stack_size;
+            size_t dest_stack_offset = variant_stack_size + tag_size;
             for (size_t i = 0; i < syn.variant.args.len; i++) {
                 size_t field_size = pi_size_of(*(PiType*)args.data[i]);
                 size_t field_align = pi_align_of(*(PiType*)args.data[i]);
@@ -1369,8 +1342,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Remove the space occupied by the temporary values, then update
             // bookkeeping accordingly 
-            build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size - tag_size), ass, a, point);
-            data_stack_shrink(env, variant_stack_size - tag_size);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(variant_stack_size), ass, a, point);
+            data_stack_shrink(env, variant_stack_size);
         }
         break;
     }
@@ -1397,7 +1370,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 // Note: the match value is on the variable stack, so we use VSTACK_HEAD.
                 AsmResult out;
                 if (!clause.is_wildcard)  {
-                    build_binary_op(Cmp, rref8(VSTACK_HEAD, 0, sz_64), imm32(clause.tag), ass, a, point);
+                    LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                    build_binary_op(Cmp, rref8(VSTACK_HEAD, 0, sz), imm32(clause.tag), ass, a, point);
                     out = build_unary_op(JE, imm32(0), ass, a, point);
                 } else {
                     out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -1453,6 +1427,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                         Binding bind = (Binding) {
                             .sym = clause.vars.data[i],
                             .size = ADDRESS_SIZE,
+                            .align = ADDRESS_SIZE,
                             .is_variable = true,
                         };
                         push_binding(bind, &vars);
@@ -1473,6 +1448,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                         Binding bind = (Binding) {
                             .sym = clause.vars.data[i],
                             .size = arg_sz,
+                            .align = ADDRESS_SIZE, // TODO: is this correct?
                             .is_variable = false,
                         };
                         push_binding(bind, &vars);
@@ -1483,7 +1459,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                         // Push the value onto the stack - perform a monomorphic stack
                     }
                 }
-                address_bind_enum_vars(vars, true, env);
+                size_t tagsize = enum_type->enumeration.tag_size / 8;
+                address_bind_enum_vars(vars, tagsize, true, env);
 
                 generate_i(*clause.body, env, ictx);
                 if (is_variable_in(syn.ptype, env)) {
@@ -1562,7 +1539,24 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 SynClause clause = *(SynClause*)syn.match.clauses.data[i];
                 AsmResult out;
                 if (!clause.is_wildcard) {
-                    build_binary_op(Cmp, rref8(RSP, 0, sz_64), imm32(clause.tag), ass, a, point);
+                    LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
+                    // TODO: this was done because CMP with rref8/imm32 doesn't
+                    //   work well for memory operands with size < 64 - there is
+                    //   commented out test in assembler_binary_op_tests that is
+                    //   currently failing otherwise.
+                    // For now, move/zero-extend before comparing to the tag
+                    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                    switch (sz) {
+                    case sz_8:
+                    case sz_16:
+                      build_binary_op(MovZx, reg(RAX, sz_64), reg(RCX, sz), ass, a, point);
+                      break;
+                    case sz_32:
+                    case sz_64:
+                      build_binary_op(Mov, reg(RAX, sz), reg(RCX, sz), ass,a, point);
+                      break;
+                    }
+                    build_binary_op(Cmp, reg(RAX, sz_64), imm32(clause.tag), ass, a, point);
                     out = build_unary_op(JE, imm32(0), ass, a, point);
                 } else {
                     out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -1604,10 +1598,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                         .sym = clause.vars.data[j],
                         .is_variable = false,
                         .size = pi_size_of(*(PiType*)variant_types.data[j]),
+                        .align = pi_align_of(*(PiType*)variant_types.data[j])
                     };
                     push_binding(binder, &arg_sizes);
                 }
-                address_bind_enum_vars(arg_sizes, false, env);
+                size_t tag_size = enum_type->enumeration.tag_size / 8;
+                address_bind_enum_vars(arg_sizes, tag_size, false, env);
 
                 generate_i(*clause.body, env, ictx);
 
@@ -2389,6 +2385,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
+    case SDynAlloc: {
+        // TODO: check size/provide overflow error?
+        generate_i(*syn.size, env, ictx);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+        build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
+        build_binary_op(Add, reg(DMEM_REGISTER, sz_64), reg(RAX, sz_64), ass, a, point);
+        break;
+    }
     case SCheckedType: {
         build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_val), ass, a, point);
         build_unary_op(Push, reg(R9, sz_64), ass, a, point);
@@ -2933,23 +2937,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 #endif
 }
 
-size_t calc_variant_size(PtrArray* types) {
-    size_t total = sizeof(uint64_t);
-    for (size_t i = 0; i < types->len; i++) {
-        size_t field_align;
-        Result_t res = pi_maybe_align_of(*(PiType*)types->data[i], &field_align);
-        if (res != Ok) return res;
-        total = pi_size_align(total, field_align);
-        size_t field_size;
-        res = pi_maybe_size_of(*(PiType*)types->data[i], &field_size);
-        if (res != Ok) return res;
-        total += field_size;
-    }
-    return total;
-}
-
 size_t calc_variant_stack_size(PtrArray* types) {
-    size_t total = sizeof(uint64_t);
+    size_t total = 0;
     for (size_t i = 0; i < types->len; i++) {
         total += pi_stack_size_of(*(PiType*)types->data[i]);
     }

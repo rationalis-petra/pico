@@ -8,6 +8,29 @@
 #include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/platform/submodules.h"
 
+
+LocationSize tag_size_sz(uint8_t tagsize) {
+    LocationSize sz;
+    switch (tagsize) {
+    case 8:
+        sz = sz_8;
+        break;
+    case 16:
+        sz = sz_16;
+        break;
+    case 32:
+        sz = sz_32;
+        break;
+    case 64:
+        sz = sz_64;
+        break;
+    default:
+        panic(mv_string("Invalid enum tag size."));
+        break;
+    }
+    return sz;
+}
+
 int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
     int diff_1 = lhs.offset - rhs.offset;
     if (diff_1) return diff_1;

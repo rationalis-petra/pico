@@ -13,7 +13,7 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/syntax/concrete.h"
-#include "pico/analysis/abstraction.h"
+#include "pico/abstraction/abstraction.h"
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
 

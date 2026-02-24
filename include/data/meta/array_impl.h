@@ -40,8 +40,8 @@
         out.data = mem_alloc(memsize, a);                               \
         out.len = source.len;                                           \
         out.size = source.size;                                         \
-        out.gpa = *a;                                                    \
-        memcpy(out.data, source.data, memsize);                         \
+        out.gpa = *a;                                                   \
+        if (out.size > 0) memcpy(out.data, source.data, memsize);       \
         return out;                                                     \
     }                                                                   \
                                                                         \

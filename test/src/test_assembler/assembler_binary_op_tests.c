@@ -54,6 +54,20 @@ void run_binary_op_assembler_tests(TestLog *log, Allocator *a) {
         }
     }
 
+    // TODO: fix the assembler for this test...
+    //   - Also, fix the assembler so that it will avoid adding 'REX' prefixes
+    //     in more scenarios, e.g. if doing so would affect the size of the operands
+    /* if (test_start(log, mv_string("asm-cmp-m32-imm32"))) { // Mov [RSI + 8]b, DIL,  */
+    /*     ASM_TEST() { */
+    /*         uint8_t expected[] =  { 0x66, 0x83, 0x3C, 0x24, 0x01, 0x90 } ; */
+
+    /*         build_binary_op(Cmp, rref8(RSP, 0, sz_32), imm32(1), ass, &gpa, &point); */
+
+    /*         check_asm_eq(expected, ass, &gpa, log); */
+    /*         clear_assembler(ass); */
+    /*     } */
+    /* } */
+
     if (test_start(log, mv_string("asm-mov-r32-m32"))) { // Mov [RSI + 8]b, DIL, 
         ASM_TEST() {
             uint8_t expected[] =  { 0x41, 0x8B, 0x43, 0x08, 0x90 } ;
