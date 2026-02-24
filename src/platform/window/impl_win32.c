@@ -56,90 +56,90 @@ bool translate_key_id(Key* key, WPARAM windows_keycode) {
         *key = WKEY_9;
         break;
 
-    case A:
+    case 0x41:
         *key = WKEY_A;
         break;
-    case B:
+    case 0x42:
         *key = WKEY_B;
         break;
-    case C:
+    case 0x43:
         *key = WKEY_C;
         break;
-    case D:
+    case 0x44:
         *key = WKEY_D;
         break;
-    case E:
+    case 0x45:
         *key = WKEY_E;
         break;
-    case F:
+    case 0x46:
         *key = WKEY_F;
         break;
-    case G:
+    case 0x47:
         *key = WKEY_G;
         break;
-    case H:
+    case 0x48:
         *key = WKEY_H;
         break;
-    case I:
+    case 0x49:
         *key = WKEY_I;
         break;
-    case J:
+    case 0x4A:
         *key = WKEY_J;
         break;
-    case K:
+    case 0x4B:
         *key = WKEY_K;
         break;
-    case L:
+    case 0x4C:
         *key = WKEY_L;
         break;
-    case M:
+    case 0x4D:
         *key = WKEY_M;
         break;
-    case N:
+    case 0x4E:
         *key = WKEY_N;
         break;
-    case O:
+    case 0x4F:
         *key = WKEY_O;
         break;
-    case P:
+    case 0x50:
         *key = WKEY_P;
         break;
-    case Q:
+    case 0x51:
         *key = WKEY_Q;
         break;
-    case R:
+    case 0x52:
         *key = WKEY_R;
         break;
-    case S:
+    case 0x53:
         *key = WKEY_S;
         break;
-    case T:
+    case 0x54:
         *key = WKEY_T;
         break;
-    case U:
+    case 0x55:
         *key = WKEY_U;
         break;
-    case V:
+    case 0x56:
         *key = WKEY_V;
         break;
-    case W:
+    case 0x57:
         *key = WKEY_W;
         break;
-    case X:
+    case 0x58:
         *key = WKEY_X;
         break;
-    case Y:
+    case 0x59:
         *key = WKEY_Y;
         break;
-    case Z:
+    case 0x6A:
         *key = WKEY_Z;
         break;
 
     case VK_OEM_MINUS:
-        outkey = WKEY_MINUS;
+        *key = WKEY_MINUS;
         break;
     case VK_OEM_PLUS:
-        outkey = WKEY_PLUS;
+        *key = WKEY_PLUS;
         break;
 
     default:
@@ -209,6 +209,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             };
             push_wm(message, &window->messages);
         }
+        break;
     }
     case WM_CLOSE:
         window->should_close = true;
