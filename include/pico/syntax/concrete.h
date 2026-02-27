@@ -76,6 +76,10 @@ Document* pretty_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree(RawTree tree, Allocator* a);
 void delete_rawtree_ptr(RawTree* tree_ptr, Allocator* a);
 
+// Constructors used for testing
+RawTree raw_branch(PiAllocator* pia, Range range, SyntaxHint, size_t n, ...);
+RawTree raw_sym(PiAllocator* pia, Range range, SyntaxHint, size_t n, ...);
+
 Document* pretty_atom(Atom val, Allocator* a);
 
 #endif

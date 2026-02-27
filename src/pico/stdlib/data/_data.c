@@ -16,10 +16,15 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
+    add_module(string_to_symbol(mv_string("data")), module, base);
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
     add_allocators_module(target.target, module, subregion);
+    reset_subregion(subregion);
+    add_pointer_module(target, module, subregion);
+    reset_subregion(subregion);
+    add_slice_module(target, module, subregion);
     reset_subregion(subregion);
     add_list_module(target, module, subregion);
     reset_subregion(subregion);
@@ -31,10 +36,8 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_pair_module(target, module, subregion);
     reset_subregion(subregion);
-    add_pointer_module(target, module, subregion);
-    reset_subregion(subregion);
     add_string_module(target, module, subregion);
     release_subregion(subregion);
-
-    add_module(string_to_symbol(mv_string("data")), module, base);
+    add_stringview_module(target, module, subregion);
+    release_subregion(subregion);
 }

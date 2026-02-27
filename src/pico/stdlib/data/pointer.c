@@ -44,6 +44,9 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
     const char* get_fn = "(def get all [A] proc [(p (Ptr A))] (load {A} (unname p)))";
     compile_toplevel(get_fn, module, target, &point, &pi_point, region);
 
+    const char* carat_fn = "(def ^ get)";
+    compile_toplevel(carat_fn, module, target, &point, &pi_point, region);
+
     const char* set_fn = "(def set all [A] proc [(p (Ptr A)) (val A)] (store (unname p) val))";
     compile_toplevel(set_fn, module, target, &point, &pi_point, region);
 

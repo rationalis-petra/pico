@@ -44,7 +44,9 @@ void run_pico_tests(TestLog* log, Allocator* a) {
     set_current_package(base);
 
     if (suite_start(log, mv_string("parse"))) {
-        run_pico_parse_tests(log, a);
+        RegionAllocator* subregion = make_subregion(region);
+        run_pico_parse_tests(log, subregion);
+        release_subregion(subregion);
         suite_end(log);
     }
 

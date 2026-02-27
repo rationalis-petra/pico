@@ -208,7 +208,6 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
 }
 
 int main(int argc, char** argv) {
-
     // Setup
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();

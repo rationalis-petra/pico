@@ -7,6 +7,7 @@
 #include "pico/codegen/codegen.h"
 
 void add_pointer_module(Target target, Module* data, RegionAllocator* region);
+void add_slice_module(Target target, Module* data, RegionAllocator* region);
 void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region);
 
 void add_pair_module(Target target, Module* data, RegionAllocator* region);
@@ -16,5 +17,6 @@ void add_result_module(Target target, Module* data, RegionAllocator* region);
 
 void add_list_module(Target target, Module* data, RegionAllocator* region);
 void add_string_module(Target target, Module* data, RegionAllocator* region);
+void add_stringview_module(Target target, Module* data, RegionAllocator* region);
 
 #endif
