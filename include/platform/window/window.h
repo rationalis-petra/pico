@@ -50,7 +50,7 @@ typedef struct {
 
 
 typedef struct KeyMap KeyMap;
-typedef struct KeyState KeyState;
+typedef struct KeyboardState KeyboardState;
 
 typedef struct {
     MessageType type;
@@ -69,14 +69,14 @@ ARRAY_HEADER(WinMessage, wm, WinMessage);
 //  - add window ID to window events?
 WinMessageArray pl_poll_events(PlWindow* window, Allocator* a);
 
-bool is_key_pressed(RawKey raw);
+KeyboardState* create_keyboard_state(KeyMap* keymap);
+void destroy_keyboard_state(KeyboardState*);
 
-KeyState* create_keystate(KeyMap* keymap);
-void destroy_keystate(KeyState*);
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState* state);
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState* state);
 
-void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyState* state);
-void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyState* state);
-Key get_key(RawKey raw, KeyState* state);
+// TODO: what about multiple unicocde characters?
+Key get_key(RawKey raw, KeyboardState* state);
 
 
 

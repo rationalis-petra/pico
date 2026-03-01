@@ -11,6 +11,7 @@
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
 #include "pico/abstraction/abstraction.h"
+#include "pico/abstraction/abstraction_errors.h"
 
 // Internal types
 typedef enum {
@@ -26,14 +27,6 @@ typedef struct {
     };
 } ComptimeHead;
 
-typedef struct {
-    Allocator* gpa;
-    PiAllocator* pia;
-    ShadowEnv* env;
-    PiErrorPoint* point;
-    void* vstack_memory_ptr;
-    void* dynamic_memory_ptr;
-} AbstractionCtx;
 
 // Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx);
@@ -301,14 +294,22 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, AbstractionCtx
         RawTree annotation = list.branch.nodes.data[i];
         if (annotation.type == RawAtom) {
             sym_ptr_bind(annotation.atom.symbol, NULL, args);
-        } else if (annotation.type == RawBranch || annotation.branch.nodes.len == 2) {
+        } else if (annotation.type == RawBranch || annotation.branch.nodes.len > 1) {
             RawTree arg = annotation.branch.nodes.data[0];
-            RawTree raw_type = annotation.branch.nodes.data[1];
             if (arg.type != RawAtom || arg.atom.type != ASymbol) { return error_result; }
-            Syntax* type = abstract_expr_i(raw_type, ctx); 
+            RawTree* raw_type;
+            if (annotation.branch.nodes.len == 2) {
+              raw_type = &annotation.branch.nodes.data[1];
+            } else {
+              raw_type = raw_slice(&annotation, 1, ctx.pia);
+            }
+            Syntax* type = abstract_expr_i(*raw_type, ctx); 
 
             sym_ptr_bind(arg.atom.symbol, type, args);
-        } else { return error_result; }
+        } else {
+          // TODO (Improvement): produce index, range?
+          return error_result;
+        }
     }
     return (Result) {.type = Ok};
 }
@@ -441,8 +442,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
 
             args_index++;
         }
-
-
 
         SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
         for (size_t i = 0; i < arguments.len; i++) {
@@ -1557,15 +1556,44 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        RawTree namer = raw.branch.nodes.data[1];
+        Symbol name = {};
+        PtrArray args = {};
+        if (namer.type == RawBranch) {
+            RawTreePiList name_list = namer.branch.nodes;
+            if (name_list.len < 1) {
+                err.range = namer.range;
+                err.message = mv_cstr_doc("Term former 'name' expects name list to have at least one member!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (!is_symbol(name_list.data[0])) {
+                err.range = name_list.data[1].range;
+                err.message = mv_cstr_doc("Term former 'name' expects the first argument of name list to be a symbol!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            name = name_list.data[0].atom.symbol;
+
+            args = mk_ptr_array(name_list.len - 1, a);
+            for (size_t i = 1; i < name_list.len; i++) {
+                push_ptr(abstract_expr_i(name_list.data[i], ctx), &args);
+            }
+        }
+        else if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'name' expects the first argument to be a symbol or symbol + type list!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        else {
+            name = raw.branch.nodes.data[1].atom.symbol;
+        }
+        Syntax* body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SName,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .name = {.name = name, .body = body, .args = args},
         };
         return res;
     }
@@ -1602,7 +1630,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SWiden,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .widen = {.val = term, .type = type},
         };
         return res;
     }
@@ -1621,7 +1649,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SNarrow,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .narrow = {.val = term, .type = type},
         };
         return res;
     }
@@ -1705,9 +1733,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Wrong number of terms to proc type former.", a);
-            throw_pi_error(ctx.point, err);
+            proc_tyformer_incorrect_numterms(raw, ctx);
         }
 
         RawTree raw_args = raw.branch.nodes.data[1];

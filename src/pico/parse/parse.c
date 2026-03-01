@@ -117,7 +117,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 running = false;
                 break;
             }
-            else if (is_symchar(point)){
+            else if (is_symchar(point) || point == '^'){
                 out = parse_atom(is, pia, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
@@ -285,7 +285,28 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     U32Array symchars = mk_u32_array(16, a);
     size_t start = bytecount(is);
     return parse_atom_prepped(symchars, start, is, pia, a);
-} 
+}
+
+RawTree wrap_caret(RawTree val, Range bang_range, PiAllocator* pia) {
+    RawTreePiList nodes = mk_rawtree_list(2, pia);
+
+    push_rawtree((RawTree) {
+        .type = RawAtom,
+        .range = bang_range,
+        .atom.type = ASymbol,
+        .atom.symbol= string_to_symbol(mv_string("^")),
+      }, &nodes);
+    
+    push_rawtree(val, &nodes);
+
+    return (RawTree) {
+        .type = RawBranch,
+        .range.start = bang_range.start,
+        .range.end = val.range.end,
+        .branch.hint = HExpression,
+        .branch.nodes = nodes,
+    };
+}
 
 ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
@@ -305,10 +326,16 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
 
+    bool caret_next = false;
+    Range caret_range = {};
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
             push_u32(codepoint, &symchars);
+        } else if (codepoint == '^') {
+            caret_next = true;
+            next(is, &codepoint);
+            caret_range = (Range) { start, bytecount(is) };
         } else if (codepoint == '.' || codepoint == ':') {
             size_t op_start = bytecount(is);
             next(is, &codepoint);
@@ -333,6 +360,11 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
+            if (caret_next) {
+                val = wrap_caret(val, caret_range, pia);
+                caret_next = false;
+            }
+
             // new start bytecount(is)
             start = op_end;
 
@@ -356,15 +388,32 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
         }
     }
     if (result == StreamEnd) {
-        String str = string_from_UTF_32(symchars, a);
-        RawTree val = (RawTree) {
-            .type = RawAtom,
-            .range.start = start,
-            .range.end = bytecount(is),
-            .atom.type = ASymbol,
-            .atom.symbol = string_to_symbol(str),
-        };
-        push_rawtree(val, &terms);
+        if (symchars.len == 0) {
+            if (caret_next) {
+                RawTree val = {
+                    .type = RawAtom,
+                    .range = caret_range,
+                    .atom.type = ASymbol,
+                    .atom.symbol = string_to_symbol(mv_string("^")),
+                };
+                caret_next = false;
+                push_rawtree(val, &terms);
+            }
+        } else {
+            String str = string_from_UTF_32(symchars, a);
+            RawTree val = (RawTree) {
+                .type = RawAtom,
+                .range.start = start,
+                .range.end = bytecount(is),
+                .atom.type = ASymbol,
+                .atom.symbol = string_to_symbol(str),
+            };
+            if (caret_next) {
+                val = wrap_caret(val, caret_range, pia);
+                caret_next = false;
+            }
+            push_rawtree(val, &terms);
+        }
     }
 
     if (result != StreamSuccess && result != StreamEnd) {
@@ -553,9 +602,9 @@ ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* 
         push_u32(codepoint, &arr);
     }
 
-    if (result != StreamSuccess) {
+    if (result != StreamSuccess && result != StreamEnd) {
         out.type = ParseFail;
-        out.error.message = mv_cstr_doc("Stream failed", a);
+        out.error.message = mv_cstr_doc("Stream failed while parsing prefix", a);
         out.error.range.start = bytecount(is);
         out.error.range.end = bytecount(is);
     } else if (arr.len == 0) {
@@ -826,5 +875,6 @@ bool is_symchar(uint32_t codepoint) {
                                           || codepoint == 0x27E8
                                           || codepoint == 0x27E9
                                           || codepoint == '.'
-                                          || codepoint == ':');
+                                          || codepoint == ':'
+                                          || codepoint == '^');
 }

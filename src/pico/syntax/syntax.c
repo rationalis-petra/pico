@@ -643,8 +643,17 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
     case SName: {
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mv_style_doc(former_style, mk_cstr_doc("name", a), a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax->name.type, ctx, a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax->name.val, ctx, a), &nodes);
+        if (syntax->name.args.len > 0) {
+            PtrArray name_nodes = mk_ptr_array(syntax->name.args.len + 1, a);
+            push_ptr(mv_str_doc(symbol_to_string(syntax->name.name, a), a), &name_nodes);
+            for (size_t i = 0; i < syntax->name.args.len; i++) {
+                push_ptr(pretty_syntax_internal(syntax->name.args.data[i], ctx, a), &name_nodes);
+            }
+            push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(name_nodes, a), a), a), a), &nodes);
+        } else {
+            push_ptr(mv_str_doc(symbol_to_string(syntax->name.name, a), a), &nodes);
+        }
+        push_ptr(pretty_syntax_internal(syntax->name.body, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }

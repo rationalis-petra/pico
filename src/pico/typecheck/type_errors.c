@@ -2,6 +2,67 @@
 
 #include "pico/typecheck/type_errors.h"
 
+
+// ---------------------------------------------------------------------- 
+//
+//                              Typechecking  
+//
+// ----------------------------------------------------------------------
+
+// After unification, checkif typecheck was successful
+void check_result_out(UnifyResult out, Range range, UnifyReason reason, Allocator* a, PiErrorPoint* point) {
+    if (out.type == USimpleError) {
+        PtrArray errs = mk_ptr_array(3, a);
+        PicoError* err;
+
+        if (reason.type == URCheck) {
+            UReasonCheck check = reason.check;
+
+            PtrArray nodes = mk_ptr_array(4, a);
+            push_ptr(mv_cstr_doc("A typechecking error occurred here - the term does not have type", a), &nodes);
+            push_ptr(pretty_type(check.expected, a), &nodes);
+            push_ptr(mv_cstr_doc("But instead has type", a), &nodes);
+            push_ptr(pretty_type(check.actual, a), &nodes);
+
+            PicoError* err = mem_alloc(sizeof(PicoError), a);
+            push_ptr(err, &errs);
+            *err = (PicoError) {
+                .range = range,
+                .message = mv_sep_doc(nodes, a),
+            };
+        }
+
+
+        err = mem_alloc(sizeof(PicoError), a);
+        push_ptr(err, &errs);
+        *err = (PicoError) {
+            .range = reason.type == URCheck ? (Range){} : range,
+            .message = out.message, 
+        };
+
+        throw_pi_errors(point, errs);
+    }
+    if (out.type == UConstraintError) {
+        PtrArray errs = mk_ptr_array(2, a);
+        PicoError* err_main = mem_alloc(sizeof(PicoError), a);
+        *err_main = (PicoError) {
+            .range = range,
+            .message = out.message,
+        };
+
+        PicoError* err_src = mem_alloc(sizeof(PicoError), a);
+        *err_src = (PicoError) {
+            .range = out.initial,
+            .message = mv_cstr_doc("Constraint was introduced here", a)
+        };
+        push_ptr(err_main, &errs);
+        push_ptr(err_src, &errs);
+
+        throw_pi_errors(point, errs);
+    }
+}
+
+// Variables
 _Noreturn void type_error_unexpected_module(Syntax* syn, Module* module, TypeCheckContext ctx) {
   PicoError err = {
     .message = mv_cstr_doc(
@@ -443,5 +504,19 @@ UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs,
     return (UnifyResult) {
         .type = USimpleError,
         .message = mv_vsep_doc(nodes, a),
+    };
+}
+
+
+UnifyResult unify_error_name_has_args_match(PiType* lhs, PiType* rhs, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(6, a);
+    push_ptr(mv_cstr_doc("Named type mismatch: two named types must both be instantiated with the same number of arguments.", a), &nodes);
+    push_ptr(mv_cstr_doc("This error occurred when trying to unify types: ", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+    push_ptr(mv_cstr_doc("and", a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
+    return (UnifyResult) {
+        .type = USimpleError,
+        .message = mv_sep_doc(nodes, a),
     };
 }

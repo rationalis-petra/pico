@@ -39,7 +39,9 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
         for (size_t i = 0; i < multi.errors.len; i++) {
             PicoError error = *(PicoError*)multi.errors.data[i];
             size_t prev_lines = i == 0 ? 5 : 2;
-            display_code_region(code_buffer, error.range, prev_lines, fos, a);
+            if (error.range.start != 0 && error.range.end != 0) {
+                display_code_region(code_buffer, error.range, prev_lines, fos, a);
+            }
 
             write_fstring(mv_string("\n"), fos);
             start_coloured_text(message_colour, fos);

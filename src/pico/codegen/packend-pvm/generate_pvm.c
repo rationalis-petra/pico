@@ -277,7 +277,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         generate(*syn.out_of.val, env, target, links, a, point);
         break;
     case SName:
-        generate(*syn.name.val, env, target, links, a, point);
+        generate(*syn.name.body, env, target, links, a, point);
         break;
     case SUnName:
         generate(*syn.unname, env, target, links, a, point);

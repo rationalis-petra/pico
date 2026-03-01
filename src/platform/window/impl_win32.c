@@ -4,6 +4,7 @@
 #if (OS_FAMILY == WINDOWS)
 
 #include "platform/window/window.h"
+#include "platform/window/winkey_translate.h"
 #include "platform/window/internal.h"
 #include <windows.h>
 
@@ -15,140 +16,6 @@ static Allocator* wsa = NULL;
 static HINSTANCE app_handle = 0;
 static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
-
-bool translate_key_id(Key* key, WPARAM windows_keycode) {
-    switch (windows_keycode) {
-    case VK_BACK:
-        *key = WKEY_BACKSPACE;
-        break;
-    case VK_RETURN:
-        *key = WKEY_ENTER;
-        break;
-    case VK_SPACE:
-        *key = WKEY_SPACE;
-        break;
-    case 0x30:
-        *key = WKEY_0;
-        break;
-    case 0x31:
-        *key = WKEY_1;
-        break;
-    case 0x32:
-        *key = WKEY_2;
-        break;
-    case 0x33:
-        *key = WKEY_3;
-        break;
-    case 0x34:
-        *key = WKEY_4;
-        break;
-    case 0x35:
-        *key = WKEY_5;
-        break;
-    case 0x36:
-        *key = WKEY_6;
-        break;
-    case 0x37:
-        *key = WKEY_7;
-        break;
-    case 0x38:
-        *key = WKEY_8;
-        break;
-    case 0x39:
-        *key = WKEY_9;
-        break;
-
-    case 0x41:
-        *key = WKEY_A;
-        break;
-    case 0x42:
-        *key = WKEY_B;
-        break;
-    case 0x43:
-        *key = WKEY_C;
-        break;
-    case 0x44:
-        *key = WKEY_D;
-        break;
-    case 0x45:
-        *key = WKEY_E;
-        break;
-    case 0x46:
-        *key = WKEY_F;
-        break;
-    case 0x47:
-        *key = WKEY_G;
-        break;
-    case 0x48:
-        *key = WKEY_H;
-        break;
-    case 0x49:
-        *key = WKEY_I;
-        break;
-    case 0x4A:
-        *key = WKEY_J;
-        break;
-    case 0x4B:
-        *key = WKEY_K;
-        break;
-    case 0x4C:
-        *key = WKEY_L;
-        break;
-    case 0x4D:
-        *key = WKEY_M;
-        break;
-    case 0x4E:
-        *key = WKEY_N;
-        break;
-    case 0x4F:
-        *key = WKEY_O;
-        break;
-    case 0x50:
-        *key = WKEY_P;
-        break;
-    case 0x51:
-        *key = WKEY_Q;
-        break;
-    case 0x52:
-        *key = WKEY_R;
-        break;
-    case 0x53:
-        *key = WKEY_S;
-        break;
-    case 0x54:
-        *key = WKEY_T;
-        break;
-    case 0x55:
-        *key = WKEY_U;
-        break;
-    case 0x56:
-        *key = WKEY_V;
-        break;
-    case 0x57:
-        *key = WKEY_W;
-        break;
-    case 0x58:
-        *key = WKEY_X;
-        break;
-    case 0x59:
-        *key = WKEY_Y;
-        break;
-    case 0x6A:
-        *key = WKEY_Z;
-        break;
-
-    case VK_OEM_MINUS:
-        *key = WKEY_MINUS;
-        break;
-    case VK_OEM_PLUS:
-        *key = WKEY_PLUS;
-        break;
-
-    default:
-        return false;
-    }
-    return true;
-}
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PlWindow* window;
@@ -276,6 +143,49 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
     return out;
+}
+
+// Key handling: 
+struct KeyboardState {
+    uint8_t[256] keys;
+}
+
+KeyboardState* create_keystate(KeyMap *keymap) {
+    KeyboardState* keystate = mem_alloc(sizeof(KeyboardState), wsa);
+    for (size_t i = 0; i < 256; i++) {
+        keys[i] = 0;
+    }
+    return keys;
+}
+
+void destroy_keystate(KeyboardState* state) {
+    mem_free(state, wsa);
+}
+
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyState *state) {
+    WPARAM keycode = rawkey_to_keycode(RawKey raw);
+    keystate[keycode] = is_pressed << 7;
+}
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyState *state) {
+    // TODO: implement me!
+}
+
+Key get_key(RawKey raw, KeyState *state) {
+    uint16_t unicode_out[1];
+    int numchar = ToUnicode(rawkey_to_keycode(RawKey rawkey),
+                            //[in]           UINT       wVirtKey,
+                            0,
+                            //[in]           UINT       wScanCode,
+                            state,
+                            //[in, optional] const BYTE *lpKeyState,
+                            unicode_out
+                            //[out]          LPWSTR     pwszBuff,
+                            1,
+                            //[in]           int        cchBuff,
+                            0
+                            //[in]           UINT       wFlags
+                            );
+    return translate_win_keycode(raw, unicode_out[0], numchar == 1);
 }
 
 #endif

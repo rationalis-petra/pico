@@ -64,7 +64,7 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
         push_ptr(mv_cat_doc(path_nodes, a), &nodes);
         push_ptr(mv_cstr_doc(":as", a), &nodes);
         push_ptr(mv_str_doc(symbol_to_string(clause.rename, a), a), &nodes);
-        return mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }
     case ImportMany:
         panic(mv_string("Not implemented: pretty for import many"));
@@ -72,7 +72,7 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mv_cat_doc(path_nodes, a), &nodes);
         push_ptr(mv_cstr_doc(":all", a), &nodes);
-        return mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
+        return mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
     }
     }
     panic(mv_string("bad import clause"));

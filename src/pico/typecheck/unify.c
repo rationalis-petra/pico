@@ -329,15 +329,7 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         break;
     }
     case TNamed: {
-      SymPair syms = (SymPair) {
-          .lhs = lhs->named.name,
-          .rhs = rhs->named.name
-      };
-      push_sym_pair(syms, rename);
-      UnifyResult res = unify_internal(lhs->named.type, rhs->named.type, rename, ctx); 
-      rename->len--;
-
-      if (res.type != UOk) return res;
+      UnifyResult res;
 
       if (lhs->named.args && rhs->named.args) {
         if (lhs->named.args->len != rhs->named.args->len) {
@@ -352,11 +344,16 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             if (res.type != UOk) return res;
         }
       } else if (lhs->named.args || rhs->named.args) {
-        return (UnifyResult) {
-            .type = USimpleError,
-            .message = mv_cstr_doc("named type mismatch: one has args and one doesn't!", a),
-        };
+          return unify_error_name_has_args_match(lhs, rhs, a);
       }
+
+      SymPair syms = (SymPair) {
+          .lhs = lhs->named.name,
+          .rhs = rhs->named.name
+      };
+      push_sym_pair(syms, rename);
+      res = unify_internal(lhs->named.type, rhs->named.type, rename, ctx); 
+      rename->len--;
       return res;
       break;
     }

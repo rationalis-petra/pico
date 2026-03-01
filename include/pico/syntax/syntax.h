@@ -315,6 +315,12 @@ typedef struct {
 } SynIs;
 
 typedef struct {
+    Symbol name;
+    PtrArray args;
+    Syntax* body;
+} SynName;
+
+typedef struct {
     Syntax* type;
 } SynSize;
 
@@ -339,7 +345,7 @@ typedef struct {
 typedef struct {
     Symbol name;
     Syntax* body;
-} SynName;
+} SynNamed;
 
 typedef struct {
     Symbol field;
@@ -442,7 +448,7 @@ struct Syntax {
         SynIs is;
         SynIs into;
         SynIs out_of;
-        SynIs name;
+        SynName name;
         Syntax* unname;
         SynIs widen;
         SynIs narrow;
@@ -456,7 +462,7 @@ struct Syntax {
         Syntax* dynamic_type;
         SynBind bind_type;
         SynSealedType sealed_type;
-        SynName named_type;
+        SynNamed named_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
         SynTrait trait;

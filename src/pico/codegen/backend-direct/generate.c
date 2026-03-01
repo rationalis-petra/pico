@@ -2297,7 +2297,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         generate_i(*syn.out_of.val, env, ictx);
         break;
     case SName:
-        generate_i(*syn.name.val, env, ictx);
+        generate_i(*syn.name.body, env, ictx);
         break;
     case SUnName:
         generate_i(*syn.unname, env, ictx);

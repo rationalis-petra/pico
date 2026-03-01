@@ -381,15 +381,15 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     return out;
 }
 
-KeyState* create_keystate(KeyMap* map) {
+KeyboardState* create_keystate(KeyMap* map) {
     struct xkb_keymap* keymap = (void*)map;
     struct xkb_state* state = xkb_state_new(keymap);
     if (!state)
         panic(mv_string("Failed to create xkb state"));
-    return (KeyState*)state;
+    return (KeyboardState*)state;
 }
 
-void destroy_keystate(KeyState* state) {
+void destroy_keystate(KeyboardState* state) {
     struct xkb_state* xstate = (void*)state;
     xkb_state_unref(xstate);
 }
@@ -398,7 +398,7 @@ KeyMap* get_keymap() {
     return (KeyMap*) xkb_keymap;
 }
 
-void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyState* state) {
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState* state) {
     struct xkb_state* kstate = (void*)state;
 
     xkb_keycode_t keycode = rawkey_to_scancode(raw) + 8;
@@ -413,12 +413,12 @@ void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, Ke
 
 }
 
-void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyState* state) {
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState* state) {
     struct xkb_state* kstate = (void*)state;
     xkb_state_update_mask(kstate, depressed, latched, locked, 0, 0, group);
 }
 
-Key get_key(RawKey raw, KeyState* state) {
+Key get_key(RawKey raw, KeyboardState* state) {
     struct xkb_state* kstate = (void*)state;
     uint32_t keycode = rawkey_to_scancode(raw) + 8;
     xkb_keysym_t keysym = xkb_state_key_get_one_sym(kstate, keycode);

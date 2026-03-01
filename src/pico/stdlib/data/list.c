@@ -16,6 +16,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
+    add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -149,17 +150,17 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     // Imperative Interface
     const char *list_push_fn =
-        "(def push all [A] proc [(val A) (l (Dynamic List A))] \n"
-        "  let [lst (use l)]\n"
+        "(def push all [A] proc [(val A) (l (Ptr (List A)))] \n"
+        "  let [lst (get l)]\n"
         "    (if (u64.< lst.len lst.capacity)\n"
-        "      (seq (eset lst.len val lst) (modify l (struct lst [.len (u64.+ lst.len 1)])))\n"
+        "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
         "      (panic {Unit} \"unimplemented\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
 
     const char *list_pop_fn =
-        "(def pop all [A] proc [(lst (Dynamic List A))] seq\n"
-        "  [let! old (use lst)]\n"
-        "  (modify lst (struct old [.len (u64.- old.len 1)]))\n"
+        "(def pop all [A] proc [(lst (Ptr (List A)))] seq\n"
+        "  [let! old (get lst)]\n"
+        "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
         "  (elt (u64.- old.len 1) old))\n";
     compile_toplevel(list_pop_fn, module, target, &point, &pi_point, region);
 
