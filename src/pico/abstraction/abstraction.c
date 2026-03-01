@@ -1556,15 +1556,44 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        RawTree namer = raw.branch.nodes.data[1];
+        Symbol name = {};
+        PtrArray args = {};
+        if (namer.type == RawBranch) {
+            RawTreePiList name_list = namer.branch.nodes;
+            if (name_list.len < 1) {
+                err.range = namer.range;
+                err.message = mv_cstr_doc("Term former 'name' expects name list to have at least one member!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (!is_symbol(name_list.data[0])) {
+                err.range = name_list.data[1].range;
+                err.message = mv_cstr_doc("Term former 'name' expects the first argument of name list to be a symbol!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            name = name_list.data[0].atom.symbol;
+
+            args = mk_ptr_array(name_list.len - 1, a);
+            for (size_t i = 1; i < name_list.len; i++) {
+                push_ptr(abstract_expr_i(name_list.data[i], ctx), &args);
+            }
+        }
+        else if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'name' expects the first argument to be a symbol or symbol + type list!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        else {
+            name = raw.branch.nodes.data[1].atom.symbol;
+        }
+        Syntax* body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SName,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .name = {.name = name, .body = body, .args = args},
         };
         return res;
     }
@@ -1601,7 +1630,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SWiden,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .widen = {.val = term, .type = type},
         };
         return res;
     }
@@ -1620,7 +1649,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SNarrow,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .narrow = {.val = term, .type = type},
         };
         return res;
     }

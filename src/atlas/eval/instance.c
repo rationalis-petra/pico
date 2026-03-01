@@ -322,6 +322,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         };
         type_check(&abs, env, tc_ctx);
 
+
         // -------------------------------------------------------------------------
         // Code Generation
         // -------------------------------------------------------------------------

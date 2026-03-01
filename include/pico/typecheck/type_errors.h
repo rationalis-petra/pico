@@ -4,6 +4,35 @@
 #include "pico/typecheck/typecheck.h"
 #include "pico/typecheck/unify.h"
 
+
+// ---------------------------------------------------------------------- 
+//
+//                              Typechecking  
+//
+// ----------------------------------------------------------------------
+
+typedef enum {
+    URNone,
+    URCheck,
+} UnifyReason_t;
+
+typedef struct {
+    PiType *expected;
+    PiType *actual;
+    Range range;
+} UReasonCheck;
+
+typedef struct {
+    UnifyReason_t type;
+    union {
+        UReasonCheck check;
+    };
+} UnifyReason;
+
+// After unification, checkif typecheck was successful
+void check_result_out(UnifyResult out, Range range, UnifyReason reason, Allocator* a, PiErrorPoint* point);
+
+
 // Variable
 _Noreturn void type_error_unexpected_module(Syntax* syn, Module* module, TypeCheckContext ctx);
 _Noreturn void type_error_unknown_var(Syntax* syn, TypeCheckContext ctx);
@@ -62,7 +91,11 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
 //
 // ----------------------------------------------------------------------
 
+// Enum
 UnifyResult unify_error_variant_name_mismatch(Symbol lhs, Symbol rhs, UnifyContext ctx);
+
+// Named
+UnifyResult unify_error_name_has_args_match(PiType* lhs, PiType* rhs, Allocator* a);
 
 #endif
 

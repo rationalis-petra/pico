@@ -1,9 +1,7 @@
 #include "platform/signals.h"
-#include "platform/memory/executable.h"
 #include "platform/memory/region.h"
 
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/platform/submodules.h"
 #include "pico/binding/environment.h"
 
 #include "test_pico/parse/parse.h"
