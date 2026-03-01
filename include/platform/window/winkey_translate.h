@@ -5,6 +5,7 @@
 #ifdef WINDOW_SYSTEM
 #if (OS_FAMILY == WINDOWS)
 
+#include "platform/window/window.h"
 #include <stdbool.h>
 #include <windows.h>
 

@@ -55,7 +55,7 @@ void build_window_should_close_fn(PiType* type, Assembler* ass, PiAllocator* pia
 void build_create_keystate_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 1, "keymap", mk_voidptr_ctype(pia), mk_voidptr_ctype(pia));
 
-    convert_c_fn(create_keystate, &fn_ctype, type, ass, a, point);
+    convert_c_fn(create_keyboard_state, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, pia);
 }
@@ -65,7 +65,7 @@ void build_destroy_keystate_fn(PiType* type, Assembler* ass, PiAllocator* pia, A
                                mk_voidptr_ctype(pia),
                                (CType){.sort = CSVoid});
 
-    convert_c_fn(destroy_keystate, &fn_ctype, type, ass, a, point);
+    convert_c_fn(destroy_keyboard_state, &fn_ctype, type, ass, a, point);
 
     delete_c_type(fn_ctype, pia);
 }

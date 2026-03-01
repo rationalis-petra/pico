@@ -1,3 +1,7 @@
+#include "platform/machine_info.h"
+
+#ifdef WINDOW_SYSTEM
+#if (OS_FAMILY == UNIX)
 #include <linux/input.h>
 
 #include "platform/window/xkb_translate.h"
@@ -460,3 +464,6 @@ static uint32_t invert_key[] = {
 uint32_t rawkey_to_scancode(RawKey rawkey) {
     return invert_key[rawkey];
 }
+
+#endif
+#endif

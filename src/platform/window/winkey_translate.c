@@ -4,6 +4,7 @@
 
 #include "platform/window/winkey_translate.h"
 #include "platform/window/window.h"
+#include "platform/signals.h"
 
 RawKey keycode_to_rawkey(WPARAM windows_keycode) {
     switch (windows_keycode) {
@@ -34,57 +35,57 @@ RawKey keycode_to_rawkey(WPARAM windows_keycode) {
     case 0x39:
         return RKEY_9;
         
-    case A:
+    case 'A':
         return RKEY_A;
-    case B:
+    case 'B':
         return RKEY_B;
-    case C:
+    case 'C':
         return RKEY_C;
-    case D:
+    case 'D':
         return RKEY_D;
-    case E:
+    case 'E':
         return RKEY_E;
-    case F:
+    case 'F':
         return RKEY_F;
-    case G:
+    case 'G':
         return RKEY_G;
-    case H:
+    case 'H':
         return RKEY_H;
-    case I:
+    case 'I':
         return RKEY_I;
-    case J:
+    case 'J':
         return RKEY_J;
-    case K:
+    case 'K':
         return RKEY_K;
-    case L:
+    case 'L':
         return RKEY_L;
-    case M:
+    case 'M':
         return RKEY_M;
-    case N:
+    case 'N':
         return RKEY_N;
-    case O:
+    case 'O':
         return RKEY_O;
-    case P:
+    case 'P':
         return RKEY_P;
-    case Q:
+    case 'Q':
         return RKEY_Q;
-    case R:
+    case 'R':
         return RKEY_R;
-    case S:
+    case 'S':
         return RKEY_S;
-    case T:
+    case 'T':
         return RKEY_T;
-    case U:
+    case 'U':
         return RKEY_U;
-    case V:
+    case 'V':
         return RKEY_V;
-    case W:
+    case 'W':
         return RKEY_W;
-    case X:
+    case 'X':
         return RKEY_X;
-    case Y:
+    case 'Y':
         return RKEY_Y;
-    case Z:
+    case 'Z':
         return RKEY_Z;
         
     /* case VK_OEM_MINUS: */
@@ -94,9 +95,8 @@ RawKey keycode_to_rawkey(WPARAM windows_keycode) {
     /*     outkey = WKEY_PLUS; */
     /*     break; */
 
-    default:
-        panic(mv_string("don't recognize this virtual keyode!"));
     }
+    panic(mv_string("don't recognize this virtual keyode!"));
 }
 
 WPARAM rawkey_to_keycode(RawKey rawkey) {
@@ -126,60 +126,60 @@ WPARAM rawkey_to_keycode(RawKey rawkey) {
     case RKEY_8:
         return 0x38;
     case RKEY_9:
-        return R0x39;
+        return 0x39;
         
     case RKEY_A:
-        return A;
+        return 'A';
     case RKEY_B:
-        return B;
+        return 'B';
     case RKEY_C:
-        return C;
+        return 'C';
     case RKEY_D:
-        return D;
+        return 'D';
     case RKEY_E:
-        return E;
+        return 'E';
     case RKEY_F:
-        return F;
+        return 'F';
     case RKEY_G:
-        return G;
+        return 'G';
     case RKEY_H:
-        return H;
+        return 'H';
     case RKEY_I:
-        return I;
+        return 'I';
     case RKEY_J:
-        return J;
+        return 'J';
     case RKEY_K:
-        return K;
+        return 'K';
     case RKEY_L:
-        return L;
+        return 'L';
     case RKEY_M:
-        return M;
+        return 'M';
     case RKEY_N:
-        return N;
+        return 'N';
     case RKEY_O:
-        return O;
+        return 'O';
     case RKEY_P:
-        return P;
+        return 'P';
     case RKEY_Q:
-        return Q;
+        return 'Q';
     case RKEY_R:
-        return R;
+        return 'R';
     case RKEY_S:
-        return S;
+        return 'S';
     case RKEY_T:
-        return T;
+        return 'T';
     case RKEY_U:
-        return U;
+        return 'U';
     case RKEY_V:
-        return V;
+        return 'V';
     case RKEY_W:
-        return W;
+        return 'W';
     case RKEY_X:
-        return X;
+        return 'X';
     case RKEY_Y:
-        return Y;
+        return 'Y';
     case RKEY_Z:
-        return Z;
+        return 'Z';
 
     /* case VK_OEM_MINUS: */
     /*     outkey = WKEY_MINUS; */
@@ -188,15 +188,14 @@ WPARAM rawkey_to_keycode(RawKey rawkey) {
     /*     outkey = WKEY_PLUS; */
     /*     break; */
 
-    default:
-        panic(mv_string("don't recognize this virtual keyode!"));
     }
+    panic(mv_string("don't recognize this rawkey!"));
 }
 
 Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
   if (use_unicode) {
   } else {
-      switch (RawKey) {
+      switch (key) {
       case RKEY_BACKSPACE:
           return PKEY_BACKSPACE;
       case RKEY_ENTER:
@@ -278,6 +277,7 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
           return PKEY_Z_Lower;
       }
   }
+  panic(mv_string("failed to translate keycode"));
 }
 
 #endif

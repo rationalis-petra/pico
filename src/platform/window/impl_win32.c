@@ -68,16 +68,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     case WM_KEYDOWN:
     case WM_KEYUP: {
-        Key key;
-        if (translate_key_id(&key, wParam)) {
-            WinMessage message = (WinMessage) {
-                .type = KeyEvent,
-                .key_event.key_id = key,
-                .key_event.modifier_key_mask = 0,
-                .key_event.key_pressed = uMsg == WM_KEYDOWN,
-            };
-            push_wm(message, &window->messages);
-        }
+        RawKey key = keycode_to_rawkey(wParam);
+        WinMessage message = (WinMessage){
+            .type = KeyEvent,
+            .key_event.key_id = key,
+            .key_event.modifier_key_mask = 0,
+            .key_event.key_pressed = uMsg == WM_KEYDOWN,
+        };
+        push_wm(message, &window->messages);
         break;
     }
     case WM_CLOSE:
@@ -147,38 +145,38 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
 
 // Key handling: 
 struct KeyboardState {
-    uint8_t[256] keys;
-}
+    uint8_t keys[256];
+};
 
-KeyboardState* create_keystate(KeyMap *keymap) {
+KeyboardState* create_keyboard_state(KeyMap *keymap) {
     KeyboardState* keystate = mem_alloc(sizeof(KeyboardState), wsa);
     for (size_t i = 0; i < 256; i++) {
-        keys[i] = 0;
+        keystate->keys[i] = 0;
     }
-    return keys;
+    return keystate;
 }
 
-void destroy_keystate(KeyboardState* state) {
+void destroy_keyboard_state(KeyboardState* state) {
     mem_free(state, wsa);
 }
 
-void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyState *state) {
-    WPARAM keycode = rawkey_to_keycode(RawKey raw);
-    keystate[keycode] = is_pressed << 7;
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState *state) {
+    WPARAM keycode = rawkey_to_keycode(raw);
+    state->keys[keycode] = is_pressed << 7;
 }
-void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyState *state) {
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState *state) {
     // TODO: implement me!
 }
 
-Key get_key(RawKey raw, KeyState *state) {
+Key get_key(RawKey raw, KeyboardState *state) {
     uint16_t unicode_out[1];
-    int numchar = ToUnicode(rawkey_to_keycode(RawKey rawkey),
+    int numchar = ToUnicode(rawkey_to_keycode(raw),
                             //[in]           UINT       wVirtKey,
                             0,
                             //[in]           UINT       wScanCode,
-                            state,
+                            state->keys,
                             //[in, optional] const BYTE *lpKeyState,
-                            unicode_out
+                            unicode_out,
                             //[out]          LPWSTR     pwszBuff,
                             1,
                             //[in]           int        cchBuff,
