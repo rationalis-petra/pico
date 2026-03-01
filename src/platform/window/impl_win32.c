@@ -34,6 +34,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             .width = windowArea.right - windowArea.left,
             .height = windowArea.bottom - windowArea.top,
         };
+
+        WinMessage message = (WinMessage) {
+            .type = KeymapChanged,
+            .keymap = NULL,
+        };
+        push_wm(message, &window->messages);
     } else {
         window = (PlWindow*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
