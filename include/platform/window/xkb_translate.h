@@ -10,5 +10,4 @@ uint32_t rawkey_to_scancode(RawKey rawkey);
 
 Key translate_xkb_keycode(xkb_keysym_t key);
 
-
 #endif
