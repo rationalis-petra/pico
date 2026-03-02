@@ -181,17 +181,23 @@ $(TEST_DIR)/%.c.o: %.c
 
 # Installer
 # ---------------------------------------------
-## Same process as above but for tests
+# Objects from the 'platform' and 'components' diretories
+# that may be useful regardless of application...
+GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
+GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c
+GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
+
 
 INSTALLER_DIR := $(BUILD_DIR)/installer
 INSTALLER_INC_DIR := ./installer/include
 INSTALLER_SRC_DIRS := ./installer/src
 TARGET_INSTALLER := pico_installer
 
-INSTALLER_FLAGS := $(DEBUG_FLAGS)
+INSTALLER_FLAGS := $(RELEASE_FLAGS)
 
 INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
-INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_DIR)/%.o) $(DEBUG_OBJS)
+INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_DIR)/%.o) $(GENERIC_OBJS)
 
 # Final build step for installer 
 $(INSTALLER_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
@@ -211,16 +217,16 @@ KEEPER_INC_DIR := ./keeper/include
 KEEPER_SRC_DIRS := ./keeper/src
 TARGET_KEEPER := pico_keeper
 
-KEEPER_FLAGS := $(DEBUG_FLAGS)
+KEEPER_FLAGS := $(RELASE_FLAGS)
 
 KEEPER_SRCS := $(shell find $(KEEPER_SRC_DIRS) -name '*.c')
-KEEPER_OBJS := $(KEEPER_SRCS:%=$(KEEPER_DIR)/%.o) $(DEBUG_OBJS)
+KEEPER_OBJS := $(KEEPER_SRCS:%=$(KEEPER_DIR)/%.o) $(GENERIC_OBJS)
 
 # Final build step for keeper 
 $(KEEPER_DIR)/$(TARGET_KEEPER): $(KEEPER_OBJS)
 	$(CC) $(KEEPER_OBJS) -I $(KEEPER_INC_DIR) -o $@ $(LINK_FLAGS) $(KEEPER_FLAGS) 
 
-# Build step for C tests
+# Build step for C keeper objects/intermediates
 $(KEEPER_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I $(KEEPER_INC_DIR) -c $< -o $@ $(KEEPER_FLAGS) 
