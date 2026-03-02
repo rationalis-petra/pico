@@ -54,6 +54,7 @@ typedef enum : uint32_t {
     RKEY_RPAREN,
     RKEY_MINUS,
     RKEY_PLUS,
+    RKEY_DIVIDE,
 
     RKEY_LBRACE,
     RKEY_RBRACE,
@@ -65,6 +66,7 @@ typedef enum : uint32_t {
 
     RKEY_SPACE,
 
+    RKEY_SHIFT,
     RKEY_ENTER,
     RKEY_BACKSPACE,
 } RawKey;
@@ -147,6 +149,7 @@ typedef enum : uint32_t {
     PKEY_RPAREN,
     PKEY_MINUS,
     PKEY_PLUS,
+    PKEY_DIVIDE,
 
     PKEY_LBRACE,
     PKEY_RBRACE,
@@ -158,6 +161,7 @@ typedef enum : uint32_t {
 
     PKEY_SPACE,
 
+    PKEY_SHIFT,
     PKEY_ENTER,
     PKEY_BACKSPACE,
 } Key;

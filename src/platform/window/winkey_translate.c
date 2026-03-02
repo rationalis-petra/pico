@@ -12,6 +12,8 @@ RawKey keycode_to_rawkey(WPARAM windows_keycode) {
         return RKEY_BACKSPACE;
     case VK_RETURN:
         return RKEY_ENTER;
+    case VK_SHIFT:
+        return RKEY_SHIFT;
     case VK_SPACE:
         return RKEY_SPACE;
     case 0x30:
@@ -88,12 +90,16 @@ RawKey keycode_to_rawkey(WPARAM windows_keycode) {
     case 'Z':
         return RKEY_Z;
         
-    /* case VK_OEM_MINUS: */
-    /*     outkey = WKEY_MINUS; */
-    /*     break; */
-    /* case VK_OEM_PLUS: */
-    /*     outkey = WKEY_PLUS; */
-    /*     break; */
+    case VK_OEM_PLUS:
+        return RKEY_PLUS;
+    case VK_OEM_COMMA:
+        return RKEY_COMMA;
+    case VK_OEM_MINUS:
+        return RKEY_MINUS;
+    case VK_OEM_PERIOD:
+        return RKEY_DOT;
+    case VK_OEM_2:
+        return RKEY_DIVIDE;
 
     }
     panic(mv_string("don't recognize this virtual keyode!"));
@@ -101,12 +107,6 @@ RawKey keycode_to_rawkey(WPARAM windows_keycode) {
 
 WPARAM rawkey_to_keycode(RawKey rawkey) {
     switch (rawkey) {
-    case RKEY_BACKSPACE:
-        return VK_BACK;
-    case RKEY_ENTER:
-        return VK_RETURN;
-    case RKEY_SPACE:
-        return VK_SPACE;
     case RKEY_0:
         return 0x30;
     case RKEY_1:
@@ -181,14 +181,48 @@ WPARAM rawkey_to_keycode(RawKey rawkey) {
     case RKEY_Z:
         return 'Z';
 
-    /* case VK_OEM_MINUS: */
-    /*     outkey = WKEY_MINUS; */
-    /*     break; */
-    /* case VK_OEM_PLUS: */
-    /*     outkey = WKEY_PLUS; */
-    /*     break; */
+        /*
+    RKEY_EXCLAMATION,
+    RKEY_AT,
+    RKEY_HASH,
+    RKEY_DOLLAR,
+    RKEY_PERCENT,
+    RKEY_CARET,
+    RKEY_AMPERSAND,
+    RKEY_ASTERISK,
+    RKEY_LPAREN,
+    RKEY_RPAREN,
+    */
+    case RKEY_MINUS:
+        return VK_OEM_MINUS;
+    case RKEY_PLUS:
+        return VK_OEM_PLUS;
 
+    //RKEY_LBRACE,
+    //RKEY_RBRACE,
+    //RKEY_COLON,
+    //RKEY_SEMICOLON,
+    case RKEY_COMMA:
+        return VK_OEM_COMMA;
+    case RKEY_DOT:
+        return VK_OEM_PERIOD;
+    case RKEY_DIVIDE:
+        return VK_OEM_2;
+    //    return VK_
+
+    case RKEY_SPACE:
+        return VK_SPACE;
+
+    case RKEY_SHIFT:
+        return VK_SHIFT;
+    case RKEY_BACKSPACE:
+        return VK_BACK;
+    case RKEY_ENTER:
+        return VK_RETURN;
+    default:
+        panic(mv_string("Virtual Keycode not recognized when translating to 'raw' key"));
     }
+
     panic(mv_string("don't recognize this rawkey!"));
 }
 
@@ -199,8 +233,62 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
             return PKEY_BACKSPACE;
         case 13:
             return PKEY_ENTER;
-        case 32:
+        case ' ':
             return PKEY_SPACE;
+        case '!':
+            return PKEY_EXCLAMATION;
+        case '#':
+            return PKEY_HASH;
+        case '$':
+            return PKEY_DOLLAR;
+        case '%':
+            return PKEY_PERCENT;
+        case '&':
+            return PKEY_AMPERSAND;
+        case '(':
+            return PKEY_LPAREN;
+        case ')':
+            return PKEY_RPAREN;
+        case '*':
+            return PKEY_ASTERISK;
+        case '+':
+            return PKEY_PLUS;
+        case ',':
+            return PKEY_COMMA;
+        case '-':
+            return PKEY_MINUS;
+        case '.':
+            return PKEY_DOT;
+        case '/':
+            return PKEY_DIVIDE;
+        case '0':
+            return PKEY_0;
+        case '1':
+            return PKEY_1;
+        case '2':
+            return PKEY_2;
+        case '3':
+            return PKEY_3;
+        case '4':
+            return PKEY_4;
+        case '5':
+            return PKEY_5;
+        case '6':
+            return PKEY_6;
+        case '7':
+            return PKEY_7;
+        case '8':
+            return PKEY_8;
+        case '9':
+            return PKEY_9;
+        case ':':
+            return PKEY_COLON;
+        case ';':
+            return PKEY_SEMICOLON;
+        case '?':
+            return PKEY_QUERY;
+        case '@':
+            return PKEY_AT;
         case 'A':
             return PKEY_A;
         case 'B':
@@ -253,6 +341,12 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
             return PKEY_Y;
         case 'Z':
             return PKEY_Z;
+        case '[':
+            return PKEY_LBRACE;
+        case ']':
+            return PKEY_RBRACE;
+        case '^':
+            return PKEY_CARET;
         case 'a':
             return PKEY_A_Lower;
         case 'b':
@@ -305,11 +399,15 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
             return PKEY_Y_Lower;
         case 'z':
             return PKEY_Z_Lower;
-      }
+        default:
+            panic(mv_string("Unhandled Unicode(UTF-16) when translating to Processed Key"));
+        }
   } else {
       switch (key) {
       case RKEY_BACKSPACE:
           return PKEY_BACKSPACE;
+      case RKEY_SHIFT:
+          return PKEY_SHIFT;
       case RKEY_ENTER:
           return PKEY_ENTER;
       case RKEY_SPACE:
@@ -387,6 +485,8 @@ Key translate_win_keycode(RawKey key, uint16_t unicode, bool use_unicode) {
           return PKEY_Y_Lower;
       case RKEY_Z:
           return PKEY_Z_Lower;
+      default:
+        panic(mv_string("Unhandled RawKey when translating to Processed Key"));
       }
   }
   panic(mv_string("failed to translate keycode"));
