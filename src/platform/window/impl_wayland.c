@@ -381,7 +381,7 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     return out;
 }
 
-KeyboardState* create_keystate(KeyMap* map) {
+KeyboardState* create_keyboard_state(KeyMap* map) {
     struct xkb_keymap* keymap = (void*)map;
     struct xkb_state* state = xkb_state_new(keymap);
     if (!state)
@@ -389,7 +389,7 @@ KeyboardState* create_keystate(KeyMap* map) {
     return (KeyboardState*)state;
 }
 
-void destroy_keystate(KeyboardState* state) {
+void destroy_keyboard_state(KeyboardState* state) {
     struct xkb_state* xstate = (void*)state;
     xkb_state_unref(xstate);
 }
