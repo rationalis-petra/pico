@@ -17,10 +17,9 @@
 #include "pico/parse/parse.h"
 #include "pico/stdlib/extra.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/values/array.h"
 #include "pico/binding/environment.h"
-#include "pico/analysis/abstraction.h"
-#include "pico/analysis/typecheck.h"
+#include "pico/abstraction/abstraction.h"
+#include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 
@@ -87,7 +86,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     }
 
     // -------------------------------------------------------------------------
-    // Resolution
+    // Analysis
     // -------------------------------------------------------------------------
     TopLevel abs = abstract(res.result, env, &ra, &pi_point);
 
@@ -102,14 +101,17 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
         .a = &ra, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
+
+
+    // -------------------------------------------------------------------------
+    // Evaluation
+    // -------------------------------------------------------------------------
     EvalResult evres = pico_run_toplevel(abs, target, links, module, &ra, &point);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
             callbacks.on_expr(evres.val.type, evres.val.val, data, log);
         }
-        if (evres.val.type->sort == TArray)
-            free_array(evres.val.val);
     } else {
         if (callbacks.on_top) {
             callbacks.on_top(data, log);

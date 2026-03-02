@@ -69,6 +69,12 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         TEST_TYPE("((all [B] proc [(x B)] (id x)) 77)");
     }
 
+    if (test_start(log, mv_string("instantiate-call-poly-fn"))) {
+        RUN("(def int-id proc [(x I64)] x)");
+        PiType* expected = mk_prim_type(&pregion, Int_64);
+        TEST_TYPE("((all [A] proc [(a A) (fn (Proc [A] I64))] (fn a)) 89 int-id)");
+    }
+
     if (test_start(log, mv_string("Instnatiate Implicit with Default UVar"))) {
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);

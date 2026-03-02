@@ -586,6 +586,15 @@ void build_binary_table() {
         .order = MI,
         .has_opcode_ext = false,
     };
+    binary_table[bindex(Dest_Deref, sz_32, Dest_Immediate, sz_32)] = (BinaryTableEntry){
+        .valid = true,
+        .use_size_override_prefix = false,
+        .use_rex_byte = false,
+        .use_modrm_byte = true,
+        .num_immediate_bytes = 4,
+        .order = MI,
+        .has_opcode_ext = false,
+    };
 
     // m16, r16
     binary_table[bindex(Dest_Deref, sz_16, Dest_Register, sz_16)] = (BinaryTableEntry){
@@ -722,7 +731,8 @@ void build_binary_opcode_tables() {
     }
 
     {   // Add Operation. Source - Intel Manual Vol 2. p142
-        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
+        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 |
+                              R32_RM32 | R16_RM16 | R8_RM8;
         static BinOpBytes ops[7];
         add_op_ext(0x83, 0x0, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x0, RM64_Imm32, sup, ops);
@@ -758,8 +768,8 @@ void build_binary_opcode_tables() {
     }
 
     {   // Cmp Operation. Source - Intel Manual Vol 2. p1407
-        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | R16_RM16 | R8_RM8;
-        static BinOpBytes ops[7];
+        static uint64_t sup = RM64_Imm8 | RM64_Imm32 | RM64_R64 | R64_RM64 | R32_RM32 | RM32_Imm32 | R16_RM16 | R8_RM8 | RM8_Imm8;
+        static BinOpBytes ops[9];
         add_op_ext(0x83, 0x7, RM64_Imm8, sup, ops);
         add_op_ext(0x81, 0x7, RM64_Imm32, sup, ops);
 
@@ -767,8 +777,10 @@ void build_binary_opcode_tables() {
         add_op(0x3B, R64_RM64, sup, ops);
 
         add_op(0x3B, R32_RM32, sup, ops);
+        add_op(0x81, RM32_Imm32, sup, ops);
         add_op(0x3B, R16_RM16, sup, ops);
         add_op(0x3A, R8_RM8, sup, ops);
+        add_op(0x80, RM8_Imm8, sup, ops);
         binary_opcode_tables[Cmp] = (BinaryOpTable) {
             .supported = sup,
             .entries = ops,
@@ -978,7 +990,7 @@ void build_binary_opcode_tables() {
 
     {   // Move. Source - Intel Manual Vol 2. 769
       static uint64_t sup = R64_Imm64 | RM64_Imm32 | RM64_R64 | R64_RM64 |
-                            RM32_R32 | R32_RM32 | RM16_R16 | R16_RM16 | RM8_R8 | RM8_R8_x86 |
+                            RM32_Imm32 | RM32_R32 | R32_RM32 | RM16_R16 | R16_RM16 | RM8_R8 | RM8_R8_x86 |
                             R8_RM8 | R8_RM8_x86 | RM32_Imm32 | RM16_Imm16 | R8_Imm8;
         static BinOpBytes ops[16];
         add_op(0xB8, R64_Imm64, sup, ops);
@@ -987,6 +999,7 @@ void build_binary_opcode_tables() {
 
         add_op(0x89, RM64_R64, sup, ops);
         add_op(0x8B, R64_RM64, sup, ops);
+        add_op(0x89, RM32_Imm32, sup, ops);
         add_op(0x89, RM32_R32, sup, ops);
         add_op(0x8B, R32_RM32, sup, ops);
         add_op(0x89, RM16_R16, sup, ops);
@@ -1359,6 +1372,14 @@ AsmResult build_binary_op(BinaryOp op, Location dest, Location src, Assembler* a
 
     uint8_t num_disp_bytes = 0;
     uint8_t disp_bytes [4];
+
+    // Check if registers are in the R9-R15 range
+    if ((R8 <= src.reg && src.reg <= R15) || (R8 <= dest.reg && dest.reg <= R15)) {
+        if (!be.use_rex_byte) {
+            be.use_rex_byte = true;
+            rex_byte = 0b01000000;
+        }
+    }
 
     // TODO: ensure not attempting to encode SPL, BPL SIL, DIL if 
     // using AH, BH, CH, DH

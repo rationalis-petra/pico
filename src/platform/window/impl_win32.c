@@ -4,14 +4,18 @@
 #if (OS_FAMILY == WINDOWS)
 
 #include "platform/window/window.h"
+#include "platform/window/winkey_translate.h"
 #include "platform/window/internal.h"
 #include <windows.h>
+
+// TODO: Check the 'text services framework' (TSF) for more
+//   info/help.
+// https://learn.microsoft.com/en-us/windows/win32/tsf/text-services-framework
 
 static Allocator* wsa = NULL;
 static HINSTANCE app_handle = 0;
 static WNDCLASS wind_class;
 static const char* wind_class_name = "Relic Window Class";
-
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     PlWindow* window;
@@ -30,6 +34,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             .width = windowArea.right - windowArea.left,
             .height = windowArea.bottom - windowArea.top,
         };
+
+        WinMessage message = (WinMessage) {
+            .type = KeymapChanged,
+            .keymap = NULL,
+        };
+        push_wm(message, &window->messages);
     } else {
         window = (PlWindow*) GetWindowLongPtr(hwnd, GWLP_USERDATA);
     }
@@ -59,6 +69,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         };
         window->width = width;
         window->height = height;
+        push_wm(message, &window->messages);
+        break;
+    }
+    case WM_KEYDOWN:
+    case WM_KEYUP: {
+        RawKey key = keycode_to_rawkey(wParam);
+        WinMessage message = (WinMessage){
+            .type = KeyEvent,
+            .key_event.key_id = key,
+            .key_event.modifier_key_mask = 0,
+            .key_event.key_pressed = uMsg == WM_KEYDOWN,
+        };
         push_wm(message, &window->messages);
         break;
     }
@@ -125,6 +147,49 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
     return out;
+}
+
+// Key handling: 
+struct KeyboardState {
+    uint8_t keys[256];
+};
+
+KeyboardState* create_keyboard_state(KeyMap *keymap) {
+    KeyboardState* keystate = mem_alloc(sizeof(KeyboardState), wsa);
+    for (size_t i = 0; i < 256; i++) {
+        keystate->keys[i] = 0;
+    }
+    return keystate;
+}
+
+void destroy_keyboard_state(KeyboardState* state) {
+    mem_free(state, wsa);
+}
+
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState *state) {
+    WPARAM keycode = rawkey_to_keycode(raw);
+    state->keys[keycode] = is_pressed << 7;
+}
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState *state) {
+    // TODO: implement me!
+}
+
+Key get_key(RawKey raw, KeyboardState *state) {
+    uint16_t unicode_out[1];
+    int numchar = ToUnicode(rawkey_to_keycode(raw),
+                            //[in]           UINT       wVirtKey,
+                            0,
+                            //[in]           UINT       wScanCode,
+                            state->keys,
+                            //[in, optional] const BYTE *lpKeyState,
+                            unicode_out,
+                            //[out]          LPWSTR     pwszBuff,
+                            1,
+                            //[in]           int        cchBuff,
+                            0
+                            //[in]           UINT       wFlags
+                            );
+    return translate_win_keycode(raw, unicode_out[0], numchar == 1);
 }
 
 #endif

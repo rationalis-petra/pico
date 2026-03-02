@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "platform/threads.h"
+#include "platform/thread.h"
 #include "data/array.h"
 #include "components/pretty/standard_types.h"
 
@@ -77,7 +77,6 @@ Name copy_name(Name n, Allocator* a) { return n; };
 // 
 // Implementation of dynamic variables
 // Each thread has an array, sized for # of dynamic vars
-//static 
 _Thread_local PtrArray thread_dynamic_vars;
 static Allocator* dynamic_var_allocator;
 static PtrArray dynamic_var_metadata;
@@ -284,12 +283,6 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FInstance:
         out = mk_str_doc(mv_string("::instance"), a);
         break;
-    case FGenArray:
-        out = mk_str_doc(mv_string("::gen-array"), a);
-        break;
-    case FWith:
-        out = mk_str_doc(mv_string("::with"), a);
-        break;
 
     case FLet:
         out = mk_str_doc(mv_string("::let"), a);
@@ -349,11 +342,11 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FOffsetOf:
         out = mk_str_doc(mv_string("::offset-of"), a);
         break;
+    case FDynAlloc:
+        out = mk_str_doc(mv_string("::dyn-alloc"), a);
+        break;
 
         // Type formers
-    case FArrayType:
-        out = mk_str_doc(mv_string("::Array"), a);
-        break;
     case FStructType:
         out = mk_str_doc(mv_string("::Struct"), a);
         break;

@@ -366,6 +366,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("offset-of"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FDynAlloc;
+    sym = string_to_symbol(mv_string("dyn-alloc"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
     add_def(module, sym, type, &former, null_segments, NULL);

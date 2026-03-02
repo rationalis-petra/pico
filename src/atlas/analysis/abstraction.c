@@ -35,7 +35,7 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
         if (string_cmp(mv_string("library"), symbol_to_string(head, &ra)) == 0) {
             Library library_stanza = {};
 
-            bool library_checks[] = {false, false, false};
+            bool library_checks[] = {false, false, false, false};
 
             //property(, );
             // Library stanza components:
@@ -46,6 +46,7 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
             add_symbol_prop(mv_string("name"), &library_stanza.name, props);
             add_string_option_prop(mv_string("file"), &library_stanza.filename, props);
             add_string_array_prop(mv_string("submodules"), &library_stanza.submodules, props);
+            add_symbol_array_prop(mv_string("dependencies"), &library_stanza.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {
                 parse_prop(raw.branch.data[i], props, library_checks, point, &ra);

@@ -37,6 +37,7 @@ typedef struct {
     Symbol name;
     StringOption filename;
     StringArray submodules;
+    SymbolArray dependencies;
 } Library;
 
 typedef struct {

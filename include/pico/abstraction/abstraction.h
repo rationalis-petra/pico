@@ -1,5 +1,5 @@
-#ifndef __PICO_ANALYSIS_ABSTRACTION_H
-#define __PICO_ANALYSIS_ABSTRACTION_H
+#ifndef __PICO_ABSTRACTION_ABSTRACTION_H
+#define __PICO_ABSTRACTION_ABSTRACTION_H
 
 #include "pico/data/error.h"
 #include "pico/binding/environment.h"

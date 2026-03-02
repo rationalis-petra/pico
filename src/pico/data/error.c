@@ -39,7 +39,9 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
         for (size_t i = 0; i < multi.errors.len; i++) {
             PicoError error = *(PicoError*)multi.errors.data[i];
             size_t prev_lines = i == 0 ? 5 : 2;
-            display_code_region(code_buffer, error.range, prev_lines, fos, a);
+            if (error.range.start != 0 && error.range.end != 0) {
+                display_code_region(code_buffer, error.range, prev_lines, fos, a);
+            }
 
             write_fstring(mv_string("\n"), fos);
             start_coloured_text(message_colour, fos);
@@ -50,10 +52,12 @@ void display_error(MultiError multi, String code_buffer, FormattedOStream* fos, 
             write_fstring(mv_string("\n\n"), fos);
         }
     } else {
-        display_code_region(code_buffer, multi.error.range, 5, fos, a);
-        write_fstring(mv_string("\n"), fos);
-        start_coloured_text(message_colour, fos);
+        if (code_buffer.bytes) {
+            display_code_region(code_buffer, multi.error.range, 5, fos, a);
+            write_fstring(mv_string("\n"), fos);
+        }
 
+        start_coloured_text(message_colour, fos);
         Document* iderr = mv_nest_doc(2, multi.error.message, a);
         write_doc_formatted(iderr, 120, fos);
         mem_free(iderr, a); // TODO: fix me! (fix mk doc & replace the mv with mk)
@@ -165,7 +169,6 @@ void display_code_region(String buffer, Range range, const size_t lines_prior, F
                     start_coloured_text(regular_code_colour, fos);
                     write_linenum(++line_number, line_width, fos, a);
                     end_coloured_text(fos);
-                    start_coloured_text(bad_code_colour, fos);
                 }
                 write_fstring(bad_line, fos);
                 delete_string(bad_line, a);

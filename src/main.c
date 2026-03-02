@@ -16,8 +16,8 @@
 #include "pico/syntax/concrete.h"
 #include "pico/parse/parse.h"
 #include "pico/binding/environment.h"
-#include "pico/analysis/abstraction.h"
-#include "pico/analysis/typecheck.h"
+#include "pico/abstraction/abstraction.h"
+#include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/stdlib.h"
@@ -32,7 +32,7 @@
 #include "app/module_load.h"
 #include "app/help_string.h"
 
-static const char* version = "0.1.4";
+static const char* version = "0.1.5";
 
 typedef struct {
     bool debug_print;
@@ -136,7 +136,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             start_underline(cout);
             write_fstring(mv_string("Inferred Type\n"), cout);
             end_underline(cout);
-            doc = mv_nest_doc(2, pretty_type(ty, &ra), stdalloc);
+            doc = mv_nest_doc(2, pretty_type(ty, &ra), &ra);
             write_doc_formatted(doc, 120, cout);
             write_fstring(mv_string("\n"), cout);
         }
@@ -208,7 +208,6 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
 }
 
 int main(int argc, char** argv) {
-
     // Setup
     Allocator* stdalloc = get_std_allocator();
     IStream* cin = get_stdin_stream();

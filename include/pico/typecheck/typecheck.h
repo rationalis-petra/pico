@@ -1,5 +1,5 @@
-#ifndef __PICO_ANALYSIS_TYPECHECK_H
-#define __PICO_ANALYSIS_TYPECHECK_H
+#ifndef __PICO_TYPECHECK_TYPECHECK_H
+#define __PICO_TYPECHECK_TYPECHECK_H
 
 #include "components/logging/structured_logging.h"
 

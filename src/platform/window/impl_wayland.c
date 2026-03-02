@@ -4,21 +4,46 @@
 #include <string.h> // for memset, TODO: remove?
 
 #include "platform/window/window.h"
+#include "platform/signals.h"
 #include "platform/window/internal.h"
+#include "platform/window/xkb_translate.h"
 #include "platform/window/xdg-shell-protocol.h"
 
 #include <unistd.h>
 #include <fcntl.h> // for O_ constants
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <linux/input.h>
 
 // for more info, it may be good to read
-// /usr/include/wayland-client-protocol.h
-// /usr/include/wayland-client-core.h
+//   • /usr/include/wayland-client-protocol.h
+//   • /usr/include/wayland-client-core.h
+//   • https://wayland-book.com/seat/keyboard.html
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
+
+// GLOBAL DATA FOR OUR FUNCTIONS (CALLBACKS)
+// ---------------------------------------- 
+// The allocator for the window system
 static Allocator* wsa = NULL;
 
+// The array of currently created/extant windows
+static PtrArray windows = {};
+
+// X Keyboard Library
+// ----------------------------------------
+// X keyboard library global context
+//   useful reference here:
+//     • https://github.com/xkbcommon/libxkbcommon/blob/master/doc/quick-guide.md
+//     • https://xkbcommon.org/doc/current/group__keysyms.html
+static struct xkb_context* xkb_context = NULL; 
+static struct xkb_keymap* xkb_keymap = NULL;
+
+
+// GLOBAL WAYLAND DATA
+// ---------------------------------------- 
 // The wayland display represents the "connection" between this application
 // and the wayland display
 static struct wl_display* wl_display;
@@ -38,7 +63,12 @@ static struct xdg_wm_base* xdg_shell; // ??
 // device is hot plugged.
 struct wl_seat* seat;
 
+// TODO (BUG)
+// There technically may be more than one keyboard plugged in. We should
+// gracefully handle this scenario.
 static struct wl_keyboard* kb;
+
+// ---------------------------------------- 
 
 int32_t alc_shm(uint64_t sz) {
     // TODO: make a unique string/name - this can be done by, e.g. using printf
@@ -126,8 +156,29 @@ void xdg_toplevel_close(void *data, struct xdg_toplevel *top) {
 }
 
 
-void kb_map(void* data, struct wl_keyboard* kb, uint32_t frmt, int32_t fd, uint32_t sz) {
-	
+void kb_map(void* data, struct wl_keyboard* kb, uint32_t format, int32_t fd, uint32_t size) {
+    // set xkb keymap...
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+        panic(mv_string("Wayland keyboard keymap format!"));
+
+    char *map_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map_shm == MAP_FAILED)
+        panic(mv_string("Window: mapping of fd failed in kb_map (wayland callback) failed."));
+
+    xkb_keymap = xkb_keymap_new_from_string(xkb_context, map_shm,
+                                        XKB_KEYMAP_FORMAT_TEXT_V1,
+                                        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    munmap(map_shm, size);
+    close(fd);
+
+
+    PtrArray* windows = data;
+    PlWindow* window = windows->data[0];
+    WinMessage message = (WinMessage) {
+        .type = KeymapChanged,
+        .keymap = (KeyMap*)xkb_keymap,
+    };
+    push_wm(message, &window->messages);
 }
 
 void kb_enter(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surface* srfc, struct wl_array* keys) {
@@ -138,10 +189,42 @@ void kb_leave(void* data, struct wl_keyboard* kb, uint32_t ser, struct wl_surfac
 	
 }
 
-void kb_key(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t t, uint32_t key, uint32_t stat) {
+void kb_key(void *data, struct wl_keyboard *kb, uint32_t ser,
+            uint32_t depressed, uint32_t key, uint32_t stat) {
+    RawKey outkey = scancode_to_rawkey(key);
+
+    if (outkey != UINT32_MAX) {
+        PtrArray* windows = data;
+
+        // TODO: select currently active window!!!
+        PlWindow* window = windows->data[0];
+        WinMessage message = (WinMessage) {
+            .type = KeyEvent,
+            .key_event.key_id = outkey,
+            .key_event.modifier_key_mask = 0,
+            .key_event.key_pressed = stat,
+        };
+        push_wm(message, &window->messages);
+    }
 }
 
-void kb_mod(void* data, struct wl_keyboard* kb, uint32_t ser, uint32_t dep, uint32_t lat, uint32_t lock, uint32_t grp) {
+void kb_mod(void *data, struct wl_keyboard *kb, uint32_t serial,
+            uint32_t depressed, uint32_t latched, uint32_t locked,
+            uint32_t group) {
+
+
+    PtrArray* windows = data;
+
+    // TODO: select currently active window!!!
+    PlWindow* window = windows->data[0];
+    WinMessage message = (WinMessage) {
+        .type = ModifierKeyEvent,
+        .mod_event.depressed = depressed,
+        .mod_event.latched = latched,
+        .mod_event.locked = locked,
+        .mod_event.group = group,
+    };
+    push_wm(message, &window->messages);
 	
 }
 
@@ -149,7 +232,7 @@ void kb_rep(void* data, struct wl_keyboard* kb, int32_t rate, int32_t del) {
 	
 }
 
-struct wl_keyboard_listener kb_listener = {
+static struct wl_keyboard_listener kb_listener = {
 	.keymap = kb_map,
 	.enter = kb_enter,
 	.leave = kb_leave,
@@ -205,7 +288,7 @@ void reg_glob(void *data, struct wl_registry *reg, uint32_t name, const char *in
 		xdg_wm_base_add_listener(xdg_shell, &shell_listener, 0);
 	} else if (!strcmp(intf, wl_seat_interface.name)) {
 		seat = wl_registry_bind(reg, name, &wl_seat_interface, 1);
-		wl_seat_add_listener(seat, &seat_listener, 0);
+		wl_seat_add_listener(seat, &seat_listener, data);
 	}
 }
 
@@ -222,8 +305,13 @@ int pl_init_window_system(Allocator* a) {
     wsa = a;
     wl_display = wl_display_connect(NULL);
     if (!wl_display) return 1;
+    xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!xkb_context) return 1;
+
+    windows = mk_ptr_array(1, wsa);
+
     wl_registry = wl_display_get_registry(wl_display);
-    wl_registry_add_listener(wl_registry, &wl_listener, 0);
+    wl_registry_add_listener(wl_registry, &wl_listener, &windows);
 
     wl_display_roundtrip(wl_display); // tell the server that we are looking for data
     return 0;
@@ -260,6 +348,7 @@ PlWindow *pl_create_window(String name, int width, int height) {
     xdg_toplevel_set_title(top, (char*)name.bytes);
 
     wl_surface_commit(surface); // TOOD: necessary?
+    push_ptr(window, &windows);
 
     return window;
 }
@@ -271,18 +360,14 @@ void pl_destroy_window(PlWindow *window) {
     if (window->pixles) {
         munmap(window->pixles, 4 * window->width * window->height);
     }
-    // TODO: we may be leaking the shared memory in window->pixles!
 
+    // TODO (BUG INVESTIGATE): we may be leaking the shared memory in window->pixles!
     xdg_toplevel_destroy(window->toplevel);
     xdg_surface_destroy(window->xdg_surface);
     wl_surface_destroy(window->surface);
 
     sdelete_wm_array(window->messages);
     mem_free(window, wsa);
-
-    // TOOD: check if we want to keep this here? possibly we need to wait on a
-    //       sync message from the compositor.
-    wl_display_dispatch(wl_display);
 }
 
 bool pl_window_should_close(PlWindow *window) {
@@ -294,6 +379,50 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = scopy_wm_array(window->messages, a);
     window->messages.len = 0;
     return out;
+}
+
+KeyboardState* create_keystate(KeyMap* map) {
+    struct xkb_keymap* keymap = (void*)map;
+    struct xkb_state* state = xkb_state_new(keymap);
+    if (!state)
+        panic(mv_string("Failed to create xkb state"));
+    return (KeyboardState*)state;
+}
+
+void destroy_keystate(KeyboardState* state) {
+    struct xkb_state* xstate = (void*)state;
+    xkb_state_unref(xstate);
+}
+
+KeyMap* get_keymap() {
+    return (KeyMap*) xkb_keymap;
+}
+
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState* state) {
+    struct xkb_state* kstate = (void*)state;
+
+    xkb_keycode_t keycode = rawkey_to_scancode(raw) + 8;
+
+    // TODO (Investigate): check for if the 'changed' should be used anywhere?
+    //enum xkb_state_component changed;
+    if (is_pressed) {
+        xkb_state_update_key(kstate, keycode, XKB_KEY_DOWN);
+    } else {
+        xkb_state_update_key(kstate, keycode, XKB_KEY_UP);
+    }
+
+}
+
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState* state) {
+    struct xkb_state* kstate = (void*)state;
+    xkb_state_update_mask(kstate, depressed, latched, locked, 0, 0, group);
+}
+
+Key get_key(RawKey raw, KeyboardState* state) {
+    struct xkb_state* kstate = (void*)state;
+    uint32_t keycode = rawkey_to_scancode(raw) + 8;
+    xkb_keysym_t keysym = xkb_state_key_get_one_sym(kstate, keycode);
+    return translate_xkb_keycode(keysym);
 }
 
 #endif

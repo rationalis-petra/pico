@@ -6,16 +6,14 @@
 #include "platform/signals.h"
 
 #include "data/stream.h"
-#include "data/stringify.h"
-#include "components/pretty/stream_printer.h"
 
 #include "pico/data/sym_ptr_amap.h"
 #include "pico/values/modular.h"
 
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
-#include "pico/analysis/abstraction.h"
-#include "pico/analysis/typecheck.h"
+#include "pico/abstraction/abstraction.h"
+#include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 #include "pico/stdlib/platform/submodules.h"
@@ -87,7 +85,6 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
 
     if (!instance->project_set) {
         AtlasError err = {
-            .range = (Range) {},
             .message = mk_str_doc(mv_string("No atlas project was found, please ensure there is an 'atlas-project' file in the current directory."), &ra),
         };
         throw_at_error(point, err);
@@ -104,7 +101,6 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             push_ptr(mk_str_doc(mv_string("' has no entry-point and is therefore is not runnable."), &ra), &nodes);
 
             AtlasError err = {
-                .range = (Range) {},
                 .message = mv_cat_doc(nodes, &ra),
             };
             throw_at_error(point, err);
@@ -143,7 +139,6 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
                 push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
                 AtlasError err = {
-                    .range = (Range) {},
                     .message = mv_cat_doc(nodes, &ra),
                 };
                 throw_at_error(point, err);
@@ -161,7 +156,6 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
             push_ptr(mk_str_doc(mv_string("' could not be found."), &ra), &nodes);
 
             AtlasError err = {
-                .range = (Range) {},
                 .message = mv_cat_doc(nodes, &ra),
             };
             throw_at_error(point, err);
@@ -328,6 +322,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         };
         type_check(&abs, env, tc_ctx);
 
+
         // -------------------------------------------------------------------------
         // Code Generation
         // -------------------------------------------------------------------------
@@ -355,7 +350,9 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     release_subregion(iter_region);
     release_executable_allocator(exec);
     return module;
+
  on_parse_error: {
+        if (old_module) set_std_current_module(old_module);
         Document* out = copy_doc(ph_res.error.message, &ra);
         AtlasError new_err = {
             .range = ph_res.error.range,
@@ -373,7 +370,12 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     }
 
  on_pi_error: {
+        if (old_module) set_std_current_module(old_module);
+        release_subregion(iter_region);
+        release_executable_allocator(exec);
         MultiError error;
+
+
         if (pi_point.multi.has_many) {
             PtrArray copied_errors = mk_ptr_array(pi_point.multi.errors.len, &ra); 
             for (size_t i = 0; i < pi_point.multi.errors.len; i++) {
@@ -413,10 +415,8 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
  on_error: {
         AtlasError new_err = {
-            .range = pi_point.multi.error.range,
-            .message = err_point.error_message,
+            .message = copy_doc(err_point.error_message, &ra),
             .filename = filename,
-            .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
 
         delete_istream(in, &ra);
@@ -501,8 +501,12 @@ void add_library(Library library, String path, AtlasInstance* instance) {
     StringOption filename = {.type = None};
     if (library.filename.type == Some) {
         filename = (StringOption) {
-            .type = Some,
-            .value = copy_string(library.filename.value, instance->gpa),
+          .type = Some,
+          .value = string_ncat(instance->gpa, 4,
+                               path,
+                               mv_string("/"),
+                               library.filename.value,
+                               mv_string(".rl")),
         };
     }
 
@@ -511,7 +515,7 @@ void add_library(Library library, String path, AtlasInstance* instance) {
         .path = path,
         .filename = filename,
         .entrypoint = (SymbolOption) {.type = None},
-        .target_dependencies = mk_symbol_array(0, instance->gpa),
+        .target_dependencies = scopy_symbol_array(library.dependencies, instance->gpa),
         .file_dependencies = mk_string_array(library.submodules.len, instance->gpa),
         .module = NULL,
     };

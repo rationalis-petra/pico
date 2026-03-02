@@ -3,7 +3,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/binding/type_env.h"
 
 // Address Environment: Implementation
@@ -285,9 +285,9 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
 
     SAddr padding = (SAddr){};
     padding.type = SASentinel;
-    stack_offset += 3 * ADDRESS_SIZE; // We add 2x the register size to account for the
-                                      // return address, rbp and the dynamic
-                                      // memory ptr.
+    stack_offset += 4 * ADDRESS_SIZE; // We add 4x the register size to account for 
+                                      // (1) the return address, (2) rbp, (3) the dynamic
+                                      // memory ptr and (4) the dynamic var ptr.
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
@@ -451,23 +451,23 @@ void address_pop(AddressEnv* env) {
     pop_saddr(&locals->vars);
 }
 
-void address_bind_enum_vars(BindingArray vars, bool is_variable, AddressEnv* env) {
+void address_bind_enum_vars(BindingArray vars, size_t tagsize, bool is_variable, AddressEnv* env) {
     // Note: We don't adjust the stack head
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
     size_t stack_offset = locals->stack_head;
 
     SAddr padding = (SAddr){};
     padding.type = SASentinel;
-    stack_offset += is_variable ? 0 : REGISTER_SIZE;
+    stack_offset += is_variable ? 0 : tagsize;
     padding.stack_offset = stack_offset;
     push_saddr(padding, &locals->vars);
 
     // Variables are in reverse order!
     // due to how the stack pushes/pops args.
-
     for (size_t i = 0; i < vars.len; i++) {
         SAddr local;
         Binding bind = vars.data[i];
+        stack_offset = pi_size_align(stack_offset, bind.align);
 
         local.type = bind.is_variable ? SAIndexed : SADirect;
         local.symbol = bind.sym;

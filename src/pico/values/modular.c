@@ -374,7 +374,9 @@ Result add_decl(Module *module, Symbol symbol, ModuleDecl decl) {
     bool found_decl = false;
     for (size_t i = 0; i < declarations->len; i++) {
         if (((ModuleDecl*)declarations->data[i])->sort == decl.sort) {
+            delete_decl(*(ModuleDecl*)declarations->data[i], &module->pico_allocator);
             *(ModuleDecl*)declarations->data[i] = copy_decl(decl, &module->allocator);
+
             found_decl = true;
         }
     }

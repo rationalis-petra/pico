@@ -50,14 +50,20 @@ typedef enum {
     VertexBuffer = 0,
     IndexBuffer = 1,
     UniformBuffer = 2,
-    TransferSourceBuffer = 3,
-    TransferDestinationBuffer = 4,
+    StorageBuffer = 3,
+    TransferSourceBuffer = 4,
+    TransferDestinationBuffer = 5,
 } BufferType;
 
 typedef enum {
     IndexU16 = 0, // Matches Vulkan spec
     IndexU32 = 1, // Matches Vulkan Spec
 } IndexFormat;
+
+typedef enum {
+    Nearest = 0, // Matches Vulkan spec
+    Linear = 1,  // Matches Vulkan Spec
+} ImageFilterType;
 
 typedef struct HedronBuffer HedronBuffer;
 
@@ -86,13 +92,13 @@ void destroy_image(HedronImage* image);
 HedronImageView* create_image_view(HedronImage* image, ImageFormat format);
 void destroy_image_view(HedronImageView* image_view);
 
-HedronSampler* create_sampler();
+HedronSampler* create_sampler(bool enable_anisotropy, ImageFilterType min_filter, ImageFilterType mag_filter);
 void destroy_sampler(HedronSampler* image_sampler);
 
 // Descriptor Sets
 // ----------------------------------
 
-typedef enum : uint64_t { UniformBufferDesc, CombinedImageSamplerDesc } DescriptorType;
+typedef enum : uint64_t { CombinedImageSamplerDesc, UniformBufferDesc, StorageBufferDesc } DescriptorType;
 typedef enum : uint64_t { VertexShader, FragmentShader } ShaderStage;
 
 typedef struct {
@@ -138,14 +144,18 @@ typedef enum : uint64_t {
     ImageInfo,
 } HedronDescriptorWriteType;
 
+PICO_LIST_HEADER_TYPE(HedronDescriptorBufferInfo, HedronDescriptorBufferInfo);
+PICO_LIST_HEADER_TYPE(HedronDescriptorImageInfo, HedronDescriptorImageInfo);
+
 typedef struct {
+    HedronDescriptorSet* descriptor_set;
+    DescriptorType descriptor_type;
+
     HedronDescriptorWriteType write_type;
     union {
-        HedronDescriptorBufferInfo buffer_info;
-        HedronDescriptorImageInfo image_info;
+        HedronDescriptorBufferInfoPiList buffer_writes;
+        HedronDescriptorImageInfoPiList image_writes;
     };
-    DescriptorType descriptor_type;
-    HedronDescriptorSet* descriptor_set;
 } HedronWriteDescriptorSet;
 
 typedef struct {
@@ -306,6 +316,8 @@ void command_copy_buffer_to_image(HedronCommandBuffer* commands, HedronBuffer* b
 void command_bind_descriptor_set(HedronCommandBuffer* commands, HedronPipeline* pipeline, HedronDescriptorSet* descriptor_set);
 void command_bind_pipeline(HedronCommandBuffer* commands, HedronPipeline* pipeline);
 void command_bind_vertex_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer);
+void command_bind_vertex_buffers(HedronCommandBuffer* commands, AddrPiList buffers);
+
 void command_bind_index_buffer(HedronCommandBuffer* commands, HedronBuffer* buffer, IndexFormat format);
 
 void command_set_surface(HedronCommandBuffer *commands, HedronSurface *surface);

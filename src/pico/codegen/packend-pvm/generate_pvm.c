@@ -4,7 +4,7 @@
 
 #include "pico/data/error.h"
 #include "pico/codegen/backend-pvm/generate.h"
-#include "pico/binding/address_env.h"
+#include "pico/codegen/backend-direct/address_env.h"
 
 /* Code Generation Assumptions:
  * • All expressions evaluate to integers or functions 
@@ -45,6 +45,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
         // generating a type.
         Symbol* recsym = top.def.value->ptype->sort != TKind ? 
             &top.def.bind : NULL;
+        // TODO: no address env should be here... use a pvm environment instead...
         AddressEnv* a_env = mk_address_env(env, recsym, a);
         generate(*top.def.value, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
@@ -165,10 +166,6 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         not_implemented(mv_string("PVM Unit Generation"));
         break;
     }
-    case SLitArray: {
-        not_implemented(mv_string("PVM Array Constant Generation"));
-        break;
-    }
     case SVariable: 
     case SAbsVariable: {
         not_implemented(mv_string("PVM Variable Generation"));
@@ -280,7 +277,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         generate(*syn.out_of.val, env, target, links, a, point);
         break;
     case SName:
-        generate(*syn.name.val, env, target, links, a, point);
+        generate(*syn.name.body, env, target, links, a, point);
         break;
     case SUnName:
         generate(*syn.unname, env, target, links, a, point);

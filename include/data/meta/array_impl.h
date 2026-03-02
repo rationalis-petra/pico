@@ -40,8 +40,8 @@
         out.data = mem_alloc(memsize, a);                               \
         out.len = source.len;                                           \
         out.size = source.size;                                         \
-        out.gpa = *a;                                                    \
-        memcpy(out.data, source.data, memsize);                         \
+        out.gpa = *a;                                                   \
+        if (out.size > 0) memcpy(out.data, source.data, memsize);       \
         return out;                                                     \
     }                                                                   \
                                                                         \
@@ -55,6 +55,7 @@
     void sdelete_ ## fprefix ## _array(tprefix ## Array arr) {          \
         mem_free(arr.data, &arr.gpa);                                   \
     }                                                                   \
+                                                                        \
     void reverse_ ## fprefix ##_array(tprefix##Array arr) {             \
         for (size_t i = 0; i < arr.len / 2; i++) {                      \
             type tmp = arr.data[i];                                     \

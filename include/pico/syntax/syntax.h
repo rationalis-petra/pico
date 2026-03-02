@@ -36,7 +36,6 @@ typedef enum {
     SLitString,
     SLitBool,
     SLitUnit,
-    SLitArray,
     SVariable,
     SAbsVariable,
 
@@ -48,6 +47,7 @@ typedef enum {
     SAllApplication,
     SSeal,
     SUnseal,
+    // TODO (Refactor) can probably remove SConstructor?
     SConstructor,
     SVariant,
     SMatch,
@@ -80,6 +80,7 @@ typedef enum {
     SSizeOf,
     SAlignOf,
     SOffsetOf,
+    SDynAlloc,
     SModule,
 
     // Types & Type formers
@@ -131,11 +132,6 @@ typedef struct {
 } SynFloatingLiteral;
 
 typedef struct {
-    U64Array shape;
-    PtrArray subterms;
-} SynArrayLiteral;
-
-typedef struct {
     Symbol symbol;
     size_t index;
     void* value;
@@ -145,6 +141,7 @@ typedef struct {
     SymPtrAssoc args;
     SymPtrAssoc implicits;
     Syntax* body;
+    bool preserve_dyn_memory;
 } SynProcedure;
 
 typedef struct {
@@ -198,6 +195,7 @@ typedef struct {
     size_t tag;
     SymbolArray vars;
     Syntax* body;
+    bool is_wildcard;
 } SynClause;
 
 typedef struct {
@@ -317,6 +315,12 @@ typedef struct {
 } SynIs;
 
 typedef struct {
+    Symbol name;
+    PtrArray args;
+    Syntax* body;
+} SynName;
+
+typedef struct {
     Syntax* type;
 } SynSize;
 
@@ -341,7 +345,7 @@ typedef struct {
 typedef struct {
     Symbol name;
     Syntax* body;
-} SynName;
+} SynNamed;
 
 typedef struct {
     Symbol field;
@@ -407,7 +411,6 @@ struct Syntax {
     union {
         SynIntegralLiteral integral;
         SynFloatingLiteral floating;
-        SynArrayLiteral array_lit;
         bool boolean;
         String string;
 
@@ -445,7 +448,7 @@ struct Syntax {
         SynIs is;
         SynIs into;
         SynIs out_of;
-        SynIs name;
+        SynName name;
         Syntax* unname;
         SynIs widen;
         SynIs narrow;
@@ -459,7 +462,7 @@ struct Syntax {
         Syntax* dynamic_type;
         SynBind bind_type;
         SynSealedType sealed_type;
-        SynName named_type;
+        SynNamed named_type;
         Syntax* distinct_type;
         Syntax* opaque_type;
         SynTrait trait;

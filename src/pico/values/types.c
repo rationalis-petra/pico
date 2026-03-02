@@ -10,10 +10,9 @@
 #include "pico/data/rename_array.h"
 #include "components/pretty/standard_types.h"
 #include "components/pretty/string_printer.h"
-#include "pico/analysis/unify.h"
+#include "pico/typecheck/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
-#include "pico/values/array.h"
 
 struct UVarGenerator {
     uint64_t counter;
@@ -38,14 +37,6 @@ void delete_enum_variant_p(AddrPiList* t, PiAllocator* pia) {
 
 void delete_pi_type(PiType t, PiAllocator* pia) {
     switch(t.sort) {
-    case TArray: {
-        for (size_t i = 0; i < t.array.dimensions.len; i++) {
-            call_free(t.array.dimensions.data[i], pia);
-        }
-        sdelete_addr_list(t.array.dimensions);
-        delete_pi_type_p(t.array.element_type, pia);
-        break;
-    }
     case TProc: {
         delete_pi_type_p(t.proc.ret, pia);
         for (size_t i = 0; i < t.proc.implicits.len; i++)
@@ -186,16 +177,6 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     PiType out;
     out.sort = t.sort;
     switch(t.sort) {
-    case TArray: {
-        out.array.sort = t.array.sort;
-        out.array.dimensions = mk_addr_list(t.array.dimensions.len * sizeof(void*), pia);
-        for (size_t i = 0; i < t.array.dimensions.len; i++) {
-            ArrayDimType* ty = call_alloc(sizeof(ArrayDimType), pia);
-            push_addr(ty, &out.array.dimensions);
-        }
-        out.array.element_type = copy_pi_type_p(t.array.element_type, pia);
-        break;
-    }
     case TProc:
         out.proc.ret = copy_pi_type_p(t.proc.ret, pia);
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
@@ -380,15 +361,6 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         }
         }
         break;
-    case TArray: {
-        PrettyElem pelem = (PrettyElem) {
-            .print_elem = (print_element)pretty_pi_value,
-            .context = type->array.element_type,
-        };
-        Array* array = (Array*) val;
-        size_t index_size = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
-        return pretty_array(*array, index_size, pelem, a);
-    }
     case TProc: {
         void** addr = (void**) val;
         PtrArray nodes = mk_ptr_array(2, a);
@@ -626,7 +598,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     DocStyle cstyle = scolour(colour(209, 118, 219), dstyle);
     DocStyle vstyle = scolour(colour(38, 181, 43), dstyle);
     DocStyle pstyle = scolour(colour(52, 216, 235), dstyle);
-    DocStyle fstyle = scolour(colour(149, 187, 191), dstyle);
+    DocStyle field_style = scolour(colour(149, 187, 191), dstyle);
 
     Document* out = NULL;
     switch (type->sort) {
@@ -681,33 +653,6 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
-    case TArray: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
-
-        push_ptr(pretty_type_internal(type->array.element_type, ctx, a), &nodes);
-
-        if (type->array.sort == Any) {
-            push_ptr(mk_cstr_doc("⟨...⟩", a), &nodes);
-        } else {
-            if (type->array.dimensions.len != 0) {
-                PtrArray arg_nodes = mk_ptr_array(type->array.dimensions.len, a);
-                for (size_t i = 0; i < type->array.dimensions.len; i++) {
-                    ArrayDimType dim = *(ArrayDimType*)type->array.dimensions.data[i];
-                    if (dim.is_any) {
-                        push_ptr(mk_cstr_doc(".", a), &nodes);
-                    } else {
-                        push_ptr(pretty_u64(dim.value, a), &arg_nodes);
-                    }
-                }
-                push_ptr(mk_paren_doc("⟨", "⟩", mv_sep_doc(arg_nodes, a), a), &nodes);
-            }
-        }
-
-        out = mv_sep_doc(nodes, a);
-        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
-        break;
-    }
     case TProc: {
         PtrArray head_nodes = mk_ptr_array(4, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &head_nodes);
@@ -743,11 +688,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mv_str_doc((mk_string("packed", a)), a), &head_nodes);
         }
 
+        ctx.should_wrap = false;
         PtrArray fields = mk_ptr_array( type->structure.fields.len, a);
         for (size_t i = 0; i < type->structure.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
-            Document* arg = pretty_type_internal(type->structure.fields.data[i].val, ctx, a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->structure.fields.data[i].key, a), a), a);
+            Document* arg = mv_nest_doc(2, pretty_type_internal(type->structure.fields.data[i].val, ctx, a), a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -774,7 +720,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             PtrArray name_nodes= mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc(":", a), &name_nodes);
             push_ptr(mk_str_doc(view_symbol_string(type->enumeration.variants.data[i].key), a), &name_nodes);
-            Document* fname = mv_style_doc(fstyle, mv_cat_doc(name_nodes, a), a);
+            Document* fname = mv_style_doc(field_style, mv_cat_doc(name_nodes, a), a);
 
             PtrArray* types = type->enumeration.variants.data[i].val;
             PtrArray ty_nodes = mk_ptr_array(types->len, a);
@@ -836,16 +782,17 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->named.name, a), a), a),
                          &args);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
+                    push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.args->data[i], ctx, a), a), &args);
                 }
-                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &name_group);
+                Document* inner = mk_paren_doc("(", ")", mv_sep_doc(args, a), a);
+                push_ptr(mv_nest_doc(2, mv_group_doc(inner, a), a), &name_group);
             } else {
-                push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->named.name, a), a), a),
-                         &name_group);
+                Document* inner = mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->named.name, a), a), a);
+                push_ptr(mv_nest_doc(2, inner, a), &name_group);
             }
 
             ctx.should_wrap = false;
-            push_ptr(mv_group_doc(mv_sep_doc(name_group, a), a), &nodes);
+            push_ptr(mv_group_doc(mv_hsep_doc(name_group, a), a), &nodes);
             push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.type, ctx, a), a), &nodes);
             out = mv_sep_doc(nodes, a);
             if (should_wrap) {
@@ -858,7 +805,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
                 PtrArray args = mk_ptr_array(type->named.args->len + 1, a);
                 push_ptr(base, &args);
                 for (size_t i = 0; i < type->named.args->len; i++) {
-                    push_ptr(pretty_type_internal(type->named.args->data[i], ctx, a), &args);
+                    push_ptr(mv_nest_doc(2, pretty_type_internal(type->named.args->data[i], ctx, a), a), &args);
                 }
                 out = mv_sep_doc(args, a);
                 if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -877,10 +824,12 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         // 'Default' path
         PtrArray nodes = mk_ptr_array(6, a);
         if (type->distinct.source_module) {
-            push_ptr(mk_str_doc(mv_string("Opaque #" ), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Opaque" ), a), a), &nodes);
         } else {
-            push_ptr(mk_str_doc(mv_string("Distinct #" ), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Distinct" ), a), a), &nodes);
         }
+
+        push_ptr(mk_str_doc(mv_string(" #" ), a), &nodes);
         push_ptr(pretty_u64(type->distinct.id, a), &nodes);
         if (type->distinct.args) {
             PtrArray args = mk_ptr_array(type->distinct.args->len, a);
@@ -890,6 +839,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
             push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
+        ctx.should_wrap = false;
         push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
         out = mv_cat_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -912,7 +862,7 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
 
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->trait.fields.data[i].key, a), a), a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->trait.fields.data[i].key, a), a), a);
             Document* arg = pretty_type_internal(type->trait.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -927,14 +877,14 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     }
     case TTraitInstance: {
         PtrArray head_nodes = mk_ptr_array(2, a);
-        push_ptr(mv_style_doc(fstyle, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
+        push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
         push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
 
         PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(fstyle, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
+            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
             Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
             push_ptr(fname, &fd_nodes);
@@ -976,20 +926,28 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
         break;
     }
     case TSealed: {
-        PtrArray nodes = mk_ptr_array(4, a);
-        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Sealed" ), a), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(4, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Sealed" ), a), a), &head_nodes);
         PtrArray types = mk_ptr_array(type->sealed.vars.len, a);
         for (size_t i = 0; i < type->sealed.vars.len; i++) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->sealed.vars.data[i], a), a), a), &types);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(types, a), a), &nodes);
+        Document* ty_args = mk_paren_doc("[", "]", mv_hsep_doc(types, a), a);
+        push_ptr(mv_nest_doc(2, mv_group_doc(ty_args, a), a), &head_nodes);
 
         PtrArray implicits = mk_ptr_array(type->sealed.implicits.len, a);
         for (size_t i = 0; i < type->sealed.implicits.len; i++) {
             push_ptr(pretty_type_internal(type->sealed.implicits.data[i], ctx, a), &implicits);
         }
-        push_ptr(mk_paren_doc("{", "}", mv_hsep_doc(implicits, a), a), &nodes);
-        push_ptr(pretty_type_internal(type->sealed.body, ctx, a), &nodes);
+        if (implicits.len > 0) {
+            Document* impl_args = mk_paren_doc("{", "}", mv_hsep_doc(implicits, a), a);
+            push_ptr(mv_nest_doc(2, mv_group_doc(impl_args, a), a), &head_nodes);
+        }
+
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+        ctx.should_wrap = false;
+        push_ptr(mv_nest_doc(2, pretty_type_internal(type->sealed.body, ctx, a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
@@ -1142,9 +1100,6 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
             panic(mv_string("pi-maybe-size-of: unrecognized primitive."));
         }
         break;
-    case TArray: 
-        *out = 3 * ADDRESS_SIZE;
-        return Ok;
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
@@ -1172,8 +1127,8 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         return Ok;
     }
     case TEnum: {
-        size_t align = 1;
         size_t max = 0; 
+        size_t align = type.enumeration.tag_size / 8;
         size_t tag_size = type.enumeration.tag_size / 8;
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
             size_t total = tag_size;
@@ -1197,7 +1152,7 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         }
 
         // Add 1 for tag!
-        *out = max;
+        *out = pi_size_align(max, align);
         return Ok;
     }
 
@@ -1302,9 +1257,6 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
             panic(mv_string("pi_maybe_align_of received invalid primitive"));
         }
         return sizeof(uint64_t);
-    case TArray:
-        *out = ADDRESS_SIZE;
-        return Ok;
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
@@ -1457,10 +1409,11 @@ bool is_narrower(PiType *wide, PiType *narrow) {
     return false;
 }
 
-PiType* unwrap_type(PiType *ty, PiAllocator* pia, Allocator* a) {
+PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a) {
     bool unwrapping = true;
     while (unwrapping) {
-        if (ty->sort == TDistinct && ty->distinct.source_module == NULL) {
+      if (ty->sort == TDistinct &&
+          (ty->distinct.source_module == NULL || ty->distinct.source_module == curr_module)) {
             ty = ty->distinct.type;
         } else if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
@@ -1587,7 +1540,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         type_app_subst(body->sealed.body, subst, shadowed, pia, a);
 
-        shadowed -= body->sealed.vars.len;
+        shadowed->len -= body->sealed.vars.len;
         break;
     }
 
@@ -1596,8 +1549,11 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         panic(mv_string("Not implemetned type-app for App"));
         break;
     case TFam:
-        // Note: when implementing, consider shadowing
-        panic(mv_string("Not implemetned type-app for Fam"));
+        for (size_t i = 0; i < body->binder.vars.len; i++) {
+            push_symbol(body->binder.vars.data[i], shadowed);
+        }
+        type_app_subst(body->binder.body, subst, shadowed, pia, a);
+        shadowed->len -= body->binder.vars.len;
         break;
 
     case TUVar:
@@ -1959,24 +1915,6 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
-    case TArray: {
-        // Step 1: shape shape
-        Array* larray = (Array*)lhs;
-        Array* rarray = (Array*)rhs;
-        if (larray->shape.len != rarray->shape.len) return false;
-        size_t nelements = 1;
-        for (size_t i = 0; i < larray->shape.len; i++) {
-            if (larray->shape.data[i] != rarray->shape.data[i]) return false;
-            nelements *= larray->shape.data[i];
-        }
-        size_t index_mul = pi_size_align(pi_size_of(*type->array.element_type), pi_align_of(*type->array.element_type));
-        for (size_t i = 0; i < nelements; i++) {
-            void* laddr = larray->data + (i * index_mul);
-            void* raddr = larray->data + (i * index_mul);
-            if (!pi_value_eql(type->array.element_type, laddr, raddr, a)) return false;
-        }
-        return true;
-    }
     case TProc: {
         void** addrlhs = (void**) lhs;
         void** addrrhs = (void**) rhs;
@@ -1999,12 +1937,42 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         return true;
     }
     case TEnum: {
-        uint64_t lhs_tag = *(uint64_t*)lhs;
-        uint64_t rhs_tag = *(uint64_t*)rhs;
-        if (lhs_tag != rhs_tag) return false;
+        size_t offset = type->enumeration.tag_size / 8;
+        uint64_t tag = 0;
+        switch (type->enumeration.tag_size) {
+        case 8: {
+            uint8_t lhs_tag = *(uint8_t*)lhs;
+            uint8_t rhs_tag = *(uint8_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 16:{
+            uint16_t lhs_tag = *(uint16_t*)lhs;
+            uint16_t rhs_tag = *(uint16_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 32: {
+            uint32_t lhs_tag = *(uint32_t*)lhs;
+            uint32_t rhs_tag = *(uint32_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        case 64: {
+            uint64_t lhs_tag = *(uint64_t*)lhs;
+            uint64_t rhs_tag = *(uint64_t*)rhs;
+            if (lhs_tag != rhs_tag) return false;
+            tag = lhs_tag;
+            break;
+        }
+        default:
+            panic(mv_string("Invalid enum tag-size"));
+        }
 
-        size_t offset = sizeof(uint64_t);
-        PtrArray* types = type->enumeration.variants.data[lhs_tag].val;
+        PtrArray* types = type->enumeration.variants.data[tag].val;
         for (size_t i = 0; i < types->len; i++) {
             PiType* ty = types->data[i];
             offset = pi_size_align(offset, pi_align_of(*ty));
@@ -2079,8 +2047,6 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
         }
         return false;
     }
-    case TArray:
-        return false;
     case TProc:
         return false;
     case TStruct:

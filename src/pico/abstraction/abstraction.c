@@ -10,7 +10,8 @@
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/shadow_env.h"
-#include "pico/analysis/abstraction.h"
+#include "pico/abstraction/abstraction.h"
+#include "pico/abstraction/abstraction_errors.h"
 
 // Internal types
 typedef enum {
@@ -26,13 +27,6 @@ typedef struct {
     };
 } ComptimeHead;
 
-typedef struct {
-    Allocator* gpa;
-    PiAllocator* pia;
-    ShadowEnv* env;
-    PiErrorPoint* point;
-    void* dynamic_memory_ptr;
-} AbstractionCtx;
 
 // Internal functions declarations needed for interface implementation
 Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx);
@@ -40,7 +34,6 @@ TopLevel abstract_i(RawTree raw, AbstractionCtx ctx);
 
 Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, AbstractionCtx ctx);
 Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx);
-Syntax* mk_array_literal(RawTree raw, AbstractionCtx ctx);
 ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx);
 Module* try_get_module(Syntax* syn, ShadowEnv* env);
 Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx);
@@ -65,16 +58,19 @@ Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint*
     PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
     PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
 
+    void* vstack_memory_space = mem_alloc(4096, a);
     void* dynamic_memory_space = mem_alloc(4096, a);
     AbstractionCtx ctx = {
         .gpa = a,
         .pia = &pi_alloc,
         .env = s_env,
         .point = point,
-        .dynamic_memory_ptr = dynamic_memory_space + 4095,
+        .vstack_memory_ptr = vstack_memory_space + 4095,
+        .dynamic_memory_ptr = dynamic_memory_space,
     };
     Syntax* out = abstract_expr_i(raw, ctx);
     mem_free(dynamic_memory_space, a);
+    mem_free(vstack_memory_space, a);
 
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
@@ -83,6 +79,7 @@ Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint*
 
 TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point) {
     ShadowEnv* s_env = mk_shadow_env(a, env);
+    void* vstack_memory_space = mem_alloc(4096, a);
     void* dynamic_memory_space = mem_alloc(4096, a);
     PiAllocator pi_alloc = convert_to_pallocator(a);
     PiAllocator tmp_alloc = convert_to_pallocator(a);
@@ -94,11 +91,13 @@ TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* poi
         .pia = &pi_alloc,
         .env = s_env,
         .point = point,
-        .dynamic_memory_ptr = dynamic_memory_space + 4095,
+        .vstack_memory_ptr = vstack_memory_space + 4095,
+        .dynamic_memory_ptr = dynamic_memory_space,
     };
     TopLevel out = abstract_i(raw, ctx);
 
     mem_free(dynamic_memory_space, a);
+    mem_free(vstack_memory_space, a);
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
     return out;
@@ -295,14 +294,22 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, AbstractionCtx
         RawTree annotation = list.branch.nodes.data[i];
         if (annotation.type == RawAtom) {
             sym_ptr_bind(annotation.atom.symbol, NULL, args);
-        } else if (annotation.type == RawBranch || annotation.branch.nodes.len == 2) {
+        } else if (annotation.type == RawBranch || annotation.branch.nodes.len > 1) {
             RawTree arg = annotation.branch.nodes.data[0];
-            RawTree raw_type = annotation.branch.nodes.data[1];
             if (arg.type != RawAtom || arg.atom.type != ASymbol) { return error_result; }
-            Syntax* type = abstract_expr_i(raw_type, ctx); 
+            RawTree* raw_type;
+            if (annotation.branch.nodes.len == 2) {
+              raw_type = &annotation.branch.nodes.data[1];
+            } else {
+              raw_type = raw_slice(&annotation, 1, ctx.pia);
+            }
+            Syntax* type = abstract_expr_i(*raw_type, ctx); 
 
             sym_ptr_bind(arg.atom.symbol, type, args);
-        } else { return error_result; }
+        } else {
+          // TODO (Improvement): produce index, range?
+          return error_result;
+        }
     }
     return (Result) {.type = Ok};
 }
@@ -419,6 +426,23 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             args_index++;
         }
 
+        bool preserve_dyn_memory = false;
+        if (is_special(raw.branch.nodes.data[args_index])) {
+            RawTree props = raw.branch.nodes.data[args_index];
+            for (size_t i = 0; i < props.branch.nodes.len; i++) {
+                RawTree prop = props.branch.nodes.data[i];
+                if (eq_symbol(&prop, string_to_symbol(mv_string("preserve-dyn-memory")))) {
+                    preserve_dyn_memory = true;
+                } else {
+                    err.range = raw.branch.nodes.data[args_index].range;
+                    err.message = mv_cstr_doc("Unrecognized proc property: must be one of [preserve-dyn-memory]", a);
+                    throw_pi_error(ctx.point, err);
+                }
+            }
+
+            args_index++;
+        }
+
         SymbolArray to_shadow = mk_symbol_array(arguments.len, a);
         for (size_t i = 0; i < arguments.len; i++) {
             push_symbol(arguments.data[i].key, &to_shadow);
@@ -441,7 +465,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .range = raw.range,
             .procedure.args = arguments,
             .procedure.implicits = implicits, 
-            .procedure.body = body
+            .procedure.body = body,
+            .procedure.preserve_dyn_memory = preserve_dyn_memory,
         };
         return res;
     }
@@ -510,7 +535,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SynArray types = mk_ptr_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
-            if (raw_types.type != RawBranch && raw_types.branch.hint != HSpecial) {
+            if (!is_special(raw_types)) {
                 err.range = raw_types.range;
                 err.message = mv_cstr_doc("Seal expects second argument to be a set of types", a);
                 throw_pi_error(ctx.point, err);
@@ -567,8 +592,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         {
 
             RawTree raw_binder = raw.branch.nodes.data[1];
-            if (raw_binder.type != RawBranch
-                || raw_binder.branch.hint != HSpecial
+            if (!is_special(raw_binder)
                 || raw_binder.branch.nodes.len != 2
                 || !is_symbol(raw_binder.branch.nodes.data[0])) {
 
@@ -584,7 +608,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         SymbolArray types = mk_symbol_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
-            if (!get_symbol_list(&types, raw_types) || raw_types.branch.hint != HSpecial) {
+            if (!is_special(raw_types) || !get_symbol_list(&types, raw_types)) {
                 err.range = raw_types.range;
                 err.message = mv_cstr_doc("Invalid type binding provided to unseal", a);
                 throw_pi_error(ctx.point, err);
@@ -735,49 +759,61 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             // Get the pattern
+
+            Symbol clause_tagname = {}; 
+            SymbolArray clause_binds = {};
+            bool is_wildcard = false;
             RawTree raw_pattern = raw_clause.branch.nodes.data[0];
             if (raw_pattern.type != RawBranch) {
-                err.range = raw_pattern.range;
-                err.message = mv_cstr_doc("Match Pattern should be a list!", a);
-                throw_pi_error(ctx.point, err);
-            }
-
-            // The pattern has two parts: the variables & the tag
-            // The tag should be in a constructor (i.e. list)
-
-            Symbol clause_tagname; 
-            SymbolArray clause_binds;
-            RawTree mcol = raw_pattern.branch.nodes.data[0];
-            if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
-                RawTree mname = raw_pattern.branch.nodes.data[1];
-                if (!is_symbol(mname)) {
-                    err.range = mname.range;
-                    err.message = mv_cstr_doc("Bad pattern in match clause", a);
-                    throw_pi_error(ctx.point, err);
-                }
-
-                clause_tagname = mname.atom.symbol;
-                clause_binds = mk_symbol_array(0, a);
-            } else {
-                if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
-                    PtrArray nodes = mk_ptr_array(2, a);
-                    push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
-                    push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
-                    Document* doc = mv_sep_doc(nodes, a);
-                    err.range = raw_clause.range;
-                    err.message = doc;
-                    throw_pi_error(ctx.point, err);
-                }
-
-                clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
-                for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
-                    RawTree raw_name = raw_pattern.branch.nodes.data[s];
-                    if (!is_symbol(raw_name)) {
+                if (eq_symbol(&raw_pattern, string_to_symbol(mv_string("_")))) {
+                    if (i + 1 != raw.branch.nodes.len) {
                         err.range = raw_clause.range;
-                        err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+                        err.message = mv_cstr_doc("A wildcard pattern must be the last pattern in a match clause.", a);
                         throw_pi_error(ctx.point, err);
                     }
-                    push_symbol(raw_name.atom.symbol, &clause_binds); 
+
+                    is_wildcard = true;
+                } else {
+                    err.range = raw_clause.range;
+                    err.message = mv_cstr_doc("Expecting pattern but got a symbol instead. This is not yet supported.", a);
+                    throw_pi_error(ctx.point, err);
+                }
+            } else {
+                // The pattern has two parts: the variables & the tag
+                // The tag should be in a constructor (i.e. list)
+
+                RawTree mcol = raw_pattern.branch.nodes.data[0];
+                if (raw_pattern.branch.nodes.len == 2 && is_symbol(mcol) && symbol_eq(mcol.atom.symbol, string_to_symbol(mv_string(":")))) {
+                    RawTree mname = raw_pattern.branch.nodes.data[1];
+                    if (!is_symbol(mname)) {
+                        err.range = mname.range;
+                        err.message = mv_cstr_doc("Bad pattern in match clause", a);
+                        throw_pi_error(ctx.point, err);
+                    }
+
+                    clause_tagname = mname.atom.symbol;
+                    clause_binds = mk_symbol_array(0, a);
+                } else {
+                    if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
+                        PtrArray nodes = mk_ptr_array(2, a);
+                        push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
+                        push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
+                        Document* doc = mv_sep_doc(nodes, a);
+                        err.range = raw_clause.range;
+                        err.message = doc;
+                        throw_pi_error(ctx.point, err);
+                    }
+
+                    clause_binds = mk_symbol_array(raw_pattern.branch.nodes.len - 1, a);
+                    for (size_t s = 1; s < raw_pattern.branch.nodes.len; s++) {
+                        RawTree raw_name = raw_pattern.branch.nodes.data[s];
+                        if (!is_symbol(raw_name)) {
+                            err.range = raw_clause.range;
+                            err.message = mv_cstr_doc("Pattern binding was not a symbol!", a);
+                            throw_pi_error(ctx.point, err);
+                        }
+                        push_symbol(raw_name.atom.symbol, &clause_binds); 
+                    }
                 }
             }
 
@@ -792,6 +828,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 .tagname = clause_tagname,
                 .vars = clause_binds,
                 .body = clause_body,
+                .is_wildcard = is_wildcard,
             };
             push_ptr(clause, &clauses);
         }
@@ -816,7 +853,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         Syntax* sbase;
         size_t start_idx = 1;
         // Get the type of the structure
-        if (raw.branch.nodes.data[1].type != RawBranch || raw.branch.nodes.data[1].branch.hint != HSpecial) {
+        if (!is_special(raw.branch.nodes.data[1])) {
             start_idx = 2;
             sbase = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         } else {
@@ -975,10 +1012,6 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         };
         return res;
     }
-    case FGenArray:
-        panic(mv_string("abstract for gen-array not implemented"));
-    case FWith:
-        panic(mv_string("abstract for with not implemented"));
     case FDynamic: {
         if (raw.branch.nodes.len < 2) {
             err.range = raw.range;
@@ -1269,8 +1302,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             
             size_t index = 1;
             SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
-            if (label_expr->branch.nodes.data[index].type == RawBranch
-                && label_expr->branch.nodes.data[index].branch.hint == HSpecial) {
+            if (is_special(label_expr->branch.nodes.data[index])) {
                 Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], ctx);
                 if (args_out.type == Err) {
                     err.range = label_expr->branch.nodes.data[index].range;
@@ -1409,7 +1441,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         size_t num_binds = 0;
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
             RawTree tree = raw.branch.nodes.data[i];
-            if (tree.type == RawBranch && tree.branch.hint == HSpecial) {
+            if (is_special(tree)) {
                 if (tree.type != RawBranch
                     || !eq_symbol(&tree.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                     err.range = tree.branch.nodes.data[0].range;
@@ -1524,15 +1556,44 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        RawTree namer = raw.branch.nodes.data[1];
+        Symbol name = {};
+        PtrArray args = {};
+        if (namer.type == RawBranch) {
+            RawTreePiList name_list = namer.branch.nodes;
+            if (name_list.len < 1) {
+                err.range = namer.range;
+                err.message = mv_cstr_doc("Term former 'name' expects name list to have at least one member!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            if (!is_symbol(name_list.data[0])) {
+                err.range = name_list.data[1].range;
+                err.message = mv_cstr_doc("Term former 'name' expects the first argument of name list to be a symbol!", a);
+                throw_pi_error(ctx.point, err);
+            }
+            name = name_list.data[0].atom.symbol;
+
+            args = mk_ptr_array(name_list.len - 1, a);
+            for (size_t i = 1; i < name_list.len; i++) {
+                push_ptr(abstract_expr_i(name_list.data[i], ctx), &args);
+            }
+        }
+        else if (!is_symbol(raw.branch.nodes.data[1])) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'name' expects the first argument to be a symbol or symbol + type list!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        else {
+            name = raw.branch.nodes.data[1].atom.symbol;
+        }
+        Syntax* body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
         Syntax* res = mem_alloc(sizeof(Syntax), a);
         *res = (Syntax) {
             .type = SName,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .name = {.name = name, .body = body, .args = args},
         };
         return res;
     }
@@ -1569,7 +1630,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SWiden,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .widen = {.val = term, .type = type},
         };
         return res;
     }
@@ -1588,7 +1649,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SNarrow,
             .ptype = NULL,
             .range = raw.range,
-            .name = {.val = term, .type = type},
+            .narrow = {.val = term, .type = type},
         };
         return res;
     }
@@ -1653,14 +1714,26 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         };
         return res;
     }
-    case FArrayType: {
-        panic(mv_string("Array type former not implemented."));
+    case FDynAlloc: {
+        if (raw.branch.nodes.len != 2) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Term former 'dyn-alloc' expects precisely 1 argument!", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+
+        Syntax* res = mem_alloc(sizeof(Syntax), a);
+        *res = (Syntax) {
+            .type = SDynAlloc,
+            .ptype = NULL,
+            .range = raw.range,
+            .size = term,
+        };
+        return res;
     }
     case FProcType: {
         if (raw.branch.nodes.len != 3) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Wrong number of terms to proc type former.", a);
-            throw_pi_error(ctx.point, err);
+            proc_tyformer_incorrect_numterms(raw, ctx);
         }
 
         RawTree raw_args = raw.branch.nodes.data[1];
@@ -1771,7 +1844,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree edesc = raw.branch.nodes.data[i];
 
             if (edesc.type != RawBranch) {
-                err.range = edesc.branch.nodes.data[0].range;
+                err.range = edesc.range;
                 err.message = mv_cstr_doc("Enumeration type expects all variant descriptors to be lists.", a);
                 throw_pi_error(ctx.point, err);
             };
@@ -2380,30 +2453,13 @@ void mk_array_inner(PtrArray* terms, uint64_t depth, U64Array expected_shape, Ra
     }
 }
 
-Syntax *mk_array_literal(RawTree raw, AbstractionCtx ctx) {
-    Allocator* a = ctx.gpa;
-    PtrArray terms = mk_ptr_array(8, a);
-    U64Array shape = mk_u64_array(8, a);
-    get_array_shape(raw, &shape, a, ctx.point);
-    mk_array_inner(&terms, 0, shape, raw, ctx);
-
-    Syntax* res = mem_alloc(sizeof(Syntax), a);
-    *res = (Syntax) {
-        .type = SLitArray,
-        .ptype = NULL,
-        .range = raw.range,
-        .array_lit.shape = shape,
-        .array_lit.subterms = terms,
-    };
-    return res;
-}
-
 MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
     // Call the function (uses Pico ABI)
     MacroResult output;
     RawTreePiList input = raw.branch.nodes;
     void* dvars = get_dynamic_memory();
-    void* dynamic_memory_ptr = ctx.dynamic_memory_ptr; // ??
+    void* vstack_memory_ptr = ctx.vstack_memory_ptr; 
+    void* dynamic_memory_ptr = ctx.dynamic_memory_ptr; 
 
     PiAllocator old_temp_alloc = set_std_temp_allocator(*ctx.pia);
 
@@ -2420,22 +2476,23 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                          "push %%r13       \n" // for control/indexing memory space
                          "push %%r12       \n" // Nonvolatile on System V + Win64
 
-                         "mov %3, %%r13    \n"
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r12    \n"
                          "mov %2, %%r14    \n"
                          "mov %2, %%r15    \n"
 
                          // Push output ptr & sizeof (MacroResult), resp
-                         "push %5          \n" // output ptr
-                         "push %6          \n" // sizeof (MacroResult)
+                         "push %6          \n" // output ptr
+                         "push %7          \n" // sizeof (MacroResult)
 
                          // Push arg (array) onto stack
                          //"push 0x30(%4)       \n"
-                         "push 0x28(%4)       \n"
-                         "push 0x20(%4)       \n"
-                         "push 0x18(%4)       \n"
-                         "push 0x10(%4)       \n"
-                         "push 0x8(%4)        \n"
-                         "push (%4)         \n"
+                         "push 0x28(%5)       \n"
+                         "push 0x20(%5)       \n"
+                         "push 0x18(%5)       \n"
+                         "push 0x10(%5)       \n"
+                         "push 0x8(%5)        \n"
+                         "push (%5)         \n"
 
                          // First store the function to call in RAX, in case
                          // the compiler has stored it as an offset to rbp
@@ -2488,6 +2545,7 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
                          : "=r" (out)
 
                          : "r" (head.macro_addr)
+                           , "r" (vstack_memory_ptr)
                            , "r" (dynamic_memory_ptr)
                            , "r" (dvars)
                            , "r" (&input)
@@ -2575,9 +2633,6 @@ Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
-        if (raw.branch.hint == HData) {
-            return mk_array_literal(raw, ctx);
-        }
 
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
@@ -2752,13 +2807,6 @@ TopLevel abstract_i(RawTree raw, AbstractionCtx ctx) {
     bool unique_toplevel = false;
 
     if (raw.type == RawBranch && raw.branch.nodes.len > 1) {
-        if (raw.branch.hint == HData) {
-            return (TopLevel) {
-                .type = TLExpr,
-                .expr = mk_array_literal(raw, ctx),
-            };
-        }
-
         ComptimeHead head = comptime_head(raw.branch.nodes.data[0], ctx);
         switch (head.type) {
         case HeadSyntax:

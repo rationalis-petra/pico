@@ -5,6 +5,8 @@
 #include "data/float.h"
 #include "data/string.h"
 
+String string_bool(bool val, Allocator* a);
+
 String string_i64(int64_t  val, Allocator* a);
 String string_i32(int32_t  val, Allocator* a);
 String string_i16(int16_t  val, Allocator* a);
