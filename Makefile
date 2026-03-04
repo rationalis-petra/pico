@@ -4,9 +4,13 @@
 ##
 ## -----------------------------------------------------------------------------
 
+ifneq ($(OS), Windows_NT)
 TARGET_EXEC := pico
-MAIN_SRC := ./src/main.c
+else
+TARGET_EXEC := pico.exe
+endif
 
+MAIN_SRC := ./src/main.c
 BUILD_DIR := ./build
 RELEASE_DIR := $(BUILD_DIR)/release
 DEBUG_DIR := $(BUILD_DIR)/debug
@@ -215,7 +219,11 @@ $(INSTALLER_DIR)/%.c.o: %.c
 KEEPER_DIR := $(BUILD_DIR)/keeper
 KEEPER_INC_DIR := ./keeper/include
 KEEPER_SRC_DIRS := ./keeper/src
-TARGET_KEEPER := pico_keeper
+ifneq ($(OS), Windows_NT)
+TARGET_KEEPER := keeper
+else
+TARGET_KEEPER := keeper.exe
+endif
 
 KEEPER_FLAGS := $(RELASE_FLAGS)
 
@@ -292,7 +300,7 @@ ASSET_DIR := $(INSTALLER_DIR)/assets
 install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
 	mkdir -p $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
-	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/keeper
+	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
 	cp -r archive $(ASSET_DIR)
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 

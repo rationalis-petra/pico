@@ -352,10 +352,13 @@ bool write_chunk(File* file, U8Array arr) {
     return !fwrite(arr.data, sizeof(uint8_t), arr.len, (FILE*)file);
 }
 
-#include<stdio.h>
 Result copy_file(String source, String dest) {
 #if OS_FAMILY == WINDOWS
-#error "copy-file not implemented on windows (yet)"
+    if (CopyFile((LPCSTR)source.bytes, (LPCSTR)dest.bytes, false)) {
+        return (Result){.type = Ok};
+    } else {
+        return (Result){.type = Err, .error_message = mv_string("Failed to copy file!")};
+    }
 #elif OS_FAMILY == UNIX
     // TODO (PORT): see https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c
     // for non-linux support!
@@ -363,14 +366,12 @@ Result copy_file(String source, String dest) {
     int input, output;
     if ((input = open((char*)source.bytes, O_RDONLY)) == -1)
     {
-        printf("%d\n", errno);
         return (Result) {.type =Err, .error_message = mv_string("Failed to open source file.")};
     }
     // Create new or truncate existing at destination
     if ((output = creat((char*)dest.bytes, 0660)) == -1)
     {
         close(input);
-        printf("%d\n", errno);
         return (Result) {.type =Err, .error_message = mv_string("Failed to create destination file.")};
     }
     // sendfile will work with non-socket output (i.e. regular file) under
@@ -396,13 +397,35 @@ Result copy_file(String source, String dest) {
 
 Result set_permissions(String file, FilePermissions perms) {
 #if OS_FAMILY == WINDOWS
-#error "set-permissions not implemented on windows (yet)"
+    Result res = {.type = Ok};
+    return res;
 #elif OS_FAMILY == UNIX
     Result res = {.type = Ok};
     mode_t unix_perms = (perms.user << 6) | (perms.group << 3) | perms.other;
     if (chmod((char *)file.bytes, unix_perms)) {
         res = (Result) {.type = Err, .error_message = mv_string("Failed to change permissions for file.")};
     }
-#endif
     return res;
+#endif
+}
+
+Result create_directory(String dirname) {
+    Result res = {.type = Ok};
+#if OS_FAMILY == WINDOWS
+    if (!CreateDirectory((char*)dirname.bytes, NULL)) {
+        res = (Result){.type = Err, .error_message = mv_string("Failed to create directory.")};
+    }
+    return res;
+#elif OS_FAMILY == UNIX
+    return res;
+#endif
+}
+
+bool file_exists(String path) {
+#if OS_FAMILY == WINDOWS
+  DWORD dwAttrib = GetFileAttributes((char*)path.bytes);
+  return (dwAttrib != INVALID_FILE_ATTRIBUTES);
+#elif OS_FAMILY == UNIX
+    #error "Not implemented in unix: file_exists!"
+#endif
 }

@@ -110,4 +110,8 @@ typedef struct {
 
 Result set_permissions(String file, FilePermissions perms);
 
+Result create_directory(String dirname);
+
+bool file_exists(String path);
+
 #endif
