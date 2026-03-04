@@ -17,10 +17,10 @@ typedef struct {
     uint64_t size;
 } MaybeSize;
 
-FileResult relic_open_file(String name, FilePermissions perms) {
+FileResult relic_open_file(String name, FileMode mode) {
     PiAllocator pia = get_std_perm_allocator();
     Allocator a = convert_to_callocator(&pia);
-    return open_file(name, perms, &a);
+    return open_file(name, mode, &a);
 }
 
 uint8_t relic_read_byte(File *file) {

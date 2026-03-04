@@ -8,6 +8,17 @@
 #include "data/string.h"
 #include "data/meta/array_impl.h"
 
+#if OS_FAMILY == UNIX
+// Unix Generic
+#include <fcntl.h>
+#include <unistd.h>
+
+// Linux specific
+#include <limits.h>
+#include <sys/sendfile.h>
+#include <sys/stat.h>
+#endif
+
 // ---------------------------------------------------------------------------
 //     Paths 
 // ---------------------------------------------------------------------------
@@ -236,23 +247,23 @@ void set_current_directory(String path) {
 //     Directories 
 // ---------------------------------------------------------------------------
 
-FileResult open_file(String name, FilePermissions perms, Allocator *alloc) {
-    const char *mode = NULL;
-    switch (perms) {
+FileResult open_file(String name, FileMode mode, Allocator *alloc) {
+    const char *mode_str = NULL;
+    switch (mode) {
     case Read:
-        mode = "rb";
+        mode_str = "rb";
         break;
     case Write:
-        mode = "wb";
+        mode_str = "wb";
         break;
     case ReadWrite:
-        mode = "wb+";
+        mode_str = "wb+";
         break;
     case Append:
-        mode = "ab";
+        mode_str = "ab";
         break;
     case ReadAppend:
-        mode = "ab+";
+        mode_str = "ab+";
         break;
     default:
         panic(mv_string("Bad filemode"));
@@ -260,7 +271,7 @@ FileResult open_file(String name, FilePermissions perms, Allocator *alloc) {
 
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
-    File* file = (File*)fopen((char*)name.bytes, mode);
+    File* file = (File*)fopen((char*)name.bytes, mode_str);
     if (file) {
         return (FileResult) {.type = Ok, .file = file};
     } else {
@@ -339,4 +350,59 @@ bool write_byte(File *file, uint8_t out) {
 
 bool write_chunk(File* file, U8Array arr) {
     return !fwrite(arr.data, sizeof(uint8_t), arr.len, (FILE*)file);
+}
+
+#include<stdio.h>
+Result copy_file(String source, String dest) {
+#if OS_FAMILY == WINDOWS
+#error "copy-file not implemented on windows (yet)"
+#elif OS_FAMILY == UNIX
+    // TODO (PORT): see https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c
+    // for non-linux support!
+    Result result = {.type = Ok};
+    int input, output;
+    if ((input = open((char*)source.bytes, O_RDONLY)) == -1)
+    {
+        printf("%d\n", errno);
+        return (Result) {.type =Err, .error_message = mv_string("Failed to open source file.")};
+    }
+    // Create new or truncate existing at destination
+    if ((output = creat((char*)dest.bytes, 0660)) == -1)
+    {
+        close(input);
+        printf("%d\n", errno);
+        return (Result) {.type =Err, .error_message = mv_string("Failed to create destination file.")};
+    }
+    // sendfile will work with non-socket output (i.e. regular file) under
+    // Linux 2.6.33+ and some other unixy systems.
+    struct stat file_stat = {0};
+    if (fstat(input, &file_stat) != 0) {
+        result = (Result) {.type = Err, .error_message = mv_string("Fstat file in copy file.")};
+    }
+    off_t copied = 0;
+    while (result.type == Ok && copied < file_stat.st_size) {
+        ssize_t written = sendfile(output, input, &copied, SSIZE_MAX);
+        copied += written;
+        if (written == -1) {
+            result = (Result){.type = Err, .error_message = mv_string("Error while copying file.")};
+        }
+    }
+    close(input);
+    close(output);
+
+    return result;
+#endif
+}
+
+Result set_permissions(String file, FilePermissions perms) {
+#if OS_FAMILY == WINDOWS
+#error "set-permissions not implemented on windows (yet)"
+#elif OS_FAMILY == UNIX
+    Result res = {.type = Ok};
+    mode_t unix_perms = (perms.user << 6) | (perms.group << 3) | perms.other;
+    if (chmod((char *)file.bytes, unix_perms)) {
+        res = (Result) {.type = Err, .error_message = mv_string("Failed to change permissions for file.")};
+    }
+#endif
+    return res;
 }

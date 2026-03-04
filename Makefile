@@ -185,7 +185,7 @@ $(TEST_DIR)/%.c.o: %.c
 # that may be useful regardless of application...
 GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
 GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
-GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
 GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
 
 
@@ -292,9 +292,9 @@ ASSET_DIR := $(INSTALLER_DIR)/assets
 install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
 	mkdir -p $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
-	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)
+	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/keeper
 	cp -r archive $(ASSET_DIR)
-	$(INSTALLER_DIR)/$(TARGET_INSTALLER)
+	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 # use make <target> QUIET=1 to prevent make from printing! 
 # can be used in scripts, e.g. git pre-commit hooks

@@ -2,6 +2,7 @@
 #define __DATA_OPTION_H
 
 #include <stdint.h>
+#include "data/string.h"
 
 typedef enum Option_t {
     Some,
@@ -52,5 +53,10 @@ typedef struct {
     Option_t type;
     uint8_t val;
 } I64Option;
+
+typedef struct {
+    Option_t type;
+    String val;
+} StringOption;
 
 #endif

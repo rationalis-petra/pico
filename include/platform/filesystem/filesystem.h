@@ -78,9 +78,9 @@ typedef struct {
 
 typedef enum {
     Read, Write, ReadWrite, Append, ReadAppend
-} FilePermissions;
+} FileMode;
 
-FileResult open_file(String name, FilePermissions perms, Allocator* alloc);
+FileResult open_file(String name, FileMode mode, Allocator* alloc);
 FileResult open_tempfile(Allocator* alloc);
 void close_file(File* file);
 
@@ -93,5 +93,21 @@ U8Array read_chunk(File* file, bool limit, uint64_t size_limit, Allocator* regio
 bool write_byte(File* file, uint8_t out);
 bool write_chunk(File* file, U8Array arr);
 
+// Misc?
+Result copy_file(String source, String dest);
+
+typedef enum : uint8_t {
+    FRead = 0x4,
+    FWrite = 0x2,
+    FExecute = 0x1,
+} FilePermission;
+
+typedef struct {
+    FilePermission user;
+    FilePermission group;
+    FilePermission other;
+} FilePermissions;
+
+Result set_permissions(String file, FilePermissions perms);
 
 #endif
