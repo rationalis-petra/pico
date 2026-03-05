@@ -417,6 +417,7 @@ Result create_directory(String dirname) {
     }
     return res;
 #elif OS_FAMILY == UNIX
+    mkdir((char*)dirname.bytes, 0700);
     return res;
 #endif
 }
@@ -426,6 +427,6 @@ bool file_exists(String path) {
   DWORD dwAttrib = GetFileAttributes((char*)path.bytes);
   return (dwAttrib != INVALID_FILE_ATTRIBUTES);
 #elif OS_FAMILY == UNIX
-    #error "Not implemented in unix: file_exists!"
+  return access((char*)path.bytes, F_OK) == 0;
 #endif
 }

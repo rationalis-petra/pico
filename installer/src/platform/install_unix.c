@@ -44,7 +44,7 @@ int install_unix(int argc, char **argv) {
     CHECK_RESULT(res);
 
     String keeper_dest = string_cat(bin_dir, mv_string("keeper"), &a);
-    res = copy_file(mv_string("assets/keeper"), keeper_dest);
+    res = copy_file(mv_string("assets/pico_keeper"), keeper_dest);
     CHECK_RESULT(res);
 
     res = set_permissions(keeper_dest, exec_perms);

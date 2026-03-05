@@ -220,7 +220,7 @@ KEEPER_DIR := $(BUILD_DIR)/keeper
 KEEPER_INC_DIR := ./keeper/include
 KEEPER_SRC_DIRS := ./keeper/src
 ifneq ($(OS), Windows_NT)
-TARGET_KEEPER := keeper
+TARGET_KEEPER := pico_keeper
 else
 TARGET_KEEPER := keeper.exe
 endif
