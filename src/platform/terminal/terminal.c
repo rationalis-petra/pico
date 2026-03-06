@@ -6,9 +6,13 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#if OS_FAMILY == WINDOWS 
+#if OS_FAMILY == UNIX 
+#include <termios.h>    
+#include <unistd.h>    
+#elif OS_FAMILY == WINDOWS 
 #include <Windows.h>    
 #endif
+
 
 static Allocator* terminal_allocator;
 
@@ -208,4 +212,104 @@ void end_underline(FormattedOStream *os) {
     char str[8];
     snprintf(str, 8, "\x1b[24m");
     write_fstring(mv_string(str), os);
+}
+
+// ----------------------------------------------------------------------------- 
+// 
+//     Output Event Stream
+// 
+// -----------------------------------------------------------------------------
+
+void send_output_terminal_event(OutTermEvent event) {
+  switch (event.type) {
+  case OTClear:
+      switch (event.clear) {
+      case ClearScreen:
+          write(STDOUT_FILENO, "\x1b[2J", 4);
+          break;
+      }
+      break;
+  case OTPosCursor: {
+      char str[16];
+      size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
+      write(STDOUT_FILENO, str, len);
+      break;
+  }
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+// 
+//     Terminal Modes
+// 
+// -----------------------------------------------------------------------------
+
+/* TerminalSettings terminal_get_settings(void) { */
+/* #if OS_FAMILY == UNIX  */
+/*   struct termios platform_settings; */
+/*   tcgetattr(STDIN_FILENO, &platform_settings); */
+/*   return (TerminalSettings) { */
+/*     .echo = ECHO && platform_settings.c_lflag, */
+/*     .input_line = ICANON && platform_settings.c_lflag, */
+/*     .signals =  */
+/*   } */
+/* #elif OS_FAMILY == WINDOWS  */
+/* #error "not implemented: terminal_get_settings in windows" */
+/* #endif */
+/* } */
+
+/* void terminal_set_settings(TerminalSettings settings) { */
+/* #if OS_FAMILY == UNIX  */
+/*   struct termios platform_settings; */
+/*   tcgetattr(STDIN_FILENO, &platform_settings); */
+
+/*   if (settings.echo) */
+/*       platform_settings.c_lflag |= (ECHO); */
+/*   else  */
+/*       platform_settings.c_lflag &= ~(ECHO); */
+
+/*   if (settings.input_line) */
+/*       platform_settings.c_lflag |= (ICANON); */
+/*   else  */
+/*       platform_settings.c_lflag &= ~(ICANON); */
+  
+/*   if (settings.signals) */
+/*       platform_settings.c_lflag |= (ICANON); */
+/*   else  */
+/*       platform_settings.c_lflag &= ~(ICANON); */
+
+
+/*   tcsetattr(STDIN_FILENO, TCSAFLUSH, &platform_settings); */
+/* #elif OS_FAMILY == WINDOWS  */
+/* #error "not implemented: terminal_set_settings in windows" */
+/* #endif */
+/* } */
+
+void terminal_set_raw_mode(bool is_on) {
+    // TODO (BUG): come up with a better API where we can restore old settings...
+#if OS_FAMILY == UNIX
+    if (is_on) {
+        struct termios tsettings;
+        tcgetattr(STDIN_FILENO, &tsettings);
+        tsettings.c_iflag &= ~(ICRNL | IXON);
+        tsettings.c_oflag &= ~(OPOST);
+        tsettings.c_cflag |= (CS8);
+        tsettings.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+
+        tsettings.c_cc[VMIN] = 0;
+        tsettings.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &tsettings);
+
+    } else {
+        struct termios tsettings;
+        tcgetattr(STDIN_FILENO, &tsettings);
+        tsettings.c_iflag &= (ICRNL | IXON);
+        tsettings.c_oflag &= (OPOST);
+        tsettings.c_lflag &= (BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &tsettings);
+    }
+#elif OS_FAMILY == WINDOWS
+#error "not implemented: terminal_set_raw_mode in windows"
+#endif
 }
