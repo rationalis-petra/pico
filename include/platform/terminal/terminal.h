@@ -60,7 +60,19 @@ void end_underline(FormattedOStream* os);
 // 
 // ------------------------------------------------------------
 
+typedef enum {
+    ITNone,
+    ITChar,
+} InTermEventType;
 
+typedef struct {
+  InTermEventType type;
+  union {
+    uint32_t codepoint;
+  };
+} InTermEvent;
+
+InTermEvent poll_in_terminal_event();
 
 // ------------------------------------------------------------ 
 // 

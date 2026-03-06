@@ -7,8 +7,9 @@
 #include <inttypes.h>
 
 #if OS_FAMILY == UNIX 
-#include <termios.h>    
-#include <unistd.h>    
+#include <termios.h>
+#include <unistd.h>
+#include <errno.h>
 #elif OS_FAMILY == WINDOWS 
 #include <Windows.h>    
 #endif
@@ -30,6 +31,8 @@ struct FormattedOStream {
 
 static FormattedOStream form_stdout;
 
+// TOOD (improvement):
+//   move the 'formatted stream' stuff to a create_formatted_ostream() constructor
 void init_terminal(Allocator *a) {
     terminal_allocator = a;
 
@@ -216,9 +219,31 @@ void end_underline(FormattedOStream *os) {
 
 // ----------------------------------------------------------------------------- 
 // 
+//     Input Event Stream
+// 
+// -----------------------------------------------------------------------------
+
+InTermEvent poll_in_terminal_event() {
+    char c = '\0';
+    int nread = read(STDIN_FILENO, &c, 1);
+    if (nread == -1 && errno != EAGAIN) {
+        // TODO: there has been a significant error; report this!
+    }
+
+    if (nread == 0 || nread == -1) {
+        return (InTermEvent) {.type = ITNone};
+    } else {
+        // TODO (BUG): implement utf-8 decoding
+        return (InTermEvent) {.type = ITChar, .codepoint = c};
+    }
+}
+
+// ----------------------------------------------------------------------------- 
+// 
 //     Output Event Stream
 // 
 // -----------------------------------------------------------------------------
+
 
 void send_output_terminal_event(OutTermEvent event) {
   switch (event.type) {
@@ -292,14 +317,16 @@ void terminal_set_raw_mode(bool is_on) {
     if (is_on) {
         struct termios tsettings;
         tcgetattr(STDIN_FILENO, &tsettings);
-        tsettings.c_iflag &= ~(ICRNL | IXON);
+        tsettings.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
         tsettings.c_oflag &= ~(OPOST);
         tsettings.c_cflag |= (CS8);
-        tsettings.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+        tsettings.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
 
         tsettings.c_cc[VMIN] = 0;
         tsettings.c_cc[VTIME] = 0;
-        tcsetattr(STDIN_FILENO, TCSAFLUSH, &tsettings);
+        if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &tsettings) == -1) {
+            panic(mv_string("failed to enter raw mode: error code returned!"));
+        }
 
     } else {
         struct termios tsettings;
