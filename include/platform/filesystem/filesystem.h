@@ -15,15 +15,23 @@
 // ---------------------------------------------------------------------------
 
 typedef enum : uint64_t {
-    ErrFileDoesNotExist,
-    ErrFilePermissionDenied,
-} FileOpenError;
+    ErrDoesNotExist,
+    ErrAlreadyExists,
+    ErrPermissionDenied,
+    ErrInvalidArgument,
+} RecordError;
+
+typedef struct {
+    Result_t type;
+    RecordError error;
+} RecordResult;
 
 // ---------------------------------------------------------------------------
 //     Paths 
 // ---------------------------------------------------------------------------
 
 String path_cat(String path1, String path2, Allocator* alloc);
+String path_name(String path);
 
 // ---------------------------------------------------------------------------
 //     Directories 
@@ -35,10 +43,11 @@ typedef struct {
     Result_t type;
     union {
         Directory* directory;
-        FileOpenError error;
+        RecordError error;
     };
 } DirectoryResult;
 
+// TODO (INVESTIGATE): replace with record info?
 typedef struct {
     String name;
     bool is_directory;
@@ -72,7 +81,7 @@ typedef struct {
     Result_t type;
     union {
         File* file;
-        FileOpenError error;
+        RecordError error;
     };
 } FileResult;
 
@@ -94,7 +103,9 @@ bool write_byte(File* file, uint8_t out);
 bool write_chunk(File* file, U8Array arr);
 
 // Misc?
-Result copy_file(String source, String dest);
+// TODO: replace 'result' with a 'file result' that uses numeric error codes.
+RecordResult copy_file(String source, String dest);
+RecordResult copy_directory(String source, String dest);
 
 typedef enum : uint8_t {
     FRead = 0x4,
@@ -108,10 +119,33 @@ typedef struct {
     FilePermission other;
 } FilePermissions;
 
-Result set_permissions(String file, FilePermissions perms);
+RecordResult set_permissions(String file, FilePermissions perms);
 
-Result create_directory(String dirname);
+RecordResult create_directory(String dirname);
 
-bool file_exists(String path);
+bool record_exists(String path);
+
+typedef enum {
+    RINotExists,
+    RIFile,
+    RIDirectory,
+} RecordType;
+
+typedef struct {
+    size_t file_size;
+} FileInfo;
+
+typedef struct {
+} DirectoryInfo;
+
+typedef struct {
+    RecordType type;
+    union {
+        FileInfo file;
+        DirectoryInfo dir;
+    };
+} RecordInfo;
+
+RecordInfo record_info(String path);
 
 #endif

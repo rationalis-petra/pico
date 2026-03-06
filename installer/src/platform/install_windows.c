@@ -84,7 +84,7 @@ int install_windows(int argc, char **argv) {
     }
     String bin_dir = string_cat(app_data_dir.val, mv_string("/Programs/pico/"), &a);
 
-    if (!file_exists(bin_dir)) {
+    if (!record_exists(bin_dir)) {
          res = create_directory(bin_dir);
          CHECK_RESULT(res);
     }

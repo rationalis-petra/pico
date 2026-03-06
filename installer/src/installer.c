@@ -2,11 +2,16 @@
 #include "data/stream.h"
 
 #include "platform/machine_info.h"
+#include "platform/terminal/terminal.h"
+#include "platform/memory/std_allocator.h"
 
 #include "install.h"
 
 
 int main(int argc, char **argv) {
+    Allocator* a = get_std_allocator();
+    init_terminal(a);
+
     OStream* cout = get_stdout_stream();
     write_string(mv_string("Welcome to the Pico Installer.\n"), cout);
 
