@@ -4,9 +4,13 @@
 ##
 ## -----------------------------------------------------------------------------
 
+ifneq ($(OS), Windows_NT)
 TARGET_EXEC := pico
-MAIN_SRC := ./src/main.c
+else
+TARGET_EXEC := pico.exe
+endif
 
+MAIN_SRC := ./src/main.c
 BUILD_DIR := ./build
 RELEASE_DIR := $(BUILD_DIR)/release
 DEBUG_DIR := $(BUILD_DIR)/debug
@@ -179,6 +183,62 @@ $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(TEST_FLAGS) 
 
+# Installer
+# ---------------------------------------------
+# Objects from the 'platform' and 'components' diretories
+# that may be useful regardless of application...
+GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
+GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
+GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
+
+
+INSTALLER_DIR := $(BUILD_DIR)/installer
+INSTALLER_INC_DIR := ./installer/include
+INSTALLER_SRC_DIRS := ./installer/src
+TARGET_INSTALLER := pico_installer
+
+INSTALLER_FLAGS := $(RELEASE_FLAGS)
+
+INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
+INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_DIR)/%.o) $(GENERIC_OBJS)
+
+# Final build step for installer 
+$(INSTALLER_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
+	$(CC) $(INSTALLER_OBJS) -I $(INSTALLER_INC_DIR) -o $@ $(LINK_FLAGS) $(INSTALLER_FLAGS) 
+
+# Build step for C tests
+$(INSTALLER_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I $(INSTALLER_INC_DIR) -c $< -o $@ $(INSTALLER_FLAGS) 
+
+# Installer
+# ---------------------------------------------
+## Same process as above but for tests
+
+KEEPER_DIR := $(BUILD_DIR)/keeper
+KEEPER_INC_DIR := ./keeper/include
+KEEPER_SRC_DIRS := ./keeper/src
+ifneq ($(OS), Windows_NT)
+TARGET_KEEPER := pico_keeper
+else
+TARGET_KEEPER := keeper.exe
+endif
+
+KEEPER_FLAGS := $(RELASE_FLAGS)
+
+KEEPER_SRCS := $(shell find $(KEEPER_SRC_DIRS) -name '*.c')
+KEEPER_OBJS := $(KEEPER_SRCS:%=$(KEEPER_DIR)/%.o) $(GENERIC_OBJS)
+
+# Final build step for keeper 
+$(KEEPER_DIR)/$(TARGET_KEEPER): $(KEEPER_OBJS)
+	$(CC) $(KEEPER_OBJS) -I $(KEEPER_INC_DIR) -o $@ $(LINK_FLAGS) $(KEEPER_FLAGS) 
+
+# Build step for C keeper objects/intermediates
+$(KEEPER_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I $(KEEPER_INC_DIR) -c $< -o $@ $(KEEPER_FLAGS) 
+
 
 #  Phony targets
 # ---------------
@@ -199,13 +259,19 @@ debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
-# only build tests with make build-test
+.PHONY: installer
+installer: $(INSTALLER_DIR)/$(TARGET_INSTALLER)
+
+.PHONY: keeper
+keeper: $(KEEPER_DIR)/$(TARGET_KEEPER)
+
+.PHONY: run-keeper
+run-keeper: $(KEEPER_DIR)/$(TARGET_KEEPER)
+	$(KEEPER_DIR)/$(TARGET_KEEPER)
+
+# Only build tests with make build-test
 .PHONY: build-test
 test: $(TEST_DIR)/$(TARGET_TEST)
-
-.PHONY: install
-install: $(RELEASE_DIR)/$(TARGET_EXEC)
-	cp $(RELEASE_DIR)/$(TARGET_EXEC) ~/.local/bin
 
 .PHONY: run
 run: run-debug
@@ -219,12 +285,29 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: all
-all: debug release test
+all: debug release test keeper installer
 
 # TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode
 debug_mode:
 	set -x LD_LIBRARY_PATH /usr/lib/debug
+
+
+ASSET_DIR := $(INSTALLER_DIR)/assets
+
+# 
+.PHONY: prep-install
+prep-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
+	mkdir -p $(ASSET_DIR)
+	cp -r installer/scripts $(ASSET_DIR)
+	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
+	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
+	cp -r archive $(ASSET_DIR)
+
+# Installation
+.PHONY: install
+install: prep-install
+	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 # use make <target> QUIET=1 to prevent make from printing! 
 # can be used in scripts, e.g. git pre-commit hooks

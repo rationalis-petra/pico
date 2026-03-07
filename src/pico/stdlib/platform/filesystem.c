@@ -17,10 +17,10 @@ typedef struct {
     uint64_t size;
 } MaybeSize;
 
-FileResult relic_open_file(String name, FilePermissions perms) {
+FileResult relic_open_file(String name, FileMode mode) {
     PiAllocator pia = get_std_perm_allocator();
     Allocator a = convert_to_callocator(&pia);
-    return open_file(name, perms, &a);
+    return open_file(name, mode, &a);
 }
 
 uint8_t relic_read_byte(File *file) {
@@ -147,7 +147,9 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     e = get_def(sym, module);
     file_ty = e->value;
 
-    typep = mk_named_type(pia, "FileError", mk_enum_type(pia, 2, "DoesNotExist", 0, "PermissionDenied", 0));
+    typep = mk_named_type(pia, "FileError",
+                          mk_enum_type(pia, 4,
+                                       "DoesNotExist", 0, "AlreadyExists", 0, "PermissionDenied", 0, "InvalidArgument", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("FileError"));
     add_def(module, sym, type, &typep, null_segments, NULL);

@@ -228,7 +228,7 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
 
                     StringOption* dest = prop.location;
                     String src = rstr.atom.string;
-                    *dest = (StringOption) {.type = Some, .value = src};
+                    *dest = (StringOption) {.type = Some, .val = src};
                 }
                 break;
             }

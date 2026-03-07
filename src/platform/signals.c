@@ -8,6 +8,7 @@
 #include <signal.h>
 #endif
 
+// TODO (BUG): check if terminal is initialized! If not then initialize first!
 _Noreturn void panic(String message) {
     FormattedOStream* stdout = get_formatted_stdout();
 

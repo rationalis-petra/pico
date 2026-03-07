@@ -5,7 +5,11 @@
 #include "platform/memory/allocator.h"
 #include <stdint.h>
 
-// from data/stream.h
+// ------------------------------------------------------------ 
+// 
+//     Streaming Interface
+// 
+// ------------------------------------------------------------
 typedef struct OStream OStream;
 
 typedef struct {
@@ -19,9 +23,11 @@ typedef enum {
     Bold,
     Dim,
 } FontBoldness;
-
+ 
 void init_terminal(Allocator* a);
 
+// TODO: move these operations into a components/formattedstream, which
+// wraps a 'true' interface centererd around input/output *events*
 typedef struct FormattedOStream FormattedOStream;
 FormattedOStream* mk_formatted_ostream(OStream* os, Allocator* a);
 void delete_formatted_ostream(FormattedOStream* os, Allocator* a);
@@ -47,5 +53,72 @@ void end_italics(FormattedOStream* os);
 
 void start_underline(FormattedOStream* os);
 void end_underline(FormattedOStream* os);
+
+// ------------------------------------------------------------ 
+// 
+//     Input Event Stream
+// 
+// ------------------------------------------------------------
+
+typedef enum {
+    ITNone,
+    ITChar,
+} InTermEventType;
+
+typedef struct {
+  InTermEventType type;
+  union {
+    uint32_t codepoint;
+  };
+} InTermEvent;
+
+InTermEvent poll_in_terminal_event();
+
+// ------------------------------------------------------------ 
+// 
+//     Output Event Stream
+// 
+// ------------------------------------------------------------
+
+typedef enum {
+  OTClear,
+  OTPosCursor,
+} OutTermEventType;
+
+typedef enum {
+  ClearScreen,
+} ClearEventData;
+
+typedef struct {
+  uint16_t row;
+  uint16_t col;
+} PosCursorData;
+
+typedef struct {
+  OutTermEventType type;
+  union {
+    ClearEventData clear;
+    PosCursorData cursor_pos;
+  };
+} OutTermEvent;
+
+void send_output_terminal_event(OutTermEvent);
+
+// ------------------------------------------------------------ 
+// 
+//     Terminal Modes
+// 
+// ------------------------------------------------------------
+
+typedef struct {
+  bool echo;
+  bool input_line;
+  bool signals;
+} TerminalSettings;
+
+/* TerminalSettings terminal_get_settings(void); */
+/* void terminal_set_settings(TerminalSettings); */
+
+void terminal_set_raw_mode(bool is_on);
 
 #endif

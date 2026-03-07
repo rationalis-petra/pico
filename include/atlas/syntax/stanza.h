@@ -13,11 +13,6 @@
 
 typedef struct {
     Option_t type;
-    String value;
-} StringOption;
-
-typedef struct {
-    Option_t type;
     Symbol value;
 } SymbolOption;
 

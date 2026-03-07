@@ -59,7 +59,7 @@ void delete_atlas_instance(AtlasInstance* instance) {
     for (size_t i = 0; i < instance->targets.len; i++) {
         AtlasTarget* target = instance->targets.data[i].val;
         if (target->filename.type == Some) {
-            mem_free(target->filename.value.bytes, a);
+            mem_free(target->filename.val.bytes, a);
         }
         for (size_t i = 0; i < target->file_dependencies.len; i++) {
             delete_string(target->file_dependencies.data[i], a);
@@ -459,7 +459,7 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
     }
 
     if (target->filename.type == Some) {
-        out = atlas_load_file(target->filename.value, package, NULL, target->file_dependencies, region, point);
+        out = atlas_load_file(target->filename.val, package, NULL, target->file_dependencies, region, point);
     } else {
         ModuleHeader header = (ModuleHeader) {
             .name = target->name,
@@ -502,10 +502,10 @@ void add_library(Library library, String path, AtlasInstance* instance) {
     if (library.filename.type == Some) {
         filename = (StringOption) {
           .type = Some,
-          .value = string_ncat(instance->gpa, 4,
+          .val = string_ncat(instance->gpa, 4,
                                path,
                                mv_string("/"),
-                               library.filename.value,
+                               library.filename.val,
                                mv_string(".rl")),
         };
     }
@@ -540,7 +540,7 @@ void add_executable(Executable executable, String path, AtlasInstance* instance)
         .path = path,
         .filename = (StringOption) {
           .type = Some,
-          .value = string_ncat(instance->gpa, 4,
+          .val = string_ncat(instance->gpa, 4,
                                path, mv_string("/"), executable.filename, mv_string(".rl")),
         },
         .entrypoint = (SymbolOption) {.type = Some, .value = executable.entry_point },

@@ -121,12 +121,12 @@ String string_ncat(Allocator* a, size_t n, ...) {
 
 String substring(size_t start, size_t end, const String source, Allocator *a) {
 #ifdef VALIDATE_INPUTS
-  if (start > end) {
-      panic(mv_string("substring: start > end"));
-  }
-  if (end > source.memsize) {
-      panic(mv_string("substring: end > source.memsize"));
-  }
+    if (start > end) {
+        panic(mv_string("substring: start > end"));
+    }
+    if (end > source.memsize) {
+        panic(mv_string("substring: end > source.memsize"));
+    }
 #endif
     String out = (String) {.memsize = (end - start) + 1};
     out.bytes = mem_alloc(out.memsize, a);
@@ -143,4 +143,21 @@ bool begins_with(const String source, const String substr) {
         if (source.bytes[i] != substr.bytes[i]) return false;
     }
     return true;
+}
+
+
+bool is_substring(const String source, const String substr) {
+    // Degenerate cases: the empty string is a subset of all strings; and 
+    //   if the substring is larger than the source, then it cannot be a substring 
+    if (substr.memsize == 0) return true;
+    if (substr.memsize > source.memsize) return false;
+
+    for (size_t i = 0; i < source.memsize - substr.memsize; i++) {
+        size_t j = 0;
+        while (source.bytes[i + j] == substr.bytes[j]) {
+            j++;
+            if (j + 1 == substr.memsize) return true;
+        }
+    }
+    return false;
 }
