@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 // Linux specific
+#include <ftw.h>
 #include <limits.h>
 #include <sys/sendfile.h>
 #include <sys/stat.h>
@@ -404,7 +405,11 @@ RecordResult copy_file(String source, String dest) {
 
 RecordResult delete_file(String path) {
 #if OS_FAMILY == UNIX
-#error "TODO: implement delete_file for unix"
+    if (unlink((char*)path.bytes) == 0) {
+        return (RecordResult){.type = Ok};
+    } else {
+        return (RecordResult){.type = Err, .error = get_record_error_code()};
+    }
 #elif OS_FAMILY == WINDOWS
     if (DeleteFile((char*)path.bytes)) {
         return (RecordResult){.type = Ok};
@@ -499,9 +504,33 @@ RecordResult copy_directory(String source, String dest) {
 }
 
 
+#if OS_FAMILY == UNIX
+static int unlink_cb(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf) {
+    int rv = remove(fpath);
+
+    if (rv)
+        perror(fpath); // TODO(BUG): report error appropriately!
+
+    return rv;
+}
+#endif
+
+
 RecordResult delete_directory(String dirname, bool recursive) {
 #if OS_FAMILY == UNIX
-#error "delete-directory not supported on unix yet"
+  if (!recursive) {
+    if (remove((char*)dirname.bytes) == 0) {
+            return (RecordResult){.type = Ok};
+    } else {
+        return (RecordResult){.type = Err, .error = get_record_error_code()};
+    }
+  } else {
+      if (nftw((char*)dirname.bytes, unlink_cb, 64, FTW_DEPTH | FTW_PHYS) == 0) {
+          return (RecordResult){.type = Ok};
+      } else {
+          return (RecordResult){.type = Err, .error = get_record_error_code()};
+      }
+  }
 #elif OS_FAMILY == WINDOWS
     if (!recursive) {
         if (RemoveDirectoryA((char*)dirname.bytes)) {
