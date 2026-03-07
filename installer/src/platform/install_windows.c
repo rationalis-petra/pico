@@ -124,6 +124,14 @@ int install_windows(int argc, char **argv) {
     res = copy_file(mv_string("assets\\keeper.exe"), keeper_dest);
     CHECK_RESULT(res, "copying", mv_string("assets\\keeper.exe"));
 
+    String relic_dest = path_cat(bin_dir, mv_string("relic.bat"), &a);
+    res = copy_file(mv_string("assets\\scripts\\windows\\relic.bat"), relic_dest);
+    CHECK_RESULT(res, "copying", mv_string("assets\\scripts\\windows\\relic.bat"));
+
+    String atlas_dest = path_cat(bin_dir, mv_string("atlas.bat"), &a);
+    res = copy_file(mv_string("assets\\scripts\\windows\\atlas.bat"), atlas_dest);
+    CHECK_RESULT(res, "copying", mv_string("assets\\scripts\\windows\\atlas.bat"));
+
     res = set_permissions(keeper_dest, exec_perms);
     CHECK_RESULT(res, "settings permissions of", keeper_dest);
 

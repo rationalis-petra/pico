@@ -295,13 +295,18 @@ debug_mode:
 
 ASSET_DIR := $(INSTALLER_DIR)/assets
 
-# Installation
-.PHONY: install
-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
+# 
+.PHONY: prep-install
+prep-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
 	mkdir -p $(ASSET_DIR)
+	cp -r installer/scripts $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
 	cp -r archive $(ASSET_DIR)
+
+# Installation
+.PHONY: install
+install: prep-install
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 # use make <target> QUIET=1 to prevent make from printing! 
