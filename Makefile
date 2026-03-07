@@ -302,8 +302,6 @@ install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
 	cp -r archive $(ASSET_DIR)
-# TODO (BUG): remove this line and build more 'correct' updates into the Installer...
-	rm -r ~/.local/share/pico
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 # use make <target> QUIET=1 to prevent make from printing! 

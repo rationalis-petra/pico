@@ -224,6 +224,7 @@ void end_underline(FormattedOStream *os) {
 // -----------------------------------------------------------------------------
 
 InTermEvent poll_in_terminal_event() {
+#if OS_FAMILY == UNIX
     char c = '\0';
     int nread = read(STDIN_FILENO, &c, 1);
     if (nread == -1 && errno != EAGAIN) {
@@ -236,6 +237,41 @@ InTermEvent poll_in_terminal_event() {
         // TODO (BUG): implement utf-8 decoding
         return (InTermEvent) {.type = ITChar, .codepoint = c};
     }
+
+#elif OS_FAMILY == WINDOWS
+    HANDLE std_cin = GetStdHandle(STD_INPUT_HANDLE);
+    INPUT_RECORD records[1];
+    DWORD nread = 0;
+    if (!PeekConsoleInput(std_cin, records, 1, &nread)) {
+        // TODO: there has been an error; report!
+    }
+
+    if (nread != 0) {
+        // TODO: surely there's a better way peek & read?
+        if (!ReadConsoleInput(std_cin, records, 1, &nread)) {
+            // TODO: there has been an error; report!
+        }
+        switch (records[0].EventType) {
+        case KEY_EVENT: {
+            KEY_EVENT_RECORD key_event = records[0].Event.KeyEvent;
+            if (key_event.bKeyDown) {
+                return (InTermEvent){.type = ITChar, .codepoint = key_event.uChar.UnicodeChar };
+            } else {
+                return (InTermEvent){.type = ITNone};
+            }
+            break;
+        }
+        default:
+            // TODO: handle other events!
+            return (InTermEvent){.type = ITNone};
+        }
+    } else {
+        return (InTermEvent){.type = ITNone};
+    }
+
+#else
+#error "Unsupported OS_FAMIYL in poll_in_terminal_event"
+#endif
 }
 
 // ----------------------------------------------------------------------------- 
@@ -246,18 +282,24 @@ InTermEvent poll_in_terminal_event() {
 
 
 void send_output_terminal_event(OutTermEvent event) {
+  OStream* cout = get_stdout_stream();
   switch (event.type) {
   case OTClear:
       switch (event.clear) {
       case ClearScreen:
-          write(STDOUT_FILENO, "\x1b[2J", 4);
+          //write(STDOUT_FILENO, "\x1b[2J", 4);
+          // TODO: we can make this more efficent by using native calls
+          // which are provided the length of the string directly
+          write_string(mv_string("\x1b[2J"), cout);
           break;
       }
       break;
   case OTPosCursor: {
       char str[16];
       size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
-      write(STDOUT_FILENO, str, len);
+
+      write_string((String){.bytes = (uint8_t*)str, .memsize = len}, cout);
+      //write(STDOUT_FILENO, str, len);
       break;
   }
   }
@@ -337,6 +379,16 @@ void terminal_set_raw_mode(bool is_on) {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &tsettings);
     }
 #elif OS_FAMILY == WINDOWS
-#error "not implemented: terminal_set_raw_mode in windows"
+    HANDLE std_cin = GetStdHandle(STD_INPUT_HANDLE);
+    HANDLE std_cout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (is_on) {
+        // TODO (BUG) - report error!
+        // TODO : enable remembering of state.
+        SetConsoleMode(std_cin, ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
+        SetConsoleMode(std_cout, ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING | DISABLE_NEWLINE_AUTO_RETURN | ENABLE_LVB_GRID_WORLDWIDE);
+    } else {
+        SetConsoleMode(std_cin, ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
+        SetConsoleMode(std_cout, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_LVB_GRID_WORLDWIDE);
+    }
 #endif
 }

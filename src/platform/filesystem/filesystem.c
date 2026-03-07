@@ -105,7 +105,7 @@ DirectoryResult open_directory(String name, Allocator* alloc) {
         };
         return (DirectoryResult) {.type = Ok, .directory = dir};
     } else {
-        return (DirectoryResult) {.type = Err, .error = get_file_error_code()};
+        return (DirectoryResult) {.type = Err, .error = get_record_error_code()};
     }
 #else
     DIR* handle = opendir((char*)name.bytes);
@@ -357,15 +357,8 @@ bool write_chunk(File* file, U8Array arr) {
     return !fwrite(arr.data, sizeof(uint8_t), arr.len, (FILE*)file);
 }
 
-#include <stdio.h>
 RecordResult copy_file(String source, String dest) {
-#if OS_FAMILY == WINDOWS
-    if (CopyFile((LPCSTR)source.bytes, (LPCSTR)dest.bytes, false)) {
-        return (Result){.type = Ok};
-    } else {
-        return (Result){.type = Err, .err = get_record_error_code()};
-    }
-#elif OS_FAMILY == UNIX
+#if OS_FAMILY == UNIX
     // TODO (PORT): see https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c
     // for non-linux support!
     RecordResult result = {.type = Ok};
@@ -391,7 +384,6 @@ RecordResult copy_file(String source, String dest) {
         ssize_t written = sendfile(output, input, &copied, SSIZE_MAX);
         copied += written;
         if (written == -1) {
-            printf("from: %s, to: %s\n", (char*)source.bytes, (char*)dest.bytes);
             result = (RecordResult) {.type = Err, .error = get_record_error_code()};
         }
     }
@@ -399,6 +391,59 @@ RecordResult copy_file(String source, String dest) {
     close(output);
 
     return result;
+#elif OS_FAMILY == WINDOWS
+    if (CopyFile((LPCSTR)source.bytes, (LPCSTR)dest.bytes, false)) {
+        return (RecordResult){.type = Ok};
+    } else {
+        return (RecordResult){.type = Err, .error = get_record_error_code()};
+    }
+#else
+#error "copy file not supported for this os"
+#endif
+}
+
+RecordResult delete_file(String path) {
+#if OS_FAMILY == UNIX
+#error "TODO: implement delete_file for unix"
+#elif OS_FAMILY == WINDOWS
+    if (DeleteFile((char*)path.bytes)) {
+        return (RecordResult){.type = Ok};
+    } else {
+        return (RecordResult){.type = Err, .error = get_record_error_code()};
+    }
+#else
+#error "delete file not supported for this os"
+#endif
+}
+
+RecordResult set_permissions(String file, FilePermissions perms) {
+#if OS_FAMILY == UNIX
+    RecordResult res = {.type = Ok};
+    mode_t unix_perms = (perms.user << 6) | (perms.group << 3) | perms.other;
+    if (chmod((char *)file.bytes, unix_perms)) {
+        res = (RecordResult) {.type = Err, .error = get_record_error_code()};
+    }
+    return res;
+#elif OS_FAMILY == WINDOWS
+    RecordResult res = {.type = Ok};
+    return res;
+#else
+#error "delete file not supported for this os"
+#endif
+}
+
+
+RecordResult create_directory(String dirname) {
+    RecordResult res = {.type = Ok};
+#if OS_FAMILY == WINDOWS
+    if (!CreateDirectory((char*)dirname.bytes, NULL)) {
+        res = (RecordResult) {.type = Err, .error = get_record_error_code()};
+    }
+    return res;
+#elif OS_FAMILY == UNIX
+    // TODO: add error checking
+    mkdir((char*)dirname.bytes, 0700);
+    return res;
 #endif
 }
 
@@ -453,31 +498,55 @@ RecordResult copy_directory(String source, String dest) {
     return copy_directory_recur(source, dest);
 }
 
-RecordResult set_permissions(String file, FilePermissions perms) {
-#if OS_FAMILY == WINDOWS
-    RecordResult res = {.type = Ok};
-    return res;
-#elif OS_FAMILY == UNIX
-    RecordResult res = {.type = Ok};
-    mode_t unix_perms = (perms.user << 6) | (perms.group << 3) | perms.other;
-    if (chmod((char *)file.bytes, unix_perms)) {
-        res = (RecordResult) {.type = Err, .error = get_record_error_code()};
-    }
-    return res;
-#endif
-}
 
-RecordResult create_directory(String dirname) {
-    RecordResult res = {.type = Ok};
-#if OS_FAMILY == WINDOWS
-    if (!CreateDirectory((char*)dirname.bytes, NULL)) {
-        res = (RecordResult) {.type = Err, .error = get_record_error_code()};
-    }
-    return res;
-#elif OS_FAMILY == UNIX
-    // TODO: add error checking
-    mkdir((char*)dirname.bytes, 0700);
-    return res;
+RecordResult delete_directory(String dirname, bool recursive) {
+#if OS_FAMILY == UNIX
+#error "delete-directory not supported on unix yet"
+#elif OS_FAMILY == WINDOWS
+    if (!recursive) {
+        if (RemoveDirectoryA((char*)dirname.bytes)) {
+            return (RecordResult){.type = Ok};
+        } else {
+            return (RecordResult){.type = Err, .error = get_record_error_code()};
+        }
+    } else {
+        Allocator* a = get_std_allocator();
+        DirectoryResult res = open_directory(dirname, a);
+        if (res.type == Err) return (RecordResult){.type = Err, .error = res.error};
+        Directory* dir = res.directory;
+        DirEntArray children = list_children(dir, a);
+
+        for (size_t i = 0; i < children.len; i++) {
+            String record_name = children.data[i].name;
+            String record_fullname = path_cat(dirname, record_name, a);
+            RecordInfo info = record_info(record_fullname);
+            RecordResult current_res;
+            switch (info.type) {
+                case RINotExists:
+                    current_res = (RecordResult){.type = Err, .error = ErrDoesNotExist};
+                    break;
+                case RIFile:
+                    current_res = delete_file(record_fullname);
+                break;
+                case RIDirectory:
+                    current_res = delete_directory(record_fullname, true);
+                break;
+            }
+
+            mem_free(record_fullname.bytes, a);
+            if (current_res.type == Err) {
+                sdelete_dirent_array(children);
+                close_directory(dir);
+                return current_res;
+            }
+        }
+
+        sdelete_dirent_array(children);
+        close_directory(dir);
+        return delete_directory(dirname, false);
+        }
+#else
+#error "delete-directory not supported on this systsem"
 #endif
 }
 
@@ -492,7 +561,24 @@ bool record_exists(String path) {
 
 RecordInfo record_info(String path) {
 #if OS_FAMILY == WINDOWS
-    #error "not implemented yet: record_info on windows"
+    DWORD attributes = GetFileAttributesA((char*)path.bytes);
+    
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        // TODO (BUG): properly report errors
+        return (RecordInfo){.type = RINotExists};
+    }
+
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+        return (RecordInfo) {
+            .type = RIDirectory,
+        };
+    } else  {
+        return (RecordInfo) {
+            .type = RIFile,
+            // TODO: file size...
+        };
+    } 
+
 #elif OS_FAMILY == UNIX
   //return access((char*)path.bytes, F_OK) == 0;
 

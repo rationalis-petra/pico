@@ -55,6 +55,10 @@ typedef struct {
 
 ARRAY_HEADER(DirectoryEntry, dirent, DirEnt)
 
+RecordResult create_directory(String dirname);
+RecordResult delete_directory(String dirname, bool recursive);
+RecordResult copy_directory(String source, String dest);
+
 DirectoryResult open_directory(String name, Allocator* alloc);
 void close_directory(Directory* directory);
 
@@ -70,6 +74,7 @@ DirEntArray list_children(Directory* dir, Allocator* alloc);
 
 String get_current_directory(Allocator* a);
 void set_current_directory(String path);
+
 
 // ---------------------------------------------------------------------------
 //     Files 
@@ -89,6 +94,9 @@ typedef enum {
     Read, Write, ReadWrite, Append, ReadAppend
 } FileMode;
 
+RecordResult copy_file(String source, String dest);
+RecordResult delete_file(String path);
+
 FileResult open_file(String name, FileMode mode, Allocator* alloc);
 FileResult open_tempfile(Allocator* alloc);
 void close_file(File* file);
@@ -102,10 +110,9 @@ U8Array read_chunk(File* file, bool limit, uint64_t size_limit, Allocator* regio
 bool write_byte(File* file, uint8_t out);
 bool write_chunk(File* file, U8Array arr);
 
-// Misc?
-// TODO: replace 'result' with a 'file result' that uses numeric error codes.
-RecordResult copy_file(String source, String dest);
-RecordResult copy_directory(String source, String dest);
+// ---------------------------------------------------------------------------
+//     Records 
+// ---------------------------------------------------------------------------
 
 typedef enum : uint8_t {
     FRead = 0x4,
@@ -121,7 +128,6 @@ typedef struct {
 
 RecordResult set_permissions(String file, FilePermissions perms);
 
-RecordResult create_directory(String dirname);
 
 bool record_exists(String path);
 

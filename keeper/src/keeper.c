@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
   while (true) {
     if (evt.type == ITChar && evt.codepoint == 'q') {
       break;
-    }
+    } 
     evt = poll_in_terminal_event();
     sleep_for((Microseconds){.us = 100.0});
   }
