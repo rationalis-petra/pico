@@ -46,30 +46,34 @@ Result add_to_path(String to_add, Allocator* a) {
 
     uint8_t* old_path_data = mem_alloc(old_path_size, a);
     RegQueryValueEx(hKey, "Path", NULL, &path_type, old_path_data, &old_path_size);
+    String old_path = {.bytes = old_path_data, .memsize = old_path_size};
 
     // 3. Construct the new PATH string
-    // Check if newPath is already in pszOldPath to avoid duplicates
+    // Check if the directory to add is already in old_path to avoid duplicates
+    if (!is_substring(old_path, to_add)) {
+        String new_path = string_ncat(a, 3,
+            (String){.bytes=old_path_data, .memsize=old_path_size},
+            mv_string(";"), 
+            to_add);
 
-    String new_path = string_ncat(a, 3,
-        (String){.bytes=old_path_data, .memsize=old_path_size},
-        mv_string(";"),
-        to_add);
-
-    // 4. Set the new PATH value in the registry
-    if (RegSetValueEx(hKey, "Path", 0, REG_EXPAND_SZ, new_path.bytes, new_path.memsize)
-        != ERROR_SUCCESS) {
-        RegCloseKey(hKey);
+        // 4. Set the new PATH value in the registry
+        if (RegSetValueEx(hKey, "Path", 0, REG_EXPAND_SZ, new_path.bytes, new_path.memsize)
+            != ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            mem_free(new_path.bytes, a);
+            mem_free(old_path_data, a);
+            return (Result){.type = Err, .error_message = mv_string("Failed to access the environment registery key.")};
+        }
         mem_free(new_path.bytes, a);
-        mem_free(old_path_data, a);
-        return (Result){.type = Err, .error_message = mv_string("Failed to access the environment registery key.")};
     }
-
+    RegFlushKey(hKey);
     RegCloseKey(hKey);
-    mem_free(new_path.bytes, a);
     mem_free(old_path_data, a);
 
     // 5. Broadcast the change to other windows/processes
-    SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"Environment", SMTO_ABORTIFHUNG, 5000, NULL); return (Result){.type = Ok}; 
+    SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)"Environment", SMTO_ABORTIFHUNG, 5000, NULL); 
+
+    return (Result){.type = Ok}; 
 }
 
 #include <stdio.h>
