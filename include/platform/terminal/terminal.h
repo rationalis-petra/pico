@@ -1,9 +1,11 @@
 #ifndef __PLATFORM_IO_TERMINAL_H
 #define __PLATFORM_IO_TERMINAL_H
 
-#include "data/string.h"
-#include "platform/memory/allocator.h"
 #include <stdint.h>
+
+#include "data/string.h"
+#include "data/result.h"
+#include "platform/memory/allocator.h"
 
 // ------------------------------------------------------------ 
 // 
@@ -104,9 +106,11 @@ typedef struct {
 
 void send_output_terminal_event(OutTermEvent);
 
+void terminal_write_string_unbuffered(String string);
+
 // ------------------------------------------------------------ 
 // 
-//     Terminal Modes
+//     Query and Set Information about the terminal
 // 
 // ------------------------------------------------------------
 
@@ -120,5 +124,17 @@ typedef struct {
 /* void terminal_set_settings(TerminalSettings); */
 
 void terminal_set_raw_mode(bool is_on);
+
+typedef struct {
+    int rows;
+    int cols;
+} TermSize;
+
+typedef struct {
+    Result_t type;
+    TermSize size;
+} TermSizeResult;
+
+TermSizeResult terminal_get_size();
 
 #endif

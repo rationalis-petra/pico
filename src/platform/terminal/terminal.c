@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #if OS_FAMILY == UNIX 
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
@@ -282,7 +283,6 @@ InTermEvent poll_in_terminal_event() {
 
 
 void send_output_terminal_event(OutTermEvent event) {
-  OStream* cout = get_stdout_stream();
   switch (event.type) {
   case OTClear:
       switch (event.clear) {
@@ -290,7 +290,8 @@ void send_output_terminal_event(OutTermEvent event) {
           //write(STDOUT_FILENO, "\x1b[2J", 4);
           // TODO: we can make this more efficent by using native calls
           // which are provided the length of the string directly
-          write_string(mv_string("\x1b[2J"), cout);
+          terminal_write_string_unbuffered(mv_string("\x1b[2J"));
+          //write_string(mv_string("\x1b[2J"), cout);
           break;
       }
       break;
@@ -298,11 +299,21 @@ void send_output_terminal_event(OutTermEvent event) {
       char str[16];
       size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
 
-      write_string((String){.bytes = (uint8_t*)str, .memsize = len}, cout);
+      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len});
       //write(STDOUT_FILENO, str, len);
       break;
   }
   }
+}
+
+void terminal_write_string_unbuffered(String string) {
+#if OS_FAMILY == UNIX
+    write(STDOUT_FILENO, string.bytes, string.memsize);
+#elif OS_FAMILY == WINDOWS
+#error "terminal_write_string_unbuffered not implemented on windows"
+#else
+#error "terminal_write_string_unbuffered not implemented on this system"
+#endif
 }
 
 
@@ -390,5 +401,25 @@ void terminal_set_raw_mode(bool is_on) {
         SetConsoleMode(std_cin, ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
         SetConsoleMode(std_cout, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_LVB_GRID_WORLDWIDE);
     }
+#else
+#error "set raw mode not implemented for this system"
+#endif
+}
+
+TermSizeResult terminal_get_size() {
+#if OS_FAMILY == UNIX
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+        return (TermSizeResult) {.type = Err,};
+    } else {
+        return (TermSizeResult) {
+            .type = Ok,
+            .size.rows = ws.ws_row,
+            .size.cols = ws.ws_col,
+        };
+    }
+#elif OS_FAMILY == WINDOWS
+#else
+#error ""
 #endif
 }
