@@ -49,6 +49,10 @@ void relic_write_string(String str) {
     write_string(str, current_ostream);
 }
 
+void relic_write_line(String str) {
+    write_line(str, current_ostream);
+}
+
 void relic_set_terminal_bg_colour(uint8_t r, uint8_t g, uint8_t b) {
     FormattedOStream* out = get_formatted_stdout();
     set_bg_colour((Colour){.r  = r, .g = g, .b= b}, out);
@@ -90,6 +94,16 @@ void build_write_string_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloc
                                  (CType){.sort = CSVoid});
 
     convert_c_fn(relic_write_string, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_write_line_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "string", mk_string_ctype(pia),
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(relic_write_line, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, pia);
 }
@@ -149,6 +163,15 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
     build_write_string_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("write-string"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, pia);
+
+    typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
+    build_write_line_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("write-line"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
