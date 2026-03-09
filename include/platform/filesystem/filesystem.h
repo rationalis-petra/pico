@@ -18,6 +18,7 @@ typedef enum : uint64_t {
     ErrDoesNotExist,
     ErrAlreadyExists,
     ErrPermissionDenied,
+    ErrFileInUse,
     ErrInvalidArgument,
 } RecordError;
 

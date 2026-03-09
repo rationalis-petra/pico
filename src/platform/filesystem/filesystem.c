@@ -84,6 +84,8 @@ RecordError get_record_error_code() {
       return ErrPermissionDenied;
   case ENOENT:
       return ErrDoesNotExist;
+  case ETXTBSY:
+      return ErrFileInUse;
   case EINVAL:
       return ErrInvalidArgument;
   default:
