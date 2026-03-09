@@ -113,5 +113,11 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("foo:ref");
   }
 
+  if (test_start(log, mv_string("parse-char-literal-adjacent-to-paren"))) {
+    RawTree expected =
+      expr_branch(&pia, 2, symbol_atom("foo"), int_atom(','));
+    TEST_EQ("(foo #,)");
+  }
+
   delete_module(module);
 }

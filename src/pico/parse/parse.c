@@ -28,6 +28,7 @@ bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_comment_start(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
+bool is_special_char(uint32_t codepoint);
 
 ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
     return parse_expr(is, '\0', pia, a);
@@ -774,7 +775,7 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
 
     uint32_t char_lit = codepoint;
     peek(is, &codepoint);
-    if (is_whitespace(codepoint)) {
+    if (is_whitespace(codepoint) || is_special_char(codepoint)) {
         return (ParseResult) {
             .type = ParseSuccess,
             .result.type = RawAtom,
@@ -866,15 +867,19 @@ bool is_comment_start(uint32_t codepoint) {
 }
 
 bool is_symchar(uint32_t codepoint) {
-    return !is_whitespace(codepoint) && !(codepoint == '('
-                                          || codepoint == ')'
-                                          || codepoint == '['
-                                          || codepoint == ']'
-                                          || codepoint == '{'
-                                          || codepoint == '}'
-                                          || codepoint == 0x27E8
-                                          || codepoint == 0x27E9
-                                          || codepoint == '.'
-                                          || codepoint == ':'
-                                          || codepoint == '^');
+    return !is_whitespace(codepoint) && !is_special_char(codepoint);
+}
+
+bool is_special_char(uint32_t codepoint) {
+    return (codepoint == '('
+            || codepoint == ')'
+            || codepoint == '['
+            || codepoint == ']'
+            || codepoint == '{'
+            || codepoint == '}'
+            || codepoint == 0x27E8
+            || codepoint == 0x27E9
+            || codepoint == '.'
+            || codepoint == ':'
+            || codepoint == '^');
 }
