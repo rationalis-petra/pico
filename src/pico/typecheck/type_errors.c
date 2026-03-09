@@ -454,7 +454,24 @@ _Noreturn void type_error_match_invalid_type(PiType *type, Syntax *match,
 _Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, U8Array used_variants, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("This match is non-exhaustive. The following variants were not found in the match:", a), &nodes);
+    for (size_t i = 0; i < used_variants.len; i++) {
+        if (!used_variants.data[i]) {
+            Symbol sym = type->enumeration.variants.data[i].key;
+            push_ptr(mk_str_doc(view_symbol_string(sym), a), &nodes);
+        }
+    }
+
+    PicoError err = {
+        .range = match->range,
+        .message = mv_sep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
 
 // Struct
 _Noreturn void type_error_struct_invalid_type(PiType *type, Syntax *strct, TypeCheckContext ctx); 

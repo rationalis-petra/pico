@@ -740,8 +740,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             for (size_t i = 0; i < used_indices.len; i++) all_indices &= used_indices.data[i];
 
             if (!all_indices) {
-                err.message = mv_cstr_doc("Not all enumerations used in match expression", a);
-                throw_pi_error(point, err);
+                type_error_match_missing_variants(enum_type, untyped, used_indices, ctx);
             }
         } else if (enum_type->sort == TUVar) {
             // TODO (FEAT): Adjust this so there is room for re-ordering! 
