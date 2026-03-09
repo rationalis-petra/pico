@@ -103,7 +103,6 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
 }
 
 void end_coloured_text(FormattedOStream* os) {
-    // TODO (feature): check for underflow in debug mode
 #ifdef DEBUG
     if (os->colour_len == 0) {
         panic(mv_string("Underflow on end_coloured_text"));
@@ -114,8 +113,10 @@ void end_coloured_text(FormattedOStream* os) {
     if (os->colour_len == 0) {
         printf("\x1b[39m");
     } else {
+        char str[24];
         Colour colour = os->colours[os->colour_len];
-        printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+        snprintf(str, 24, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+        terminal_write_string_unbuffered(mv_string(str));
     }
 }
 
@@ -129,7 +130,6 @@ void start_bg_colour(Colour colour, FormattedOStream *os) {
 }
 
 void end_bg_colour(FormattedOStream *os) {
-    // TODO (feature): check for underflow in debug mode
 #ifdef DEBUG
     if (os->bg_colour_len == 0) {
         panic(mv_string("Underflow on end_bg_colour_text"));

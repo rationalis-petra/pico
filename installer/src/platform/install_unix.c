@@ -80,6 +80,10 @@ int install_unix(int argc, char **argv) {
     CHECK_RESULT(res, "setting permissions of", atlas_dest);
 
 
+    write_string(mv_string("Programs have been copied to '"), cout);
+    write_string(bin_dir, cout);
+    write_string(mv_string("'\n"), cout);
+
 
     // Copy Archive to archive_dir
     // ------------------------------ 
@@ -104,6 +108,10 @@ int install_unix(int argc, char **argv) {
     String archive_base_dir = mv_string("assets/archive/base");
     res = copy_directory(archive_base_dir, archive_base_out_dir);
     CHECK_RESULT(res, "copying", archive_base_dir);
+
+    write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
+    write_string(archive_dir, cout);
+    write_string(mv_string("'\n"), cout);
     
     write_string(mv_string("Done!\n"), cout);
     return 0;

@@ -25,6 +25,8 @@
         write_string(string_u64(res.error, &a), cout);      \
         write_string(mv_string("\n"), cout);                \
         delete_arena_allocator(arena);                      \
+        write_string(mv_string("\nInstallation Aborted. Press Enter to Complete."), cout); \
+        read_codepoint(cin);                                \
         return 1;                                           \
     }                                                       \
 
@@ -111,6 +113,10 @@ int install_windows(int argc, char **argv) {
         }
     }
 
+    write_string(mv_string("Folder '"), cout);
+    write_string(bin_dir, cout);
+    write_string(mv_string("' has been added to %PATH% (if it wasn't already there).\n"), cout);
+
     // First: copy binaries (assests/{pico, keeper}) to ~/.local/bin
     String pico_dest = path_cat(bin_dir, mv_string("pico.exe"), &a);
     res = copy_file(mv_string("assets\\pico.exe"), pico_dest);
@@ -139,6 +145,10 @@ int install_windows(int argc, char **argv) {
     res = set_permissions(keeper_dest, exec_perms);
     CHECK_RESULT(res, "settings permissions of", keeper_dest);
 
+    write_string(mv_string("Programs have been copied to folder '"), cout);
+    write_string(bin_dir, cout);
+    write_string(mv_string("'\n"), cout);
+
     String pico_data_dir = path_cat(app_data_dir.val, mv_string("pico"), &a);
     if (!record_exists(pico_data_dir)) {
          res = create_directory(pico_data_dir);
@@ -162,8 +172,14 @@ int install_windows(int argc, char **argv) {
     String archive_base_dir = mv_string("assets\\archive\\base");
     res = copy_directory(archive_base_dir, archive_base_out_dir);
     CHECK_RESULT(res, "copying", archive_base_dir);
+
+    write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
+    write_string(archive_dir, cout);
+    write_string(mv_string("'\n"), cout);
     
-    write_string(mv_string("Done!\n"), cout);
+    write_string(mv_string("\nInstallation Complete. Press Enter to Quit.\n"), cout);
+    read_codepoint(cin);
+
     return 0;
 }
 
