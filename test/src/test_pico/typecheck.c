@@ -11,6 +11,7 @@
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
+#define TEST_TYPE_FAIL(str) test_typecheck_fail(str, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
@@ -151,6 +152,20 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("family-must-have-args"))) {
+        //PiAllocator current_old = get_std_current_allocator();
+        //set_std_current_allocator(pregion);
+        TEST_TYPE_FAIL("(Family [] Address)");
+        //set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("cannot-apply-non-family-types"))) {
+        //PiAllocator current_old = get_std_current_allocator();
+        //set_std_current_allocator(pregion);
+        TEST_TYPE_FAIL("(U8)");
+        //set_std_current_allocator(current_old);
     }
 
     delete_env(env, a);

@@ -302,6 +302,20 @@ _Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *a
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void type_error_app_not_family(PiType* type, Syntax *app, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+    push_ptr(mk_cstr_doc("Attempting to apply the type:", a), &nodes);
+    push_ptr(pretty_type(type, a), &nodes);
+    push_ptr(mk_cstr_doc("As a type family of 0 arguments, but it is not a type family.", a), &nodes);
+
+    PicoError err = {
+        .range = app->application.function->range,
+        .message = mv_sep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 
 //---------------------------------------------------------------------- 
 //
@@ -472,6 +486,22 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
     PicoError err = {
         .range = proj->range,
         .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+
+//  Type Formers
+// ------------------------------------------------------------
+_Noreturn void type_error_family_must_have_args(Syntax *family, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    const char *c_str =
+        "Attempting to form a type Family with no type parameters. \n"
+        "Type families require at least one type parameter.";
+
+    PicoError err = {
+        .range = family->range,
+        .message = mv_cstr_doc(c_str, a),
     };
     throw_pi_error(ctx.point, err);
 }

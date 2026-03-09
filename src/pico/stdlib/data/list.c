@@ -154,7 +154,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "  let [lst (get l)]\n"
         "    (if (u64.< lst.len lst.capacity)\n"
         "      (seq (eset lst.len val lst) (set l (struct lst [.len (u64.+ lst.len 1)])))\n"
-        "      (panic {Unit} \"unimplemented\")))";
+        "      (panic {Unit} \"unimplemented: grow on list push\")))";
     compile_toplevel(list_push_fn, module, target, &point, &pi_point, region);
 
     const char *list_pop_fn =
@@ -163,6 +163,11 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "  (set lst (struct old [.len (u64.- old.len 1)]))\n"
         "  (elt (u64.- old.len 1) old))\n";
     compile_toplevel(list_pop_fn, module, target, &point, &pi_point, region);
+
+    const char *list_clear_fn =
+        "(def clear all [A] proc [(l (Ptr (List A)))] \n"
+        "  (set l (struct (get l) [.len 0])))";
+    compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
     if (r.type == Err) panic(r.error_message);

@@ -27,6 +27,7 @@ void test_toplevel_mem(const char *string, const void *exepcted, const void*actu
 void assert_toplevel_mem(const char *string, const void *exepcted, const void*actual, size_t memsize, Module *module, TestContext context);
 
 void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestContext context);
+void test_typecheck_fail(const char *string, Environment* env, TestContext context);
 void run_toplevel(const char *string, Module *module, TestContext context);
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);

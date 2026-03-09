@@ -494,7 +494,7 @@ void run_toplevel(const char *string, Module *module, TestContext context) {
 typedef struct {
     void (* on_expr)(PiType* actual, void* data, TestLog* log);
     void (* on_top)(void* data, TestLog* log);
-    void (* on_pi_error)(MultiError err, IStream* sin, TestLog* log);
+    void (* on_pi_error)(MultiError err, IStream* sin, bool is_type_error, TestLog* log);
     void (* on_error)(String msg, TestLog* log);
     void (* on_exit)(void* data, TestLog* log);
 } TypeCallbacks;
@@ -518,6 +518,8 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
         .data_aux = mem_alloc(sizeof(U8Array), &ra)
     };
     *gen_target.data_aux = mk_u8_array(128, &ra);
+
+    volatile bool on_typecheck = false;
 
     jump_buf exit_point;
     if (set_jump(exit_point)) goto on_exit;
@@ -551,6 +553,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
     TypeCheckContext ctx = (TypeCheckContext) {
         .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target, .logger = logger,
     };
+    on_typecheck = true;
     type_check(&abs, env, ctx);
 
     if (abs.type == TLExpr) {
@@ -572,7 +575,7 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
 
  on_pi_error:
     if (callbacks.on_pi_error) {
-        callbacks.on_pi_error(pi_point.multi, cin, log);
+        callbacks.on_pi_error(pi_point.multi, cin, on_typecheck, log);
     }
     delete_assembler(gen_target.target);
     delete_assembler(gen_target.code_aux);
@@ -629,11 +632,20 @@ void top_type(void *data, TestLog *log) {
     test_fail(log);
 }
 
+void typecheck_fail_pi_error(MultiError err, IStream* cin, bool is_type_error, TestLog* log) {
+    ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
+    Allocator gpa = aa_to_gpa(arena);
+    display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
+    test_log_error(log, mv_string("Test failure - message logged"));
+    test_fail(log);
+    delete_arena_allocator(arena);
+}
+
 void test_typecheck_eq(const char *string, PiType* expected, Environment* env, TestContext context) {
     TypeCallbacks callbacks = (TypeCallbacks) {
         .on_expr = type_eql,
         .on_top = top_type,
-        .on_pi_error = fail_pi_error,
+        .on_pi_error = typecheck_fail_pi_error,
         .on_error = fail_error,
         .on_exit = fail_exit,
     };
@@ -641,6 +653,41 @@ void test_typecheck_eq(const char *string, PiType* expected, Environment* env, T
     set_not_implemented_hook(hook);
     RegionAllocator* subregion = make_subregion(context.region);
     test_typecheck_internal(string, env, callbacks, expected, context.log, subregion);
+    release_subregion(subregion);
+    clear_not_implemented_hook();
+}
+
+void succeed_if_type_error(MultiError err, IStream* cin, bool is_type_error, TestLog* log) {
+    if (is_type_error) {
+        test_pass(log);
+    } else {
+        ArenaAllocator* arena = make_arena_allocator(4096, get_std_allocator());
+        Allocator gpa = aa_to_gpa(arena);
+        display_error(err, *get_captured_buffer(cin), get_fstream(log), mv_string("test-suite"), &gpa);
+        test_log_error(log, mv_string("Test failure - message logged"));
+        test_fail(log);
+        delete_arena_allocator(arena);
+    }
+}
+
+void type_fail(PiType* type, void* data, TestLog* log) {
+    // TODO (BUG): move error reporting for failure into a separate method!
+    test_log_error(log, mv_string("Expecting this term to fail typechecking, but it succeeded!"));
+    test_fail(log);
+}
+
+void test_typecheck_fail(const char *string, Environment* env, TestContext context) {
+    TypeCallbacks callbacks = (TypeCallbacks) {
+        .on_expr = type_fail,
+        .on_top = top_type,
+        .on_pi_error = succeed_if_type_error,
+        .on_error = fail_error,
+        .on_exit = fail_exit,
+    };
+    Hook hook = (Hook) {.fn = skip_hook, .ctx = context.log};
+    set_not_implemented_hook(hook);
+    RegionAllocator* subregion = make_subregion(context.region);
+    test_typecheck_internal(string, env, callbacks, NULL, context.log, subregion);
     release_subregion(subregion);
     clear_not_implemented_hook();
 }

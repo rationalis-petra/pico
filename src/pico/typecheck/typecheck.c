@@ -438,6 +438,9 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
             if (fn_type.kind.nargs != untyped->application.args.len) {
                 type_error_incorrect_num_args(&fn_type, untyped, InvValues, ctx);
             }
+            if (fn_type.kind.nargs == 0) {
+                type_error_app_not_family(&fn_type, untyped, ctx);
+            }
 
             PiType* kind = mem_alloc(sizeof(PiType), a);
             *kind = (PiType) {.sort = TKind, .kind.nargs = 0};
@@ -1471,6 +1474,10 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         PiType* ty = call_alloc(sizeof(PiType), ctx.pia);
         *ty = (PiType) {.sort = TKind, .kind.nargs = untyped->bind_type.bindings.len};
         untyped->ptype = ty;
+
+        if (untyped->bind_type.bindings.len == 0) {
+            type_error_family_must_have_args(untyped, ctx);
+        }
 
         PiType* aty = call_alloc(sizeof(PiType), ctx.pia);
         *aty = (PiType) {.sort = TKind, .kind.nargs = 0};
