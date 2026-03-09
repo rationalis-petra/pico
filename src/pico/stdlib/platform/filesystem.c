@@ -149,7 +149,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
 
     typep = mk_named_type(pia, "FileError",
                           mk_enum_type(pia, 4,
-                                       "DoesNotExist", 0, "AlreadyExists", 0, "PermissionDenied", 0, "InvalidArgument", 0));
+                                       "does-not-exist", 0, "already-exists", 0, "permission-denied", 0, "invalid-argument", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("FileError"));
     add_def(module, sym, type, &typep, null_segments, NULL);

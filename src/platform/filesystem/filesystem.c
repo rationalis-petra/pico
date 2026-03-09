@@ -66,6 +66,14 @@ RecordError get_record_error_code() {
     // TODO: account for all documented possible error codes.
 #if OS_FAMILY == WINDOWS
   switch (GetLastError()) {
+  case ERROR_FILE_NOT_FOUND:
+      return ErrDoesNotExist;
+  case ERROR_ACCESS_DENIED:
+      return ErrPermissionDenied;
+  case ERROR_ACCESS_DENIED:
+      return ErrPermissionDenied;
+  case ERROR_ALREADY_EXISTS:
+      return ErrAlreadyExists;
   default:
       // TODO: surely there's a better solution than to panic?
       panic(mv_string("Unrecognized error code."));
