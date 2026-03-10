@@ -99,10 +99,10 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
   } else {
       os->colours[os->colour_len] = colour;
       //printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-      char str[30];
+      char str[32];
       Colour colour = os->colours[os->colour_len];
-      snprintf(str, 30, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-      write_fstring(mv_string(str), os);
+      size_t len = snprintf(str, 31, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
   }
 }
 
@@ -119,8 +119,8 @@ void end_coloured_text(FormattedOStream* os) {
     } else {
         char str[24];
         Colour colour = os->colours[os->colour_len];
-        snprintf(str, 24, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-        write_fstring(mv_string(str), os);
+        size_t len = snprintf(str, 23, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+        write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
     }
 }
 
@@ -291,20 +291,14 @@ void send_output_terminal_event(OutTermEvent event) {
   case OTClear:
       switch (event.clear) {
       case ClearScreen:
-          //write(STDOUT_FILENO, "\x1b[2J", 4);
-          // TODO: we can make this more efficent by using native calls
-          // which are provided the length of the string directly
           terminal_write_string_unbuffered(mv_string("\x1b[2J"));
-          //write_string(mv_string("\x1b[2J"), cout);
           break;
       }
       break;
   case OTPosCursor: {
       char str[16];
       size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
-
-      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len});
-      //write(STDOUT_FILENO, str, len);
+      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len + 1});
       break;
   }
   }
@@ -315,6 +309,7 @@ void terminal_write_string_unbuffered(String string) {
     fflush(stdout);
     write(STDOUT_FILENO, string.bytes, string.memsize);
 #elif OS_FAMILY == WINDOWS
+    fflush(stdout);
     HANDLE std_cout = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD num_chars_written;
 
