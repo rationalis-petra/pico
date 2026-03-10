@@ -70,8 +70,8 @@ RecordError get_record_error_code() {
       return ErrDoesNotExist;
   case ERROR_ACCESS_DENIED:
       return ErrPermissionDenied;
-  case ERROR_ACCESS_DENIED:
-      return ErrPermissionDenied;
+  case ERROR_BUSY:
+      return ErrFileInUse; // TODO (INVESTIGATE) is this correct?
   case ERROR_ALREADY_EXISTS:
       return ErrAlreadyExists;
   default:

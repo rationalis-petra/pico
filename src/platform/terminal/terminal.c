@@ -315,7 +315,15 @@ void terminal_write_string_unbuffered(String string) {
     fflush(stdout);
     write(STDOUT_FILENO, string.bytes, string.memsize);
 #elif OS_FAMILY == WINDOWS
-#error "terminal_write_string_unbuffered not implemented on windows"
+    HANDLE std_cout = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD num_chars_written;
+
+    // TODO: check for error code? return error on error code
+    WriteConsole(std_cout, 
+        string.bytes,
+        string.memsize - 1, // TODO : this arg may be write as is 'number of chars to write' (uft-8)?
+        &num_chars_written,
+        NULL);
 #else
 #error "terminal_write_string_unbuffered not implemented on this system"
 #endif
@@ -424,6 +432,14 @@ TermSizeResult terminal_get_size() {
         };
     }
 #elif OS_FAMILY == WINDOWS
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    // TODO: check for error?
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return (TermSizeResult) {
+        .type = Ok,
+        .size.rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1,
+        .size.cols = csbi.srWindow.Right - csbi.srWindow.Left + 1,
+    };
 #else
 #error ""
 #endif

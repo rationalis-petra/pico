@@ -15,20 +15,22 @@
 
 #include "install.h"
 
-#define CHECK_RESULT(result, action, target)               \
-    if (result.type == Err) {                               \
-        write_string(mv_string("failure: while "), cout);   \
-        write_string(mv_string(action), cout);              \
-        write_string(mv_string(" "), cout);                 \
-        write_string(target, cout);                         \
-        write_string(mv_string("\n  error code: "), cout);  \
-        write_string(string_u64(res.error, &a), cout);      \
-        write_string(mv_string("\n"), cout);                \
-        delete_arena_allocator(arena);                      \
+#define CHECK_RESULT(result, action, target)                                               \
+    if (result.type == Err)                                                                \
+    {                                                                                      \
+        write_string(mv_string("failure: while "), cout);                                  \
+        write_string(mv_string(action), cout);                                             \
+        write_string(mv_string(" "), cout);                                                \
+        write_string(target, cout);                                                        \
+        write_string(mv_string("\n  error code: "), cout);                                 \
+        write_string(string_u64(res.error, &a), cout);                                     \
+        write_string(mv_string("\n"), cout);                                               \
+        delete_arena_allocator(arena);                                                     \
         write_string(mv_string("\nInstallation Aborted. Press Enter to Complete."), cout); \
-        read_codepoint(cin);                                \
-        return 1;                                           \
-    }                                                       \
+        uint32_t codepoint;                                                                \
+        next(cin, &codepoint);                                                             \
+        return 1;                                                                          \
+    }
 
 Result add_to_path(String to_add, Allocator* a) {
     HKEY hKey;
@@ -84,6 +86,7 @@ int install_windows(int argc, char **argv) {
     ArenaAllocator* arena = make_arena_allocator(16384, stdalloc);
     Allocator a = aa_to_gpa(arena);
     OStream* cout = get_stdout_stream();
+    IStream* cin = get_stdin_stream();
 
     RecordResult res = {.type = Ok};
 
@@ -178,7 +181,8 @@ int install_windows(int argc, char **argv) {
     write_string(mv_string("'\n"), cout);
     
     write_string(mv_string("\nInstallation Complete. Press Enter to Quit.\n"), cout);
-    read_codepoint(cin);
+    uint32_t codepoint;
+    next(cin, &codepoint);
 
     return 0;
 }
