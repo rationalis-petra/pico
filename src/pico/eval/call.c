@@ -143,7 +143,7 @@ Document* pretty_res(EvalResult res, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
         push_ptr(mk_str_doc(symbol_to_string(res.def.name, a), a), &docs);
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
-        push_ptr(pretty_type(res.def.type, a), &docs);
+        push_ptr(pretty_type(res.def.type, default_ptp, a), &docs);
         out = mv_cat_doc(docs, a);
         break;
     }

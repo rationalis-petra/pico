@@ -611,11 +611,11 @@ void type_eql(PiType* type, void* data, TestLog* log) {
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
-        Document* doc = pretty_type(data, &gpa);
+        Document* doc = pretty_type(data, default_ptp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\nGot: "), os);
-        doc = pretty_type(type, &gpa);
+        doc = pretty_type(type, default_ptp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\n"), os);

@@ -178,9 +178,20 @@ struct PiType {
     };
 };
 
+typedef struct {
+    bool should_wrap;
+    bool show_named;
+} PrettyTypeParams;
+
+// 'Default Pretty Type Params'
+static const PrettyTypeParams default_ptp = {
+    .should_wrap = true,
+    .show_named = false,
+};
+
 // Transform and Analyse
 Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
-Document* pretty_type(PiType* type, Allocator* a);
+Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);

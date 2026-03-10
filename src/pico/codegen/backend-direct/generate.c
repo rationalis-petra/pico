@@ -2760,7 +2760,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                       } else {
                           push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
-                          push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, a), a), &desc);
+                          push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, default_ptp, a), a), &desc);
                       }
                       push_ptr(mv_hsep_doc(desc, a), &lines);
                   } else {
@@ -2794,7 +2794,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
               {
                   PtrArray typedesc = mk_ptr_array(2, a);
                   push_ptr(mk_str_doc(mv_string("Type: "), a), &typedesc);
-                  push_ptr(pretty_type(entry.type, a), &typedesc);
+                  push_ptr(pretty_type(entry.type, default_ptp, a), &typedesc);
                   push_ptr(mv_sep_doc(typedesc, a), &lines);
               }
               {

@@ -826,12 +826,12 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                         "Note that instances of opaque types can only be "
                         "created in the module that the opaque type is defined."
                         , a), &nodes);
-                    push_ptr(pretty_type(struct_type, a), &nodes);
+                    push_ptr(pretty_type(struct_type, default_ptp, a), &nodes);
                     err.message = mv_sep_doc(nodes, a);
                 } else {
                     PtrArray nodes = mk_ptr_array(2, a);
                     push_ptr(mv_cstr_doc("Structure provided/based off of non-structure type:", a), &nodes);
-                    push_ptr(pretty_type(struct_type, a), &nodes);
+                    push_ptr(pretty_type(struct_type, default_ptp, a), &nodes);
                     err.message = mv_sep_doc(nodes, a);
                 }
                 throw_pi_error(point, err);
@@ -1636,7 +1636,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 push_ptr(mv_str_doc(mv_string("Cannot convert between C Type: "), a), &nodes);
                 push_ptr(pretty_ctype(c_type, a), &nodes);
                 push_ptr(mv_str_doc(mv_string("\nand Relic Type: "), a), &nodes);
-                push_ptr(pretty_type(pico_type, a), &nodes);
+                push_ptr(pretty_type(pico_type, default_ptp, a), &nodes);
                 err.message = mv_cat_doc(nodes, a);
                 throw_pi_error(point, err);
             }
@@ -1729,7 +1729,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
     if (ctx.logger) {
         PtrArray docs = mk_ptr_array(2, a);
         push_ptr(mv_str_doc(mv_string("Inferred type:"), a), &docs);
-        push_ptr(pretty_type(untyped->ptype, a), &docs);
+        push_ptr(pretty_type(untyped->ptype, default_ptp, a), &docs);
         log_doc(mv_sep_doc(docs, a), ctx.logger);
         end_section(ctx.logger);
     }
@@ -2125,9 +2125,9 @@ void post_unify(Syntax* syn, TypeEnv* env, PiAllocator* pia, Allocator* a, PiErr
         if (!is_narrower(syn->narrow.val->ptype, syn->narrow.type->type_val)) {
             PtrArray docs = mk_ptr_array(2, a);
             push_ptr(mv_cstr_doc("This narrowing is invalid - cannot narrow from type:", a), &docs);
-            push_ptr(pretty_type(syn->narrow.val->ptype, a), &docs);
+            push_ptr(pretty_type(syn->narrow.val->ptype, default_ptp, a), &docs);
             push_ptr(mv_cstr_doc("to type:", a), &docs);
-            push_ptr(pretty_type(syn->narrow.type->type_val, a), &docs);
+            push_ptr(pretty_type(syn->narrow.type->type_val, default_ptp, a), &docs);
             err.message = mv_hsep_doc(docs, a);
             throw_pi_error(point, err);
         }
@@ -2545,7 +2545,7 @@ void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
         push_ptr(mk_str_doc(mv_string("Typechecking error: not all unification vars were instantiated. Term:"), ctx.a), &nodes);
         push_ptr(pretty_syntax(typed, ctx.a), &nodes);
         push_ptr(mk_str_doc(mv_string("Type:"), ctx.a), &nodes);
-        push_ptr(pretty_type(typed->ptype, ctx.a), &nodes);
+        push_ptr(pretty_type(typed->ptype, default_ptp, ctx.a), &nodes);
 
         err.message = mv_vsep_doc(nodes, ctx.a);
         throw_pi_error(ctx.point, err);
@@ -2588,7 +2588,7 @@ void* eval_typed_expr(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
 
         PtrArray docs = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("evaluated to:"), a), &docs);
-        push_ptr(mv_nest_doc(2, pretty_type(*ptype, a), a), &docs);
+        push_ptr(mv_nest_doc(2, pretty_type(*ptype, default_ptp, a), a), &docs);
         log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
 
         end_section(ctx.logger);

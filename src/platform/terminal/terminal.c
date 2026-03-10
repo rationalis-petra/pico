@@ -98,7 +98,11 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
       panic(mv_string("Don't support nesting of > 128 colours"));
   } else {
       os->colours[os->colour_len] = colour;
-      printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      //printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      char str[30];
+      Colour colour = os->colours[os->colour_len];
+      snprintf(str, 30, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      write_fstring(mv_string(str), os);
   }
 }
 
@@ -111,12 +115,12 @@ void end_coloured_text(FormattedOStream* os) {
 
     os->colour_len--;
     if (os->colour_len == 0) {
-        printf("\x1b[39m");
+        write_fstring(mv_string("\x1b[39m"), os);
     } else {
         char str[24];
         Colour colour = os->colours[os->colour_len];
         snprintf(str, 24, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-        terminal_write_string_unbuffered(mv_string(str));
+        write_fstring(mv_string(str), os);
     }
 }
 
@@ -308,6 +312,7 @@ void send_output_terminal_event(OutTermEvent event) {
 
 void terminal_write_string_unbuffered(String string) {
 #if OS_FAMILY == UNIX
+    fflush(stdout);
     write(STDOUT_FILENO, string.bytes, string.memsize);
 #elif OS_FAMILY == WINDOWS
 #error "terminal_write_string_unbuffered not implemented on windows"

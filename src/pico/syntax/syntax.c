@@ -1005,7 +1005,7 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         break;
     }
     case SCheckedType: {
-        Document* doc_ty = pretty_type(syntax->type_val, a);
+        Document* doc_ty = pretty_type(syntax->type_val, default_ptp, a);
         out = mk_paren_doc("<checked-type: ", ">", doc_ty, a);
         break;
     }
@@ -1146,7 +1146,7 @@ Document* pretty_decl(Declaration* decl, Allocator* a) {
         switch (dec->sort) {
         case DeclType:
             push_ptr(mv_cstr_doc("type", a), &prop_nodes);
-            push_ptr(pretty_type(dec->type, a), &prop_nodes);
+            push_ptr(pretty_type(dec->type, default_ptp, a), &prop_nodes);
             break;
         }
         push_ptr(mk_paren_doc("[.", "]", mv_hsep_doc(nodes, a), a), &nodes);

@@ -516,7 +516,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, a), &nodes);
+        push_ptr(pretty_type(type->binder.body, default_ptp, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -524,9 +524,9 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TCApp: {
         PtrArray nodes = mk_ptr_array(3 + type->app.args.len, a);
         push_ptr(mk_str_doc(mv_string("("), a), &nodes);
-        push_ptr(pretty_type(type->app.fam, a), &nodes);
+        push_ptr(pretty_type(type->app.fam, default_ptp, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], a), &nodes);
+            push_ptr(pretty_type(type->app.args.data[i], default_ptp,a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
@@ -558,7 +558,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("."), a), &field);
             push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &field);
             push_ptr(mk_str_doc(mv_string(" "), a), &field);
-            push_ptr(pretty_type(cell.val, a), &field);
+            push_ptr(pretty_type(cell.val, default_ptp,a), &field);
 
             push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &nodes);
         }
@@ -569,7 +569,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TKind:
     case TConstraint: {
         PiType** ptype = (PiType**) val;
-        out = pretty_type(*ptype, a);
+        out = pretty_type(*ptype, default_ptp,a);
         break;
     }
 
@@ -584,12 +584,8 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     return out;
 }
 
-typedef struct {
-    bool should_wrap;
-    bool show_named;
-} PrettyContext;
 
-Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
+Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a) {
     bool should_wrap = ctx.should_wrap;
     bool show_named = ctx.show_named;
     ctx.should_wrap = true;
@@ -1020,12 +1016,8 @@ Document* pretty_type_internal(PiType* type, PrettyContext ctx, Allocator* a) {
     return mv_group_doc(out, a);
 }
 
-Document* pretty_type(PiType* type, Allocator* a) {
-    PrettyContext ctx = (PrettyContext) {
-        .should_wrap = false,
-        .show_named = true,
-    };
-    Document* pretty_type = pretty_type_internal(type, ctx, a);
+Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a) {
+    Document* pretty_type = pretty_type_internal(type, params, a);
 
     DocStyle default_style = scolour(colour(220, 220, 220), dstyle);
     return mv_style_doc(default_style, pretty_type, a);
@@ -1566,7 +1558,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         Allocator a = convert_to_callocator(pia);
         PtrArray nodes = mk_ptr_array(4, &a);
         push_ptr(mv_str_doc(mv_string("Unrecognized type to type-app:"), &a), &nodes);
-        push_ptr(pretty_type(body, &a), &nodes);
+        push_ptr(pretty_type(body, default_ptp,&a), &nodes);
         Document* message = mk_sep_doc(nodes, &a);
         panic(doc_to_str(message, 120, &a));
         break;

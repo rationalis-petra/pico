@@ -136,7 +136,7 @@ bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, Region
             start_underline(cout);
             write_fstring(mv_string("Inferred Type\n"), cout);
             end_underline(cout);
-            doc = mv_nest_doc(2, pretty_type(ty, &ra), &ra);
+            doc = mv_nest_doc(2, pretty_type(ty, default_ptp, &ra), &ra);
             write_doc_formatted(doc, 120, cout);
             write_fstring(mv_string("\n"), cout);
         }
