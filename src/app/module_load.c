@@ -260,7 +260,6 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
     return;
 
  on_pi_error:
-    log_to_formatted_ostream(logger, 120, get_formatted_stdout());
     display_error(pi_point.multi, *get_captured_buffer(cin), serr, filename, &itera);
     goto on_error_generic;
 
