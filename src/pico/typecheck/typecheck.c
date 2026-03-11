@@ -32,6 +32,15 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         PiType* ty = env_lookup_tydecl(top->def.bind, env);
         Syntax* term = top->def.value;
 
+        if (ctx.logger) {
+            log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
+            PtrArray nodes = mk_ptr_array(4, ctx.a);
+            push_ptr(mv_cstr_doc("                    TYPECHECK FOR:", ctx.a), &nodes);
+            push_ptr(mv_str_doc(view_symbol_string(top->def.bind), ctx.a), &nodes);
+            log_doc(mv_hsep_doc(nodes, ctx.a), ctx.logger);
+            log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
+        }
+
         if (ty != NULL) {
             check_against = ty;
         } else {

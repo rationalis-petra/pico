@@ -999,12 +999,14 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (nargs == 0) {
             out = mv_style_doc(cstyle, mk_str_doc(mv_string("Constraint"), a), a);
         } else {
-            PtrArray nodes = mk_ptr_array(nargs + 2, a);
-            push_ptr(mk_str_doc(mv_string("Kind ["), a), &nodes);
+            PtrArray nodes = mk_ptr_array(3, a);
+            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Kind", a), a), &nodes);
+            PtrArray arg_nodes = mk_ptr_array(nargs, a);
             for (size_t i = 0; i < nargs; i++) {
-                push_ptr(mk_str_doc(mv_string("Type"), a), &nodes);
+                push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Type", a), a), &arg_nodes);
             }
-            push_ptr(mk_str_doc(mv_string("] Constraint"), a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(arg_nodes, a), a), &nodes);
+            push_ptr(mv_style_doc(cstyle, mk_cstr_doc("Constraint", a), a), &nodes);
             out = mv_sep_doc(nodes, a);
         }
         break;
