@@ -189,6 +189,7 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
         test_pass(log);
     }
 }
+
 void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
     Allocator* std = get_std_allocator();
     if (!pi_value_eql(type, val, data, std)) {

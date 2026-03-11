@@ -330,14 +330,15 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     case SLitUntypedFloating: 
         panic(mv_string("Cannot generate monomorphic code for untyped floating!"));
     case SLitTypedFloating: {
-        if (syn.ptype->prim == Float_32) {
+        PiType* prim_ty = strip_type(syn.ptype);
+        if (prim_ty->prim == Float_32) {
             float f = syn.floating.value;
             void* raw = &f;
             int32_t immediate = *(int32_t*)raw;
             build_unary_op(Push, imm32(immediate), ass, a, point);
             data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         }
-        else if (syn.ptype->prim == Float_64) {
+        else if (prim_ty->prim == Float_64) {
             void* raw = &syn.floating.value;
             int64_t immediate = *(int64_t*)raw;
             build_binary_op(Mov, reg(RAX,sz_64), imm64(immediate), ass, a, point);

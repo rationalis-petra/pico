@@ -155,17 +155,27 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     if (test_start(log, mv_string("family-must-have-args"))) {
-        //PiAllocator current_old = get_std_current_allocator();
-        //set_std_current_allocator(pregion);
         TEST_TYPE_FAIL("(Family [] Address)");
-        //set_std_current_allocator(current_old);
     }
 
     if (test_start(log, mv_string("cannot-apply-non-family-types"))) {
-        //PiAllocator current_old = get_std_current_allocator();
-        //set_std_current_allocator(pregion);
         TEST_TYPE_FAIL("(U8)");
-        //set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("can-coerce-to-named"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        PiType* expected = mk_named_type(&pregion, "NF", mk_prim_type(&pregion, Float_32));
+        RUN("(def NF Named NF F32)");
+        RUN("(def id-nf proc [(nf NF)] nf)");
+        TEST_TYPE("(id-nf 3.5)");
+        set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("cannot-coerce-to-disticnt"))) {
+        RUN("(def DF Distinct F32)");
+        RUN("(def id-df proc [(df DF)] df)");
+        TEST_TYPE_FAIL("(id-df 3.5)");
     }
 
     delete_env(env, a);

@@ -512,9 +512,11 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
             }
         }
     } else {
-        // TOOD (BUG): is unwrap what we want here? specifically, unwrap
-        // substitutes in when recurring?
-        PiType* unwrapped = unwrap_type(type, ctx.current_module, ctx.pia, a);
+        // Note: the reason we unwrap the type is because we want to be able to 
+        //   unify literals with named types, particularly enumerations, without 
+        //   having to specify the name.
+        PiType* unwrapped = unname_type(type, ctx.current_module, ctx.pia, a);
+
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
             case ConInt:

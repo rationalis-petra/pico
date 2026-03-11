@@ -1401,11 +1401,29 @@ bool is_narrower(PiType *wide, PiType *narrow) {
     return false;
 }
 
+PiType* unname_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a) {
+    bool unwrapping = true;
+    while (unwrapping) {
+        if (ty->sort == TNamed) {
+            SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
+            sym_ptr_bind(ty->named.name, ty, &binds);
+            ty = pi_type_subst(ty->named.type, binds, pia, a);
+        } else if (ty->sort == TUVar) {
+            PiType* maybe_ty = try_get_uvar(ty->uvar);
+            unwrapping = maybe_ty ? true : false;
+            if (unwrapping) ty = maybe_ty;
+        } else {
+            unwrapping = false;
+        }
+    }
+    return ty;
+}
+
 PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a) {
     bool unwrapping = true;
     while (unwrapping) {
-      if (ty->sort == TDistinct &&
-          (ty->distinct.source_module == NULL || ty->distinct.source_module == curr_module)) {
+        if (ty->sort == TDistinct &&
+            (ty->distinct.source_module == NULL || ty->distinct.source_module == curr_module)) {
             ty = ty->distinct.type;
         } else if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
