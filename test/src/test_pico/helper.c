@@ -175,11 +175,11 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
-        Document* doc = pretty_pi_value(data, type, &gpa);
+        Document* doc = pretty_pi_value(data, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\nGot: "), os);
-        doc = pretty_pi_value(val, type, &gpa);
+        doc = pretty_pi_value(val, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\n"), os);
@@ -196,11 +196,11 @@ void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
         Allocator gpa = aa_to_gpa(arena);
         FormattedOStream* os = get_fstream(log);
         write_fstring(mv_string("Expected: "), os);
-        Document* doc = pretty_pi_value(data, type, &gpa);
+        Document* doc = pretty_pi_value(data, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\nGot: "), os);
-        doc = pretty_pi_value(val, type, &gpa);
+        doc = pretty_pi_value(val, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
         write_fstring(mv_string("\n"), os);

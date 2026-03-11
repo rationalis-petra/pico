@@ -183,14 +183,22 @@ typedef struct {
     bool show_named;
 } PrettyTypeParams;
 
+typedef struct {
+    PrettyTypeParams type;
+} PrettyValParams;
+
 // 'Default Pretty Type Params'
 static const PrettyTypeParams default_ptp = {
     .should_wrap = true,
     .show_named = false,
 };
 
+static const PrettyValParams default_pvp = {
+    .type = default_ptp,
+};
+
 // Transform and Analyse
-Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
+Document* pretty_pi_value(void* val, PiType* types, PrettyValParams params, Allocator* a);
 Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);

@@ -269,7 +269,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     return out;
 }
 
-Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
+Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
     case TPrim:
@@ -387,7 +387,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
                 current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
             }
 
-            Document* arg = pretty_pi_value(val + current_offset, ftype, a);
+            Document* arg = pretty_pi_value(val + current_offset, ftype, params, a);
 
             push_ptr(fname, &fd_nodes);
             push_ptr(arg,   &fd_nodes);
@@ -423,7 +423,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
                 for (size_t i = 0; i < variant_types.len; i++) {
                     PiType* ftype = variant_types.data[i];
                     current_offset = pi_size_align(current_offset, pi_align_of(*ftype));
-                    Document* arg = pretty_pi_value(val + current_offset, ftype, a);
+                    Document* arg = pretty_pi_value(val + current_offset, ftype, params, a);
                     push_ptr(arg, &nodes);
                     current_offset += pi_size_of(*ftype);
                 }
@@ -446,7 +446,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("(dynamic #"), a), &nodes);
         push_ptr(pretty_u64(dvar, a), &nodes);
         push_ptr(mk_str_doc(mv_string(": "), a), &nodes);
-        push_ptr(pretty_pi_value(get_dynamic_val(dvar), type->dynamic, a), &nodes);
+        push_ptr(pretty_pi_value(get_dynamic_val(dvar), type->dynamic, params, a), &nodes);
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_cat_doc(nodes, a);
         break;
@@ -459,7 +459,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             SymAddrPiCell cell = type->instance.fields.data[i];
             PtrArray lcl_nodes = mk_ptr_array(2, a);
             push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &lcl_nodes);
-            push_ptr(pretty_pi_value(data, (PiType*)cell.val, a), &lcl_nodes);
+            push_ptr(pretty_pi_value(data, (PiType*)cell.val, params, a), &lcl_nodes);
 
             data += pi_size_of(*(PiType*)cell.val);
             push_ptr(mk_paren_doc("[.", "]", mv_sep_doc(lcl_nodes, a), a), &nodes);
@@ -502,7 +502,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             offset += REGISTER_SIZE;
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
-        push_ptr(pretty_pi_value(val + offset, type->sealed.body, a), &nodes);
+        push_ptr(pretty_pi_value(val + offset, type->sealed.body, params, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -516,7 +516,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(symbol_to_string(type->binder.vars.data[i], a), a), &args);
         }
         push_ptr(mk_paren_doc("[", "]", mv_hsep_doc(args, a), a), &nodes);
-        push_ptr(pretty_type(type->binder.body, default_ptp, a), &nodes);
+        push_ptr(pretty_type(type->binder.body, params.type, a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -526,18 +526,18 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("("), a), &nodes);
         push_ptr(pretty_type(type->app.fam, default_ptp, a), &nodes);
         for (size_t i = 0; i < type->app.args.len; i++) {
-            push_ptr(pretty_type(type->app.args.data[i], default_ptp,a), &nodes);
+            push_ptr(pretty_type(type->app.args.data[i], params.type,a), &nodes);
         }
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
     }
     case TNamed: {
-        out = pretty_pi_value(val, type->named.type, a);
+        out = pretty_pi_value(val, type->named.type, params, a);
         break;
     }
     case TDistinct:  {
-        out = pretty_pi_value(val, type->distinct.type, a);
+        out = pretty_pi_value(val, type->distinct.type, params, a);
         break;
     }
     case TTrait:  {
@@ -558,7 +558,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
             push_ptr(mk_str_doc(mv_string("."), a), &field);
             push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &field);
             push_ptr(mk_str_doc(mv_string(" "), a), &field);
-            push_ptr(pretty_type(cell.val, default_ptp,a), &field);
+            push_ptr(pretty_type(cell.val, params.type, a), &field);
 
             push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &nodes);
         }
@@ -569,7 +569,7 @@ Document* pretty_pi_value(void* val, PiType* type, Allocator* a) {
     case TKind:
     case TConstraint: {
         PiType** ptype = (PiType**) val;
-        out = pretty_type(*ptype, default_ptp,a);
+        out = pretty_type(*ptype, params.type, a);
         break;
     }
 

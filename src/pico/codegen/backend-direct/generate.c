@@ -2800,7 +2800,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
               {
                   PtrArray valdesc = mk_ptr_array(2, a);
                   push_ptr(mk_str_doc(mv_string("Value: "), a), &valdesc);
-                  push_ptr(pretty_pi_value(entry.value, entry.type, a), &valdesc);
+                  push_ptr(pretty_pi_value(entry.value, entry.type, default_pvp, a), &valdesc);
                   push_ptr(mv_sep_doc(valdesc, a), &lines);
               }
 
