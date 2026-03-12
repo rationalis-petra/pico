@@ -71,4 +71,15 @@ void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env,
         set_std_current_allocator(current_old);
         reset_subregion(region);
     }
+
+    if (test_start(log, mv_string("nested-loop"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        const char* expected = "012012012012012012012012012012";
+        TEST_STDOUT("(loop [for i from 1 upto 10]"
+                    "  (loop [for j from 1 upto 2]"
+                    "    (terminal.write-string (u64.to-string j))))");
+        set_std_current_allocator(current_old);
+        reset_subregion(region);
+    }
 }

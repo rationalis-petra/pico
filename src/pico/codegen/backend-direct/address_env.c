@@ -265,6 +265,11 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
     for (size_t i = locals.vars.len; i > 0; i--) {
         SAddr maddr = locals.vars.data[i - 1];
         if (maddr.type == SALabel && symbol_eq(maddr.symbol, s)) {
+#ifdef DEBUG_ASSERT
+            if (maddr.stack_offset < current_head) {
+                panic(mv_string("maddr.stack_offset < current_head in label_env_lookup!"));
+            }
+#endif
             return (LabelEntry) {
                 .type = Ok,
                 .stack_offset = maddr.stack_offset - current_head,
