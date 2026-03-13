@@ -404,7 +404,7 @@ void address_bind_type(Symbol s, AddressEnv* env) {
 void address_bind_relative(Symbol s, size_t offset, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    size_t stack_offset = locals->stack_head;
+    int64_t stack_offset = locals->stack_head;
     SAddr value = (SAddr){};
     value.type = SADirect;
     value.symbol = s;
@@ -417,7 +417,7 @@ void address_bind_relative_type(Symbol s, size_t offset, AddressEnv* env) {
 
     push_symbol(s, &locals->types);
 
-    size_t stack_offset = locals->stack_head;
+    int64_t stack_offset = locals->stack_head;
     SAddr value = (SAddr){};
     value.type = SADirect;
     value.symbol = s;
@@ -428,7 +428,7 @@ void address_bind_relative_type(Symbol s, size_t offset, AddressEnv* env) {
 void address_bind_relative_index(Symbol s, size_t offset, AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    size_t stack_offset = locals->stack_head;
+    int64_t stack_offset = locals->stack_head;
     SAddr value = (SAddr){};
     value.type = SAIndexed;
     value.symbol = s;
@@ -529,7 +529,7 @@ void address_unbind_label_vars(AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
     pop_saddr(&locals->vars);
-    for (size_t i = env->local_envs.len; i > 0; i--) {
+    while (true) {
         SAddr local = pop_saddr(&locals->vars);
         if (local.type == SASentinel) {
             break;
