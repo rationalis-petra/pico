@@ -521,14 +521,14 @@ void address_bind_label_vars(SymSizeAssoc vars, AddressEnv* env) {
         push_saddr(local, &locals->vars);
     }
 
-    padding.stack_offset = stack_offset + REGISTER_SIZE;
-    push_saddr(padding, &locals->vars);
+    //padding.stack_offset = stack_offset + REGISTER_SIZE;
+    //push_saddr(padding, &locals->vars);
 }
 
 void address_unbind_label_vars(AddressEnv* env) {
     LocalAddrs* locals = (LocalAddrs*)env->local_envs.data[env->local_envs.len - 1];
 
-    pop_saddr(&locals->vars);
+    //pop_saddr(&locals->vars);
     while (true) {
         SAddr local = pop_saddr(&locals->vars);
         if (local.type == SASentinel) {
