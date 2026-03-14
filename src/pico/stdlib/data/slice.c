@@ -15,6 +15,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 1, "meta");
+    add_import(&imports.clauses, &ra, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -44,6 +45,13 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
 
     const char* slice_null_fn = "(def null all [A] (name (Slice A) (num-to-address 0)))";
     compile_toplevel(slice_null_fn, module, target, &point, &pi_point, region);
+
+    const char* slice_new_fn = "(def new all [A] proc [len] (name (Slice A) (memory.alloc (u64.* len (size-of A)))))";
+    compile_toplevel(slice_new_fn, module, target, &point, &pi_point, region);
+
+    const char* slice_delte_fn = "(def delete all [A] proc [(slice (Slice A))] "
+                               "  (memory.free (unname slice)))";
+    compile_toplevel(slice_delte_fn, module, target, &point, &pi_point, region);
 
     const char *slice_elt_fn = "(def elt all [A] proc [(i U64) (slice (Slice A))] seq\n"
                                "  [let! sl-num (address-to-num (unname slice))]"

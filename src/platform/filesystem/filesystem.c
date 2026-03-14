@@ -21,6 +21,30 @@
 #include <sys/stat.h>
 #endif
 
+
+String error_description(RecordError err) {
+    switch (err) {
+    case ErrDoesNotExist:
+        return mv_string("File Does Not Exist");
+        break;
+    case ErrAlreadyExists:
+        return mv_string("File Already Denied");
+        break;
+    case ErrPermissionDenied:
+        return mv_string("Permission Denied");
+        break;
+    case ErrFileInUse:
+        return mv_string("File In Use");
+        break;
+    case ErrInvalidArgument:
+        return mv_string("Invalid Argument");
+        break;
+    default:
+        return mv_string("Invalid Record Error");
+        break;
+    }
+}
+
 // ---------------------------------------------------------------------------
 //     Paths 
 // ---------------------------------------------------------------------------

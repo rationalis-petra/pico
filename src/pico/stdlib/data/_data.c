@@ -28,6 +28,8 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_list_module(target, module, subregion);
     reset_subregion(subregion);
+    add_string_module(target, module, subregion);
+    reset_subregion(subregion);
     add_either_module(target, module, subregion);
     reset_subregion(subregion);
     add_result_module(target, module, subregion);
@@ -35,9 +37,5 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     add_maybe_module(target, module, subregion);
     reset_subregion(subregion);
     add_pair_module(target, module, subregion);
-    reset_subregion(subregion);
-    add_string_module(target, module, subregion);
-    release_subregion(subregion);
-    add_stringview_module(target, module, subregion);
     release_subregion(subregion);
 }

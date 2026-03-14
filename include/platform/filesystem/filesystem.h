@@ -22,6 +22,8 @@ typedef enum : uint64_t {
     ErrInvalidArgument,
 } RecordError;
 
+String error_description(RecordError err);
+
 typedef struct {
     Result_t type;
     RecordError error;
