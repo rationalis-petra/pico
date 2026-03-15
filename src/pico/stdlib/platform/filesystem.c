@@ -104,6 +104,14 @@ void build_write_chunk_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     convert_c_fn(write_chunk, &fn_ctype, type, ass, a, point); 
 }
 
+void build_error_description_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "error", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}),
+                                 mk_string_ctype(pia));
+
+    convert_c_fn(error_description, &fn_ctype, type, ass, a, point); 
+}
+
 void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
@@ -147,9 +155,11 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     e = get_def(sym, module);
     file_ty = e->value;
 
-    typep = mk_named_type(pia, "FileError",
-                          mk_enum_type(pia, 4,
-                                       "DoesNotExist", 0, "AlreadyExists", 0, "PermissionDenied", 0, "InvalidArgument", 0));
+    typep =
+        mk_named_type(pia, "FileError",
+                      mk_enum_type(pia, 5, "does-not-exist", 0,
+                                   "already-exists", 0, "permission-denied", 0,
+                                   "file-in-use", 0, "invalid-argument", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("FileError"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -217,6 +227,14 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
                          mk_prim_type(pia, Unit));
     build_write_chunk_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("write-chunk"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, copy_pi_type_p(file_err_ty, pia), mk_string_type(pia));
+    build_error_description_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("error-description"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -855,8 +855,10 @@ void* mk_named_ty(Symbol name, PiType* body) {
 void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #if ABI == SYSTEM_V_64
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    // NOTE: Reading the spec, this seems wrong, but it produced the correct
+    //       results (set a breakpoint at mk_named_ty if you don't believe me!)
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 #elif ABI == WIN_64
     build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);

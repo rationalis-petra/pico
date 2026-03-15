@@ -20,9 +20,9 @@ void check_result_out(UnifyResult out, Range range, UnifyReason reason, Allocato
 
             PtrArray nodes = mk_ptr_array(4, a);
             push_ptr(mv_cstr_doc("A typechecking error occurred here - the term does not have type", a), &nodes);
-            push_ptr(pretty_type(check.expected, a), &nodes);
+            push_ptr(pretty_type(check.expected, default_ptp, a), &nodes);
             push_ptr(mv_cstr_doc("But instead has type", a), &nodes);
-            push_ptr(pretty_type(check.actual, a), &nodes);
+            push_ptr(pretty_type(check.actual, default_ptp, a), &nodes);
 
             PicoError* err = mem_alloc(sizeof(PicoError), a);
             push_ptr(err, &errs);
@@ -129,7 +129,7 @@ _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, Syntax *pr
     push_ptr(mv_cstr_doc("is beign used as an instance argument, i.e. between '{' and '}'."
                          " As such, it is expected to have a trait (instance) type, but"
                          " it instead has type:" , ctx.a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(proc->ptype, ctx.a), ctx.a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(proc->ptype, default_ptp, ctx.a), ctx.a), &nodes);
 
     PicoError err = {
         .range = proc->range,
@@ -228,7 +228,7 @@ _Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidA
     } else {
         push_ptr(mv_cstr_doc("The type being applied has kind:", a), &supplement_nodes);
     }
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &supplement_nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &supplement_nodes);
 
     PtrArray nodes = mk_ptr_array(2, a);
     push_ptr(mv_hsep_doc(err_nodes, a), &nodes);
@@ -251,7 +251,7 @@ _Noreturn void type_error_invalid_application_target(PiType *type, Syntax *app, 
     } else {
         push_ptr(mv_str_doc(mv_string("Attempting to apply this value to some arguments. However, it has type: "), a), &nodes);
     }
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
     if (is_all) {
         push_ptr(mv_str_doc(mv_string("which cannot be used this way. Only 'all' terms can be applied in this context."), a), &nodes);
     } else {
@@ -275,7 +275,7 @@ _Noreturn void type_error_incorrect_num_args_all_noproc(PiType *type, Syntax *ap
     size_t len = is_implicit_args ? app->all_application.implicits.len : app->all_application.args.len;
     push_ptr(pretty_u64(len, a), &nodes);
     push_ptr(mk_cstr_doc("Note: the function being applied has type: ", a), &nodes);
-    push_ptr(pretty_type(type, a), &nodes);
+    push_ptr(pretty_type(type, default_ptp, a), &nodes);
 
     PicoError err = {
         .range = app->all_application.function->range,
@@ -290,7 +290,7 @@ _Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *a
 
     PtrArray nodes = mk_ptr_array(4, a);
     push_ptr(mv_cstr_doc("Typechecking error: When applying an all with type", a), &nodes);
-    push_ptr(pretty_type(fn_ty, a), &nodes);
+    push_ptr(pretty_type(fn_ty, default_ptp, a), &nodes);
     push_ptr(mv_cstr_doc("not all types were able to be deduced. In particular, the type of ", a), &nodes);
     push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(fn_ty->binder.vars.data[arg_idx]), a), a), &nodes);
     push_ptr(mv_cstr_doc("is ambiguous.", a), &nodes);
@@ -298,6 +298,20 @@ _Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *a
     PicoError err = {
         .range = app->all_application.function->range,
         .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_app_not_family(PiType* type, Syntax *app, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+    push_ptr(mk_cstr_doc("Attempting to apply the type:", a), &nodes);
+    push_ptr(pretty_type(type, default_ptp, a), &nodes);
+    push_ptr(mk_cstr_doc("As a type family of 0 arguments, but it is not a type family.", a), &nodes);
+
+    PicoError err = {
+        .range = app->application.function->range,
+        .message = mv_sep_doc(nodes, a),
     };
     throw_pi_error(ctx.point, err);
 }
@@ -313,7 +327,7 @@ _Noreturn void type_error_invalid_seal_type(PiType *type, Syntax *seal, TypeChec
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(4, a);
     push_ptr(mv_cstr_doc("A seal is being constructed with type:", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
     push_ptr(mv_cstr_doc("However, only 'Sealed' types are allowed here.", a), &nodes);
 
     PicoError err = {
@@ -331,7 +345,7 @@ _Noreturn void type_error_incorrect_num_seal_args(PiType *type, Syntax *seal, Ty
     push_ptr(mv_cstr_doc("types, however, the seal type was expecting ", a), &nodes);
     push_ptr(pretty_u64(type->sealed.vars.len, a), &nodes);
     push_ptr(mv_cstr_doc(" The type being sealed against is:", a), &nodes);
-    push_ptr(pretty_type(type, a), &nodes);
+    push_ptr(pretty_type(type, default_ptp, a), &nodes);
 
     PicoError err = {
         .range = seal->range,
@@ -344,7 +358,7 @@ _Noreturn void type_error_invalid_unseal_type(PiType *type, Syntax *unseal, Type
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(4, a);
     push_ptr(mv_cstr_doc("An unseal performed, however, the value being unsealed has type:", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
     push_ptr(mv_cstr_doc("Only 'Sealed' types are allowed here.", a), &nodes);
 
     PicoError err = {
@@ -362,7 +376,7 @@ _Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, Syntax* unsea
     push_ptr(mv_cstr_doc("types, however, the seal type was expecting ", a), &nodes);
     push_ptr(pretty_u64(type->sealed.vars.len, a), &nodes);
     push_ptr(mv_cstr_doc("The type being unsealed is:", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {
         .range = unseal->range,
@@ -375,7 +389,7 @@ _Noreturn void type_error_invalid_variant_type(PiType *type, Syntax *variant, Ty
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(6, a);
     push_ptr(mv_cstr_doc("Contructing a variant from type", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
     push_ptr(mv_cstr_doc("which is not an enum type. Only Enum types can be used in this instance.", a), &nodes);
 
     PicoError err = {
@@ -397,7 +411,7 @@ _Noreturn void type_error_incorrect_num_variant_args(PiType *type, Syntax *varia
     push_ptr(mv_cstr_doc("args, however, this variant only accepts", a), &nodes);
     push_ptr(pretty_u64(variant_args->len, a), &nodes);
     push_ptr(mv_cstr_doc("args. The type being construted is:", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {
         .range = variant->range,
@@ -413,7 +427,7 @@ _Noreturn void type_error_missing_variant_tag(PiType * type, Syntax * variant, T
     push_ptr(mv_cstr_doc("Attempting constructing the variant", a), &nodes);
     push_ptr(mk_paren_doc("'","'", mv_str_doc(view_symbol_string(variant->variant.tagname), a), a), &nodes);
     push_ptr(mv_cstr_doc("which does not exist in the inferred Enum type. The type this should have is:", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(type, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(type, default_ptp, a), a), &nodes);
 
     PicoError err = {
         .range = variant->range,
@@ -428,7 +442,7 @@ _Noreturn void type_error_match_invalid_type(PiType *type, Syntax *match,
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(2, a);
     push_ptr(mv_cstr_doc("Unexpected type provided to match. Expected an enum type, but got:", a),  &nodes);
-    push_ptr(pretty_type(match->match.val->ptype, a), &nodes);
+    push_ptr(pretty_type(match->match.val->ptype, default_ptp, a), &nodes);
 
     PicoError err = {
         .range = match->match.val->range,
@@ -440,7 +454,24 @@ _Noreturn void type_error_match_invalid_type(PiType *type, Syntax *match,
 _Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, U8Array used_variants, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(6, a);
+
+    push_ptr(mv_cstr_doc("This match is non-exhaustive. The following variants were not found in the match:", a), &nodes);
+    for (size_t i = 0; i < used_variants.len; i++) {
+        if (!used_variants.data[i]) {
+            Symbol sym = type->enumeration.variants.data[i].key;
+            push_ptr(mk_str_doc(view_symbol_string(sym), a), &nodes);
+        }
+    }
+
+    PicoError err = {
+        .range = match->range,
+        .message = mv_sep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
 
 // Struct
 _Noreturn void type_error_struct_invalid_type(PiType *type, Syntax *strct, TypeCheckContext ctx); 
@@ -459,19 +490,35 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
         push_ptr(mv_cstr_doc("however, this field cannot be accessed, as the source has an opaque type.", a), &nodes);
         push_ptr(mv_cstr_doc("This means that the type can only be used within the module it defined. Outside of its' home", a), &nodes);
         push_ptr(mv_cstr_doc("module, a value with opaque type can only be passed into functions. \n\nThe type is provided below for convenience.", a), &nodes);
-        push_ptr(pretty_type(proj->projector.val->ptype, a),  &nodes);
+        push_ptr(pretty_type(proj->projector.val->ptype, default_ptp, a),  &nodes);
     
     } else {
         push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj->projector.field), a), a), &nodes);
         push_ptr(mv_cstr_doc(" however, this field cannot be accessed, as the source has type", a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_type(proj->projector.val->ptype, a), a),  &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(proj->projector.val->ptype, default_ptp, a), a),  &nodes);
         push_ptr(mv_cstr_doc("which does not allow field access.", a), &nodes);
     }
 
     PicoError err = {
         .range = proj->range,
         .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+
+//  Type Formers
+// ------------------------------------------------------------
+_Noreturn void type_error_family_must_have_args(Syntax *family, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    const char *c_str =
+        "Attempting to form a type Family with no type parameters. \n"
+        "Type families require at least one type parameter.";
+
+    PicoError err = {
+        .range = family->range,
+        .message = mv_cstr_doc(c_str, a),
     };
     throw_pi_error(ctx.point, err);
 }
@@ -512,9 +559,9 @@ UnifyResult unify_error_name_has_args_match(PiType* lhs, PiType* rhs, Allocator*
     PtrArray nodes = mk_ptr_array(6, a);
     push_ptr(mv_cstr_doc("Named type mismatch: two named types must both be instantiated with the same number of arguments.", a), &nodes);
     push_ptr(mv_cstr_doc("This error occurred when trying to unify types: ", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(lhs, default_ptp, a), a), &nodes);
     push_ptr(mv_cstr_doc("and", a), &nodes);
-    push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
+    push_ptr(mv_nest_doc(2, pretty_type(rhs, default_ptp, a), a), &nodes);
     return (UnifyResult) {
         .type = USimpleError,
         .message = mv_sep_doc(nodes, a),

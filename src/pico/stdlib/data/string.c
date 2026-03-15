@@ -9,11 +9,13 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(3, &ra),
+        .clauses = mk_import_clause_array(5, &ra),
     };
     add_import_all(&imports.clauses, &ra, 1, "core");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "extra");
+    add_import_all(&imports.clauses, &ra, 2, "data", "list");
+    add_import(&imports.clauses, &ra, 2, "platform", "memory");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -44,6 +46,17 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "(def nth-byte proc [(idx U64) (string String)] \n"
         "  (load {U8} (num-to-address (u64.+ idx (address-to-num string.bytes)))))";
     compile_toplevel(str_nth_byte, module, target, &point, &pi_point, region);
+
+    const char *from_ascii =
+        "(def from-ascii proc [(ascii (List U8))] seq\n"
+        "  [let! new-bytes (memory.alloc (u64.+ ascii.len 1))]\n"
+        "  (loop [for i from 0 below ascii.len]\n"
+        "    [let! byte (elt i ascii)]\n"
+        "    [let! dest-address (num-to-address (u64.+ i (address-to-num new-bytes)))]\n"
+        "    (store dest-address byte))\n"
+        "  (store {U8} (num-to-address (u64.+ ascii.len (address-to-num new-bytes))) 0)\n"
+        "  (struct String [.bytes new-bytes] [.memsize (u64.+ ascii.len 1)]))";
+    compile_toplevel(from_ascii, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("string")), module);
     if (r.type == Err) panic(r.error_message);

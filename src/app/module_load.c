@@ -4,6 +4,7 @@
 #include "platform/memory/executable.h"
 #include "components/assembler/assembler.h"
 #include "components/pretty/stream_printer.h"
+#include "components/logging/structured_logging.h"
 
 #include "pico/binding/environment.h"
 #include "pico/parse/parse.h"
@@ -22,6 +23,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
     RegionAllocator* iter_region = make_subregion(region);
     Allocator itera = ra_to_gpa(iter_region);
     Allocator exec = mk_executable_allocator(&ra);
+    Logger* logger = NULL;
 
     PiAllocator pico_itera = convert_to_pallocator(&itera);
 
@@ -116,7 +118,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = target
+            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = target, .logger = logger
         };
         type_check(&abs, env, tc_ctx);
 
@@ -127,14 +129,13 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &point, .target = target
+            .a = &itera, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
         // -------------------------------------------------------------------------
         // Evaluation
         // -------------------------------------------------------------------------
-
         pico_run_toplevel(abs, target, links, module, &itera, &point);
     }
     return;
@@ -184,6 +185,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
     bool next_iter = true;
     Allocator itera = ra_to_gpa(subregion);
     PiAllocator pia = convert_to_pallocator(&itera);
+    Logger* logger = NULL;
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
@@ -229,7 +231,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pia, .point = &pi_point, .target = target
+            .a = &itera, .pia = &pia, .point = &pi_point, .target = target, .logger = logger
         };
         type_check(&abs, env, tc_ctx);
 
@@ -240,7 +242,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &point, .target = target
+            .a = &itera, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 

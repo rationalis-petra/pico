@@ -28,6 +28,7 @@ bool is_numchar(uint32_t codepoint);
 bool is_whitespace(uint32_t codepoint);
 bool is_comment_start(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
+bool is_special_char(uint32_t codepoint);
 
 ParseResult parse_rawtree(IStream* is, PiAllocator* pia, Allocator* a) {
     return parse_expr(is, '\0', pia, a);
@@ -333,6 +334,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
             next(is, &codepoint);
             push_u32(codepoint, &symchars);
         } else if (codepoint == '^') {
+            // TODO: detect if caret_next is already true!
             caret_next = true;
             next(is, &codepoint);
             caret_range = (Range) { start, bytecount(is) };
@@ -373,15 +375,28 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
 
             push_rawtree(op, &terms);
         } else {
-            String str = string_from_UTF_32(symchars, a);
-            RawTree val = (RawTree) {
-                .type = RawAtom,
-                .range.start = start,
-                .range.end = bytecount(is),
-                .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(str),
-            };
-            push_rawtree(val, &terms);
+            // Empty symchars *should* only occur when parsing the '^' symbol
+            if (symchars.len != 0) {
+                String str = string_from_UTF_32(symchars, a);
+                RawTree val = (RawTree) {
+                    .type = RawAtom,
+                    .range.start = start,
+                    .range.end = bytecount(is),
+                    .atom.type = ASymbol,
+                    .atom.symbol = string_to_symbol(str),
+                };
+                push_rawtree(val, &terms);
+            } else if (caret_next) {
+                RawTree val = {
+                    .type = RawAtom,
+                    .range = caret_range,
+                    .atom.type = ASymbol,
+                    .atom.symbol = string_to_symbol(mv_string("^")),
+                };
+                caret_next = false;
+                push_rawtree(val, &terms);
+            }
+            // TODO: panic/report debug error if we get to an 'else' clause
 
             // We are done; break out of loop
             break;
@@ -774,7 +789,7 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
 
     uint32_t char_lit = codepoint;
     peek(is, &codepoint);
-    if (is_whitespace(codepoint)) {
+    if (is_whitespace(codepoint) || is_special_char(codepoint)) {
         return (ParseResult) {
             .type = ParseSuccess,
             .result.type = RawAtom,
@@ -866,15 +881,19 @@ bool is_comment_start(uint32_t codepoint) {
 }
 
 bool is_symchar(uint32_t codepoint) {
-    return !is_whitespace(codepoint) && !(codepoint == '('
-                                          || codepoint == ')'
-                                          || codepoint == '['
-                                          || codepoint == ']'
-                                          || codepoint == '{'
-                                          || codepoint == '}'
-                                          || codepoint == 0x27E8
-                                          || codepoint == 0x27E9
-                                          || codepoint == '.'
-                                          || codepoint == ':'
-                                          || codepoint == '^');
+    return !is_whitespace(codepoint) && !is_special_char(codepoint);
+}
+
+bool is_special_char(uint32_t codepoint) {
+    return (codepoint == '('
+            || codepoint == ')'
+            || codepoint == '['
+            || codepoint == ']'
+            || codepoint == '{'
+            || codepoint == '}'
+            || codepoint == 0x27E8
+            || codepoint == 0x27E9
+            || codepoint == '.'
+            || codepoint == ':'
+            || codepoint == '^');
 }

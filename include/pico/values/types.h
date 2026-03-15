@@ -178,9 +178,28 @@ struct PiType {
     };
 };
 
+typedef struct {
+    bool should_wrap;
+    bool show_named;
+} PrettyTypeParams;
+
+typedef struct {
+    PrettyTypeParams type;
+} PrettyValParams;
+
+// 'Default Pretty Type Params'
+static const PrettyTypeParams default_ptp = {
+    .should_wrap = true,
+    .show_named = false,
+};
+
+static const PrettyValParams default_pvp = {
+    .type = default_ptp,
+};
+
 // Transform and Analyse
-Document* pretty_pi_value(void* val, PiType* types, Allocator* a);
-Document* pretty_type(PiType* type, Allocator* a);
+Document* pretty_pi_value(void* val, PiType* types, PrettyValParams params, Allocator* a);
+Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
 
 PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
@@ -215,7 +234,12 @@ uint64_t distinct_id();
 bool is_wider(PiType* narrow, PiType* wide);
 bool is_narrower(PiType* wide, PiType* narrow);
 
-// Recursively extracts the inner type from distinct types (but not opaque)
+// Recursively extracts the inner type from named types (but not distinct or opaque) 
+// Upon encountering a named type, it will substitute the name for the 
+// (wrapped) named type within the type, then contine descending.
+PiType* unname_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);
+
+// Recursively extracts the inner type from named and distinct types (but not opaque)
 // Upon encountering a named type, it will substitute the name for the 
 // (wrapped) named type within the type, then contine descending.
 PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);

@@ -127,9 +127,9 @@ UnifyResult unify_internal(PiType* lhs, PiType* rhs, SymPairArray* rename, Unify
     } else {
         PtrArray nodes = mk_ptr_array(8, ctx.a);
         push_ptr(mk_str_doc(mv_string("Unification failed: given two non-unifiable types"), ctx.a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_type(lhs, ctx.a), ctx.a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(lhs, default_ptp, ctx.a), ctx.a), &nodes);
         push_ptr(mk_str_doc(mv_string("and"), ctx.a), &nodes);
-        push_ptr(mv_nest_doc(2, pretty_type(rhs, ctx.a), ctx.a), &nodes);
+        push_ptr(mv_nest_doc(2, pretty_type(rhs, default_ptp, ctx.a), ctx.a), &nodes);
 
         out = (UnifyResult) {
             .type = USimpleError,
@@ -152,7 +152,7 @@ UnifyResult unify_variant(Symbol lhs_sym, AddrPiList lhs_args,
         push_ptr(mv_cstr_doc("LHS: ", a), &lhs_nodes);
         push_ptr(mv_str_doc(symbol_to_string(lhs_sym, a), a), &lhs_nodes);
         for (size_t i = 0; i < lhs_args.len; i++) {
-            push_ptr(pretty_type(lhs_args.data[i], a), &lhs_nodes);
+            push_ptr(pretty_type(lhs_args.data[i], default_ptp, a), &lhs_nodes);
         }
         Document* doc_lhs = mv_sep_doc(lhs_nodes, a);
 
@@ -160,7 +160,7 @@ UnifyResult unify_variant(Symbol lhs_sym, AddrPiList lhs_args,
         push_ptr(mv_cstr_doc("RHS: ", a), &rhs_nodes);
         push_ptr(mv_str_doc(symbol_to_string(rhs_sym, a), a), &rhs_nodes);
         for (size_t i = 0; i < rhs_args.len; i++) {
-            push_ptr(pretty_type(rhs_args.data[i], a), &rhs_nodes);
+            push_ptr(pretty_type(rhs_args.data[i], default_ptp, a), &rhs_nodes);
         }
         Document* doc_rhs = mv_sep_doc(rhs_nodes, a);
 
@@ -206,9 +206,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
         } else {
             PtrArray nodes = mk_ptr_array(8, a);
             push_ptr(mk_str_doc(mv_string("Unification failed: could not unify unequal primitives"), a), &nodes);
-            push_ptr(pretty_type(lhs, a), &nodes);
+            push_ptr(pretty_type(lhs, default_ptp, a), &nodes);
             push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
-            push_ptr(pretty_type(rhs, a), &nodes);
+            push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
 
             return (UnifyResult) {
                 .type = USimpleError,
@@ -247,9 +247,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             PtrArray nodes = mk_ptr_array(5, a);
             push_ptr(mv_cstr_doc("Unification failed: attempting to unify two different structures with differing number of fields.", a), &nodes);
             push_ptr(mv_cstr_doc("The types are:", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(lhs, default_ptp, a), a), &nodes);
             push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(rhs, default_ptp, a), a), &nodes);
 
             return (UnifyResult) {
                 .type = USimpleError,
@@ -264,14 +264,14 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             Symbol rhs_sym = rhs->structure.fields.data[i].key;
             PiType* rhs_ty = rhs->structure.fields.data[i].val;
 
-            PtrArray nodes = mk_ptr_array(5, a);
-            push_ptr(mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a), &nodes);
-            push_ptr(mv_cstr_doc("The types are:", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
-            push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
             if (!symbol_eq(rhs_sym, lhs_sym)) {
-                return (UnifyResult) {
+                PtrArray nodes = mk_ptr_array(5, a);
+                push_ptr(mv_cstr_doc("Unification failed: RHS and LHS structures must have matching field-names.", a), &nodes);
+                push_ptr(mv_cstr_doc("The types are:", a), &nodes);
+                push_ptr(mv_nest_doc(2, pretty_type(lhs, default_ptp, a), a), &nodes);
+                push_ptr(mv_cstr_doc("and", a), &nodes);
+                push_ptr(mv_nest_doc(2, pretty_type(rhs, default_ptp, a), a), &nodes);
+                return (UnifyResult){
                     .type = USimpleError,
                     .message = mk_vsep_doc(nodes, a),
                 };
@@ -289,9 +289,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
             PtrArray nodes = mk_ptr_array(5, a);
             push_ptr(mv_cstr_doc("Unification failed: two different enums with differing number of variants.", a), &nodes);
             push_ptr(mv_cstr_doc("The types are:", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(lhs, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(lhs, default_ptp, a), a), &nodes);
             push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(mv_nest_doc(2, pretty_type(rhs, a), a), &nodes);
+            push_ptr(mv_nest_doc(2, pretty_type(rhs, default_ptp, a), a), &nodes);
             return (UnifyResult) {
                 .type = USimpleError,
                 .message = mk_vsep_doc(nodes, a),
@@ -462,9 +462,9 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
     default:  {
         PtrArray nodes = mk_ptr_array(8, a);
         push_ptr(mk_str_doc(mv_string("Unification failed: invalid types"), a), &nodes);
-        push_ptr(pretty_type(lhs, a), &nodes);
+        push_ptr(pretty_type(lhs, default_ptp, a), &nodes);
         push_ptr(mk_str_doc(mv_string("and"), a), &nodes);
-        push_ptr(pretty_type(rhs, a), &nodes);
+        push_ptr(pretty_type(rhs, default_ptp, a), &nodes);
         panic(doc_to_str(mv_sep_doc(nodes, a), 80, a));
     } 
     }
@@ -486,7 +486,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
         push_ptr(mv_str_doc(mv_string("instantiating:"), ctx.a), &docs);
         push_ptr(pretty_uvar_type(uvar, ctx.a), &docs);
         push_ptr(mv_str_doc(mv_string("->"), ctx.a), &docs);
-        push_ptr(pretty_type(type, ctx.a), &docs);
+        push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
         log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
     }
 
@@ -512,16 +512,18 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
             }
         }
     } else {
-        // TOOD (BUG): is unwrap what we want here? specifically, unwrap
-        // substitutes in when recurring?
-        PiType* unwrapped = unwrap_type(type, ctx.current_module, ctx.pia, a);
+        // Note: the reason we unwrap the type is because we want to be able to 
+        //   unify literals with named types, particularly enumerations, without 
+        //   having to specify the name.
+        PiType* unwrapped = unname_type(type, ctx.current_module, ctx.pia, a);
+
         for (size_t i = 0; i < uvar->constraints.len; i++) {
             switch (uvar->constraints.data[i].type) {
             case ConInt:
                 if (unwrapped->sort != TPrim || unwrapped->prim > 0b111) {
                     PtrArray nodes = mk_ptr_array(2, a);
                     push_ptr(mv_cstr_doc("Type does not satisfy integral constraint:", a), &nodes);
-                    push_ptr(pretty_type(type, a), &nodes);
+                    push_ptr(pretty_type(type, default_ptp, a), &nodes);
 
                     return (UnifyResult) {
                         .type = UConstraintError,
@@ -534,7 +536,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
                 if (unwrapped->sort != TPrim || (unwrapped->prim != Float_32 && unwrapped->prim != Float_64)) {
                     PtrArray nodes = mk_ptr_array(2, a);
                     push_ptr(mv_cstr_doc("Type does not satisfy floating constraint:", a), &nodes);
-                    push_ptr(pretty_type(type, a), &nodes);
+                    push_ptr(pretty_type(type, default_ptp, a), &nodes);
                     return (UnifyResult) {.type = USimpleError, .message = mv_hsep_doc(nodes, a)};
                 }
                 break;
@@ -557,7 +559,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
                     push_ptr(mv_cstr_doc("Does not satisfy field constraint - field not found:", a), &nodes);
                     push_ptr(mv_str_doc(symbol_to_string(uvar->constraints.data[i].has_field.name, a), a), &nodes);
                     push_ptr(mv_cstr_doc("in type:", a), &nodes);
-                    push_ptr(pretty_type(type, a), &nodes);
+                    push_ptr(pretty_type(type, default_ptp, a), &nodes);
                                   
                     return (UnifyResult) {
                         .type = UConstraintError,
@@ -596,12 +598,12 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
                         AddrPiList types = *uvar->constraints.data[i].has_variant.types;
                         PtrArray ptypes = mk_ptr_array(types.len, a);
                         for (size_t j = 0; j < uvar->constraints.data[i].has_variant.types->len; j++) {
-                            push_ptr(pretty_type(type, a), &ptypes);
+                            push_ptr(pretty_type(type, default_ptp, a), &ptypes);
                         }
                         push_ptr(mv_grouped_sep_doc(ptypes, a), &ptypes);
                     }
                     push_ptr(mv_cstr_doc("in type:", a), &nodes);
-                    push_ptr(pretty_type(type, a), &nodes);
+                    push_ptr(pretty_type(type, default_ptp, a), &nodes);
                                   
                     return (UnifyResult) {
                         .type = UConstraintError,
@@ -926,13 +928,13 @@ void squash_type(PiType* type, UnifyContext ctx) {
             PtrArray docs = mk_ptr_array(2, ctx.a);
             push_ptr(mv_str_doc(mv_string("squashing: "), ctx.a), &docs);
             PiType show_type = (PiType){.sort = TUVar, .uvar = uvar};
-            push_ptr(pretty_type(&show_type, ctx.a), &docs);
+            push_ptr(pretty_type(&show_type, default_ptp, ctx.a), &docs);
             push_ptr(mv_str_doc(mv_string("->"), ctx.a), &docs);
             if (type->sort == TUVar && type->uvar->subst == NULL) {
                 DocStyle warn_style = scolour(colour(240, 150, 80), dstyle);
                 push_ptr(mv_style_doc(warn_style, mv_str_doc(mv_string("NULL"), ctx.a), a), &docs);
             } else {
-                push_ptr(pretty_type(type, ctx.a), &docs);
+                push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
             }
             log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
         }
@@ -949,11 +951,11 @@ void squash_type(PiType* type, UnifyContext ctx) {
                     PtrArray bind_docs = mk_ptr_array(2, ctx.a);
                     push_ptr(mk_str_doc(view_symbol_string(binds->data[j].key), a), &bind_docs);
                     push_ptr(mk_str_doc(mv_string("/"), a), &bind_docs);
-                    push_ptr(pretty_type(binds->data[j].val, a), &bind_docs);
+                    push_ptr(pretty_type(binds->data[j].val, default_ptp, a), &bind_docs);
                     push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(bind_docs, a), a), a), &docs);
                 }
                 push_ptr(mv_str_doc(mv_string("->"), ctx.a), &docs);
-                push_ptr(pretty_type(type, ctx.a), &docs);
+                push_ptr(pretty_type(type, default_ptp, ctx.a), &docs);
                 log_doc(mv_sep_doc(docs, ctx.a), ctx.logger);
             }
             for (size_t j = 0; j < binds->len; j++) {
@@ -1160,7 +1162,7 @@ UnifyResult add_constraint(Constraint con, UVarType *uvar, UnifyContext ctx) {
 
 Document *pretty_uvar_type(UVarType *uvar, Allocator *a) {
     if (uvar->subst) {
-        return pretty_type(uvar->subst, a);
+        return pretty_type(uvar->subst, default_ptp, a);
     } else {
         return mv_str_doc(string_ptr(uvar, a), a);
     }

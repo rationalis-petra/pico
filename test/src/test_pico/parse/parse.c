@@ -91,6 +91,11 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("^ref");
   }
 
+  if (test_start(log, mv_string("parse-^-in-place"))) {
+    RawTree expected = expr_branch(&pia, 3, symbol_atom("set"), symbol_atom("^"), symbol_atom("ref"));
+    TEST_EQ("(set ^ ref)");
+  }
+
   if (test_start(log, mv_string("parse-.-prefix"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom("."), symbol_atom("ref"));
     TEST_EQ(".ref");
@@ -111,6 +116,12 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     RawTree expected =
       expr_branch(&pia, 3, symbol_atom(":"), symbol_atom("ref"), symbol_atom("foo"));
     TEST_EQ("foo:ref");
+  }
+
+  if (test_start(log, mv_string("parse-char-literal-adjacent-to-paren"))) {
+    RawTree expected =
+      expr_branch(&pia, 2, symbol_atom("foo"), int_atom(','));
+    TEST_EQ("(foo #,)");
   }
 
   delete_module(module);

@@ -5,13 +5,14 @@
 
 void add_user_module(Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
-    Imports imports = (Imports) {.clauses = mk_import_clause_array(9, &ra),};
+    Imports imports = (Imports) {.clauses = mk_import_clause_array(16, &ra),};
 
     add_import_all(&imports.clauses, &ra, 1, "core");
     add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
     add_import_all(&imports.clauses, &ra, 2, "abs", "show");
+    add_import_all(&imports.clauses, &ra, 2, "platform", "terminal");
 
     add_import(&imports.clauses, &ra, 1, "abs");
     add_import(&imports.clauses, &ra, 1, "data");

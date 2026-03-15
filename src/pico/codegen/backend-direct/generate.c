@@ -330,14 +330,15 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     case SLitUntypedFloating: 
         panic(mv_string("Cannot generate monomorphic code for untyped floating!"));
     case SLitTypedFloating: {
-        if (syn.ptype->prim == Float_32) {
+        PiType* prim_ty = strip_type(syn.ptype);
+        if (prim_ty->prim == Float_32) {
             float f = syn.floating.value;
             void* raw = &f;
             int32_t immediate = *(int32_t*)raw;
             build_unary_op(Push, imm32(immediate), ass, a, point);
             data_stack_grow(env, pi_stack_size_of(*syn.ptype));
         }
-        else if (syn.ptype->prim == Float_64) {
+        else if (prim_ty->prim == Float_64) {
             void* raw = &syn.floating.value;
             int64_t immediate = *(int64_t*)raw;
             build_binary_op(Mov, reg(RAX,sz_64), imm64(immediate), ass, a, point);
@@ -2616,9 +2617,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SNamedType: {
         address_bind_type(syn.named_type.name, env);
-        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, sizeof(Symbol));
 
@@ -2760,7 +2761,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                       } else {
                           push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
-                          push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, a), a), &desc);
+                          push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, default_ptp, a), a), &desc);
                       }
                       push_ptr(mv_hsep_doc(desc, a), &lines);
                   } else {
@@ -2794,13 +2795,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
               {
                   PtrArray typedesc = mk_ptr_array(2, a);
                   push_ptr(mk_str_doc(mv_string("Type: "), a), &typedesc);
-                  push_ptr(pretty_type(entry.type, a), &typedesc);
+                  push_ptr(pretty_type(entry.type, default_ptp, a), &typedesc);
                   push_ptr(mv_sep_doc(typedesc, a), &lines);
               }
               {
                   PtrArray valdesc = mk_ptr_array(2, a);
                   push_ptr(mk_str_doc(mv_string("Value: "), a), &valdesc);
-                  push_ptr(pretty_pi_value(entry.value, entry.type, a), &valdesc);
+                  push_ptr(pretty_pi_value(entry.value, entry.type, default_pvp, a), &valdesc);
                   push_ptr(mv_sep_doc(valdesc, a), &lines);
               }
 

@@ -11,6 +11,7 @@
 
 #define RUN(str) run_toplevel(str, module, context); refresh_env(env)
 #define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
+#define TEST_TYPE_FAIL(str) test_typecheck_fail(str, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
@@ -151,6 +152,30 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         PiType* expected = &ty;
         TEST_TYPE("(Family [A] A)");
         set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("family-must-have-args"))) {
+        TEST_TYPE_FAIL("(Family [] Address)");
+    }
+
+    if (test_start(log, mv_string("cannot-apply-non-family-types"))) {
+        TEST_TYPE_FAIL("(U8)");
+    }
+
+    if (test_start(log, mv_string("can-coerce-to-named"))) {
+        PiAllocator current_old = get_std_current_allocator();
+        set_std_current_allocator(pregion);
+        PiType* expected = mk_named_type(&pregion, "NF", mk_prim_type(&pregion, Float_32));
+        RUN("(def NF Named NF F32)");
+        RUN("(def id-nf proc [(nf NF)] nf)");
+        TEST_TYPE("(id-nf 3.5)");
+        set_std_current_allocator(current_old);
+    }
+
+    if (test_start(log, mv_string("cannot-coerce-to-disticnt"))) {
+        RUN("(def DF Distinct F32)");
+        RUN("(def id-df proc [(df DF)] df)");
+        TEST_TYPE_FAIL("(id-df 3.5)");
     }
 
     delete_env(env, a);

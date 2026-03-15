@@ -143,7 +143,9 @@ Document* pretty_res(EvalResult res, Allocator* a) {
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
         push_ptr(mk_str_doc(symbol_to_string(res.def.name, a), a), &docs);
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
-        push_ptr(pretty_type(res.def.type, a), &docs);
+        PrettyTypeParams ptp = default_ptp; 
+        ptp.show_named = true;
+        push_ptr(pretty_type(res.def.type, ptp, a), &docs);
         out = mv_cat_doc(docs, a);
         break;
     }
@@ -157,9 +159,12 @@ Document* pretty_res(EvalResult res, Allocator* a) {
         out = mv_sep_doc(docs, a);
         break;
     }
-    case ERValue:
-        out = pretty_pi_value(res.val.val, res.val.type, a);
+    case ERValue: {
+        PrettyValParams pvp = default_pvp;
+        pvp.type.show_named = true;
+        out = pretty_pi_value(res.val.val, res.val.type, pvp, a);
         break;
+    }
     case ERDecl:
         out = mk_str_doc(mv_string("Declared: "), a);
         break;

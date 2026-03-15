@@ -285,7 +285,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: all
-all: debug release test keeper installer
+all: debug release test keeper installer prep-install
 
 # TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode

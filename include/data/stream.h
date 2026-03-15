@@ -60,5 +60,6 @@ void reset_bytecount(IStream* stream);
 void write_impl(int char_literal, OStream* stream);
 void write_codepoint(uint32_t codepoint, OStream* stream);
 void write_string(String str, OStream* stream);
+void write_line(String str, OStream* stream);
 
 #endif

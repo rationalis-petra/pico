@@ -1468,6 +1468,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                     .expr = abstract_expr_i(*body, ctx),
                 };
                 push_ptr(elt, &elements);
+
+                shadow_var(rsym.atom.symbol, ctx.env);
+                num_binds++;
             } else {
                 SeqElt* elt = mem_alloc(sizeof(SeqElt), a);
                 *elt = (SeqElt) {

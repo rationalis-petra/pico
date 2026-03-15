@@ -124,6 +124,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels (go-to start) [start (labels (go-to end) [end 4])] [end 3])");
     }
 
+    /* TODO (BUG): this generate a panic - fix it
+    if (test_start(log, mv_string("nested-labels-with-bind"))) {
+        int64_t expected = 4;
+        TEST_EQ(""
+                "(labels (go-to start 3) "
+                "  [start [y] (seq [let! x 4] (labels (go-to end) [end x]))]"
+                "  [end 3])");
+    }
+    */
+
     // -------------------------------------------------------------------------
     //
     //     Dynamic binding - dynamic/use/bind/modify

@@ -490,4 +490,19 @@ void write_string(String str, OStream* stream) {
     }
 }
 
+void write_line(String str, OStream* stream) {
+    switch (stream->type) {
+    case OStreamFile:
+        // TODO (FEATURE): Support outputting to non utf-8 ostreams
+        fputs((char*)str.bytes, stream->impl.file_ostream.file_ptr);
+        fputs((char*)"\n", stream->impl.file_ostream.file_ptr);
+        break;
+    case OStreamString:
+        // TODO: (windows) - \r\n??, part of stream?
+        add_u8_chunk(str.bytes, str.memsize - 1, &stream->impl.string_ostream.buffer);
+        add_u8_chunk((uint8_t*)"\n", 1, &stream->impl.string_ostream.buffer);
+        break;
+    }
+}
+
 

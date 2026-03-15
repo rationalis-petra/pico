@@ -232,7 +232,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
         push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function return types -", a), &nodes);
         push_ptr(pretty_ctype(ctype->proc.ret, a), &nodes);
         push_ptr(mv_cstr_doc("and", a), &nodes);
-        push_ptr(pretty_type(ptype->proc.ret, a), &nodes);
+        push_ptr(pretty_type(ptype->proc.ret, default_ptp, a), &nodes);
         push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
         panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
     }
@@ -255,7 +255,7 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
             push_ptr(mv_cstr_doc("Attempted to do invalid conversion of function argument types -", a), &nodes);
             push_ptr(pretty_ctype(&ctype->proc.args.data[i].val, a), &nodes);
             push_ptr(mv_cstr_doc("and", a), &nodes);
-            push_ptr(pretty_type(ptype->proc.args.data[i], a), &nodes);
+            push_ptr(pretty_type(ptype->proc.args.data[i], default_ptp, a), &nodes);
             push_ptr(mv_cstr_doc("are not equal.", a), &nodes);
             panic(doc_to_str(mk_hsep_doc(nodes, a), 120, a));
         }

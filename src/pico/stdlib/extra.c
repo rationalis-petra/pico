@@ -239,6 +239,10 @@ MacroResult loop_macro(RawTreePiList nodes) {
                     ? &branch.branch.nodes.data[1]
                     : raw_slice(&branch, 1, pia);
                 push_addr(raw_term, &loop_whiles);
+            } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
+                // let! gets an exception because loop bodies contain an
+                // implicit 'seq'
+                push_rawtree(nodes.data[i], &loop_body_nodes);
             } else {
                 return (MacroResult) {
                     .result_type = Left,

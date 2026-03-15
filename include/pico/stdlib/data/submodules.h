@@ -17,6 +17,5 @@ void add_result_module(Target target, Module* data, RegionAllocator* region);
 
 void add_list_module(Target target, Module* data, RegionAllocator* region);
 void add_string_module(Target target, Module* data, RegionAllocator* region);
-void add_stringview_module(Target target, Module* data, RegionAllocator* region);
 
 #endif

@@ -54,7 +54,8 @@ typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
 _Noreturn void type_error_invalid_application_target(PiType* type, Syntax* app, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidArgType args_type, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_args_all_noproc(PiType* type, Syntax* app, bool is_implicit_args, TypeCheckContext ctx);
-_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg, Syntax* app, TypeCheckContext ctx);
+_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *app, TypeCheckContext ctx);
+_Noreturn void type_error_app_not_family(PiType* type, Syntax *app, TypeCheckContext ctx);
 
 // Sealing
 _Noreturn void type_error_invalid_seal_type(PiType* type, Syntax* seal, TypeCheckContext ctx);
@@ -74,7 +75,7 @@ _Noreturn void type_error_match_invalid_type(PiType* type, Syntax* variant, Type
 _Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
 _Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, U8Array used_variants, TypeCheckContext ctx);
 
 // Struct
 _Noreturn void type_error_struct_invalid_type(PiType* type, Syntax* strct, TypeCheckContext ctx);
@@ -84,6 +85,10 @@ _Noreturn void type_error_struct_extra_field(PiType* type, Syntax* strct, TypeCh
 
 // Projector
 _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeCheckContext ctx);
+
+// Type Formers
+_Noreturn void type_error_family_must_have_args(Syntax* family, TypeCheckContext ctx);
+
 
 // ---------------------------------------------------------------------- 
 //

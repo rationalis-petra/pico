@@ -174,9 +174,9 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
                 push_ptr(mk_str_doc(mv_string("' has type:"), &ra), &ep_nodes);
                 push_ptr(mv_cat_doc(ep_nodes, &ra), &nodes);
             }
-            push_ptr(pretty_type(&e->type, &ra), &nodes);
+            push_ptr(pretty_type(&e->type, default_ptp, &ra), &nodes);
             push_ptr(mk_str_doc(mv_string("but entry points must have type"), &ra), &nodes);
-            push_ptr(pretty_type(check_ty, &ra), &nodes);
+            push_ptr(pretty_type(check_ty, default_ptp, &ra), &nodes);
             AtlasError err = {
                 .message = mv_sep_doc(nodes, &ra),
             };

@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #if OS_FAMILY == UNIX 
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 #include <errno.h>
@@ -97,12 +98,15 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
       panic(mv_string("Don't support nesting of > 128 colours"));
   } else {
       os->colours[os->colour_len] = colour;
-      printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      //printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      char str[32];
+      Colour colour = os->colours[os->colour_len];
+      size_t len = snprintf(str, 31, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+      write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
   }
 }
 
 void end_coloured_text(FormattedOStream* os) {
-    // TODO (feature): check for underflow in debug mode
 #ifdef DEBUG
     if (os->colour_len == 0) {
         panic(mv_string("Underflow on end_coloured_text"));
@@ -111,10 +115,12 @@ void end_coloured_text(FormattedOStream* os) {
 
     os->colour_len--;
     if (os->colour_len == 0) {
-        printf("\x1b[39m");
+        write_fstring(mv_string("\x1b[39m"), os);
     } else {
+        char str[24];
         Colour colour = os->colours[os->colour_len];
-        printf("\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+        size_t len = snprintf(str, 23, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
+        write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
     }
 }
 
@@ -128,7 +134,6 @@ void start_bg_colour(Colour colour, FormattedOStream *os) {
 }
 
 void end_bg_colour(FormattedOStream *os) {
-    // TODO (feature): check for underflow in debug mode
 #ifdef DEBUG
     if (os->bg_colour_len == 0) {
         panic(mv_string("Underflow on end_bg_colour_text"));
@@ -282,27 +287,41 @@ InTermEvent poll_in_terminal_event() {
 
 
 void send_output_terminal_event(OutTermEvent event) {
-  OStream* cout = get_stdout_stream();
   switch (event.type) {
   case OTClear:
       switch (event.clear) {
       case ClearScreen:
-          //write(STDOUT_FILENO, "\x1b[2J", 4);
-          // TODO: we can make this more efficent by using native calls
-          // which are provided the length of the string directly
-          write_string(mv_string("\x1b[2J"), cout);
+          terminal_write_string_unbuffered(mv_string("\x1b[2J"));
           break;
       }
       break;
   case OTPosCursor: {
       char str[16];
       size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
-
-      write_string((String){.bytes = (uint8_t*)str, .memsize = len}, cout);
-      //write(STDOUT_FILENO, str, len);
+      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len + 1});
       break;
   }
   }
+}
+
+void terminal_write_string_unbuffered(String string) {
+#if OS_FAMILY == UNIX
+    fflush(stdout);
+    write(STDOUT_FILENO, string.bytes, string.memsize);
+#elif OS_FAMILY == WINDOWS
+    fflush(stdout);
+    HANDLE std_cout = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD num_chars_written;
+
+    // TODO: check for error code? return error on error code
+    WriteConsole(std_cout, 
+        string.bytes,
+        string.memsize - 1, // TODO : this arg may be write as is 'number of chars to write' (uft-8)?
+        &num_chars_written,
+        NULL);
+#else
+#error "terminal_write_string_unbuffered not implemented on this system"
+#endif
 }
 
 
@@ -390,5 +409,33 @@ void terminal_set_raw_mode(bool is_on) {
         SetConsoleMode(std_cin, ENABLE_ECHO_INPUT | ENABLE_INSERT_MODE | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT);
         SetConsoleMode(std_cout, ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_LVB_GRID_WORLDWIDE);
     }
+#else
+#error "set raw mode not implemented for this system"
+#endif
+}
+
+TermSizeResult terminal_get_size() {
+#if OS_FAMILY == UNIX
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+        return (TermSizeResult) {.type = Err,};
+    } else {
+        return (TermSizeResult) {
+            .type = Ok,
+            .size.rows = ws.ws_row,
+            .size.cols = ws.ws_col,
+        };
+    }
+#elif OS_FAMILY == WINDOWS
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    // TODO: check for error?
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return (TermSizeResult) {
+        .type = Ok,
+        .size.rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1,
+        .size.cols = csbi.srWindow.Right - csbi.srWindow.Left + 1,
+    };
+#else
+#error ""
 #endif
 }
