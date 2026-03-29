@@ -592,7 +592,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("instance-const"))) {
         int64_t expected = 77;
-        RUN("(def Inhabited Trait [A] [.value A])");
+        RUN("(def Inhabited Trait Inhabited [A] [.value A])");
         // TODO (BUG)
         // swapping the order of below statements gives an 'ambiguous instance' error?
         RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
@@ -603,7 +603,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("instance-mval"))) {
         int64_t expected = -77;
-        RUN("(def MultiInhabited Trait [A] [.val-1 A] [.val-2 A])");
+        RUN("(def MultiInhabited Trait MultiInhabited [A] [.val-1 A] [.val-2 A])");
         // TODO (BUG)
         // swapping the order of below statements gives an 'ambiguous instance' error?
         RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
@@ -614,7 +614,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("instance-mval"))) {
         uint64_t expected = 43;
-        RUN("(def MultiConstInhabited Trait [A] [.val-1 A] [.val-2 U64])");
+        RUN("(def MultiConstInhabited Trait MultiConstInhabited [A] [.val-1 A] [.val-2 U64])");
         RUN("(def get-snd-const-value all [A] proc {(in (MultiConstInhabited A))} [(x A)] in.val-2)");
         RUN("(def i64-multi-const-inhabited instance (MultiConstInhabited I64) [.val-1 77] [.val-2 43])");
 

@@ -66,7 +66,6 @@ ProcessResult process_term(ProcessInput input, RegionAllocator* region) {
     result.checked_term = abs;
     return result;
 
-
  on_pi_error:
 
     if (input.options & POErrors) {

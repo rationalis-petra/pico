@@ -224,9 +224,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
     Segments prepped;
     PiType* type_data;
 
-    // TODO: fill in correct type
-    // dynlib-open : Proc [String] (Either String DynLib)
-    PiType* dynlib_ty = mk_opaque_type(pia, module, mk_prim_type(pia, Address));
+    PiType* dynlib_ty = mk_opaque_type(pia, "DynLib", module, mk_prim_type(pia, Address));
     type_data = dynlib_ty;
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DynLib"));

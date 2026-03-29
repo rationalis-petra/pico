@@ -910,16 +910,18 @@ Document* pretty_syntax_internal(Syntax* syntax, PrettyContext ctx, Allocator* a
         break;
     }
     case SDistinctType: {
-        PtrArray nodes = mk_ptr_array(2, a) ;
+        PtrArray nodes = mk_ptr_array(4, a) ;
         push_ptr(mk_str_doc(mv_string("Distinct"), a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax->distinct_type, ctx, a), &nodes);
+        push_ptr(mk_str_doc(view_symbol_string(syntax->distinct_type.name), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->distinct_type.body, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SOpaqueType: {
-        PtrArray nodes = mk_ptr_array(2, a) ;
+        PtrArray nodes = mk_ptr_array(4, a) ;
         push_ptr(mk_str_doc(mv_string("Opaque"), a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax->opaque_type, ctx, a), &nodes);
+        push_ptr(mk_str_doc(view_symbol_string(syntax->opaque_type.name), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax->opaque_type.body, ctx, a), &nodes);
         out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }

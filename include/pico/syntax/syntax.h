@@ -301,6 +301,7 @@ typedef struct {
 } SynCond;
 
 typedef struct {
+    Symbol name;
     SymbolArray vars;
     SymPtrAMap fields;
 } SynTrait;
@@ -323,12 +324,6 @@ typedef struct {
 typedef struct {
     Syntax* type;
 } SynSize;
-
-typedef struct {
-    // imports
-    // exports
-    // body - terms
-} SynModule;
 
 // Types
 typedef struct {
@@ -463,8 +458,8 @@ struct Syntax {
         SynBind bind_type;
         SynSealedType sealed_type;
         SynNamed named_type;
-        Syntax* distinct_type;
-        Syntax* opaque_type;
+        SynNamed distinct_type;
+        SynNamed opaque_type;
         SynTrait trait;
         PiType* type_val;
         Syntax* c_type;

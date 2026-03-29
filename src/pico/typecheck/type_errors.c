@@ -507,6 +507,52 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeChec
     throw_pi_error(ctx.point, err);
 }
 
+// Instance
+_Noreturn void type_error_instance_invalid_type(PiType *type, Range range, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(3, a);
+    
+    push_ptr(mv_cstr_doc("Attempting to create an instance of", a), &nodes);
+    push_ptr(pretty_type(type, default_ptp, a),  &nodes);
+    push_ptr(mv_cstr_doc("however, this type is not a trait. You can only create instances of trait types.", a), &nodes);
+
+    PicoError err = {
+        .range = range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_instance_wrong_nfields(Range range, size_t expected, size_t actual, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+
+    push_ptr(mv_cstr_doc("Attempting to make a trait instance with", a), &nodes);
+    push_ptr(pretty_u64(actual, a),  &nodes);
+    push_ptr(mv_cstr_doc("fields. However, the trait the instace is being made from has", a), &nodes);
+    push_ptr(pretty_u64(expected, a),  &nodes);
+
+    PicoError err = {
+        .range = range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(3, a);
+
+    push_ptr(mv_cstr_doc("Attempting to creats an instance with field ", a), &nodes);
+    push_ptr(mk_paren_doc("'", "'.", mv_str_doc(view_symbol_string(name), a), a), &nodes);
+    push_ptr(mv_cstr_doc("However, the trait the instace is being made from does not have this field", a), &nodes);
+
+    PicoError err = {
+        .range = range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
 
 //  Type Formers
 // ------------------------------------------------------------

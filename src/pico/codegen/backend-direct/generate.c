@@ -2633,15 +2633,34 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SDistinctType:
-        generate_i(*(Syntax*)syn.distinct_type, env, ictx);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.distinct_type.name, env);
+        generate_i(*(Syntax*)syn.distinct_type.body, env, ictx);
         gen_mk_distinct_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
         break;
     case SOpaqueType:
-        generate_i(*(Syntax*)syn.opaque_type, env, ictx);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.opaque_type.name, env);
+        generate_i(*(Syntax*)syn.opaque_type.body, env, ictx);
         gen_mk_opaque_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
         break;
     case STraitType: {
         // Generate trait type: first bind relevant variables
+        address_bind_type(syn.trait.name, env);
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
@@ -2649,7 +2668,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // First, malloc enough data for the array:
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
-
 
         for (size_t i = 0; i < syn.trait.fields.len; i++) {
             SymPtrCell field = syn.trait.fields.data[i];
@@ -2675,11 +2693,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         }
 
         // Finally, generate function call to make type
-        gen_mk_trait_ty(syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
+        gen_mk_trait_ty(syn.trait.name ,syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
-        address_pop_n(syn.trait.vars.len, env);
+        address_pop_n(syn.trait.vars.len + 1, env);
         break;
     }
 

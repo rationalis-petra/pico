@@ -135,7 +135,7 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
         .data = mk_u8_array(0, &ra),
     };
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Arena", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Arena", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Arena"));
     add_def(module, sym, type, &typep, null_segments, NULL);

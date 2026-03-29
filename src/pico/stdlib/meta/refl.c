@@ -174,12 +174,12 @@ void add_refl_module(Assembler* ass, Module* base, RegionAllocator* region) {
         .kind.nargs = 0,
     };
 
-    typep = mk_opaque_type(&pia, module, mk_named_type(&pia, "Module", mk_prim_type(&pia, Address)));
+    typep = mk_opaque_type(&pia, "Module", module, mk_prim_type(&pia, Address));
     sym = string_to_symbol(mv_string("Module"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     PiType* module_type = typep;
 
-    typep = mk_opaque_type(&pia, module, mk_named_type(&pia, "Package", mk_prim_type(&pia, Address)));
+    typep = mk_opaque_type(&pia, "Package", module, mk_prim_type(&pia, Address));
     sym = string_to_symbol(mv_string("Package"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     PiType* package_type = typep;

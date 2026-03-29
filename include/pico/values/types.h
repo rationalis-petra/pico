@@ -98,12 +98,14 @@ typedef struct {
 
 typedef struct {
     uint64_t id;
+    Symbol name;
     SymbolPiList vars;
     SymAddrPiAMap fields; 
 } TraitType; 
 
 typedef struct {
     uint64_t instance_of;
+    Symbol name;
     AddrPiList args; 
     SymAddrPiAMap fields; 
 } TraitInstance; 
@@ -279,10 +281,10 @@ PiType* mk_sz_enum_type(PiAllocator* pia, uint8_t tagsize, size_t nfields, ...);
 PiType* mk_named_type(PiAllocator* pia, const char* name, PiType* inner);
 
 // Sample usage: mk_distinct_type(a, mk_prim_type(Address))
-PiType* mk_distinct_type(PiAllocator* pia, PiType* inner);
+PiType* mk_distinct_type(PiAllocator* pia, const char* name, PiType* inner);
 
 // Sample usage: mk_opaque_type(a, mod, mk_prim_type(Address))
-PiType* mk_opaque_type(PiAllocator* pia, void* module, PiType* inner);
+PiType* mk_opaque_type(PiAllocator* pia, const char* name, void* module, PiType* inner);
 
 PiType* mk_var_type(PiAllocator* pia, const char* name);
 

@@ -1969,12 +1969,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         return res;
     }
     case FDistinctType: {
-        if (raw.branch.nodes.len <= 1) {
+        if (raw.branch.nodes.len <= 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Malformed Distinct Type expression: expects at least 1 arg.", a);
+            err.message = mv_cstr_doc("Malformed Distinct Type expression: expects at least 2 args.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
+
+
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Distinct Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
         Syntax* distinct = abstract_expr_i(*body, ctx);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -1982,17 +1991,26 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SDistinctType,
             .ptype = NULL,
             .range = raw.range,
-            .distinct_type = distinct,
+            .distinct_type.name = name,
+            .distinct_type.body = distinct,
         };
         return res;
     }
     case FOpaqueType: {
-        if (raw.branch.nodes.len <= 1) {
+        if (raw.branch.nodes.len <= 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Malformed Opaque Type expression: expects at least 1 arg.", a);
+            err.message = mv_cstr_doc("Malformed Opaque Type expression: expects at least 2 args.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
+       
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Opaque Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
         Syntax* opaque = abstract_expr_i(*body, ctx);
 
         Syntax* res = mem_alloc(sizeof(Syntax), a);
@@ -2000,18 +2018,27 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = SOpaqueType,
             .ptype = NULL,
             .range = raw.range,
-            .opaque_type = opaque,
+            .opaque_type.name = name,
+            .opaque_type.body = opaque,
         };
         return res;
     }
     case FTraitType: {
-        if (raw.branch.nodes.len < 2) {
+        if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
             err.message = mv_cstr_doc("Wrong number of terms to trait type former.", a);
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree raw_vars = raw.branch.nodes.data[1];
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Trait Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        
+        RawTree raw_vars = raw.branch.nodes.data[2];
         SymbolArray vars = mk_symbol_array(raw_vars.branch.nodes.len, a);
 
         if (!get_symbol_list(&vars, raw_vars)) {
@@ -2020,8 +2047,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - 2, a);
-        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - 3, a);
+        for (size_t i = 3; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
@@ -2057,6 +2084,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             .type = STraitType,
             .ptype = NULL,
             .range = raw.range,
+            .trait.name = name,
             .trait.vars = vars,
             .trait.fields = fields,
         };

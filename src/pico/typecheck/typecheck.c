@@ -990,13 +990,11 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         *ty = *eval_type(untyped->instance.constraint, env, ctx);
 
         if (ty->sort != TTraitInstance) {
-            err.message = mv_cstr_doc("Instance type invalid", a);
-            throw_pi_error(point, err);
+            type_error_instance_invalid_type(ty, untyped->instance.constraint->range, ctx);
         }
 
-        if (untyped->instance.fields.len != ty->trait.fields.len) {
-            err.message = mv_cstr_doc("Instance must have exactly n fields.", a);
-            throw_pi_error(point, err);
+        if (untyped->instance.fields.len != ty->instance.fields.len) {
+            type_error_instance_wrong_nfields(untyped->range, ty->instance.fields.len, untyped->instance.fields.len, ctx);
         }
 
         for (size_t i = 0; i < ty->instance.fields.len; i++) {
@@ -1006,8 +1004,7 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
                 Range tysrc = untyped->instance.constraint->range;
                 type_check_i(*field_syn, field_ty, tysrc, env, ctx);
             } else {
-                err.message = mv_cstr_doc("Trait instance is missing a field", a);
-                throw_pi_error(point, err);
+                type_error_instance_missing_field(untyped->range, ty->instance.fields.data[i].key, ctx);
             }
         }
 
@@ -1523,8 +1520,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SDistinctType: {
-        type_infer_i(untyped->distinct_type, env, ctx);
-        untyped->ptype= untyped->distinct_type->ptype;
+        type_infer_i(untyped->distinct_type.body, env, ctx);
+        untyped->ptype= untyped->distinct_type.body->ptype;
         if (untyped->ptype->sort != TKind) {
             err.message = mv_cstr_doc("Distinct expects types and families as arguments!", a);
             throw_pi_error(point, err);
@@ -1551,8 +1548,8 @@ void type_infer_i(Syntax* untyped, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SOpaqueType: {
-        type_infer_i(untyped->distinct_type, env, ctx);
-        untyped->ptype= untyped->distinct_type->ptype;
+        type_infer_i(untyped->distinct_type.body, env, ctx);
+        untyped->ptype= untyped->distinct_type.body->ptype;
         if (untyped->ptype->sort != TKind) {
             err.message = mv_cstr_doc("Opaque expects types and families as arguments!", a);
             throw_pi_error(point, err);
@@ -2502,10 +2499,10 @@ void squash_types(Syntax* typed, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed->named_type.body, env, ctx);
         break;
     case SDistinctType:
-        squash_types(typed->distinct_type, env, ctx);
+        squash_types(typed->distinct_type.body, env, ctx);
         break;
     case SOpaqueType:
-        squash_types(typed->opaque_type, env, ctx);
+        squash_types(typed->opaque_type.body, env, ctx);
         break;
     case STraitType:
         for (size_t i = 0; i < typed->trait.fields.len; i++) {

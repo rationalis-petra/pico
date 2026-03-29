@@ -36,7 +36,7 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
     }
 
     const char* num_trait = 
-        "(def Num Trait [A]"
+        "(def Num Trait Num [A]"
         "  [.+ Proc [A A] A]"
         "  [.- Proc [A A] A]"
         "  [.* Proc [A A] A]"

@@ -199,11 +199,13 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         break;
     case TTrait:
         out.trait.id = t.trait.id;
+        out.trait.name = t.trait.name;
         out.trait.vars = scopy_sym_list(t.trait.vars, pia);
         out.trait.fields = copy_sym_addr_piamap(t.trait.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
     case TTraitInstance:
         out.instance.instance_of = t.instance.instance_of;
+        out.instance.name = t.instance.name;
         out.instance.args = copy_addr_list(t.instance.args,  (TyCopier)copy_pi_type_p, pia);
         out.instance.fields = copy_sym_addr_piamap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
@@ -812,43 +814,51 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         break;
     }
     case TDistinct:  {
-        // Opaque types whose innter types are named should print as name-only! 
-        if (type->distinct.source_module && type->distinct.type->sort == TNamed) {
-            return mv_str_doc(symbol_to_string(type->distinct.type->named.name, a), a);
-        }
+        // Opaque types whose innter types are named should print as name-only!
+        if (!show_named || type->distinct.source_module) {
+            Document* base = mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->distinct.name, a), a), a);
 
-        // 'Default' path
-        PtrArray nodes = mk_ptr_array(6, a);
-        if (type->distinct.source_module) {
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Opaque" ), a), a), &nodes);
-        } else {
-            push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Distinct" ), a), a), &nodes);
-        }
-
-        push_ptr(mk_str_doc(mv_string(" #" ), a), &nodes);
-        push_ptr(pretty_u64(type->distinct.id, a), &nodes);
-        if (type->distinct.args) {
-            PtrArray args = mk_ptr_array(type->distinct.args->len, a);
-            for (size_t i = 0; i < type->distinct.args->len; i++) {
-                push_ptr(pretty_type_internal(type->distinct.args->data[i], ctx, a), &args);
+            if (type->distinct.args) {
+                PtrArray args = mk_ptr_array(type->distinct.args->len + 1, a);
+                push_ptr(base, &args);
+                for (size_t i = 0; i < type->distinct.args->len; i++) {
+                    push_ptr(mv_nest_doc(2, pretty_type_internal(type->distinct.args->data[i], ctx, a), a), &args);
+                }
+                out = mv_sep_doc(args, a);
+                if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+            } else {
+                out = base;
             }
-            push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+        } else {
+            // 'Default' path
+            PtrArray nodes = mk_ptr_array(6, a);
+            if (type->distinct.source_module) {
+                push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Opaque" ), a), a), &nodes);
+            } else {
+                push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Distinct" ), a), a), &nodes);
+            }
+
+            push_ptr(mk_str_doc(view_symbol_string(type->distinct.name), a), &nodes);
+            if (type->distinct.args) {
+                PtrArray args = mk_ptr_array(type->distinct.args->len, a);
+                for (size_t i = 0; i < type->distinct.args->len; i++) {
+                    push_ptr(pretty_type_internal(type->distinct.args->data[i], ctx, a), &args);
+                }
+                push_ptr(mk_paren_doc("(", ")", mv_sep_doc(args, a), a), &nodes);
+            }
+            push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
+            ctx.should_wrap = false;
+            push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
+            out = mv_sep_doc(nodes, a);
+            if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         }
-        push_ptr(mk_str_doc(mv_string(" " ), a), &nodes);
-        ctx.should_wrap = false;
-        push_ptr(pretty_type_internal(type->distinct.type, ctx, a), &nodes);
-        out = mv_cat_doc(nodes, a);
-        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TTrait:  {
         PtrArray nodes = mk_ptr_array(3 + type->trait.fields.len, a);
         push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &nodes);
         
-        PtrArray id_nodes = mk_ptr_array(2, a);
-        push_ptr(mk_str_doc(mv_string("#"), a), &id_nodes);
-        push_ptr(pretty_u64(type->trait.id, a), &id_nodes);
-        push_ptr(mv_cat_doc(id_nodes, a), &nodes);
+        push_ptr(mk_str_doc(view_symbol_string(type->trait.name), a), &nodes);
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
@@ -872,26 +882,38 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         break;
     }
     case TTraitInstance: {
-        PtrArray head_nodes = mk_ptr_array(2, a);
-        push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
-        push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
+        if (show_named) {
+            PtrArray head_nodes = mk_ptr_array(2, a);
+            push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("Instance" ), a), a), &head_nodes);
+            push_ptr(pretty_u64(type->instance.instance_of, a), &head_nodes);
 
-        PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
-        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
-        for (size_t i = 0; i < type->instance.fields.len; i++) {
-            PtrArray fd_nodes = mk_ptr_array(2, a);
-            Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
-            Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
+            PtrArray nodes = mk_ptr_array(1 + type->instance.fields.len, a);
+            push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+            for (size_t i = 0; i < type->instance.fields.len; i++) {
+                PtrArray fd_nodes = mk_ptr_array(2, a);
+                Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->instance.fields.data[i].key, a), a), a);
+                Document* arg = pretty_type_internal(type->instance.fields.data[i].val, ctx, a);
 
-            push_ptr(fname, &fd_nodes);
-            push_ptr(arg,   &fd_nodes);
-            Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
+                push_ptr(fname, &fd_nodes);
+                push_ptr(arg,   &fd_nodes);
+                Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(mv_nest_doc(2, mv_group_doc(fd_doc, a), a), &nodes);
+                push_ptr(mv_nest_doc(2, mv_group_doc(fd_doc, a), a), &nodes);
+            }
+            out = mv_sep_doc(nodes, a);
+            if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        } else {
+            PtrArray nodes = mk_ptr_array(1 + type->instance.args.len, a);
+            push_ptr(mk_str_doc(view_symbol_string(type->instance.name), a), &nodes);
+
+            for (size_t i = 0; i < type->instance.args.len; i++) {
+                push_ptr(pretty_type_internal(type->instance.args.data[i], ctx, a), &nodes);
+            }
+
+            out = mv_sep_doc(nodes, a);
+            if (should_wrap && nodes.len > 1) out = mk_paren_doc("(", ")", out, a);
         }
 
-        out = mv_sep_doc(nodes, a);
-        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
     }
     case TCType: {
@@ -1620,6 +1642,7 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
         *out_ty = (PiType) {
             .sort = TTraitInstance,
             .instance.instance_of = family.trait.id,
+            .instance.name = family.trait.name,
             .instance.args = saved_args,
             .instance.fields = new_fields,
         };
@@ -2315,24 +2338,26 @@ PiType *mk_named_type(PiAllocator* pia, const char *name, PiType *inner) {
     return out;
 }
 
-PiType* mk_distinct_type(PiAllocator* pia, PiType* inner) {
+PiType* mk_distinct_type(PiAllocator* pia, const char* name, PiType* inner) {
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out =(PiType) {
         .sort = TDistinct,
         .distinct.type = inner,
         .distinct.id = distinct_id(),
+        .distinct.name = string_to_symbol(mv_string(name)),
         .distinct.source_module = NULL,
         .distinct.args = NULL,
     };
     return out;
 }
 
-PiType* mk_opaque_type(PiAllocator* pia, void* module, PiType* inner) {
+PiType* mk_opaque_type(PiAllocator* pia, const char* name, void* module, PiType* inner) {
     PiType* out = call_alloc(sizeof(PiType), pia);
     *out = (PiType) {
         .sort = TDistinct,
         .distinct.type = inner,
         .distinct.id = distinct_id(),
+        .distinct.name = string_to_symbol(mv_string(name)),
         .distinct.source_module = module,
         .distinct.args = NULL,
     };

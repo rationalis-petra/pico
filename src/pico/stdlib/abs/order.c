@@ -36,14 +36,14 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     }
 
     const char* eq_trait = 
-        "(def Eq Trait [A]"
+        "(def Eq Trait Eq [A]"
         "  [.= Proc [A A] Bool]"
         "  [.!= Proc [A A] Bool])\n";
     compile_toplevel(eq_trait, module, target, &point, &pi_point, region);
 
     // TODO: make eq a superclass?
     const char* ord_trait = 
-        "(def Ord Trait [A]"
+        "(def Ord Trait Ord [A]"
         "  [.=  Proc [A A] Bool]" 
         "  [.!= Proc [A A] Bool]" 
         "  [.<  Proc [A A] Bool]"

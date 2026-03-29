@@ -173,7 +173,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     if (test_start(log, mv_string("cannot-coerce-to-disticnt"))) {
-        RUN("(def DF Distinct F32)");
+        RUN("(def DF Distinct DF F32)");
         RUN("(def id-df proc [(df DF)] df)");
         TEST_TYPE_FAIL("(id-df 3.5)");
     }

@@ -77,7 +77,7 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
     }
 
     if (test_start(log, mv_string("exists-with-implicits"))) {
-        RUN("(def Unital Trait [A] [.val A])");
+        RUN("(def Unital Trait Unital [A] [.val A])");
         PiType* trait = mk_trait_type(pia, 1, "A", 1,
                                       "val", mk_var_type(pia, "A"));
         trait->trait.id--;

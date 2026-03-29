@@ -86,6 +86,12 @@ _Noreturn void type_error_struct_extra_field(PiType* type, Syntax* strct, TypeCh
 // Projector
 _Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeCheckContext ctx);
 
+// Instance
+_Noreturn void type_error_instance_invalid_type(PiType* type, Range range, TypeCheckContext ctx);
+_Noreturn void type_error_instance_wrong_nfields(Range range, size_t expected, size_t actual, TypeCheckContext ctx);
+_Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeCheckContext ctx);
+
+
 // Type Formers
 _Noreturn void type_error_family_must_have_args(Syntax* family, TypeCheckContext ctx);
 
