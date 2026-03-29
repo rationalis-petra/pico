@@ -19,6 +19,7 @@ typedef enum {
 
 typedef struct {
     bool debug_print;
+    bool interactive;
     CodegenBackend backend;
 } ReplOpts;
 

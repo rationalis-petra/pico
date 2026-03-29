@@ -63,18 +63,43 @@ void end_underline(FormattedOStream* os);
 // ------------------------------------------------------------
 
 typedef enum {
+    TKUp,
+    TKDown,
+    TKLeft,
+    TKRight,
+    TKDelete,
+    TK_NUMPAD_PF1,
+    TK_NUMPAD_PF2,
+    TK_NUMPAD_PF3,
+} TerminalKey;
+
+typedef enum {
     ITNone,
     ITChar,
+    ITKey,
+    ITCursorPos,
+    ITStatus,
 } InTermEventType;
+
+typedef struct {
+  uint16_t row;
+  uint16_t col;
+} PosCursorData;
 
 typedef struct {
   InTermEventType type;
   union {
     uint32_t codepoint;
+    TerminalKey key;
+    PosCursorData cursor_pos;
+    Result_t status;
   };
 } InTermEvent;
 
 InTermEvent poll_in_terminal_event();
+InTermEvent get_in_terminal_event();
+InTermEvent wait_for_in_terminal_event(InTermEventType type);
+PosCursorData get_cursor_pos();
 
 // ------------------------------------------------------------ 
 // 
@@ -85,22 +110,25 @@ InTermEvent poll_in_terminal_event();
 typedef enum {
   OTClear,
   OTPosCursor,
+  OTChar,
+  OTQueryCursorPos,
 } OutTermEventType;
 
 typedef enum {
   ClearScreen,
+  ClearToScreenEnd,
+  ClearToScreenStart,
+  ClearLine,
+  ClearToLineEnd,
+  ClearToLineStart,
 } ClearEventData;
-
-typedef struct {
-  uint16_t row;
-  uint16_t col;
-} PosCursorData;
 
 typedef struct {
   OutTermEventType type;
   union {
     ClearEventData clear;
     PosCursorData cursor_pos;
+    uint32_t codepoint;
   };
 } OutTermEvent;
 

@@ -1,5 +1,5 @@
-#ifndef __APP_MODULE_LOAD
-#define __APP_MODULE_LOAD
+#ifndef __APP_DEV_MODULE_LOAD
+#define __APP_DEV_MODULE_LOAD
 
 #include "data/stream.h"
 #include "platform/memory/region.h"

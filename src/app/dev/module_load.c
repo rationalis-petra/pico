@@ -1,5 +1,3 @@
-#include "app/module_load.h"
-
 #include "platform/memory/region.h"
 #include "platform/memory/executable.h"
 #include "components/assembler/assembler.h"
@@ -15,6 +13,7 @@
 
 #include "pico/stdlib/meta/meta.h"
 
+#include "app/dev/module_load.h"
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, String filename, Package* package, Module* parent, PiAllocator module_allocator, RegionAllocator* region) {
 

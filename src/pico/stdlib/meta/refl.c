@@ -9,7 +9,7 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/submodules.h"
 
-#include "app/module_load.h"
+#include "app/dev//module_load.h"
 
 static uint64_t std_current_package;
 Package* set_current_package(Package* new) {

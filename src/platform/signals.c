@@ -12,6 +12,7 @@
 _Noreturn void panic(String message) {
     FormattedOStream* stdout = get_formatted_stdout();
 
+    terminal_set_raw_mode(false);
     start_coloured_text(colour(200, 0, 0), stdout);
     write_fstring(mv_string("Program Panicked! \n\n"), stdout);
     end_coloured_text(stdout);

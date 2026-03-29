@@ -41,13 +41,14 @@ static Command internal_parse_command(StringArray args, Allocator* a) {
     String subcommand = args.data[0];
     if (string_cmp(subcommand, mv_string("repl")) == 0) {
         bool debug_print = false;
+        bool interactive = false;
         CodegenBackend backend = CodegenDirect;
         for (size_t i = 1; i < args.len; i++) {
             if (string_cmp(args.data[i], mv_string("-d")) == 0) {
                 debug_print = true;
-            }
-
-            if (try_parse_backend(args.data[i], &backend, a)) {
+            } else if (string_cmp(args.data[i], mv_string("-i")) == 0) {
+                interactive = true;
+            } else if (try_parse_backend(args.data[i], &backend, a)) {
                 return (Command) {
                     .type = CInvalid,
                     .error_message = mv_string("Invalid backend"),
@@ -59,6 +60,7 @@ static Command internal_parse_command(StringArray args, Allocator* a) {
         return (Command) {
             .type = CRepl,
             .repl.debug_print = debug_print,
+            .repl.interactive = interactive,
             .repl.backend = backend,
         };
     } else if (string_cmp(subcommand, mv_string("script")) == 0) {
