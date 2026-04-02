@@ -97,11 +97,6 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
     SizeArray* sarr = sym_sarr_alookup(sym, links->gotolinks);
 
     if (!sarr) {
-        // Create & Insert
-        /*
-        sym_sarr_bind(sym, mk_size_array(4, a), &links->gotolinks);
-        sarr = sym_sarr_alookup(sym, links->gotolinks);
-        */
         panic(mv_string("Internal error in code-generation: backlink-goto unexpectedly could not find a symbol."));
     }
 
@@ -867,6 +862,12 @@ void gen_mk_named_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #endif
 
     generate_c_call(mk_named_ty, ass, a, point);
+    
+#if ABI == WIN_64
+    // As we don't pop the name into registers in the windows version, must
+    // shrink the stack here
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x10), ass, a, point);
+#endif
 
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
@@ -894,13 +895,19 @@ void gen_mk_distinct_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 #elif ABI == WIN_64
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_distinct_ty, ass, a, point);
+
+#if ABI == WIN_64
+    // As we don't pop the name into registers in the windows version, must
+    // shrink the stack here
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x10), ass, a, point);
+#endif
 
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
@@ -929,7 +936,7 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
     build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
 #elif ABI == WIN_64
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
     build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
 #else 
     #error "Unknown calling convention"
@@ -937,11 +944,26 @@ void gen_mk_opaque_ty(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     generate_c_call(mk_opaque_ty, ass, a, point);
 
+#if ABI == WIN_64
+    // As we don't pop the name into registers in the windows version, must
+    // shrink the stack here
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x10), ass, a, point);
+#endif
+
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 }
 
+typedef struct {
+  size_t len;
+  Symbol* data;
+} TraitSyms;
 
-void* mk_trait_ty(Symbol name, size_t sym_len, Symbol* syms, size_t field_len, void* data) {
+typedef struct {
+  size_t len;
+  void* data;
+} TraitFields;
+
+void* mk_trait_ty(Symbol name, TraitSyms syms, TraitFields fields) {
     PiAllocator pia = get_std_temp_allocator();
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
@@ -950,14 +972,14 @@ void* mk_trait_ty(Symbol name, size_t sym_len, Symbol* syms, size_t field_len, v
         .trait.id = distinct_id(),
         .trait.name = name,
 
-        .trait.vars.data = syms,
-        .trait.vars.len = sym_len,
-        .trait.vars.size = sym_len,
+        .trait.vars.data = syms.data,
+        .trait.vars.len = syms.len,
+        .trait.vars.size = syms.len,
         .trait.vars.gpa = pia,
 
-        .trait.fields.data = data,
-        .trait.fields.len = field_len,
-        .trait.fields.capacity = field_len,
+        .trait.fields.data = fields.data,
+        .trait.fields.len = fields.len,
+        .trait.fields.capacity = fields.len,
         .trait.fields.gpa = pia,
     };
     return ty;
@@ -978,17 +1000,31 @@ void gen_mk_trait_ty(Symbol name, SymbolArray syms, Location dest, Location nfie
     build_binary_op(Mov, reg(R8, sz_64), nfields, ass, a, point);
     build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
 #elif ABI == WIN_64
-    build_binary_op(Mov, reg(RCX, sz_64), imm64(syms.len), ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), imm64((uint64_t)sym_data), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), imm64(syms.len), ass, a, point);
-    build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)sym_data), ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), nfields, ass, a, point);
-    build_binary_op(Mov, reg(R9, sz_64), data, ass, a, point);
+    build_unary_op(Push, imm32(name.did), ass, a, point);
+    build_unary_op(Push, imm32(name.name), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+
+    build_binary_op(Mov, reg(R10, sz_64), imm64((uint64_t)syms.data), ass, a, point);
+    build_unary_op(Push, reg(R10, sz_64), ass, a, point);
+    build_unary_op(Push, imm32(syms.len), ass, a, point);
+
+    build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+
+    build_binary_op(Mov, reg(R10, sz_64), data, ass, a, point);
+    build_unary_op(Push, reg(R10, sz_64), ass, a, point);
+    build_unary_op(Push, nfields, ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), reg(RSP, sz_64), ass, a, point);
+
 #else 
     #error "Unknown calling convention"
 #endif
 
     generate_c_call(mk_trait_ty, ass, a, point);
+    
+#if ABI == WIN_64
+    // Pop all structs from the stack
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x30), ass, a, point);
+#endif
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);

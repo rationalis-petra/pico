@@ -273,11 +273,9 @@ InTermEvent translate_code(BracketEscapeCode code) {
 }
 
 InTermEvent parse_escape_code() {
-    char c;
+    // TODO: account for wait/poll dichotomy
+    char c = getchar();
     BracketEscapeCode out = {};
-    if (read(STDIN_FILENO, &c, 1) != 1) {
-        panic(mv_string("TODO: determine what to do in this sitch"));
-    }
     switch (c) {
     case 'R':
         return (InTermEvent){.type = ITKey, .key = TK_NUMPAD_PF3 };
@@ -297,9 +295,7 @@ InTermEvent parse_escape_code() {
         uint16_t digits[8]; 
         size_t ndigits = 0; 
         while (parsing_num) { 
-            if (read(STDIN_FILENO, &c, 1) != 1) {
-                panic(mv_string("TODO: determine what to do in this sitch"));
-            }
+            c = getchar();
             if (ndigits > 4) {
                 panic(mv_string("TODO: expand size of parameter base"));
             }
@@ -365,7 +361,12 @@ InTermEvent unbuffered_poll_in_terminal_event() {
         case KEY_EVENT: {
             KEY_EVENT_RECORD key_event = records[0].Event.KeyEvent;
             if (key_event.bKeyDown) {
-                return (InTermEvent){.type = ITChar, .codepoint = key_event.uChar.UnicodeChar };
+                
+                if (key_event.uChar.UnicodeChar == '\x1b') {
+                    return parse_escape_code();
+                } else {
+                    return (InTermEvent){.type = ITChar, .codepoint = key_event.uChar.UnicodeChar };
+                }
             } else {
                 return (InTermEvent){.type = ITNone};
             }
@@ -411,6 +412,7 @@ InTermEvent unbuffered_get_in_terminal_event() {
 #elif OS_FAMILY == WINDOWS
     HANDLE std_cin = GetStdHandle(STD_INPUT_HANDLE);
     INPUT_RECORD records[1];
+    DWORD nread = 0;
 
     if (!ReadConsoleInput(std_cin, records, 1, &nread)) {
         // TODO: there has been an error; report!
@@ -419,7 +421,11 @@ InTermEvent unbuffered_get_in_terminal_event() {
     case KEY_EVENT: {
         KEY_EVENT_RECORD key_event = records[0].Event.KeyEvent;
         if (key_event.bKeyDown) {
-            return (InTermEvent){.type = ITChar, .codepoint = key_event.uChar.UnicodeChar };
+            if (key_event.uChar.UnicodeChar == '\x1b') {
+                return parse_escape_code();
+            } else {
+                return (InTermEvent){.type = ITChar, .codepoint = key_event.uChar.UnicodeChar };
+            }
         } else {
             return (InTermEvent){.type = ITNone};
         }

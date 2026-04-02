@@ -37,7 +37,7 @@
         return new_buf;                                                 \
     }                                                                   \
                                                                         \
-    tprefix##CBuffer sdelete_##fprefix##_cbuffer(const tprefix##CBuffer buf) { \
+    void sdelete_##fprefix##_cbuffer(tprefix##CBuffer buf) { \
         mem_free(buf.data, &buf.gpa);                                    \
     };                                                                  \
                                                                         \

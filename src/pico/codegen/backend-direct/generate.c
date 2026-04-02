@@ -2616,7 +2616,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SNamedType: {
-        address_bind_type(syn.named_type.name, env);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
@@ -2625,8 +2624,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         address_bind_type(syn.named_type.name, env);
         generate_i(*(Syntax*)syn.named_type.body, env, ictx);
-        address_pop(env);
-
         gen_mk_named_ty(ass, a, point);
         data_stack_shrink(env, sizeof(Symbol));
         address_pop(env);
@@ -2693,7 +2690,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         }
 
         // Finally, generate function call to make type
-        gen_mk_trait_ty(syn.trait.name ,syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
+        gen_mk_trait_ty(syn.trait.name, syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
