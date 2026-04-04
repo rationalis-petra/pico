@@ -1,6 +1,9 @@
 #ifndef __PICO_SYNTAX_SYNTAX_H
 #define __PICO_SYNTAX_SYNTAX_H
 
+#include "data/option.h"
+#include "data/meta/amap_header.h"
+
 #include "platform/memory/allocator.h"
 
 #include "pico/data/range.h"
@@ -9,6 +12,7 @@
 #include "pico/data/symbol_array.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/header.h"
+#include "pico/syntax/synrange.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"
 
@@ -115,11 +119,15 @@ typedef enum {
     SDevAnnotation,
 } Syntax_t;
 
+typedef struct {
+    uint64_t idx;
+} SynRef;
+
+ARRAY_HEADER(SynRef, syn, Syn);
+AMAP_HEADER(Symbol, SynRef, sym_syn, SymSyn);
 
 typedef struct Syntax Syntax;
-typedef PtrArray SynArray;
 typedef PtrArray ClauseArray;
-typedef SymPtrAMap SymSynAMap;
 
 typedef struct {
     int64_t value;
@@ -135,56 +143,59 @@ typedef struct {
     Symbol symbol;
     size_t index;
     void* value;
+    PiType* type;
 } AbsVariable;
 
 typedef struct {
-    SymPtrAssoc args;
-    SymPtrAssoc implicits;
-    Syntax* body;
+    SymPtrAMap args;
+    SymPtrAMap implicits;
+    SynRef body;
     bool preserve_dyn_memory;
 } SynProcedure;
 
 typedef struct {
     SymbolArray args;
-    Syntax* body;
+    SynRef body;
 } SynAll;
 
 typedef struct {
-    Syntax* function;
+    SynRef function;
     SynArray implicits;
     SynArray args;
 } SynApp;
 
 typedef struct {
-    Syntax* function;
+    SynRef function;
     SynArray types;
     SynArray implicits;
     SynArray args;
 } SynAllApp;
 
 typedef struct {
-    Syntax* type;
+    SynRef type;
     SynArray types;
     SynArray implicits;
-    Syntax* body;
+    SynRef body;
 } SynSeal;
 
 typedef struct {
-    Syntax* sealed;
+    SynRef sealed;
     Symbol binder;
     SymbolArray types;
     SymbolArray implicits;
-    Syntax* body;
+    SynRef body;
 } SynUnseal;
 
 typedef struct {
-    Syntax* enum_type;
+    Option_t has_enum_type;
+    SynRef enum_type;
     Symbol tagname;
     size_t tag;
 } SynConstructor;
 
 typedef struct {
-    Syntax* enum_type;
+    Option_t has_enum_type;
+    SynRef enum_type;
     Symbol tagname;
     size_t tag;
     SynArray args;
@@ -194,57 +205,58 @@ typedef struct {
     Symbol tagname;
     size_t tag;
     SymbolArray vars;
-    Syntax* body;
+    SynRef body;
     bool is_wildcard;
 } SynClause;
 
 typedef struct {
     Symbol recfn;
-    Syntax* val;
+    SynRef val;
     ClauseArray clauses;
 } SynMatch;
 
 typedef struct {
-    Syntax* base;
+    Option_t has_base;
+    SynRef base;
     SymSynAMap fields;
 } SynStructure;
 
 typedef struct {
     Symbol field;
-    Syntax* val;
+    SynRef val;
 } SynProjector;
 
 typedef struct {
-    Syntax* dynamic;
-    Syntax* new_val;
+    SynRef dynamic;
+    SynRef new_val;
 } SynDynSet;
 
 typedef struct {
     SymbolArray params;
-    SymPtrAssoc implicits;
-    Syntax* constraint;
+    SymPtrAMap implicits;
+    SynRef constraint;
     SymSynAMap fields;
 } SynInstance;
 
 typedef struct {
-    SymPtrAssoc args;
-    Syntax* body;
+    SymPtrAMap args;
+    SynRef body;
 } SynLabelBranch;
 
 typedef struct {
-    Syntax* entry;
+    SynRef entry;
     SymPtrAssoc terms;
 } SynLabels;
 
 typedef struct {
     Symbol label;
-    PtrArray args;
+    SynArray args;
 } SynGoTo;
 
 typedef struct {
     bool is_binding;
     Symbol symbol;
-    Syntax* expr;
+    SynRef expr;
 } SeqElt;
 
 typedef struct {
@@ -253,57 +265,58 @@ typedef struct {
 
 typedef struct {
     Symbol point_sym;
-    Syntax* expr;
+    SynRef expr;
 
     PiType* in_arg_ty;
     Symbol in_sym;
 
     PiType* cont_arg_ty;
     Symbol cont_sym;
-    Syntax* handler;
+    SynRef handler;
 } SynWithReset;
 
 typedef struct {
-    Syntax* point;
-    Syntax* arg;
+    SynRef point;
+    SynRef arg;
 } SynResetTo;
 
 // Sugaring Syntax
+
 typedef struct {
     SymSynAMap bindings;
-    Syntax* body;
+    SynRef body;
 } SynLet;
 
 typedef struct {
-    Syntax* var;
-    Syntax* expr;
+    SynRef var;
+    SynRef expr;
 } DynBinding;
 
 typedef struct {
     PtrArray bindings;
-    Syntax* body;
+    SynRef body;
 } SynDynLet;
 
 typedef struct {
-    Syntax* condition;
-    Syntax* true_branch;
-    Syntax* false_branch;
+    SynRef condition;
+    SynRef true_branch;
+    SynRef false_branch;
 } SynIf;
 
 typedef struct {
-    Syntax* condition;
-    Syntax* branch;
+    SynRef condition;
+    SynRef branch;
 } CondClause;
 
 typedef struct {
     PtrArray clauses;
-    Syntax* otherwise;
+    SynRef otherwise;
 } SynCond;
 
 typedef struct {
     Symbol name;
     SymbolArray vars;
-    SymPtrAMap fields;
+    SymSynAMap fields;
 } SynTrait;
 
 //------------------------------------------------------------------------------
@@ -311,45 +324,49 @@ typedef struct {
 //------------------------------------------------------------------------------
 
 typedef struct {
-    Syntax* val;
-    Syntax* type;
+    SynRef val;
+    SynRef type;
 } SynIs;
 
 typedef struct {
     Symbol name;
-    PtrArray args;
-    Syntax* body;
+    SynArray args;
+    SynRef body;
 } SynName;
 
 typedef struct {
-    Syntax* type;
+    SynRef type;
 } SynSize;
 
-// Types
+
 typedef struct {
     SymbolArray bindings;
-    Syntax* body;
+    SynRef body;
 } SynBind;
+
+// ----------------------------------------------------------------------
+// Types
+// ----------------------------------------------------------------------
 
 typedef struct {
     SymbolArray vars;
-    PtrArray implicits;
-    Syntax* body;
+    SynArray implicits;
+    SynRef body;
 } SynSealedType;
 
 typedef struct {
     Symbol name;
-    Syntax* body;
+    SynRef body;
 } SynNamed;
 
 typedef struct {
     Symbol field;
-    Syntax* body;
+    SynRef body;
 } SynOffsetOf;
 
 typedef struct {
-    PtrArray args;
-    Syntax* return_type;
+    SynArray args;
+    SynRef return_type;
 } SynProcType;
 
 typedef struct {
@@ -363,20 +380,20 @@ typedef struct {
 } SynEnumType;
 
 typedef struct {
-    Syntax* in;
-    Syntax* out;
+    SynRef in;
+    SynRef out;
 } SynResetType;
 
 typedef struct {
     bool from_native;
-    Syntax* type;
-    Syntax* body;
+    SynRef type;
+    SynRef body;
 } SynReinterpret;
 
 typedef struct {
     bool from_native;
-    Syntax* type;
-    Syntax* body;
+    SynRef type;
+    SynRef body;
 } SynConvert;
 
 typedef struct {
@@ -398,7 +415,7 @@ typedef enum {
 
 typedef struct {
     DevFlag flags;
-    Syntax* inner;
+    SynRef inner;
 } SynDev;
 
 struct Syntax {
@@ -414,7 +431,7 @@ struct Syntax {
 
         SynProcedure procedure;
         SynAll all;
-        Syntax* transformer;
+        SynRef transformer;
         SynApp application;
         SynAllApp all_application;
         SynSeal seal;
@@ -426,9 +443,9 @@ struct Syntax {
         SynProjector projector;
         SynInstance instance;
 
-        Syntax* dynamic;
+        SynRef dynamic;
         SynDynSet dynamic_set;
-        Syntax* use;
+        SynRef use;
         SynDynLet dyn_let_expr;
 
         SynLet let_expr;
@@ -444,17 +461,17 @@ struct Syntax {
         SynIs into;
         SynIs out_of;
         SynName name;
-        Syntax* unname;
+        SynRef unname;
         SynIs widen;
         SynIs narrow;
-        Syntax* size;
+        SynRef size;
         SynOffsetOf offset_of;
 
         SynProcType proc_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynResetType reset_type;
-        Syntax* dynamic_type;
+        SynRef dynamic_type;
         SynBind bind_type;
         SynSealedType sealed_type;
         SynNamed named_type;
@@ -462,25 +479,43 @@ struct Syntax {
         SynNamed opaque_type;
         SynTrait trait;
         PiType* type_val;
-        Syntax* c_type;
+        SynRef c_type;
 
         SynReinterpret reinterpret;
         SynConvert convert;
 
         // Metaprogramming
-        Syntax* type_of;
+        SynRef type_of;
         SymbolArray to_describe;
         RawTree quoted;
         SynCapture capture;
         SynDev dev;
     };
-    PiType* ptype;
-    Range range;
 };
+
+ARRAY_HEADER(Syntax, syntax, Syntax);
+typedef struct {
+    SyntaxArray* syns;
+    SynRangeArray* ranges;
+    PtrArray* types;
+} SynTape;
+
+SynTape mk_syn_tape(Allocator* a, size_t size);
+void allocate_types(SynTape tape);
+
+SynRef new_syntax(SynTape tape);
+Syntax get_syntax(SynRef ref, SynTape tape);
+void set_syntax(SynRef ref, Syntax syn, SynTape tape);
+
+SynRange get_range(SynRef ref, SynTape tape);
+void set_range(SynRef ref, SynRange range, SynTape tape);
+
+PiType* get_type(SynRef ref, SynTape tape);
+void set_type(SynRef ref, PiType* type, SynTape tape);
 
 /* Other instances */
 String syntax_type_to_string(Syntax_t type);
-Document* pretty_syntax(Syntax* syntax, Allocator* a);
+Document* pretty_syntax(SynRef syntax, SynTape tape, Allocator* a);
 
 // -----------------------------------------------------------------------------
 //   Toplevel
@@ -495,13 +530,13 @@ typedef enum {
 
 typedef struct {
     Symbol bind;
-    Syntax* value;
+    SynRef value;
 } Definition;
 
 typedef struct {
     Symbol bind;
     union {
-        SymPtrAMap properties;
+        SymSynAMap properties;
         PtrArray decls;
     };
 } Declaration;
@@ -517,13 +552,13 @@ typedef struct {
         Definition def;
         Declaration decl;
         TLImportClause import;
-        Syntax* expr;
+        SynRef expr;
     };
 } TopLevel;
 
-Document* pretty_def(Definition* def, Allocator* a);
-Document* pretty_toplevel(TopLevel* TopLevel, Allocator* a);
+Document* pretty_def(Definition* def, SynTape tape, Allocator* a);
+Document* pretty_toplevel(TopLevel* TopLevel, SynTape tape, Allocator* a);
 
-PiType* toplevel_type(TopLevel top);
+PiType* toplevel_type(TopLevel top, SynTape tape);
 
 #endif

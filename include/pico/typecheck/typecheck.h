@@ -9,6 +9,7 @@
 #include "pico/syntax/syntax.h"
 
 typedef struct {
+    SynTape tape;
     Allocator* a;
     PiAllocator* pia;
     PiErrorPoint* point;
