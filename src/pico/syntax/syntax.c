@@ -40,7 +40,9 @@ SynRef new_syntax(SynTape tape) {
         tape->syntax_mem = mem_realloc(tape->syntax_mem, size * sizeof(Syntax), tape->a);
         tape->range_mem = mem_realloc(tape->range_mem, size * sizeof(SynRange), tape->a);
         tape->type_mem = mem_realloc(tape->type_mem, size * sizeof(PiType*), tape->a);
-        memset(tape->type_mem + tape->len-1, 0, size * sizeof(PiType*));
+
+        size_t start = tape->len-1;
+        memset(tape->type_mem + start, 0, (size - start) * sizeof(PiType*));
     }
 
     return (SynRef){.idx = out};
