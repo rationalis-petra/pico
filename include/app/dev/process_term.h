@@ -3,6 +3,7 @@
 
 #include "data/string.h"
 #include "data/option.h"
+#include "data/colour.h"
 #include "platform/memory/region.h"
 
 #include "pico/values/modular.h"
@@ -25,8 +26,6 @@ typedef struct {
 typedef struct {
     PtrArray* completions;
     PtrArray* errors;
-    // TODO: change to a syntax colour structure
-    //PtrArray* highlights;
     
     Option_t has_term;
     SynTape tape;

@@ -5,6 +5,7 @@
 
 #include "data/string.h"
 #include "data/result.h"
+#include "data/colour.h"
 #include "platform/memory/allocator.h"
 
 // ------------------------------------------------------------ 
@@ -13,12 +14,6 @@
 // 
 // ------------------------------------------------------------
 typedef struct OStream OStream;
-
-typedef struct {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-} Colour;
 
 typedef enum {
     Normal,

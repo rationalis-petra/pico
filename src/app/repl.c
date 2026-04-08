@@ -87,7 +87,6 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
           send_output_terminal_event(out);
           insert_char(in.codepoint, &buffer);
         }
-      
         break;
       }
       default:  
@@ -117,7 +116,6 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
       terminal_write_string_unbuffered(name);
       terminal_write_string_unbuffered(mv_string(" > "));
       String buf_contents = get_contents(buffer, &ra);
-      terminal_write_string_unbuffered(buf_contents);
 
       // ------------------------------------------------------------
       //   Generate Status
@@ -133,15 +131,21 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
       // ------------------------------------------------------------
       //   Print Status
       // ------------------------------------------------------------
-      PosCursorData edit_pos = get_cursor_pos();
+      PosCursorData edit_pos;
       if (result.errors) {
+        terminal_write_string_unbuffered(buf_contents);
+        edit_pos = get_cursor_pos();
+
         terminal_write_string_unbuffered(mv_string("\r\nErrors:\r\n--------\r\n"));
         for (size_t i = 0; i < result.errors->len; i++) {
-          PicoError* error = result.errors->data[i];
-          // TODO: use min (terminal width, 120)
-          write_doc_formatted(error->message, 120, get_formatted_stdout());
+            PicoError* error = result.errors->data[i];
+            // TODO: use min (terminal width, 120)
+            write_doc_formatted(error->message, 120, get_formatted_stdout());
         }
       } else if (result.has_term == Some) {
+        terminal_write_string_unbuffered(buf_contents);
+        edit_pos = get_cursor_pos();
+
         // Only proceed if the key justpressed was a newline.
         if (pressed_enter) {
           terminal_write_string_unbuffered(mv_string("\r\n"));

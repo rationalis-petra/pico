@@ -8,6 +8,8 @@
 
 #include "app/dev/process_term.h"
 
+ProcessResult highlight_syntax(SynRef ref, SynTape tape, ProcessInput input, RegionAllocator* region);
+    
 ProcessResult process_term(ProcessInput input, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pi_ra = convert_to_pallocator(&ra);
@@ -105,3 +107,5 @@ ProcessResult process_term(ProcessInput input, RegionAllocator* region) {
     release_executable_allocator(exec);
     return result;
 }
+
+ProcessResult highlight_syntax(SynRef ref, SynTape tape, ProcessInput input, RegionAllocator* region);

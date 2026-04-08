@@ -218,6 +218,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
     Module* volatile old_module = NULL;
+    volatile String vol_filename = filename;
 
     IStream* in = open_file_istream(filename, &ra);
     if (!in) {
@@ -364,7 +365,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         AtlasError new_err = {
             .range = ph_res.error.range,
             .message = out,
-            .filename = filename,
+            .filename = vol_filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
 
@@ -407,7 +408,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         }
         AtlasMultiError new_err = {
             .error = error,
-            .filename = filename,
+            .filename = vol_filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
 

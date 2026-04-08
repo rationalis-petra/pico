@@ -131,7 +131,7 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
 
     clear_target(gen_target);
     CodegenContext cg_ctx = {
-        .a = &ra, .point = &point, .target = gen_target,
+        .tape = tape, .a = &ra, .point = &point, .target = gen_target,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 
