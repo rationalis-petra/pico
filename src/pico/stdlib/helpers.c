@@ -54,22 +54,30 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
     //  Process Term: abstract, typecheck, & evaluate
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+    SynTape tape = mk_syn_tape(&ra, 128);
+    AbstractionCtx ab_ctx = {
+        .tape = tape, .env = env, .a = &ra, .point = &pi_point,
+    };
+    TopLevel abs = abstract(res.result, ab_ctx);
 
 #ifdef DEBUG
     logger = make_logger(&ra);
 #endif
     TypeCheckContext tc_ctx = {
-        .a = &ra, .pia = &pia, .point = &pi_point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = &pia, .point = &pi_point, .target = target, .logger = logger,
     };
     type_check(&abs, env, tc_ctx);
 
     clear_target(target);
     CodegenContext cg_ctx = {
-        .a = &ra, .point = &point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
-    pico_run_toplevel(abs, target, links, module, &ra, &point);
+
+    EvalCtx ev_ctx = {
+        .tape = tape, .target = target, .links = links, .module = module, .a = &ra, .point = &point
+    };
+    pico_run_toplevel(abs, ev_ctx);
 
     delete_istream(sin, &ra);
     return;

@@ -45,7 +45,11 @@ ProcessResult process_term(ProcessInput input, RegionAllocator* region) {
     // -------------------------------------------------------------------------
     // Resolution
     // -------------------------------------------------------------------------
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+    SynTape tape = mk_syn_tape(&ra, 128);
+    AbstractionCtx ab_ctx = {
+        .tape = tape, .env = env, .a = &ra, .point = &pi_point,
+    };
+    TopLevel abs = abstract(res.result, ab_ctx);
 
     // -------------------------------------------------------------------------
     // Type Checking
@@ -57,7 +61,7 @@ ProcessResult process_term(ProcessInput input, RegionAllocator* region) {
     };
     *target.data_aux = mk_u8_array(256, &ra);
     TypeCheckContext tc_ctx = {
-        .a = &ra, .pia = &pi_ra, .point = &pi_point, .target = target, 
+        .tape = tape, .a = &ra, .pia = &pi_ra, .point = &pi_point, .target = target, 
     };
     type_check(&abs, env, tc_ctx);
 

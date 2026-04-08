@@ -5,21 +5,21 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/codegen/codegen.h"
 
-EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point) {
+EvalResult pico_run_toplevel(TopLevel top, EvalCtx ctx) {
     EvalResult res;
     switch (top.type) {
     case TLExpr: {
-        size_t sz = pi_size_of(*top.expr->ptype);
+        size_t sz = pi_size_of(*get_type(top.expr, ctx.tape));
         res.type = ERValue;
-        res.val.type = top.expr->ptype;
-        res.val.val = pico_run_expr(target, sz, a, point);
+        res.val.type = get_type(top.expr, ctx.tape);
+        res.val.val = pico_run_expr(ctx.target, sz, ctx.a, ctx.point);
         break;
     }
     case TLImport: {
         res.type = ERImport;
         res.imported = top.import.clauses;
         for (size_t i = 0; i < top.import.clauses.len; i++) {
-            add_import_clause(top.import.clauses.data[i], module);
+            add_import_clause(top.import.clauses.data[i], ctx.module);
         }
         break;
     }
@@ -27,7 +27,7 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         res.type = ERDecl;
         for (size_t i = 0; i < top.decl.decls.len; i++) {
             ModuleDecl* decl = top.decl.decls.data[i];
-            add_decl(module, top.decl.bind, *decl); 
+            add_decl(ctx.module, top.decl.bind, *decl); 
         }
         break;
     }
@@ -36,17 +36,18 @@ EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module
         res = (EvalResult) {
             .type = ERDef,
             .def.name = top.def.bind,
-            .def.type = top.def.value->ptype,
+            .def.type = get_type(top.def.value, ctx.tape),
         };
 
         Segments def_segments = (Segments) {
-            .code = get_instructions(target.code_aux),
-            .data = *target.data_aux,
+            .code = get_instructions(ctx.target.code_aux),
+            .data = *ctx.target.data_aux,
         };
 
-        def_segments = prep_target(module, def_segments, target.target, &links);
-        void* val = pico_run_expr(target, pi_size_of(*top.def.value->ptype), a, point);
-        add_def(module, top.def.bind, *top.def.value->ptype, val, def_segments, &links);
+        PiType* type = get_type(top.def.value, ctx.tape);
+        def_segments = prep_target(ctx.module, def_segments, ctx.target.target, &ctx.links);
+        void* val = pico_run_expr(ctx.target, pi_size_of(*type), ctx.a, ctx.point);
+        add_def(ctx.module, top.def.bind, *type, val, def_segments, &ctx.links);
     }
     }
 

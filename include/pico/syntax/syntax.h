@@ -493,15 +493,18 @@ struct Syntax {
     };
 };
 
-ARRAY_HEADER(Syntax, syntax, Syntax);
 typedef struct {
-    SyntaxArray* syns;
-    SynRangeArray* ranges;
-    PtrArray* types;
-} SynTape;
+    Syntax* syntax_mem;
+    SynRange* range_mem;
+    PiType** type_mem;
+
+    size_t len;
+    size_t capacity;
+    Allocator* a;
+} SyntaxTape;
+typedef SyntaxTape* SynTape;
 
 SynTape mk_syn_tape(Allocator* a, size_t size);
-void allocate_types(SynTape tape);
 
 SynRef new_syntax(SynTape tape);
 Syntax get_syntax(SynRef ref, SynTape tape);

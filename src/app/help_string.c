@@ -62,7 +62,12 @@ void write_help_string(FormattedOStream *os) {
     start_boldness(Bold, os);
     write_fstring(mv_string("\n  -d :: "), os);
     end_boldness(os);
-    write_fstring(mv_string("Use this option to debug print intermediate results:\n"), os);
+    write_fstring(mv_string("Use this option to debug print intermediate results.\n"), os);
+
+    start_boldness(Bold, os);
+    write_fstring(mv_string("\n  -i :: "), os);
+    end_boldness(os);
+    write_fstring(mv_string("Use this option to enable interactive features like syntax highlighting.\n"), os);
 
     write_fstring(mv_string("\n"), os);
     

@@ -55,7 +55,7 @@ _Noreturn void type_error_invalid_application_target(PiType* type, SynRef app, T
 _Noreturn void type_error_incorrect_num_args(PiType* type, SynRef app, InvalidArgType args_type, TypeCheckContext ctx);
 _Noreturn void type_error_incorrect_num_args_all_noproc(PiType* type, SynRef app, bool is_implicit_args, TypeCheckContext ctx);
 _Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, SynRef app, TypeCheckContext ctx);
-_Noreturn void type_error_app_not_family(PiType* type, Syntax *app, TypeCheckContext ctx);
+_Noreturn void type_error_app_not_family(PiType* type, SynRef app, TypeCheckContext ctx);
 
 // Sealing
 _Noreturn void type_error_invalid_seal_type(PiType* type, SynRef seal, TypeCheckContext ctx);

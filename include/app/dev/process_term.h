@@ -29,6 +29,7 @@ typedef struct {
     //PtrArray* highlights;
     
     Option_t has_term;
+    SynTape tape;
     TopLevel checked_term;
 } ProcessResult;
 

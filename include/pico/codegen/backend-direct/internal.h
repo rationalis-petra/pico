@@ -31,6 +31,7 @@ typedef struct {
 } InternalLinkData;
 
 typedef struct {
+    SynTape tape;
     Target target;
     InternalLinkData* links;
     Allocator *a;
@@ -38,15 +39,15 @@ typedef struct {
     Logger* logger;
 } InternalContext;
 
-void generate_i(Syntax syn, AddressEnv* env, InternalContext ctx);
-void generate_polymorphic_i(Syntax syn, AddressEnv* env, InternalContext ctx);
+void generate_i(SynRef ref, AddressEnv* env, InternalContext ctx);
+void generate_polymorphic_i(SynRef ref, AddressEnv* env, InternalContext ctx);
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 LocationSize tag_size_sz(uint8_t tagsize); 
 size_t calc_variant_stack_size(PtrArray* types);
-void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ctx);
+void* const_fold(SynRef syn, AddressEnv *env, InternalContext ctx);
 
 // Codegen utilities - generate specific things
 void backlink_global(Target target, Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);

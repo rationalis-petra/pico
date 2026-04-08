@@ -1,23 +1,74 @@
 #include "data/string.h"
+#include "data/meta/array_impl.h"
+#include "data/meta/amap_impl.h"
 #include "platform/signals.h"
 #include "components/pretty/standard_types.h"
 
+#include "pico/values/values.h"
 #include "pico/values/modular.h"
 #include "pico/syntax/syntax.h"
 
+ARRAY_COMMON_IMPL(SynRef, syn, Syn);
+AMAP_CMP_IMPL(Symbol, SynRef, symbol_cmp, sym_syn, SymSyn);
+
+SynTape mk_syn_tape(Allocator* a, size_t size) {
+    SynTape tape = mem_alloc(sizeof(SyntaxTape), a);
+
+    SyntaxTape tape_val = {
+        .syntax_mem = mem_alloc(size * sizeof(Syntax), a),
+        .range_mem = mem_alloc(size * sizeof(SynRange), a),
+        .type_mem = mem_alloc(size * sizeof(PiType*), a),
+
+        .len = 0,
+        .capacity = size,
+        .a = a,
+    };
+    // set all pointers to null
+    memset(tape_val.type_mem, 0, size * sizeof(PiType*));
+    *tape = tape_val;
+    return tape;
+}
+
 SynRef new_syntax(SynTape tape) {
-    Syntax syn = {};
     uint64_t out = tape->len;
-    push_syntax(syn, tape);
+
+    tape->len++;
+    if (tape->len > tape->capacity) {
+        tape->capacity *= 2;
+        size_t size = tape->capacity; 
+        // TODO: account for failure
+        tape->syntax_mem = mem_realloc(tape->syntax_mem, size * sizeof(Syntax), tape->a);
+        tape->range_mem = mem_realloc(tape->range_mem, size * sizeof(SynRange), tape->a);
+        tape->type_mem = mem_realloc(tape->type_mem, size * sizeof(PiType*), tape->a);
+        memset(tape->type_mem + tape->len-1, 0, size * sizeof(PiType*));
+    }
+
     return (SynRef){.idx = out};
 }
 
 Syntax get_syntax(SynRef ref, SynTape tape) {
-    return tape->data[ref.idx];
+    // TODO: add valication for out of range
+    return tape->syntax_mem[ref.idx];
+}
+void set_syntax(SynRef ref, Syntax syn, SynTape tape) {
+    // TODO: add valication for out of range
+     tape->syntax_mem[ref.idx] = syn;
 }
 
-void set_syntax(SynRef ref, Syntax syn, SynTape tape) {
-     tape->data[ref.idx] = syn;
+SynRange get_range(SynRef ref, SynTape tape) {
+    // TODO: add valication for out of range
+    return tape->range_mem[ref.idx];
+}
+void set_range(SynRef ref, SynRange range, SynTape tape) {
+     tape->range_mem[ref.idx] = range;
+}
+
+PiType* get_type(SynRef ref, SynTape tape) {
+    return tape->type_mem[ref.idx];
+}
+
+void set_type(SynRef ref, PiType* type, SynTape tape) {
+     tape->type_mem[ref.idx] = type;
 }
 
 String syntax_type_to_string(Syntax_t type) {
@@ -1176,10 +1227,10 @@ PiType* toplevel_type(TopLevel top, SynTape tape) {
     PiType* out = NULL;
     switch (top.type) {
     case TLExpr:
-        out = get_syntax(top.expr, tape).ptype;
+        out = get_type(top.expr, tape);
         break;
     case TLDef:
-        out = get_syntax(top.def.value, tape).ptype;
+        out = get_type(top.def.value, tape);
         break;
     case TLDecl:
         out = NULL;

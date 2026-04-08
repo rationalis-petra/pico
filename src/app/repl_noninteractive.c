@@ -87,13 +87,17 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+    SynTape tape = mk_syn_tape(&ra, 128);
+    AbstractionCtx ab_ctx = {
+        .tape = tape, .env = env, .a = &ra, .point = &pi_point,
+    };
+    TopLevel abs = abstract(res.result, ab_ctx);
 
     if (opts.debug_print) {
         start_underline(cout);
         write_fstring(mv_string("Abstract Syntax:\n"), cout);
         end_underline(cout);
-        doc = pretty_toplevel(&abs, &ra);
+        doc = pretty_toplevel(&abs, tape, &ra);
         write_doc_formatted(doc, 120, cout);
         write_fstring(mv_string("\n"), cout);
     }
@@ -105,12 +109,12 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
     // Note: typechecking annotates the syntax tree with types, but doesn't have
     // an output.
     TypeCheckContext tc_ctx = {
-        .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
+        .tape = tape, .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
     };
     type_check(&abs, env, tc_ctx);
 
     if (opts.debug_print) {
-        PiType* ty = toplevel_type(abs);
+        PiType* ty = toplevel_type(abs, tape);
         if (ty) {
             start_underline(cout);
             write_fstring(mv_string("Inferred Type\n"), cout);
@@ -152,7 +156,10 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
     // Evaluation
     // -------------------------------------------------------------------------
 
-    EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &ra, &point);
+    EvalCtx ev_ctx = {
+        .tape = tape, .target = gen_target, .links = links, .module = module, .a = &ra, .point = &point
+    };
+    EvalResult call_res = pico_run_toplevel(abs, ev_ctx);
     if (opts.debug_print) {
         write_fstring(mv_string("Evaluation Result\n"), cout);
     }

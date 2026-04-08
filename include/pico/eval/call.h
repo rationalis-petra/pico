@@ -37,7 +37,16 @@ typedef struct EvalResult {
     };
 } EvalResult;
 
-EvalResult pico_run_toplevel(TopLevel top, Target target, LinkData links, Module* module, Allocator* a, ErrorPoint* point);
+typedef struct {
+  SynTape tape;
+  Target target;
+  LinkData links;
+  Module *module;
+  Allocator *a;
+  ErrorPoint* point;
+} EvalCtx;
+
+EvalResult pico_run_toplevel(TopLevel top, EvalCtx ctx);
 
 void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
 

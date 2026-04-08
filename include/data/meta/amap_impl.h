@@ -58,6 +58,7 @@
         }                                                               \
         return NULL;                                                    \
     }                                                                   \
+                                                                        \
     bool fprefix##_find(size_t* idx, key_t key, tprefix##AMap map) {    \
         for (size_t i = 0; i < map.len; i++) {                          \
             if (key == map.data[i].key) {                               \
@@ -80,8 +81,13 @@
         }                                                               \
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
-                map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
+                if (map->capacity == 0) {                               \
+                    map->capacity = 8;                                  \
+                    map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
+                } else {                                                \
+                    map->capacity *= 2;                                 \
+                    map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
+                } \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \
@@ -165,8 +171,13 @@
         }                                                               \
         if (append) {                                                   \
             if (map->len >= map->capacity) {                            \
-                map->capacity *= 2;                                     \
-                map->data = mem_realloc(map->data, sizeof(tprefix##Cell) * map->capacity, &map->gpa); \
+                if (map->capacity == 0) {                               \
+                    map->capacity = 8;                                  \
+                    map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
+                } else {                                                \
+                    map->capacity *= 2;                                 \
+                    map->data = mem_realloc(map->data, sizeof(tprefix ## Cell) * map->capacity, &map->gpa); \
+                } \
             }                                                           \
             map->data[i].key = key;                                     \
             map->data[i].val = val;                                     \

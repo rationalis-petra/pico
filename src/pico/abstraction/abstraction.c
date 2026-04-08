@@ -332,6 +332,7 @@ SynRef mk_application_body(SynRef fn_syn, RawTree raw, AbstractionICtx ctx) {
     if (fn.type == SConstructor) {
         Syntax syn = {
             .type = SVariant,
+            .variant.has_enum_type = fn.constructor.has_enum_type,
             .variant.enum_type = fn.constructor.enum_type,
             .variant.tagname = fn.constructor.tagname,
             .variant.args = mk_syn_array(raw.branch.nodes.len - 1, a),
@@ -354,7 +355,6 @@ SynRef mk_application_body(SynRef fn_syn, RawTree raw, AbstractionICtx ctx) {
             .all_application.implicits = mk_syn_array(0, a),
             .all_application.args = mk_syn_array(raw.branch.nodes.len - 2, a),
         };
-        syn.all_application.function = fn_syn;
 
         for (size_t i = 0; i < typelist.branch.nodes.len; i++) {
             SynRef type = abstract_expr_i(typelist.branch.nodes.data[i], ctx);
@@ -588,6 +588,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
     }
     case FUnseal: {
         if (raw.branch.nodes.len < 3) {
@@ -657,6 +658,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
     }
     case FVariant: {
         if (raw.branch.nodes.len == 2) {
@@ -704,7 +706,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
                 Syntax syn = {
                     .type = SConstructor,
-                    .constructor.enum_type = NULL,
+                    .constructor.has_enum_type = None,
                     .constructor.tagname = msym.atom.symbol,
                 };
                 SynRef res = new_syntax(ctx.tape);
@@ -732,6 +734,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
             Syntax syn = {
                 .type = SConstructor,
+                .constructor.has_enum_type = Some,
                 .constructor.enum_type = var_type,
                 .constructor.tagname = msym.atom.symbol,
             };
@@ -740,7 +743,6 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             return res;
         }
-        break;
     }
     case FMatch: {
         if (raw.branch.nodes.len < 2) {
@@ -2623,8 +2625,7 @@ SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx) {
         case ACapture: {
             Syntax syn = {
                 .type = SAbsVariable,
-                // TODO: Add Type
-                // .ptype = raw.atom.capture.type,
+                .abvar.type = raw.atom.capture.type,
                 .abvar.value = raw.atom.capture.value,
                 .abvar.index = 0,
                 // TODO: symbol?
@@ -2636,11 +2637,11 @@ SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx) {
         default:
             panic(mv_string("Don't know how to make a literal from this atom!."));
         }
+        return res;
         break;
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
-
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
             err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);
@@ -3008,17 +3009,15 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                         throw_pi_error(point, err);
                     }
 
-                    SymbolArray members = mk_symbol_array(4, a);
+                    SymbolArray members = mk_symbol_array(symlist.branch.nodes.len, a);
                     for (size_t i = 0; i < symlist.branch.nodes.len; i++) {
                         RawTree rsymbol = symlist.branch.nodes.data[i];
-                        for (size_t i = 0; i < raw->branch.nodes.len; i++) {
-                            if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
-                                push_symbol(rsymbol.atom.symbol, &members);
-                            } else {
-                                err.range = rsymbol.range;
-                                err.message = mv_cstr_doc("Expecting a symbol here.", a);
-                                throw_pi_error(point, err);
-                            }
+                        if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
+                          push_symbol(rsymbol.atom.symbol, &members);
+                        } else {
+                          err.range = rsymbol.range;
+                          err.message = mv_cstr_doc("Expecting a symbol here.", a);
+                          throw_pi_error(point, err);
                         }
                     }
                     SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
@@ -3253,6 +3252,7 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
                 SynRef res = new_syntax(ctx.tape);
                 set_syntax(res, syn , ctx.tape);
                 set_range(res, (SynRange){.term = range}, ctx.tape);
+                return res;
             } else {
                 Syntax syn = {
                     .type = SAbsVariable,
@@ -3264,6 +3264,7 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
                 SynRef res = new_syntax(ctx.tape);
                 set_syntax(res, syn , ctx.tape);
                 set_range(res, (SynRange){.term = range}, ctx.tape);
+                return res;
             }
         } else {
             PicoError err = (PicoError) {

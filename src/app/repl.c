@@ -158,10 +158,14 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
           Environment* env = env_from_module(module, &point, &ra);
 
           CodegenContext cg_ctx = {
-            .a = &ra, .point = &point, .target = gen_target,
+              .tape = result.tape, .a = &ra, .point = &point, .target = gen_target,
           };
           LinkData links = generate_toplevel(result.checked_term, env, cg_ctx);
-          EvalResult call_res = pico_run_toplevel(result.checked_term, gen_target, links, module, &ra, &point);
+
+          EvalCtx ev_ctx = {
+              .tape = result.tape, .target = gen_target, .links = links, .module = module, .a = &ra, .point = &point
+          };
+          EvalResult call_res = pico_run_toplevel(result.checked_term, ev_ctx);
           Document* doc = pretty_res(call_res, &ra);
           // TODO: use terminal width
           write_doc_formatted(doc, 120, get_formatted_stdout());
