@@ -166,7 +166,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     };
 
     // The window type is simple an opaque pointer (address)
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Window", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Window", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Window"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -174,7 +174,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     window_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "KeyMap", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "KeyMap", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("KeyMap"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -182,7 +182,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     keymap_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "KeyState", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "KeyState", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("KeyState"));
     add_def(module, sym, type, &typep, null_segments, NULL);

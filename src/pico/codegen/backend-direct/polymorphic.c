@@ -9,19 +9,22 @@
 #include "pico/codegen/backend-direct/internal.h"
 #include "pico/codegen/backend-direct/address_env.h"
 
-void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, InternalContext ictx) {
+void generate_polymorphic(SymbolArray types, SynRef ref, AddressEnv* env, InternalContext ictx) {
     Target target = ictx.target;
     Allocator *a = ictx.a;
     ErrorPoint* point = ictx.point;
     Assembler* ass = target.target;
+    Syntax syn = get_syntax(ref, ictx.tape);
+    PiType* type = get_type(ref, ictx.tape);
+
     BindingArray vars;
-    Syntax body;
+    SynRef body;
 
     size_t args_size = types.len * REGISTER_SIZE;
     if (syn.type == SProcedure) {
         vars = mk_binding_array(syn.procedure.args.len + syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            PiType* impl_ty = syn.ptype->proc.implicits.data[i];
+            PiType* impl_ty = type->proc.implicits.data[i];
             if (is_variable_for(impl_ty, types)) {
                 args_size += ADDRESS_SIZE;
                 Binding bind = (Binding) {
@@ -41,8 +44,8 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Intern
                 push_binding(bind, &vars);
             }
         }
-        for (size_t i = 0; i < syn.ptype->proc.args.len; i++) {
-            PiType* arg_ty = syn.ptype->proc.args.data[i];
+        for (size_t i = 0; i < type->proc.args.len; i++) {
+            PiType* arg_ty = type->proc.args.data[i];
             if (is_variable_for(arg_ty, types)) {
                 args_size += ADDRESS_SIZE;
                 Binding bind = (Binding) {
@@ -62,11 +65,12 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Intern
                 push_binding(bind, &vars);
             }
         }
-        body = *syn.procedure.body;
+        body = syn.procedure.body;
     } else {
         vars = mk_binding_array(0, a);
-        body = syn;
+        body = ref;
     }
+    PiType* body_type = get_type(body, ictx.tape);
 
     address_start_poly(types, vars, env, a);
 
@@ -90,13 +94,13 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Intern
     // - always data stack?
     // - always relevant stack?
 
-    if (is_variable_for(body.ptype, types)) {
+    if (is_variable_for(body_type, types)) {
         // Return on Variable Stack
         // R15 is the 'destination' on the variable stack of a return
         // argument.
 
         // Store value at the stack head
-        generate_stack_size_of(RAX, body.ptype, env, ass, a, point);
+        generate_stack_size_of(RAX, body_type, env, ass, a, point);
         build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
         build_binary_op(Sub, reg(R15, sz_64), reg(RAX, sz_64), ass, a, point);
         generate_poly_move(reg(R15, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
@@ -118,7 +122,7 @@ void generate_polymorphic(SymbolArray types, Syntax syn, AddressEnv* env, Intern
     } else {
         // Return on Data Stack
         // this is much like the steps above, where we copy 
-        size_t ret_sz = pi_stack_size_of(*body.ptype);
+        size_t ret_sz = pi_stack_size_of(*body_type);
     
         // Next, restore the old stack bases (variable + static)
         build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);

@@ -550,7 +550,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
         .data = mk_u8_array(0, &ra),
     };
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Surface",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Surface", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Surface"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -558,7 +558,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     surface_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "ShaderModule",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia,"ShaderModule", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("ShaderModule"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -566,7 +566,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     shader_module_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Pipeline",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Pipeline", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Pipeline"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -582,7 +582,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     input_rate_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Buffer", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Buffer",  module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Buffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -590,7 +590,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     buffer_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Image", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Image", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Image"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -598,7 +598,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     image_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "ImageView", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "ImageView", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("ImageView"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -622,7 +622,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     image_layout_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Sampler", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Sampler", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Sampler"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -638,7 +638,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     sampler_filter_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandPool", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "CommandPool", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandPool"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -646,7 +646,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     command_pool_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "CommandBuffer", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "CommandBuffer", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("CommandBuffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -747,7 +747,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     descriptor_pool_size_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "DescriptorPool",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "DescriptorPool", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DescriptorPool"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -755,7 +755,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     descriptor_pool_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "DescriptorSetLayout",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "DescriptorSetLayout", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DescriptorSetLayout"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -763,7 +763,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     descriptor_set_layout_ty = e->value;
     
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "DescriptorSet",mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "DescriptorSet", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("DescriptorSet"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -875,7 +875,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     buffer_sort_ty = e->value;
 
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Semaphore", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Semaphore", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Semaphore"));
     add_def(module, sym, type, &typep, null_segments, NULL);
@@ -883,7 +883,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     e = get_def(sym, module);
     semaphore_ty = e->value;
 
-    typep = mk_opaque_type(pia, module, mk_named_type(pia, "Fence", mk_prim_type(pia, Address)));
+    typep = mk_opaque_type(pia, "Fence", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Fence"));
     add_def(module, sym, type, &typep, null_segments, NULL);

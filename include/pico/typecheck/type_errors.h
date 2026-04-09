@@ -34,60 +34,66 @@ void check_result_out(UnifyResult out, Range range, UnifyReason reason, Allocato
 
 
 // Variable
-_Noreturn void type_error_unexpected_module(Syntax* syn, Module* module, TypeCheckContext ctx);
-_Noreturn void type_error_unknown_var(Syntax* syn, TypeCheckContext ctx);
+_Noreturn void type_error_unexpected_module(SynRef syn, Module* module, TypeCheckContext ctx);
+_Noreturn void type_error_unknown_var(SynRef syn, TypeCheckContext ctx);
 
 // Declarations
-_Noreturn void type_error_invalid_declaration(Symbol type, Syntax* arg, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_declaration(Symbol type, SynRef arg, TypeCheckContext ctx);
 
 // Import
 _Noreturn void type_error_invalid_import(ImportClause clause, Range range, TypeCheckContext ctx);
 
 // Procedure
-_Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, Syntax* proc, TypeCheckContext ctx);
-_Noreturn void type_error_proc_incorrect_num_implicits(Syntax* proc, PiType* type, TypeCheckContext ctx);
-_Noreturn void type_error_proc_incorrect_num_args(Syntax* proc, PiType* type, TypeCheckContext ctx);
+_Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef proc, TypeCheckContext ctx);
+_Noreturn void type_error_proc_incorrect_num_implicits(SynRef proc, PiType* type, TypeCheckContext ctx);
+_Noreturn void type_error_proc_incorrect_num_args(SynRef proc, PiType* type, TypeCheckContext ctx);
 
 // Application and All Application
 typedef enum {InvTypes, InvImplicits, InvValues} InvalidArgType;
 
-_Noreturn void type_error_invalid_application_target(PiType* type, Syntax* app, TypeCheckContext ctx);
-_Noreturn void type_error_incorrect_num_args(PiType* type, Syntax *app, InvalidArgType args_type, TypeCheckContext ctx);
-_Noreturn void type_error_incorrect_num_args_all_noproc(PiType* type, Syntax* app, bool is_implicit_args, TypeCheckContext ctx);
-_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, Syntax *app, TypeCheckContext ctx);
-_Noreturn void type_error_app_not_family(PiType* type, Syntax *app, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_application_target(PiType* type, SynRef app, TypeCheckContext ctx);
+_Noreturn void type_error_incorrect_num_args(PiType* type, SynRef app, InvalidArgType args_type, TypeCheckContext ctx);
+_Noreturn void type_error_incorrect_num_args_all_noproc(PiType* type, SynRef app, bool is_implicit_args, TypeCheckContext ctx);
+_Noreturn void type_error_all_app_couldnt_deduce_types(size_t arg_idx, SynRef app, TypeCheckContext ctx);
+_Noreturn void type_error_app_not_family(PiType* type, SynRef app, TypeCheckContext ctx);
 
 // Sealing
-_Noreturn void type_error_invalid_seal_type(PiType* type, Syntax* seal, TypeCheckContext ctx);
-_Noreturn void type_error_incorrect_num_seal_args(PiType* type, Syntax* seal, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_seal_type(PiType* type, SynRef seal, TypeCheckContext ctx);
+_Noreturn void type_error_incorrect_num_seal_args(PiType* type, SynRef seal, TypeCheckContext ctx);
 
 // Sealing
-_Noreturn void type_error_invalid_unseal_type(PiType* type, Syntax* unseal, TypeCheckContext ctx);
-_Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, Syntax* unseal, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_unseal_type(PiType* type, SynRef unseal, TypeCheckContext ctx);
+_Noreturn void type_error_incorrect_num_unseal_binds(PiType* type, SynRef unseal, TypeCheckContext ctx);
 
 // Constructor / Variant
-_Noreturn void type_error_invalid_variant_type(PiType* type, Syntax* variant, TypeCheckContext ctx);
-_Noreturn void type_error_incorrect_num_variant_args(PiType* type, Syntax* variant, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_missing_variant_tag(PiType* type, Syntax* variant, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_variant_type(PiType* type, SynRef variant, TypeCheckContext ctx);
+_Noreturn void type_error_incorrect_num_variant_args(PiType* type, SynRef variant, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_missing_variant_tag(PiType* type, SynRef variant, TypeCheckContext ctx);
 
 // Match 
-_Noreturn void type_error_match_invalid_type(PiType* type, Syntax* variant, TypeCheckContext ctx);
-_Noreturn void type_error_match_duplicate_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_incorrect_tag(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_num_binds(PiType* type, Syntax* match, size_t variant_idx, TypeCheckContext ctx);
-_Noreturn void type_error_match_missing_variants(PiType* type, Syntax* match, U8Array used_variants, TypeCheckContext ctx);
+_Noreturn void type_error_match_invalid_type(PiType* type, SynRef variant, TypeCheckContext ctx);
+_Noreturn void type_error_match_duplicate_tag(PiType* type, SynRef match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_incorrect_tag(PiType* type, SynRef match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_num_binds(PiType* type, SynRef match, size_t variant_idx, TypeCheckContext ctx);
+_Noreturn void type_error_match_missing_variants(PiType* type, SynRef match, U8Array used_variants, TypeCheckContext ctx);
 
 // Struct
-_Noreturn void type_error_struct_invalid_type(PiType* type, Syntax* strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_missing_field(PiType* type, Syntax* strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_dupliate_field(PiType* type, Syntax* strct, TypeCheckContext ctx);
-_Noreturn void type_error_struct_extra_field(PiType* type, Syntax* strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_invalid_type(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_missing_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_dupliate_field(PiType* type, SynRef strct, TypeCheckContext ctx);
+_Noreturn void type_error_struct_extra_field(PiType* type, SynRef strct, TypeCheckContext ctx);
 
 // Projector
-_Noreturn void type_error_proj_invalid_type(PiType* type, Syntax* proj, TypeCheckContext ctx);
+_Noreturn void type_error_proj_invalid_type(PiType* type, SynRef proj, TypeCheckContext ctx);
+
+// Instance
+_Noreturn void type_error_instance_invalid_type(PiType* type, Range range, TypeCheckContext ctx);
+_Noreturn void type_error_instance_wrong_nfields(Range range, size_t expected, size_t actual, TypeCheckContext ctx);
+_Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeCheckContext ctx);
+
 
 // Type Formers
-_Noreturn void type_error_family_must_have_args(Syntax* family, TypeCheckContext ctx);
+_Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext ctx);
 
 
 // ---------------------------------------------------------------------- 

@@ -1,211 +1,27 @@
 ﻿#include "data/string.h"
 #include "data/stream.h"
 
-#include "platform/error.h"
 #include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
-#include "platform/jump.h"
 #include "platform/terminal/terminal.h"
 #include "platform/window/window.h"
 #include "platform/hedron/hedron.h"
 
 #include "components/assembler/assembler.h"
-#include "components/pretty/stream_printer.h"
-#include "components/pretty/document.h"
-
-#include "pico/syntax/concrete.h"
-#include "pico/parse/parse.h"
-#include "pico/binding/environment.h"
-#include "pico/abstraction/abstraction.h"
-#include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
-#include "pico/eval/call.h"
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/extra.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
-#include "pico/values/types.h"
 
 #include "atlas/atlas.h"
 
+#include "app/dev/module_load.h"
 #include "app/command_line_opts.h"
-#include "app/module_load.h"
 #include "app/help_string.h"
+#include "app/repl.h"
 
 static const char* version = "0.2.1";
 
-typedef struct {
-    bool debug_print;
-    bool interactive;
-} IterOpts;
-
-bool repl_iter(IStream* cin, FormattedOStream* cout, Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
-    // Note: we need to be aware of the arena and error point, as both are used
-    // by code in the 'true' branches of the nonlocal exits, and may be stored
-    // in registers, so they cannotbe changed (unless marked volatile).
-    Allocator ra = ra_to_gpa(region);
-    PiAllocator pico_region = convert_to_pallocator(&ra);
-
-    IStream* volatile  cp_in = mk_capturing_istream(cin, &ra);
-    reset_bytecount(cp_in);
-
-    Target gen_target = {
-        .target = mk_assembler(current_cpu_feature_flags(), exec),
-        .code_aux = mk_assembler(current_cpu_feature_flags(), exec),
-        .data_aux = mem_alloc(sizeof(U8Array), &ra)
-    };
-    *gen_target.data_aux = mk_u8_array(128, &ra);
-
-    jump_buf exit_point;
-    if (set_jump(exit_point)) goto on_exit;
-    set_exit_callback(&exit_point);
-
-    ErrorPoint point;
-    if (catch_error(point)) goto on_error;
-
-    PiErrorPoint pi_point;
-    if (catch_error(pi_point)) goto on_pi_error;
-
-    Environment* env = env_from_module(module, &point, &ra);
-
-    if (opts.interactive) {
-        String name = symbol_to_string(module_name(module), &ra);
-        write_fstring(name, cout);
-        write_fstring(mv_string(" > "), cout);
-    }
-
-    ParseResult res = parse_rawtree(cp_in, &pico_region, &ra);
-
-    if (res.type == ParseNone) {
-        write_fstring(mv_string("\n"), cout);
-        goto on_exit;
-    }
-    if (res.type == ParseFail) {
-        MultiError multi = (MultiError) {
-            .has_many = false,
-            .error = res.error,
-        };
-        display_error(multi, *get_captured_buffer(cp_in), get_formatted_stdout(), mv_string("stdin"), stdalloc);
-        return true;
-    }
-    if (res.type != ParseSuccess) {
-        // If parse is invalid, means internal bug, so better exit soon!
-        write_fstring(mv_string("Parse Returned Invalid Result!\n"), cout);
-        return false;
-    }
-
-    Document* doc;
-    if (opts.debug_print) {
-        doc = pretty_rawtree(res.result, &ra);
-        start_underline(cout);
-        write_fstring(mv_string("Raw Syntax\n"), cout);
-        end_underline(cout);
-        write_doc_formatted(doc, 120, cout);
-        write_fstring(mv_string("\n"), cout);
-    }
-
-    // -------------------------------------------------------------------------
-    // Resolution
-    // -------------------------------------------------------------------------
-
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
-
-    if (opts.debug_print) {
-        start_underline(cout);
-        write_fstring(mv_string("Abstract Syntax:\n"), cout);
-        end_underline(cout);
-        doc = pretty_toplevel(&abs, &ra);
-        write_doc_formatted(doc, 120, cout);
-        write_fstring(mv_string("\n"), cout);
-    }
-
-    // -------------------------------------------------------------------------
-    // Type Checking
-    // -------------------------------------------------------------------------
-
-    // Note: typechecking annotates the syntax tree with types, but doesn't have
-    // an output.
-    TypeCheckContext tc_ctx = {
-        .a = &ra, .pia = &pico_region, .point = &pi_point, .target = gen_target,
-    };
-    type_check(&abs, env, tc_ctx);
-
-    if (opts.debug_print) {
-        PiType* ty = toplevel_type(abs);
-        if (ty) {
-            start_underline(cout);
-            write_fstring(mv_string("Inferred Type\n"), cout);
-            end_underline(cout);
-            doc = mv_nest_doc(2, pretty_type(ty, default_ptp, &ra), &ra);
-            write_doc_formatted(doc, 120, cout);
-            write_fstring(mv_string("\n"), cout);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Code Generation
-    // -------------------------------------------------------------------------
-
-    clear_target(gen_target);
-    CodegenContext cg_ctx = {
-        .a = &ra, .point = &point, .target = gen_target,
-    };
-    LinkData links = generate_toplevel(abs, env, cg_ctx);
-
-    if (opts.debug_print) {
-        start_underline(cout);
-        write_fstring(mv_string("Compiled Binary:\n"), cout);
-        end_underline(cout);
-        write_fstring(mv_string("Execute Assembly:\n"), cout);
-        doc = pretty_assembler(gen_target.target, &ra);
-        write_doc_formatted(doc, 120, cout);
-        write_fstring(mv_string("\nCode Segment:\n"), cout);
-        doc = pretty_assembler(gen_target.code_aux, &ra);
-        write_doc_formatted(doc, 120, cout);
-        write_fstring(mv_string("\nData Segment:\n"), cout);
-        // TODO (FEAT): as per string (below)
-        write_fstring(mv_string("TODO: data segment needs to type-annotate data to display properly!"), cout);
-        //write_fstring(string_from_ASCII(*gen_target.data_aux, &arena), cout);
-        write_fstring(mv_string("\n"), cout);
-    }
-
-    // -------------------------------------------------------------------------
-    // Evaluation
-    // -------------------------------------------------------------------------
-
-    EvalResult call_res = pico_run_toplevel(abs, gen_target, links, module, &ra, &point);
-    if (opts.debug_print) {
-        write_fstring(mv_string("Evaluation Result\n"), cout);
-    }
-
-    if (opts.debug_print || opts.interactive) {
-        doc = pretty_res(call_res, &ra);
-        write_doc_formatted(doc, 140, get_formatted_stdout());
-        write_fstring(mv_string("\n"), cout);
-    }
-
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    return true;
-
- on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cp_in), cout, mv_string("stdin"), &ra);
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    return true;
-
- on_error:
-    write_doc_formatted(point.error_message, 120, cout);
-    write_fstring(mv_string("\n"), cout);
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    return true;
-
- on_exit:
-    delete_assembler(gen_target.target);
-    delete_assembler(gen_target.code_aux);
-    return false;
-}
 
 int main(int argc, char** argv) {
     // Setup
@@ -214,8 +30,8 @@ int main(int argc, char** argv) {
     OStream* cout = get_stdout_stream();
     Allocator exalloc = mk_executable_allocator(stdalloc);
 
-    // Init terminal first, as other initializers may panic (and therefore write
-    // to stdout)
+    // Init terminal first, as other initializers may panic, therefore writing
+    //   to stdout, which uses the terminal module.
     init_terminal(stdalloc);
 
     // Initialization order here is not important
@@ -269,14 +85,24 @@ int main(int argc, char** argv) {
         init_codegen(command.repl.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = command.repl.debug_print,
-            .interactive = true,
+            .is_eval = false,
         };
+
         write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
-        write_string(mv_string(version), cout);
+        write_line(mv_string(version), cout);
         write_string(mv_string("\n"), cout);
 
-        while (repl_iter(cin, get_formatted_stdout(), stdalloc, subregion, &exalloc, module, opts)) {
-            reset_subregion(subregion);
+        if (command.repl.interactive) { 
+            write_line(mv_string("Press 'Ctrl + q' to quit"), cout);
+            terminal_set_raw_mode(true);
+            while (repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
+                reset_subregion(subregion);
+            }
+            terminal_set_raw_mode(false);
+        } else {
+            while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
+                reset_subregion(subregion);
+            }
         }
         break;
     }
@@ -300,11 +126,11 @@ int main(int argc, char** argv) {
         init_codegen(command.eval.backend, stdalloc);
         IterOpts opts = (IterOpts) {
             .debug_print = false,
-            .interactive = false,
+            .is_eval = true,
         };
 
         IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
-        while (repl_iter(sin, get_formatted_stdout(), stdalloc, subregion, &exalloc, module, opts)) {
+        while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
             reset_subregion(subregion);
         }
         delete_istream(sin, stdalloc);

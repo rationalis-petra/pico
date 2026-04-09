@@ -38,7 +38,6 @@
 // Internal functions
 static void generate_entry(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
 static void generate_exit(size_t out_sz, Target target, Allocator* a, ErrorPoint* point);
-void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ictx);
 
 LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
@@ -58,12 +57,13 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     case TLDef: {
         // Note: types can only be recursive via 'Name', so we do not recursively bind if
         // generating a type.
-        Symbol* recsym = top.def.value->ptype->sort != TKind ? 
+        Symbol* recsym = get_type(top.def.value, ctx.tape)->sort != TKind ? 
             &top.def.bind : NULL;
         AddressEnv* a_env = mk_address_env(env, recsym, a);
-        size_t out_sz = pi_size_of(*top.def.value->ptype);
+        size_t out_sz = pi_size_of(*get_type(top.def.value, ctx.tape));
 
         InternalContext ictx = {
+            .tape = ctx.tape,
             .target = ctx.target,
             .links = &links,
             .a = ctx.a,
@@ -72,7 +72,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         };
 
         generate_entry(out_sz, ctx.target, a, ctx.point);
-        generate_i(*top.def.value, a_env, ictx);
+        generate_i(top.def.value, a_env, ictx);
         generate_exit(out_sz, ctx.target, a, ctx.point);
 
         delete_address_env(a_env, a);
@@ -90,6 +90,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         AddressEnv* a_env = mk_address_env(env, NULL, a);
 
         InternalContext ictx = {
+            .tape = ctx.tape,
             .target = ctx.target,
             .links = &links,
             .a = ctx.a,
@@ -97,9 +98,9 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
             .logger = ctx.logger,
         };
 
-        size_t out_sz = pi_size_of(*top.expr->ptype);
+        size_t out_sz = pi_size_of(*get_type(top.expr, ctx.tape));
         generate_entry(out_sz, ctx.target, a, ctx.point);
-        generate_i(*top.expr, a_env, ictx);
+        generate_i(top.expr, a_env, ictx);
         generate_exit(out_sz, ctx.target, a, ctx.point);
 
         delete_address_env(a_env, a);
@@ -129,7 +130,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     return links.links;
 }
 
-LinkData bd_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
+LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     
     AddressEnv* a_env = mk_address_env(env, NULL, a);
@@ -153,9 +154,9 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
         .logger = ctx.logger,
     };
 
-    size_t out_sz = pi_size_of(*syn->ptype);
+    size_t out_sz = pi_size_of(*get_type(syn, ctx.tape));
     generate_entry(out_sz, ctx.target, a, ctx.point);
-    generate_i(*syn, a_env, ictx);
+    generate_i(syn, a_env, ictx);
     generate_exit(out_sz, ctx.target, a, ctx.point);
 
     delete_address_env(a_env, a);
@@ -182,7 +183,7 @@ LinkData bd_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
     return links.links;
 }
 
-void bd_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
+void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     InternalLinkData links = (InternalLinkData) {
@@ -198,6 +199,7 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
     };
 
     InternalContext ictx = {
+        .tape = ctx.tape,
         .target = ctx.target,
         .links = &links,
         .a = ctx.a,
@@ -205,9 +207,9 @@ void bd_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
         .logger = ctx.logger,
     };
 
-    size_t out_sz = pi_size_of(*syn->ptype);
+    size_t out_sz = pi_size_of(*get_type(syn, ctx.tape));
     generate_entry(out_sz, ctx.target, a, ctx.point);
-    generate_i(*syn, a_env, ictx);
+    generate_i(syn, a_env, ictx);
     generate_exit(out_sz, ctx.target, a, ctx.point);
 
     delete_address_env(a_env, a);
@@ -304,7 +306,7 @@ static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint
     build_nullary_op(Ret, ass, a, point);
 }
 
-void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
+void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 #ifdef DEBUG_ASSERT
     int64_t old_head = get_stack_head(env);
 #endif
@@ -312,6 +314,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     Allocator* a = ictx.a;
     Target target = ictx.target;
     InternalLinkData* links = ictx.links;
+    Syntax syn = get_syntax(ref, ictx.tape);
+    PiType* type = get_type(ref, ictx.tape);
 
     Assembler* ass = target.target;
     switch (syn.type) {
@@ -324,26 +328,26 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         int32_t immediate = (int32_t)syn.integral.value;
         build_unary_op(Push, imm32(immediate), ass, a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SLitUntypedFloating: 
         panic(mv_string("Cannot generate monomorphic code for untyped floating!"));
     case SLitTypedFloating: {
-        PiType* prim_ty = strip_type(syn.ptype);
+        PiType* prim_ty = strip_type(type);
         if (prim_ty->prim == Float_32) {
             float f = syn.floating.value;
             void* raw = &f;
             int32_t immediate = *(int32_t*)raw;
             build_unary_op(Push, imm32(immediate), ass, a, point);
-            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+            data_stack_grow(env, pi_stack_size_of(*type));
         }
         else if (prim_ty->prim == Float_64) {
             void* raw = &syn.floating.value;
             int64_t immediate = *(int64_t*)raw;
             build_binary_op(Mov, reg(RAX,sz_64), imm64(immediate), ass, a, point);
             build_unary_op(Push, reg(RAX,sz_64), ass, a, point);
-            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+            data_stack_grow(env, pi_stack_size_of(*type));
         } else {
             panic(mv_string("Floating literal has non-float type!"));
         }
@@ -352,7 +356,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     case SLitBool: {
         int8_t immediate = syn.boolean;
         build_unary_op(Push, imm8(immediate), ass, a, point);
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SLitUnit: 
@@ -372,7 +376,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
 
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SVariable:
@@ -384,7 +388,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         switch (e.type) {
         case ALocalDirect: {
             // Copy to the current level 
-            size_t size = pi_size_of(*syn.ptype);
+            size_t size = pi_size_of(*type);
             size_t stack_size = pi_stack_align(size);
             data_stack_grow(env, stack_size);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
@@ -398,7 +402,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // First, we need the size of the variable & allocate space for it on the stack
             // ------------------------------------------------------------------------------------------
             // Store stack size in R9
-            generate_stack_size_of(R9, syn.ptype, env, ass, a, point);
+            generate_stack_size_of(R9, type, env, ass, a, point);
             build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(R9, sz_64), ass, a, point);
             build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
@@ -417,7 +421,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             break;
         }
         case AGlobal: {
-            PiType indistinct_type = *strip_type(syn.ptype);
+            PiType indistinct_type = *strip_type(type);
 
             // Procedures (inc. polymorphic procedures), Types are passed by reference (i.e. they are addresses). 
             // Dynamic Vars and instances pby value, but are guaranteed to take up 64 bits.
@@ -515,20 +519,20 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         size_t args_size = 0;
         SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
         for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            size_t arg_size = pi_stack_size_of(*(PiType*)syn.ptype->proc.implicits.data[i]);
+            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.implicits.data[i]);
             args_size += pi_stack_align(arg_size);
             sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
         }
 
         SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
         for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            size_t arg_size = pi_stack_size_of(*(PiType*)syn.ptype->proc.args.data[i]);
+            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.args.data[i]);
             args_size += arg_size;
             sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
         }
 
         address_start_proc(impl_sizes, arg_sizes, env, a);
-        generate_i(*syn.procedure.body, env, ictx);
+        generate_i(syn.procedure.body, env, ictx);
         address_end_proc(env, a);
 
         // Codegen function teardown:
@@ -540,7 +544,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // + return to stashed address
 
         // Storage of function output 
-        size_t ret_size = pi_stack_size_of(*syn.procedure.body->ptype);
+        size_t ret_size = pi_stack_size_of(*get_type(syn.procedure.body, ictx.tape));
 
         // Note: R9, DMEM_REGISTER, VSTACK_HEAD, RBP were saved previously (in the prolog)
         //       RBX is for the return address, as it is non-volatile on SysV
@@ -578,60 +582,60 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         target.target = target.code_aux;
         ictx.target = target;
 
-        generate_polymorphic(syn.all.args, *syn.all.body, env, ictx);
+        generate_polymorphic(syn.all.args, syn.all.body, env, ictx);
         break;
     }
     case SMacro:
-        generate_i(*syn.transformer, env, ictx);
+        generate_i(syn.transformer, env, ictx);
         break;
-    case SApplication: {
-        if (syn.application.function->ptype->sort == TProc) {
+    case SApplication: 
+        if (get_type(syn.application.function, ictx.tape)->sort == TProc) {
             // Generate the arguments
             bool variable_args = false;
             int64_t arg_base = get_stack_head(env);
             for (size_t i = 0; i < syn.application.implicits.len; i++) {
-                Syntax* arg = (Syntax*) syn.application.implicits.data[i];
-                variable_args |= is_variable_in(arg->ptype, env);
-                generate_i(*arg, env, ictx);
+                SynRef arg = syn.application.implicits.data[i];
+                variable_args |= is_variable_in(get_type(arg, ictx.tape), env);
+                generate_i(arg, env, ictx);
             }
             for (size_t i = 0; i < syn.application.args.len; i++) {
-                Syntax* arg = (Syntax*) syn.application.args.data[i];
-                variable_args |= is_variable_in(arg->ptype, env);
-                generate_i(*arg, env, ictx);
+                SynRef arg = syn.application.args.data[i];
+                variable_args |= is_variable_in(get_type(arg, ictx.tape), env);
+                generate_i(arg, env, ictx);
             }
 
             if (!variable_args) {
                 // Calculate size to pop
                 size_t pop_sz = ADDRESS_SIZE;
                 for (size_t i = 0; i < syn.application.implicits.len; i++) {
-                    PiType* aty = ((Syntax*)syn.application.implicits.data[i])->ptype;
+                    PiType* aty = get_type(syn.application.implicits.data[i], ictx.tape);
                     pop_sz += pi_stack_size_of(*aty);
                 }
                 for (size_t i = 0; i < syn.application.args.len; i++) {
-                    PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                    PiType* aty = get_type(syn.application.args.data[i], ictx.tape);
                     pop_sz += pi_stack_size_of(*aty);
                 }
                 // This will push a function pointer onto the stack
-                generate_i(*syn.application.function, env, ictx);
+                generate_i(syn.application.function, env, ictx);
         
                 // Regular Function Call
                 // Pop the function into RCX; call the function
                 build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
                 build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
                 data_stack_shrink(env, pop_sz);
-                if (is_variable_in(syn.ptype, env)) {
+                if (is_variable_in(type, env)) {
                     // Move value from data to 'variable' stack.
                     panic(mv_string("not implemented: variable return from static function in poly code."));
                 } else {
-                    data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+                    data_stack_grow(env, pi_stack_size_of(*type));
                 }
             } else {
-                generate_i(*syn.application.function, env, ictx);
+                generate_i(syn.application.function, env, ictx);
 
                 size_t args_size = 0;
                 // Move variable args from the data stack to the variable stack
                 for (size_t i = 0; i < syn.application.implicits.len; i++) {
-                    PiType* aty = ((Syntax*)syn.application.implicits.data[i])->ptype;
+                    PiType* aty = get_type(syn.application.implicits.data[i], ictx.tape);
                     if (is_variable_in(aty, env)) {
 
                         // Unfold argument onto data-stack
@@ -649,7 +653,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                     }
                 }
                 for (size_t i = 0; i < syn.application.args.len; i++) {
-                    PiType* aty = ((Syntax*)syn.application.args.data[i])->ptype;
+                    PiType* aty = get_type(syn.application.args.data[i], ictx.tape);
                     if (is_variable_in(aty, env)) {
 
                         // Unfold argument onto data-stack
@@ -676,9 +680,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 build_unary_op(Call, reg(RCX, sz_64), ass, a, point);
                 data_stack_shrink(env, args_size);
 
-                if (is_variable_in(syn.ptype, env)) {
+                if (is_variable_in(type, env)) {
                     // Move value from data to 'variable' stack.
-                    generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+                    generate_stack_size_of(RAX, type, env, ass, a, point);
                     build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_binary_op(Mov, reg(R9, sz_64), reg(RSP, sz_64), ass, a, point);
                     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -691,64 +695,65 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                     data_stack_grow(env, ADDRESS_SIZE);
                 } else {
                     // Regular move up the data-stack
-                    size_t out_sz = pi_stack_size_of(*syn.ptype);
+                    size_t out_sz = pi_stack_size_of(*type);
                     generate_stack_move(args_size, 0, out_sz, ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(args_size), ass, a, point);
-                    data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+                    data_stack_grow(env, pi_stack_size_of(*type));
                 }
             }
         } else {
             size_t args_size = 0;
             for (size_t i = 0; i < syn.application.args.len; i++) {
-                Syntax* arg = (Syntax*) syn.application.args.data[i];
-                args_size += pi_stack_size_of(*arg->ptype);
-                generate_i(*arg, env, ictx);
+                SynRef arg = syn.application.args.data[i];
+                args_size += pi_stack_size_of(*get_type(arg, ictx.tape));
+                generate_i(arg, env, ictx);
             }
 
             // push the type onto the stack:
-            generate_i(*syn.application.function, env, ictx);
+            generate_i(syn.application.function, env, ictx);
 
             gen_mk_family_app(syn.application.args.len, ass, a, point);
             // Update for popping all values off the stack (also the function itself)
             data_stack_shrink(env, args_size + ADDRESS_SIZE);
 
             // Update as pushed the final value onto the stac
-            data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+            data_stack_grow(env, pi_stack_size_of(*type));
         }
         break;
-    }
     case SAllApplication: {
         // Polymorphic Funcall
         build_binary_op(Mov, reg(R15, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
         size_t static_arg_size = 0;
 
-        SymbolPiList type_vars = syn.all_application.function->ptype->binder.vars;
+        SymbolPiList type_vars = get_type(syn.all_application.function, ictx.tape)->binder.vars;
         SymbolArray ctype_vars = mk_symbol_array(type_vars.len, a);
         for (size_t i = 0; i < type_vars.len; i++) {
             push_symbol(type_vars.data[i], &ctype_vars);
         }
         for (size_t i = 0; i < syn.all_application.types.len; i++) {
-            PiType* type = ((Syntax*)syn.all_application.types.data[i])->type_val;
+            PiType* type = get_syntax(syn.all_application.types.data[i], ictx.tape).type_val;
             generate_pi_type(type, env, ass, a, point);
             static_arg_size += ADDRESS_SIZE;
         }
 
         bool mismatch_variable_args = false;
-        PiType* fn_ty = strip_type(syn.all_application.function->ptype);
+        PiType* fn_ty = strip_type(get_type(syn.all_application.function, ictx.tape));
         if (fn_ty->sort == TAll) { fn_ty = fn_ty->binder.body; }
 
         for (size_t i = 0; i < syn.all_application.implicits.len; i++) {
-            PiType* argty = fn_ty->proc.implicits.data[i];
-            Syntax* arg = (Syntax*) syn.all_application.implicits.data[i];
-            generate_i(*arg, env, ictx);
+            SynRef arg = syn.all_application.implicits.data[i];
+            PiType* paramty = fn_ty->proc.implicits.data[i];
+            PiType* argty = get_type(arg, ictx.tape);
+            
+            generate_i(arg, env, ictx);
 
             // The argument is variable for for the callee
-            if (is_variable_for(argty, ctype_vars)) {
+            if (is_variable_for(paramty, ctype_vars)) {
                 // Is it also variable in our context?
                 // if not, we need to move to variable stack, otherwise can keep here.
                 static_arg_size += ADDRESS_SIZE;
-                if (!is_variable_in(arg->ptype, env)) {
-                    size_t arg_size = pi_stack_size_of(*arg->ptype);
+                if (!is_variable_in(argty, env)) {
+                    size_t arg_size = pi_stack_size_of(*argty);
                     build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
@@ -759,23 +764,24 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
                 }
             } else {
-                mismatch_variable_args |= is_variable_in(arg->ptype, env);
-                static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
+                mismatch_variable_args |= is_variable_in(argty, env);
+                static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
             }
         }
 
         for (size_t i = 0; i < syn.all_application.args.len; i++) {
-            PiType* argty = fn_ty->proc.args.data[i];
-            Syntax* arg = (Syntax*) syn.all_application.args.data[i];
-            generate_i(*arg, env, ictx);
+            SynRef arg = syn.all_application.args.data[i];
+            PiType* paramty = fn_ty->proc.args.data[i];
+            PiType* argty = get_type(arg, ictx.tape);
+            generate_i(arg, env, ictx);
 
             // The argument is variable for for the callee
-            if (is_variable_for(argty, ctype_vars)) {
+            if (is_variable_for(paramty, ctype_vars)) {
                 // Is it also variable in our context?
                 // if not, we need to move to variable stack, otherwise can keep here.
                 static_arg_size += ADDRESS_SIZE;
-                if (!is_variable_in(arg->ptype, env)) {
-                    size_t arg_size = pi_stack_size_of(*arg->ptype);
+                if (!is_variable_in(argty, env)) {
+                    size_t arg_size = pi_stack_size_of(*argty);
                     build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
@@ -785,11 +791,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                     data_stack_grow(env, ADDRESS_SIZE);
                 }
             } else {
-                mismatch_variable_args |= is_variable_in(arg->ptype, env);
-                static_arg_size += is_variable_in(arg->ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*arg->ptype);
+                mismatch_variable_args |= is_variable_in(argty, env);
+                static_arg_size += is_variable_in(argty, env) ? ADDRESS_SIZE : pi_stack_size_of(*argty);
             }
         }
-        generate_i(*syn.all_application.function, env, ictx);
+        generate_i(syn.all_application.function, env, ictx);
         static_arg_size += ADDRESS_SIZE;
 
         if (mismatch_variable_args) {
@@ -803,12 +809,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         PiType* ty = fn_ty->sort == TProc ? fn_ty->proc.ret : fn_ty;
         bool callee_varstack = is_variable_for(ty, ctype_vars);
-        bool caller_varstack = is_variable_in(syn.ptype, env);
+        bool caller_varstack = is_variable_in(type, env);
 
-        data_stack_grow(env, caller_varstack ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, caller_varstack ? ADDRESS_SIZE : pi_stack_size_of(*type));
         if (callee_varstack != caller_varstack) {
             if (callee_varstack) {
-                size_t out_size = pi_stack_size_of(*syn.ptype);
+                size_t out_size = pi_stack_size_of(*type);
                 // Copy from varstack to our stack 
                 build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), ass, a, point);
@@ -829,15 +835,15 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // 2. Generate the types (in reverse order)
         // This will naturally place a seal on the stack, which is effectively 
         // a struct prepended by the sealed type descriptors.
-        if (is_variable_in(syn.seal.body->ptype, env)) {
+        if (is_variable_in(get_type(syn.seal.body, ictx.tape), env)) {
             not_implemented(mv_string("Polymorphic seal"));
         } else {
-            generate_i(*syn.seal.body, env, ictx);
+            generate_i(syn.seal.body, env, ictx);
             if (syn.seal.implicits.len > 0)
                 not_implemented(mv_string("Codegen for Seal with implicits"));
             for (size_t i = 0; i < syn.seal.types.len; i++) {
                 size_t idx = syn.seal.types.len - (i + 1);
-                PiType* type = ((Syntax*)syn.seal.types.data[idx])->type_val;
+                PiType* type = get_syntax(syn.seal.types.data[idx], ictx.tape).type_val;
                 generate_pi_type(type, env, ass, a, point);
             }
         }
@@ -847,10 +853,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // Generate sealed type, then bind types/values, and finally generate
         // code for body. As with any binding expression, resultant value must
         // then be copied up the stack.
-        if (is_variable_in(syn.unseal.sealed->ptype, env)) {
+        if (is_variable_in(get_type(syn.unseal.sealed, ictx.tape), env)) {
             not_implemented(mv_string("Polymorphic unseal"));
         } else {
-            generate_i(*syn.unseal.sealed, env, ictx);
+            generate_i(syn.unseal.sealed, env, ictx);
             if (syn.unseal.implicits.len > 0)
                 not_implemented(mv_string("Codegen for Unseal with implicits"));
 
@@ -860,19 +866,19 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 offset += REGISTER_SIZE;
             }
             address_bind_relative(syn.unseal.binder, offset, env);
-            generate_i(*syn.unseal.body, env, ictx);
+            generate_i(syn.unseal.body, env, ictx);
             address_pop(env);
             address_pop_n_types(syn.unseal.types.len + 1, env);
 
             // Finally, copy the resultant value (body) up the stack.
-            size_t mv_size = pi_stack_size_of(*syn.unseal.sealed->ptype);
-            if (is_variable_in(syn.unseal.body->ptype, env)) {
+            size_t mv_size = pi_stack_size_of(*get_type(syn.unseal.sealed, ictx.tape));
+            if (is_variable_in(get_type(syn.unseal.body, ictx.tape), env)) {
                 build_unary_op(Pop, reg(RAX, sz_64),  ass, a, point);
                 build_binary_op(Add, reg(RSP, sz_64), imm32(mv_size), ass, a, point);
                 build_unary_op(Push, reg(RAX, sz_64),  ass, a, point);
                 data_stack_shrink(env, mv_size);
             } else {
-                size_t data_sz = pi_stack_size_of(*syn.unseal.body->ptype);
+                size_t data_sz = pi_stack_size_of(*get_type(syn.unseal.body, ictx.tape));
                 generate_stack_move(mv_size, 0, data_sz, ass, a, point);
                 build_binary_op(Add, reg(RSP, sz_64), imm32(mv_size), ass, a, point);
                 data_stack_shrink(env, mv_size);
@@ -881,13 +887,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break; 
     }
     case SStructure: {
-        PiType* struct_type = strip_type(syn.ptype);
-        if (is_variable_in(syn.ptype, env)) {
+        PiType* struct_type = strip_type(type);
+        if (is_variable_in(type, env)) {
             // Reserve space on the stack for the structure to go
-            if (syn.structure.base && syn.structure.base->type != SCheckedType) {
-                generate_i(*syn.structure.base, env, ictx);
+            if (syn.structure.has_base == Some &&
+                get_syntax(syn.structure.base, ictx.tape).type != SCheckedType) {
+                generate_i(syn.structure.base, env, ictx);
             } else {
-                generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+                generate_stack_size_of(RAX, type, env, ass, a, point);
                 build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
                 build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
                 data_stack_grow(env, ADDRESS_SIZE);
@@ -896,7 +903,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Generate code for each of the fields (in order)
             for (size_t i = 0; i < struct_type->structure.fields.len; i++)
-                generate_i(*(Syntax *)syn.structure.fields.data[i].val, env, ictx);
+                generate_i(syn.structure.fields.data[i].val, env, ictx);
 
             // Copy the field contents into the final struct.
             // ----------------------------------------------
@@ -914,7 +921,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 for (size_t j = syn.structure.fields.len; j > 0; j--) {
                     size_t idx = j - 1;
                     if (symbol_eq(field, syn.structure.fields.data[idx].key)) { field_present = true; break; }
-                    PiType* field_ty = ((Syntax*)syn.structure.fields.data[idx].val)->ptype;
+                    PiType* field_ty = get_type(syn.structure.fields.data[idx].val, ictx.tape);
                     source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
                 }
 
@@ -955,8 +962,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Step 1: Make room on the stack for our struct (OR, just generate the
             // base struct)
-            if (syn.structure.base && syn.structure.base->type != SCheckedType) {
-                generate_i(*syn.structure.base, env, ictx);
+            if (syn.structure.has_base == Some &&
+                get_syntax(syn.structure.base, ictx.tape).type != SCheckedType) {
+                generate_i(syn.structure.base, env, ictx);
             } else {
                 size_t struct_size = pi_stack_size_of(*struct_type);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(struct_size), ass, a, point);
@@ -965,7 +973,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Step 2: evaluate each element/variable binding
             for (size_t i = 0; i < syn.structure.fields.len; i++) {
-                generate_i(*(Syntax*)syn.structure.fields.data[i].val, env, ictx);
+                generate_i(syn.structure.fields.data[i].val, env, ictx);
             }
         
             // Step 3: copy each element of the array into it's place on the stack.
@@ -982,7 +990,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // Copy from the bottom (of the destination) to the top (also of the destination) 
             size_t source_region_size = 0;
             for (size_t i = 0; i < syn.structure.fields.len; i++) {
-                source_region_size += pi_stack_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype); 
+                source_region_size += pi_stack_size_of(*get_type(syn.structure.fields.data[i].val, ictx.tape)); 
             }
             size_t src_offset = 0;
             for (size_t i = 0; i < syn.structure.fields.len; i++) {
@@ -1002,7 +1010,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 // relative to the 'bottom' of their respective structures.
                 // Therefore, we now need to find their offsets relative to the `top'
                 // of the stack.
-                size_t field_size = pi_size_of(*((Syntax*)syn.structure.fields.data[i].val)->ptype);
+                size_t field_size = pi_size_of(*get_type(syn.structure.fields.data[i].val, ictx.tape));
                 src_offset += pi_stack_align(field_size);
                 size_t src_stack_offset = source_region_size - src_offset;
                 size_t dest_stack_offset = source_region_size + dest_offset;
@@ -1019,7 +1027,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SProjector: {
-        PiType* source_type = strip_type(syn.projector.val->ptype);
+        PiType* source_type = strip_type(get_type(syn.projector.val, ictx.tape));
         if (source_type->sort == TStruct) {
             // -----------------------------------------------------------------
             //
@@ -1027,15 +1035,15 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             //
             // -----------------------------------------------------------------
 
-            if (is_variable_in(syn.projector.val->ptype, env)) {
+            if (is_variable_in(get_type(syn.projector.val, ictx.tape), env)) {
                 panic(mv_string("not (yet) projecting out of variable structs."));
             } else {
-                size_t out_sz = pi_stack_size_of(*syn.ptype);
+                size_t out_sz = pi_stack_size_of(*type);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(out_sz), ass, a, point);
                 data_stack_grow(env, out_sz);
 
                 // Second, generate the structure/instance object
-                generate_i(*syn.projector.val, env, ictx);
+                generate_i(syn.projector.val, env, ictx);
                 size_t src_sz = pi_stack_size_of(*source_type);
                 // Now, copy the structure to the destination
                 // for this, we need the struct size + offset of field in the struct
@@ -1062,14 +1070,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // -----------------------------------------------------------------
 
             // Second, generate the structure/instance object
-            generate_i(*syn.projector.val, env, ictx);
+            generate_i(syn.projector.val, env, ictx);
             // Both instances (passed by reference) and structs (on variable
             // stack) will occupy an address size on the stack.
             size_t src_sz = ADDRESS_SIZE;
 
             // From this point, behaviour depends on whether we are projecting from
             // a structure or from an instance
-            bool field_is_var = is_variable_in(syn.ptype, env);
+            bool field_is_var = is_variable_in(type, env);
             bool offset_is_var = false;
             for (size_t i = 0; i < source_type->instance.fields.len; i++) {
                 offset_is_var |= is_variable_in(source_type->instance.fields.data[i].val, env);
@@ -1095,7 +1103,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 }
                 build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
 
-                size_t val_sz = pi_size_of(*syn.ptype);
+                size_t val_sz = pi_size_of(*type);
                 size_t val_stack_sz = pi_stack_align(val_sz);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(val_stack_sz), ass, a, point);
                 data_stack_grow(env, val_stack_sz);
@@ -1110,7 +1118,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
                 build_binary_op(Add, reg(RSI, sz_64), reg(RDI, sz_64), ass, a, point);
 
-                size_t val_sz = pi_size_of(*syn.ptype);
+                size_t val_sz = pi_size_of(*type);
                 size_t val_stack_sz = pi_stack_align(val_sz);
                 build_binary_op(Sub, reg(RSP, sz_64), imm32(val_stack_sz), ass, a, point);
                 data_stack_grow(env, val_stack_sz);
@@ -1123,7 +1131,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 // Generate field offset and size. 
                 generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
                 build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
-                generate_size_of(RAX, syn.ptype, env, ass, a, point);
+                generate_size_of(RAX, type, env, ass, a, point);
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
                 build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
@@ -1155,9 +1163,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
          */
 
         size_t immediate_sz = 0;
-        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
-            immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)syn.ptype->instance.fields.data[i].val));
-            immediate_sz += pi_size_of(*(PiType*)syn.ptype->instance.fields.data[i].val);
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
+            immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.fields.data[i].val));
+            immediate_sz += pi_size_of(*(PiType*)type->instance.fields.data[i].val);
         }
         build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
         generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
@@ -1172,13 +1180,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         // Alignment
         size_t index_offset = 0;
-        for (size_t i = 0; i < syn.ptype->instance.fields.len; i++) {
+        for (size_t i = 0; i < type->instance.fields.len; i++) {
             // Generate field
-            Syntax* val = syn.instance.fields.data[i].val;
-            generate_i(*val, env, ictx);
+            SynRef val = syn.instance.fields.data[i].val;
+            generate_i(val, env, ictx);
 
             // The offset tells us how far up the stack we look to find the instance ptr
-            size_t val_sz = pi_size_of(*val->ptype);
+            size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
             size_t val_stack_sz = pi_stack_align(val_sz);
 
             // Retrieve index (ptr) 
@@ -1186,7 +1194,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
 
             // Align RCX
-            size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*val->ptype));
+            size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
             if (index_offset != aligned_offset) {
                 size_t align = aligned_offset - index_offset;
                 build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
@@ -1217,10 +1225,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SConstructor: {
-        if (is_variable_in(syn.ptype, env)) {
+        if (is_variable_in(type, env)) {
             not_implemented(mv_string("Polymorphic constructor"));
         } else {
-            PiType* enum_type = strip_type(syn.ptype);
+            PiType* enum_type = strip_type(type);
             size_t enum_size = pi_stack_size_of(*enum_type);
             LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(enum_size), ass, a, point);
@@ -1230,21 +1238,21 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SVariant: {
-        if (is_variable_in(syn.ptype, env)) {
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+        if (is_variable_in(type, env)) {
+            generate_stack_size_of(RAX, type, env, ass, a, point);
             build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
             build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
             int64_t head = get_stack_head(env);
 
             // Set the tag
-            PiType* enum_type = strip_type(syn.ptype);
+            PiType* enum_type = strip_type(type);
             LocationSize sz = tag_size_sz(enum_type->enumeration.tag_size);
             build_binary_op(Mov, rref8(VSTACK_HEAD, 0, sz), imm32(syn.constructor.tag), ass, a, point);
 
             // Generate each argument
             for (size_t i = 0; i < syn.variant.args.len; i++) {
-                generate_i(*(Syntax*)syn.variant.args.data[i], env, ictx);
+                generate_i(syn.variant.args.data[i], env, ictx);
             }
 
             // Now, copy arguments up into the variant.
@@ -1256,7 +1264,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             size_t source_offset = 0;
             for (size_t i = 0; i < syn.variant.args.len; i++) {
-                PiType* field_ty = ((Syntax*)syn.variant.args.data[i])->ptype;
+                PiType* field_ty = get_type(syn.variant.args.data[i], ictx.tape);
                 // We now have both the source_offset and dest_offset. These are both
                 // relative to the 'bottom' of their respective structures.
                 // Therefore, we now need to find their offsets relative to the `top'
@@ -1303,7 +1311,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
 
         } else {
-            PiType* enum_type = strip_type(syn.ptype);
+            PiType* enum_type = strip_type(type);
             size_t enum_stack_size = pi_size_of(*enum_type);
             size_t variant_stack_size = calc_variant_stack_size(enum_type->enumeration.variants.data[syn.variant.tag].val);
 
@@ -1318,7 +1326,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // Generate each argument
             for (size_t i = 0; i < syn.variant.args.len; i++) {
-                generate_i(*(Syntax*)syn.variant.args.data[i], env, ictx);
+                generate_i(syn.variant.args.data[i], env, ictx);
             }
 
             PtrArray args = *(PtrArray*)enum_type->enumeration.variants.data[syn.variant.tag].val;
@@ -1350,14 +1358,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SMatch: {
         // Generate code for the value
-        Syntax* match_value = syn.match.val;
-        PiType* enum_type = strip_type(syn.match.val->ptype);
+        SynRef match_value = syn.match.val;
+        PiType* enum_type = strip_type(get_type(syn.match.val, ictx.tape));
 
         if (is_variable_in(enum_type, env)) {
             build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
             int64_t var_head_offset = get_stack_head(env);
-            generate_i(*match_value, env, ictx);
+            generate_i(match_value, env, ictx);
 
             SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
             SizeArray back_refs = mk_size_array(syn.match.clauses.len, a);
@@ -1463,11 +1471,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 size_t tagsize = enum_type->enumeration.tag_size / 8;
                 address_bind_enum_vars(vars, tagsize, true, env);
 
-                generate_i(*clause.body, env, ictx);
-                if (is_variable_in(syn.ptype, env)) {
+                generate_i(clause.body, env, ictx);
+                if (is_variable_in(type, env)) {
                     data_stack_shrink(env, ADDRESS_SIZE);
                 } else {
-                    data_stack_shrink(env, pi_stack_size_of(*clause.body->ptype));
+                    data_stack_shrink(env, pi_stack_size_of(*get_type(clause.body, ictx.tape)));
                 }
 
                 // Generate jump to end of match expression to be backlinked later
@@ -1494,9 +1502,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // Cleanup code: All branches of the enum will jump here. 
             //  This lets us copy the resultant value up the stack.
             int64_t current_head_offset = get_stack_head(env);
-            if (is_variable_in(syn.ptype, env)) {
+            if (is_variable_in(type, env)) {
                 size_t mov_offset = var_head_offset - current_head_offset;
-                generate_size_of(RAX, syn.ptype, env, ass, a, point);
+                generate_size_of(RAX, type, env, ass, a, point);
 
                 // Allocate space on the variable stack, then copy the variable value up the variable stack
                 build_binary_op(Mov, reg(R10, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
@@ -1514,7 +1522,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, var_head_offset, sz_64), ass, a, point);
 
                 // Move the value up the stack 
-                size_t val_sz = pi_size_of(*syn.ptype);
+                size_t val_sz = pi_size_of(*type);
                 size_t mov_offset = (var_head_offset + ADDRESS_SIZE) - current_head_offset - val_sz;
                 generate_stack_move(val_sz, 0, val_sz, ass, a, point);
 
@@ -1525,10 +1533,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         } else {
             // Generate code for the value
-            size_t enum_stack_size = pi_stack_size_of(*match_value->ptype);
-            size_t out_size = pi_stack_size_of(*syn.ptype);
+            size_t enum_stack_size = pi_stack_size_of(*get_type(match_value, ictx.tape));
+            size_t out_size = pi_stack_size_of(*type);
 
-            generate_i(*match_value, env, ictx);
+            generate_i(match_value, env, ictx);
 
             SizeArray back_positions = mk_size_array(syn.match.clauses.len, a);
             SizeArray back_refs = mk_size_array(syn.match.clauses.len, a);
@@ -1606,7 +1614,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 size_t tag_size = enum_type->enumeration.tag_size / 8;
                 address_bind_enum_vars(arg_sizes, tag_size, false, env);
 
-                generate_i(*clause.body, env, ictx);
+                generate_i(clause.body, env, ictx);
 
                 // Generate jump to end of match expression to be backlinked later
                 AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -1642,10 +1650,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     case SDynamic: {
         // Create a new dynamic variable, i.e. call the C function 
         // mk_dynamic_var(size_t size, void* default_val)
-        generate_i(*syn.dynamic, env, ictx);
+        generate_i(syn.dynamic, env, ictx);
 
         // currently RSP = default_val
-        size_t val_size = pi_size_of(*syn.dynamic->ptype);
+        size_t val_size = pi_size_of(*get_type(syn.dynamic, ictx.tape));
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
@@ -1672,7 +1680,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SDynamicUse: {
         // TODO: check that the dynamic use handles stack alignment correctly
-        generate_i(*syn.use, env, ictx);
+        generate_i(syn.use, env, ictx);
 
         // We now have a dynamic variable: get its' value as ptr
 
@@ -1689,11 +1697,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // call function
         generate_c_call(get_dynamic_val, ass, a, point);
 
-        if (is_variable_in(syn.ptype, env)) {
+        if (is_variable_in(type, env)) {
             panic(mv_string("Not yet generating code for polymorphic dynamic use"));
         } else{
             // Now, allocate space on stack
-            size_t val_size = pi_size_of(*syn.ptype);
+            size_t val_size = pi_size_of(*type);
             build_binary_op(Sub, reg(RSP, sz_64), imm32(pi_stack_align(val_size)), ass, a, point);
             build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
@@ -1704,9 +1712,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SDynamicSet: {
-        size_t val_size = pi_size_of(*syn.dynamic_set.new_val->ptype);
-        generate_i(*syn.dynamic_set.dynamic, env, ictx);
-        generate_i(*syn.dynamic_set.new_val, env, ictx);
+        size_t val_size = pi_size_of(*get_type(syn.dynamic_set.new_val, ictx.tape));
+        generate_i(syn.dynamic_set.dynamic, env, ictx);
+        generate_i(syn.dynamic_set.new_val, env, ictx);
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
@@ -1724,7 +1732,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // call function
         generate_c_call(set_dynamic_val, ass, a, point);
 
-        if (is_variable_in(syn.ptype, env)) {
+        if (is_variable_in(type, env)) {
             panic(mv_string("Not yet generating code for polymorphic dynamic set"));
         } else {
             build_binary_op(Add, reg(RSP, sz_64), imm32(val_size + ADDRESS_SIZE), ass, a, point);
@@ -1738,9 +1746,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // Step 1: evaluate all dynamic bindings & bind them
         for (size_t i = 0; i < syn.dyn_let_expr.bindings.len; i++) {
             DynBinding* dbind = syn.dyn_let_expr.bindings.data[i];
-            size_t bind_size = pi_size_of(*dbind->expr->ptype);
-            generate_i(*dbind->var, env, ictx);
-            generate_i(*dbind->expr, env, ictx);
+            size_t bind_size = pi_size_of(*get_type(dbind->expr, ictx.tape));
+            generate_i(dbind->var, env, ictx);
+            generate_i(dbind->expr, env, ictx);
 
             // Copy the value into the dynamic var
             // Currently, the stack looks like:
@@ -1760,8 +1768,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         }
 
         // Step 2: generate the body
-        generate_i(*syn.dyn_let_expr.body, env, ictx);
-        size_t val_size = pi_stack_size_of(*syn.dyn_let_expr.body->ptype);
+        generate_i(syn.dyn_let_expr.body, env, ictx);
+        size_t val_size = pi_stack_size_of(*get_type(syn.dyn_let_expr.body, ictx.tape));
 
         // Step 3: unwind the bindings
         //  • Store the (address of the) current dynamic value index to restore in RDX
@@ -1773,7 +1781,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             size_t idx = syn.dyn_let_expr.bindings.len - (i + 1);
 
             DynBinding* dbind = syn.dyn_let_expr.bindings.data[idx];
-            size_t bind_size = pi_stack_size_of(*dbind->expr->ptype);
+            size_t bind_size = pi_stack_size_of(*get_type(dbind->expr, ictx.tape));
 
             // Store ptr to dynamic memory (array) in RCX, and the index in RAX
             build_binary_op(Mov, reg(RCX, sz_64), reg(DVARS_REGISTER, sz_64), ass, a, point);
@@ -1802,22 +1810,22 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, ADDRESS_SIZE);
 
         for (size_t i = 0; i < syn.let_expr.bindings.len; i++) {
-            SymPtrCell elt = syn.let_expr.bindings.data[i];
-            generate_i(*(Syntax*)elt.val, env, ictx);
+            SymSynCell elt = syn.let_expr.bindings.data[i];
+            generate_i(elt.val, env, ictx);
 
-            if (is_variable_in(((Syntax*)elt.val)->ptype, env)) {
+            if (is_variable_in(get_type(elt.val, ictx.tape), env)) {
                 address_bind_relative_index(elt.key, 0, env);
                 bind_sz += ADDRESS_SIZE;
             } else {
-                size_t stack_sz = pi_stack_size_of(*((Syntax*)elt.val)->ptype);
+                size_t stack_sz = pi_stack_size_of(*get_type(elt.val, ictx.tape));
                 address_bind_relative(elt.key, 0, env);
                 bind_sz += stack_sz;
             }
         }
-        generate_i(*syn.let_expr.body, env, ictx);
+        generate_i(syn.let_expr.body, env, ictx);
 
-        if (is_variable_in(syn.ptype, env)) {
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+        if (is_variable_in(type, env)) {
+            generate_stack_size_of(RAX, type, env, ass, a, point);
 
             // Grab the value of VSTACK_HEAD we pushed at the beginning - offset bind_sz + stack head 
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz, sz_64), ass, a, point);
@@ -1832,7 +1840,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
         } else {
-            size_t stack_sz = pi_stack_size_of(*syn.ptype);
+            size_t stack_sz = pi_stack_size_of(*type);
             // HERE IS !!BUG!!
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
@@ -1843,7 +1851,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SIf: {
         // Generate the condition
-        generate_i(*syn.if_expr.condition, env, ictx);
+        generate_i(syn.if_expr.condition, env, ictx);
 
         // Pop the bool into R9; compare with 0
         build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1860,7 +1868,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         // ---------- TRUE BRANCH ----------
         // now, generate the code to run (if true)
-        generate_i(*syn.if_expr.true_branch, env, ictx);
+        generate_i(syn.if_expr.true_branch, env, ictx);
 
         // Generate jump to end of false branch to be backlinked later
         out = build_unary_op(JMP, imm32(0), ass, a, point);
@@ -1876,11 +1884,11 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         jmp_loc = out.backlink;
         start_pos = get_pos(ass);
 
-        data_stack_shrink(env, is_variable_in(syn.ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
+        data_stack_shrink(env, is_variable_in(type, env) ? ADDRESS_SIZE : pi_stack_size_of(*type));
 
         // ---------- FALSE BRANCH ----------
         // Generate code for the false branch
-        generate_i(*syn.if_expr.false_branch, env, ictx);
+        generate_i(syn.if_expr.false_branch, env, ictx);
 
         // calc backlink offset
         end_pos = get_pos(ass);
@@ -1897,7 +1905,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         for (size_t i = 0; i < syn.cond.clauses.len; i++) {
             CondClause* clause = syn.cond.clauses.data[i];
-            generate_i(*clause->condition, env, ictx);
+            generate_i(clause->condition, env, ictx);
 
             // Pop the bool into R9; compare with 0
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -1913,8 +1921,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             // ---------- BRANCH IF TRUE ----------
             // now, generate the code to run (if true)
-            generate_i(*clause->branch, env, ictx);
-            data_stack_shrink(env, is_variable_in(syn.ptype, env) ? ADDRESS_SIZE : pi_stack_size_of(*syn.ptype));
+            generate_i(clause->branch, env, ictx);
+            data_stack_shrink(env, is_variable_in(type, env) ? ADDRESS_SIZE : pi_stack_size_of(*type));
 
             // ---------- JUMP TO END ----------
             // Generate code for the false branch
@@ -1928,7 +1936,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         }
 
         // ---------- OTHERWISE BRANCH ----------
-        generate_i(*syn.cond.otherwise, env, ictx);
+        generate_i(syn.cond.otherwise, env, ictx);
 
         // All branches should jump to this point
         size_t curr_pos = get_pos(ass);
@@ -1958,12 +1966,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         address_start_labels(labels, env);
 
-        generate_i(*syn.labels.entry, env, ictx);
+        generate_i(syn.labels.entry, env, ictx);
 
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
 
-        size_t out_size = pi_size_of(*syn.ptype);
+        size_t out_size = pi_size_of(*type);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
             // Clear the stack offset, either from expression or previous label
             data_stack_shrink(env,out_size);
@@ -1986,7 +1994,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
             data_stack_grow(env,arg_total);
             address_bind_label_vars(arg_sizes, env);
-            generate_i(*branch->body, env, ictx);
+            generate_i(branch->body, env, ictx);
             address_unbind_label_vars(env);
 
             LabelEntry lble = label_env_lookup(cell.key, env);
@@ -2045,9 +2053,9 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // 1. Generate args
         size_t arg_total = 0;
         for (size_t i = 0; i < syn.go_to.args.len; i++) {
-            Syntax* expr = syn.go_to.args.data[i];
-            arg_total += pi_stack_size_of(*expr->ptype);
-            generate_i(*expr, env, ictx);
+            SynRef expr = syn.go_to.args.data[i];
+            arg_total += pi_stack_size_of(*get_type(expr, ictx.tape));
+            generate_i(expr, env, ictx);
         }
 
         // 2. Backlink the label
@@ -2062,12 +2070,12 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 build_binary_op(Add, reg(RSP, sz_64), imm32(delta), ass, a, point);
             }
 
-            // Stack should "pretend" it pushed a value of type syn.ptype and
+            // Stack should "pretend" it pushed a value of type type and
             // consumed all args. This is so that, e.g. if this go-to is inside
             // a seq or if, the other branches of the if or the rest of the seq
             // generates assuming the correct stack offset.
             data_stack_shrink(env, arg_total);
-            data_stack_grow(env, pi_size_of(*syn.ptype));
+            data_stack_grow(env, pi_size_of(*type));
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
 
@@ -2110,7 +2118,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         // Step 3.
         //--------
-        generate_i(*syn.with_reset.expr, env, ictx);
+        generate_i(syn.with_reset.expr, env, ictx);
 
         // Step 4.
         //--------
@@ -2123,7 +2131,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // -- Out Value
         // So, the goal is do to a stack move from current RSP to current RSP - 3*ADDRESS
 
-        size_t val_size = pi_size_of(*syn.ptype);
+        size_t val_size = pi_size_of(*type);
         size_t in_val_size = pi_size_of(*syn.with_reset.in_arg_ty);
         generate_stack_move(3 * ADDRESS_SIZE, 0, val_size, ass, a, point);
         build_binary_op(Add, reg(RSP, sz_64), imm32(3 * ADDRESS_SIZE), ass, a, point);
@@ -2166,7 +2174,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         
         /* Symbol cont_sym; */
         /* Symbol in_sym; */
-        generate_i(*syn.with_reset.handler, env, ictx);
+        generate_i(syn.with_reset.handler, env, ictx);
         data_stack_shrink(env, ADDRESS_SIZE + in_val_size);
         address_pop_n(2, env);
 
@@ -2194,8 +2202,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SResetTo: {
-        generate_i(*syn.reset_to.arg, env, ictx);
-        generate_i(*syn.reset_to.point, env, ictx);
+        generate_i(syn.reset_to.arg, env, ictx);
+        generate_i(syn.reset_to.point, env, ictx);
         // there should how be a stack with the following:
         // > arg
         // > Ptr to reset-point
@@ -2212,7 +2220,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Pop, reg(RDI, sz_64), ass, a, point); //RDI = jump dest!
 
         // Step 4: Copy the argument onto the (new) stack.
-        PiType* arg_type = syn.reset_to.arg->ptype;
+        PiType* arg_type = get_type(syn.reset_to.arg, ictx.tape);
         size_t asize = pi_size_of(*arg_type);
         build_binary_op(Sub, reg(RSP, sz_64), imm32(asize), ass, a, point);
         // TODO (check if replace with stack copy)
@@ -2222,8 +2230,10 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Call, reg(RDI, sz_64), ass, a, point);
 
         // Address environment bookkeeping: shrink the stack appropriately
-        data_stack_shrink(env, pi_size_of(*syn.reset_to.arg->ptype) + pi_size_of(*syn.reset_to.point->ptype));
-        data_stack_grow(env, pi_size_of(*syn.ptype));
+        data_stack_shrink(env,
+                          pi_size_of(*get_type(syn.reset_to.arg, ictx.tape))
+                          + pi_size_of(*get_type(syn.reset_to.point, ictx.tape)));
+        data_stack_grow(env, pi_size_of(*type));
 
         break;
     }
@@ -2234,14 +2244,14 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         size_t bind_sz = 0; 
         for (size_t i = 0; i < syn.sequence.elements.len; i++) {
             SeqElt* elt = syn.sequence.elements.data[i];
-            generate_i(*elt->expr, env, ictx);
+            generate_i(elt->expr, env, ictx);
 
             if (elt->is_binding && i + 1 != syn.sequence.elements.len) {
-                if (is_variable_in(elt->expr->ptype, env)) {
+                if (is_variable_in(get_type(elt->expr, ictx.tape), env)) {
                     address_bind_relative_index(elt->symbol, 0, env);
                     bind_sz += ADDRESS_SIZE;
                 } else {
-                    size_t stack_sz = pi_stack_size_of(*elt->expr->ptype);
+                    size_t stack_sz = pi_stack_size_of(*get_type(elt->expr, ictx.tape));
                     address_bind_relative(elt->symbol, 0, env);
                     bind_sz += stack_sz;
                 }
@@ -2251,21 +2261,21 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             // a) a binding (hence this is an else) 
             // b) the last value in the sequence (as this value is preserved)
             else if (i + 1 != syn.sequence.elements.len) {
-                if (is_variable_in(elt->expr->ptype, env)) {
-                    generate_stack_size_of(RAX, elt->expr->ptype, env, ass, a, point);
+                if (is_variable_in(get_type(elt->expr, ictx.tape), env)) {
+                    generate_stack_size_of(RAX, get_type(elt->expr, ictx.tape), env, ass, a, point);
                     build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
                     data_stack_shrink(env, ADDRESS_SIZE);
                 } else {
-                    size_t stack_sz = pi_stack_size_of(*elt->expr->ptype);
+                    size_t stack_sz = pi_stack_size_of(*get_type(elt->expr, ictx.tape));
                     build_binary_op(Add, reg(RSP, sz_64), imm8(stack_sz), ass, a, point);
                     data_stack_shrink(env, stack_sz);
                 }
             }
             
         }
-        if (is_variable_in(syn.ptype, env)) {
-            generate_stack_size_of(RAX, syn.ptype, env, ass, a, point);
+        if (is_variable_in(type, env)) {
+            generate_stack_size_of(RAX, type, env, ass, a, point);
 
             // Grab the value of VSTACK_HEAD we pushed at the beginning - offset bind_sz + stack head 
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + ADDRESS_SIZE, sz_64), ass, a, point);
@@ -2280,7 +2290,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz + ADDRESS_SIZE), ass, a, point);
             data_stack_shrink(env, bind_sz + ADDRESS_SIZE);
         } else {
-            size_t stack_sz = pi_stack_size_of(*syn.ptype);
+            size_t stack_sz = pi_stack_size_of(*type);
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref32(RSP, bind_sz + stack_sz, sz_64), ass, a, point);
             generate_stack_move(bind_sz + ADDRESS_SIZE, 0, stack_sz, ass, a, point);
             build_binary_op(Add, reg(RSP, sz_64), imm32(bind_sz + ADDRESS_SIZE), ass, a, point);
@@ -2289,34 +2299,34 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SIs:
-        generate_i(*syn.is.val, env, ictx);
+        generate_i(syn.is.val, env, ictx);
         break;
     case SInTo:
-        generate_i(*syn.into.val, env, ictx);
+        generate_i(syn.into.val, env, ictx);
         break;
     case SOutOf:
-        generate_i(*syn.out_of.val, env, ictx);
+        generate_i(syn.out_of.val, env, ictx);
         break;
     case SName:
-        generate_i(*syn.name.body, env, ictx);
+        generate_i(syn.name.body, env, ictx);
         break;
     case SUnName:
-        generate_i(*syn.unname, env, ictx);
+        generate_i(syn.unname, env, ictx);
         break;
     case SWiden:
-        if (is_variable_in(syn.ptype, env)) {
+        if (is_variable_in(type, env)) {
             // TODO: throw error with range/report in typecheck phase?
             panic(mv_string("Can't generate code for polymorphic-widen"));
         }
 
         // TODO (BUG): appropriately widen (sign-extend/double broaden)
-        generate_i(*syn.widen.val, env, ictx);
-        if (syn.widen.val->ptype->prim < UInt_8) {
+        generate_i(syn.widen.val, env, ictx);
+        if (get_type(syn.widen.val, ictx.tape)->prim < UInt_8) {
             // is signed, 
             panic(mv_string("can't widen signed ints yet!"));
-        } else if (syn.widen.val->ptype->prim < Float_32) {
+        } else if (get_type(syn.widen.val, ictx.tape)->prim < Float_32) {
             // Is unsigned, so the movzx instruction will do:
-            switch (syn.widen.val->ptype->prim) {
+            switch (get_type(syn.widen.val, ictx.tape)->prim) {
             case UInt_8:
                 // Use MovZx (only available for bytes + words)
                 build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
@@ -2349,38 +2359,38 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
 
         break;
     case SNarrow:
-        if (is_variable_in(syn.ptype, env)) {
+        if (is_variable_in(type, env)) {
             // TODO: throw error with range/report in typecheck phase?
             panic(mv_string("Can't generate code for polymorphic-narrow"));
         }
-        generate_i(*syn.narrow.val, env, ictx);
+        generate_i(syn.narrow.val, env, ictx);
         // TODO: bounds check?
         // TODO: if signed -ve => 0??
 
         // TODO (BUG): generate appropriate assembly to convert between floating
         // point values
-        if (syn.ptype->sort == TPrim && syn.ptype->prim == Float_32 &&
-            syn.narrow.val->ptype->sort == TPrim &&
-            syn.narrow.val->ptype->prim == Float_64) {
+        if (type->sort == TPrim && type->prim == Float_32 &&
+            get_type(syn.narrow.val, ictx.tape)->sort == TPrim &&
+            get_type(syn.narrow.val, ictx.tape)->prim == Float_64) {
             build_binary_op(CvtSD2SS, reg(XMM0, sz_32), rref8(RSP, 0, sz_64), ass, a, point);
             build_binary_op(MovSS, rref8(RSP, 0, sz_32), reg(XMM0, sz_32), ass, a, point);
         }
         // point values!
         break;
     case SSizeOf: {
-        generate_size_of(RAX, syn.size->type_val, env, ass, a, point);
+        generate_size_of(RAX, get_syntax(syn.size, ictx.tape).type_val, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SAlignOf: {
-        generate_align_of(RAX, syn.size->type_val, env, ass, a, point);
+        generate_align_of(RAX, get_syntax(syn.size, ictx.tape).type_val, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SOffsetOf: {
-        PiType* struct_type = strip_type(syn.offset_of.body->type_val);
+        PiType* struct_type = strip_type(get_syntax(syn.offset_of.body, ictx.tape).type_val);
         generate_offset_of(RAX, syn.offset_of.field, struct_type->structure.fields, env, ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
@@ -2388,7 +2398,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     }
     case SDynAlloc: {
         // TODO: check size/provide overflow error?
-        generate_i(*syn.size, env, ictx);
+        generate_i(syn.size, env, ictx);
         build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
         build_binary_op(Add, reg(DMEM_REGISTER, sz_64), reg(RAX, sz_64), ass, a, point);
@@ -2406,13 +2416,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.proc_type.args.len; i++) {
-            Syntax* arg = syn.proc_type.args.data[i];
+            SynRef arg = syn.proc_type.args.data[i];
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*arg, env, ictx);
+            generate_i(arg, env, ictx);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -2427,7 +2437,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // Stash RAX
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-        generate_i(*syn.proc_type.return_type, env, ictx);
+        generate_i(syn.proc_type.return_type, env, ictx);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
         build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
         build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
@@ -2446,7 +2456,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.struct_type.fields.len; i++) {
-            SymPtrCell field = syn.struct_type.fields.data[i];
+            SymSynCell field = syn.struct_type.fields.data[i];
             // First, move the field name
             build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
             build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
@@ -2455,7 +2465,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*(Syntax*)field.val, env, ictx);
+            generate_i(field.val, env, ictx);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -2491,7 +2501,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
 
-            PtrArray variant = *(PtrArray*)field.val;
+            SynArray variant = *(SynArray*)field.val;
             generate_tmp_malloc(reg(RAX, sz_64), imm32(variant.len * ADDRESS_SIZE), ass, a, point);
             build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
@@ -2501,7 +2511,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
                 data_stack_grow(env, 2*ADDRESS_SIZE);
 
-                generate_i(*(Syntax*)variant.data[i], env, ictx);
+                generate_i(variant.data[i], env, ictx);
 
                 data_stack_shrink(env, 3*ADDRESS_SIZE);
                 build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -2534,13 +2544,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SResetType:
-        generate_i(*(Syntax*)syn.reset_type.in, env, ictx);
-        generate_i(*(Syntax*)syn.reset_type.out, env, ictx);
+        generate_i(syn.reset_type.in, env, ictx);
+        generate_i(syn.reset_type.out, env, ictx);
         gen_mk_reset_ty(ass, a, point);
         data_stack_shrink(env, ADDRESS_SIZE);
         break;
     case SDynamicType:
-        generate_i(*(Syntax*)syn.dynamic_type, env, ictx);
+        generate_i(syn.dynamic_type, env, ictx);
         gen_mk_dynamic_ty(ass, a, point);
         break;
     case SAllType:
@@ -2548,7 +2558,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate_i(*(Syntax*)syn.bind_type.body, env, ictx);
+        generate_i(syn.bind_type.body, env, ictx);
         gen_mk_forall_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
@@ -2561,13 +2571,13 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.sealed_type.implicits.len; i++) {
-            Syntax* arg = syn.sealed_type.implicits.data[i];
+            SynRef arg = syn.sealed_type.implicits.data[i];
 
             // Second, generate & move the type (note: stash & pop RCX)
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*arg, env, ictx);
+            generate_i(arg, env, ictx);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -2583,7 +2593,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         // Stash RAX
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-        generate_i(*syn.sealed_type.body, env, ictx);
+        generate_i(syn.sealed_type.body, env, ictx);
         data_stack_shrink(env, 2*ADDRESS_SIZE);
 
         gen_mk_sealed_ty(syn.sealed_type.vars, imm32(syn.sealed_type.implicits.len), ass, a, point);
@@ -2596,16 +2606,16 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
-        generate_i(*(Syntax*)syn.bind_type.body, env, ictx);
+        generate_i(syn.bind_type.body, env, ictx);
         gen_mk_fam_ty(syn.bind_type.bindings, ass, a, point);
         address_pop_n(syn.bind_type.bindings.len, env);
         break;
     case SLiftCType: {
-        generate_i(*syn.c_type, env, ictx);
+        generate_i(syn.c_type, env, ictx);
         gen_mk_c_ty(ass, a, point);
         // Now, the type lies atop the stack, and we must pop the ctype out from
         // under it
-        size_t cts = pi_stack_size_of(*syn.c_type->ptype);
+        size_t cts = pi_stack_size_of(*get_type(syn.c_type, ictx.tape));
 
         // TODO (IMPROVEMENT) this assumes address-size == 64 bits 
         build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
@@ -2616,7 +2626,6 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SNamedType: {
-        address_bind_type(syn.named_type.name, env);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.did), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.named_type.name.name), ass, a, point);
@@ -2624,24 +2633,41 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         data_stack_grow(env, sizeof(Symbol));
 
         address_bind_type(syn.named_type.name, env);
-        generate_i(*(Syntax*)syn.named_type.body, env, ictx);
-        address_pop(env);
-
+        generate_i(syn.named_type.body, env, ictx);
         gen_mk_named_ty(ass, a, point);
         data_stack_shrink(env, sizeof(Symbol));
         address_pop(env);
         break;
     }
     case SDistinctType:
-        generate_i(*(Syntax*)syn.distinct_type, env, ictx);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.distinct_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.distinct_type.name, env);
+        generate_i(syn.distinct_type.body, env, ictx);
         gen_mk_distinct_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
         break;
     case SOpaqueType:
-        generate_i(*(Syntax*)syn.opaque_type, env, ictx);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.did), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(syn.opaque_type.name.name), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, sizeof(Symbol));
+
+        address_bind_type(syn.opaque_type.name, env);
+        generate_i(syn.opaque_type.body, env, ictx);
         gen_mk_opaque_ty(ass, a, point);
+        data_stack_shrink(env, sizeof(Symbol));
+        address_pop(env);
         break;
     case STraitType: {
         // Generate trait type: first bind relevant variables
+        address_bind_type(syn.trait.name, env);
         for (size_t i = 0; i < syn.bind_type.bindings.len; i++) {
             address_bind_type(syn.bind_type.bindings.data[i], env);
         }
@@ -2650,9 +2676,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
-
         for (size_t i = 0; i < syn.trait.fields.len; i++) {
-            SymPtrCell field = syn.trait.fields.data[i];
+            SymSynCell field = syn.trait.fields.data[i];
             // First, move the field name
             build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
             build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
@@ -2661,7 +2686,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
             build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, 2*ADDRESS_SIZE);
-            generate_i(*(Syntax*)field.val, env, ictx);
+            generate_i(field.val, env, ictx);
 
             data_stack_shrink(env, 3*ADDRESS_SIZE);
             build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
@@ -2675,17 +2700,17 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         }
 
         // Finally, generate function call to make type
-        gen_mk_trait_ty(syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
+        gen_mk_trait_ty(syn.trait.name, syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
-        address_pop_n(syn.trait.vars.len, env);
+        address_pop_n(syn.trait.vars.len + 1, env);
         break;
     }
 
     case SReinterpret:
         // reinterpret has no associated codegen
-        generate_i(*syn.reinterpret.body, env, ictx);
+        generate_i(syn.reinterpret.body, env, ictx);
         break;
     case SConvert: {
         if (syn.convert.from_native) {
@@ -2704,16 +2729,16 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             target.target = target.code_aux;
             ictx.target = target;
 
-            bd_convert_c_fn(cfn, &syn.convert.body->ptype->c_type, syn.ptype, ass, a, point);
+            bd_convert_c_fn(cfn, &get_type(syn.convert.body, ictx.tape)->c_type, type, ass, a, point);
         } else {
             panic(mv_string("Cannot yet convert pico value to c value."));
         }
         break;
     }
     case STypeOf: {
-        build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)syn.type_of->ptype), ass, a, point);
+        build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)get_type(syn.type_of, ictx.tape)), ass, a, point);
         build_unary_op(Push, reg(R9, sz_64), ass, a, point);
-        data_stack_grow(env, pi_size_of(*syn.ptype));
+        data_stack_grow(env, pi_size_of(*type));
         break;
     }
     case SDescribe: {
@@ -2831,7 +2856,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
 
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SQuote: {
@@ -2848,7 +2873,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), ass, a, point);
             build_binary_op(Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), ass, a, point);
         }
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SCapture: {
@@ -2875,7 +2900,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(RCX, sz_64), rref8(RAX, i, sz_64), ass, a, point);
             build_binary_op(Mov, rref8(RSP, i, sz_64), reg(RCX, sz_64), ass, a, point);
         }
-        data_stack_grow(env, pi_stack_size_of(*syn.ptype));
+        data_stack_grow(env, pi_stack_size_of(*type));
         break;
     }
     case SDevAnnotation: {
@@ -2883,7 +2908,7 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
             debug_break();
 
         size_t current_loc = get_pos(ass);
-        generate_i(*syn.dev.inner, env, ictx);
+        generate_i(syn.dev.inner, env, ictx);
 
         if (syn.dev.flags & DPGenerate) {
 
@@ -2922,8 +2947,8 @@ void generate_i(Syntax syn, AddressEnv* env, InternalContext ictx) {
     int64_t diff = old_head - new_head;
     if (diff < 0) panic(mv_string("diff < 0!"));
 
-    size_t stack_sz = is_variable_in(syn.ptype, env) ?
-        ADDRESS_SIZE : pi_stack_size_of(*syn.ptype);
+    size_t stack_sz = is_variable_in(type, env) ?
+        ADDRESS_SIZE : pi_stack_size_of(*type);
 
     // Justification for cast: stack size of is extremely unlikely to be 2^63 bytes
     //  in size!
@@ -2947,7 +2972,7 @@ size_t calc_variant_stack_size(PtrArray* types) {
 }
 
 // Const_fold: evaluate and place 
-void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ictx) {
+void* const_fold(SynRef ref, AddressEnv *env, InternalContext ictx) {
     InternalLinkData* links = ictx.links;
     Target target = ictx.target;
 
@@ -2964,7 +2989,7 @@ void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ictx) {
         .data_aux = ictx.target.data_aux,
     };
 
-    generate_i(*syn, env, ictx);
+    generate_i(ref, env, ictx);
     
     // The data chunk may be moved around during code-generation via 'realloc'
     // if it needs to grow. Thus, we backlink data here, to be safe.
@@ -2985,7 +3010,7 @@ void* const_fold(Syntax *syn, AddressEnv *env, InternalContext ictx) {
         *address_ptr= target.data_aux->data + link.dest_offset;
     }
 
-    void* result = pico_run_expr(gen_target, pi_size_of(*syn->ptype), ictx.a, &cleanup_point);
+    void* result = pico_run_expr(gen_target, pi_size_of(*get_type(ref, ictx.tape)), ictx.a, &cleanup_point);
 
     delete_assembler(gen_target.target);
     release_executable_allocator(exalloc);

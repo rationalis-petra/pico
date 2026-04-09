@@ -3,21 +3,20 @@
 
 #include "pico/data/error.h"
 #include "pico/binding/shadow_env.h"
-#include "pico/binding/environment.h"
 #include "pico/syntax/concrete.h"
 #include "pico/syntax/syntax.h"
-#include "pico/syntax/header.h"
 
 typedef struct {
     Allocator* gpa;
+    SynTape tape;
     PiAllocator* pia;
     ShadowEnv* env;
     PiErrorPoint* point;
     void* vstack_memory_ptr;
     void* dynamic_memory_ptr;
-} AbstractionCtx;
+} AbstractionICtx;
 
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionCtx ctx);
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
 
 
 

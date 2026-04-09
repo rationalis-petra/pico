@@ -218,6 +218,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
     Module* volatile old_module = NULL;
+    volatile String vol_filename = filename;
 
     IStream* in = open_file_istream(filename, &ra);
     if (!in) {
@@ -309,7 +310,11 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(ph_res.result, env, &itera, &pi_point);
+        SynTape tape = mk_syn_tape(&ra, 128);
+        AbstractionCtx ab_ctx = {
+            .tape = tape, .env = env, .a = &itera, .point = &pi_point,
+        };
+        TopLevel abs = abstract(ph_res.result, ab_ctx);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -318,7 +323,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, .logger = logger 
+            .tape = tape, .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = gen_target, .logger = logger 
         };
         type_check(&abs, env, tc_ctx);
 
@@ -330,7 +335,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Ensure the target is 'fresh' for code-gen
         clear_target(gen_target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &err_point, .target = gen_target, .logger = logger
+            .tape = tape, .a = &itera, .point = &err_point, .target = gen_target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -338,7 +343,10 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Evaluation
         // -------------------------------------------------------------------------
 
-        pico_run_toplevel(abs, gen_target, links, module, &itera, &err_point);
+        EvalCtx ev_ctx = {
+            .tape = tape, .target = gen_target, .links = links, .module = module, .a = &itera, .point = &err_point
+        };
+        pico_run_toplevel(abs, ev_ctx);
     }
 
  on_exit:
@@ -357,7 +365,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         AtlasError new_err = {
             .range = ph_res.error.range,
             .message = out,
-            .filename = filename,
+            .filename = vol_filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
 
@@ -400,7 +408,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         }
         AtlasMultiError new_err = {
             .error = error,
-            .filename = filename,
+            .filename = vol_filename,
             .captured_file = copy_string(*get_captured_buffer(cin), &ra),
         };
 

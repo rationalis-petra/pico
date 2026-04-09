@@ -76,6 +76,7 @@
             arr->len++;                                                 \
         }                                                               \
     }                                                                   \
+                                                                        \
     type pop_ ## fprefix(tprefix ## Array* arr) {                       \
         POP_CHECK(arr)                                                  \
         arr->len--;                                                     \

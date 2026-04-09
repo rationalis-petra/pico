@@ -1,6 +1,6 @@
 #include "pico/abstraction/abstraction_errors.h"
 
-_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionCtx ctx) {
+_Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
     Document* message;
     if (raw.branch.nodes.len > 3) {
         message = mv_cstr_doc("Proc type has received too many terms - expect to receive only an argument list and return type.", ctx.gpa);

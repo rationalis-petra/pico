@@ -21,7 +21,7 @@ typedef enum {
 typedef struct {
     HeadType type;
     union {
-        Syntax* syn;
+        SynRef syn;
         TermFormer former;
         uint64_t macro_addr;
     };
@@ -29,16 +29,16 @@ typedef struct {
 
 
 // Internal functions declarations needed for interface implementation
-Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx);
-TopLevel abstract_i(RawTree raw, AbstractionCtx ctx);
+SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx);
+TopLevel abstract_i(RawTree raw, AbstractionICtx ctx);
 
-Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, AbstractionCtx ctx);
-Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx);
-ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx);
-Module* try_get_module(Syntax* syn, ShadowEnv* env);
-Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx);
-SymbolArray* try_get_path(Syntax* syn, Allocator* a);
-DevFlag check_dev_flags(RawTree curr, AbstractionCtx ctx);
+SynRef mk_application_body(SynRef fn_syn, RawTree raw, AbstractionICtx ctx);
+SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx);
+ComptimeHead comptime_head(RawTree raw, AbstractionICtx ctx);
+Module* try_get_module(SynRef syn, AbstractionICtx ctx);
+SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, AbstractionICtx ctx);
+SymbolArray* try_get_path(SynRef syn, AbstractionICtx ctx);
+DevFlag check_dev_flags(RawTree curr, AbstractionICtx ctx);
 bool is_special(RawTree curr);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -50,54 +50,59 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
 // Interface Implementation
 //------------------------------------------------------------------------------
 
-Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point) {
-    ShadowEnv* s_env = mk_shadow_env(a, env);
-    PiAllocator pi_alloc = convert_to_pallocator(a);
+SynRef abstract_expr(RawTree raw, AbstractionCtx ctx) {
+    ShadowEnv* s_env = mk_shadow_env(ctx.a, ctx.env);
+    PiAllocator pi_alloc = convert_to_pallocator(ctx.a);
 
-    PiAllocator tmp_alloc = convert_to_pallocator(a);
+    PiAllocator tmp_alloc = convert_to_pallocator(ctx.a);
     PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
     PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
 
-    void* vstack_memory_space = mem_alloc(4096, a);
-    void* dynamic_memory_space = mem_alloc(4096, a);
-    AbstractionCtx ctx = {
-        .gpa = a,
+    void* vstack_memory_space = mem_alloc(4096, ctx.a);
+    void* dynamic_memory_space = mem_alloc(4096, ctx.a);
+
+    AbstractionICtx ictx = {
+        .gpa = ctx.a,
+        .tape = ctx.tape,
         .pia = &pi_alloc,
         .env = s_env,
-        .point = point,
+        .point = ctx.point,
         .vstack_memory_ptr = vstack_memory_space + 4095,
         .dynamic_memory_ptr = dynamic_memory_space,
     };
-    Syntax* out = abstract_expr_i(raw, ctx);
-    mem_free(dynamic_memory_space, a);
-    mem_free(vstack_memory_space, a);
+    SynRef out = abstract_expr_i(raw, ictx);
+
+    mem_free(dynamic_memory_space, ctx.a);
+    mem_free(vstack_memory_space, ctx.a);
 
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
-    return out; 
+    return out;
 }
 
-TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point) {
-    ShadowEnv* s_env = mk_shadow_env(a, env);
-    void* vstack_memory_space = mem_alloc(4096, a);
-    void* dynamic_memory_space = mem_alloc(4096, a);
-    PiAllocator pi_alloc = convert_to_pallocator(a);
-    PiAllocator tmp_alloc = convert_to_pallocator(a);
+TopLevel abstract(RawTree raw, AbstractionCtx ctx) {
+    ShadowEnv* s_env = mk_shadow_env(ctx.a, ctx.env);
+    void* vstack_memory_space = mem_alloc(4096, ctx.a);
+    void* dynamic_memory_space = mem_alloc(4096, ctx.a);
+    PiAllocator pi_alloc = convert_to_pallocator(ctx.a);
+    PiAllocator tmp_alloc = convert_to_pallocator(ctx.a);
     PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
     PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
 
-    AbstractionCtx ctx = {
-        .gpa = a,
+    AbstractionICtx ictx = {
+        .gpa = ctx.a,
+        .tape = ctx.tape,
         .pia = &pi_alloc,
         .env = s_env,
-        .point = point,
+        .point = ctx.point,
         .vstack_memory_ptr = vstack_memory_space + 4095,
         .dynamic_memory_ptr = dynamic_memory_space,
     };
-    TopLevel out = abstract_i(raw, ctx);
 
-    mem_free(dynamic_memory_space, a);
-    mem_free(vstack_memory_space, a);
+    TopLevel out = abstract_i(raw, ictx);
+
+    mem_free(dynamic_memory_space, ctx.a);
+    mem_free(vstack_memory_space, ctx.a);
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
     return out;
@@ -286,15 +291,17 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     return true;
 }
 
-Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, AbstractionCtx ctx) {
+Result get_annotated_symbol_list(SymPtrAMap *args, RawTree list, AbstractionICtx ctx) {
     Result error_result = {.type = Err, .error_message = mv_string("Malformed proc argument list.")};
     if (list.type != RawBranch) { return error_result; }
 
     for (size_t i = 0; i < list.branch.nodes.len; i++) {
         RawTree annotation = list.branch.nodes.data[i];
         if (annotation.type == RawAtom) {
-            sym_ptr_bind(annotation.atom.symbol, NULL, args);
+            // TODO (bug): check for duplicaes
+            sym_ptr_insert(annotation.atom.symbol, NULL, args);
         } else if (annotation.type == RawBranch || annotation.branch.nodes.len > 1) {
+            // TODO (bug): check for duplicaes
             RawTree arg = annotation.branch.nodes.data[0];
             if (arg.type != RawAtom || arg.atom.type != ASymbol) { return error_result; }
             RawTree* raw_type;
@@ -303,9 +310,10 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, AbstractionCtx
             } else {
               raw_type = raw_slice(&annotation, 1, ctx.pia);
             }
-            Syntax* type = abstract_expr_i(*raw_type, ctx); 
+            SynRef* ref = mem_alloc(sizeof(SynRef), ctx.gpa);
+            *ref = abstract_expr_i(*raw_type, ctx); 
 
-            sym_ptr_bind(arg.atom.symbol, type, args);
+            sym_ptr_insert(arg.atom.symbol, ref, args);
         } else {
           // TODO (Improvement): produce index, range?
           return error_result;
@@ -314,75 +322,75 @@ Result get_annotated_symbol_list(SymPtrAssoc *args, RawTree list, AbstractionCtx
     return (Result) {.type = Ok};
 }
 
-Syntax* mk_application_body(Syntax* fn_syn, RawTree raw, AbstractionCtx ctx) {
+SynRef mk_application_body(SynRef fn_syn, RawTree raw, AbstractionICtx ctx) {
     Allocator* a = ctx.gpa;
-    Syntax* res = mem_alloc(sizeof(Syntax), a);
-    if (fn_syn->type == SConstructor) {
-        *res = (Syntax) {
+    SynRef res = new_syntax(ctx.tape);
+    set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+
+    //     .range = raw.range,
+    Syntax fn = get_syntax(fn_syn, ctx.tape);
+    if (fn.type == SConstructor) {
+        Syntax syn = {
             .type = SVariant,
-            .ptype = NULL,
-            .range = raw.range,
-            .variant.enum_type = fn_syn->constructor.enum_type,
-            .variant.tagname = fn_syn->constructor.tagname,
-            .variant.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
+            .variant.has_enum_type = fn.constructor.has_enum_type,
+            .variant.enum_type = fn.constructor.enum_type,
+            .variant.tagname = fn.constructor.tagname,
+            .variant.args = mk_syn_array(raw.branch.nodes.len - 1, a),
         };
 
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
-            push_ptr(arg, &res->variant.args);
+            SynRef arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(arg, &syn.variant.args);
         }
+        set_syntax(res, syn, ctx.tape);
     } else if (raw.branch.nodes.len > 1
                && raw.branch.nodes.data[1].type == RawBranch
                && raw.branch.nodes.data[1].branch.hint == HImplicit) {
         RawTree typelist = raw.branch.nodes.data[1];
 
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SAllApplication,
-            .ptype = NULL,
-            .range = raw.range,
-            .all_application.function = mem_alloc(sizeof(Syntax), a),
-            .all_application.types = mk_ptr_array(typelist.branch.nodes.len, a),
-            .all_application.implicits = mk_ptr_array(0, a),
-            .all_application.args = mk_ptr_array(raw.branch.nodes.len - 2, a),
+            .all_application.function = fn_syn,
+            .all_application.types = mk_syn_array(typelist.branch.nodes.len, a),
+            .all_application.implicits = mk_syn_array(0, a),
+            .all_application.args = mk_syn_array(raw.branch.nodes.len - 2, a),
         };
-        res->all_application.function = fn_syn;
 
         for (size_t i = 0; i < typelist.branch.nodes.len; i++) {
-            Syntax* type = abstract_expr_i(typelist.branch.nodes.data[i], ctx);
-            push_ptr(type, &res->all_application.types);
+            SynRef type = abstract_expr_i(typelist.branch.nodes.data[i], ctx);
+            push_syn(type, &syn.all_application.types);
         }
 
         for (size_t i = 2; i < raw.branch.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
-            push_ptr(arg, &res->all_application.args);
+            SynRef arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(arg, &syn.all_application.args);
         }
+        set_syntax(res, syn, ctx.tape);
     } else {
-        *res = (Syntax) {
+        Syntax syn = (Syntax) {
             .type = SApplication,
-            .ptype = NULL,
-            .range = raw.range,
-            .application.function = mem_alloc(sizeof(Syntax), a),
-            .application.implicits = mk_ptr_array(0, a),
-            .application.args = mk_ptr_array(raw.branch.nodes.len - 1, a),
+            .application.function = fn_syn,
+            .application.implicits = mk_syn_array(0, a),
+            .application.args = mk_syn_array(raw.branch.nodes.len - 1, a),
         };
-        res->application.function = fn_syn;
 
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            Syntax* arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
-            push_ptr(arg, &res->application.args);
+            SynRef arg = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(arg, &syn.application.args);
         }
+        set_syntax(res, syn, ctx.tape);
     }
 
     return res;
 }
 
-Syntax* mk_application(RawTree raw, AbstractionCtx ctx) {
-    Syntax* fn_syn = abstract_expr_i((raw.branch.nodes.data[0]), ctx);
+SynRef mk_application(RawTree raw, AbstractionICtx ctx) {
+    SynRef fn_syn = abstract_expr_i((raw.branch.nodes.data[0]), ctx);
     return mk_application_body(fn_syn, raw, ctx);
 }
 
 
-Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
+SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
     Allocator* a = ctx.gpa;
     PicoError err;
     switch (former) {
@@ -405,8 +413,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
-        SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
+        SymPtrAMap implicits = mk_sym_ptr_amap(0, a);
+        SymPtrAMap arguments = mk_sym_ptr_amap(8, a);
 
         size_t args_index = 1;
         if (raw.branch.nodes.data[args_index].type == RawBranch
@@ -455,19 +463,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         } else {
             raw_term = raw_slice(&raw, args_index, ctx.pia);
         }
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
         shadow_pop(arguments.len, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SProcedure,
-            .ptype = NULL,
-            .range = raw.range,
             .procedure.args = arguments,
             .procedure.implicits = implicits, 
             .procedure.body = body,
             .procedure.preserve_dyn_memory = preserve_dyn_memory,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn, ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FAll: {
@@ -492,16 +500,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         } else {
             raw_term = raw_slice(&raw, 2, ctx.pia);
         }
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SAll,
-            .ptype = NULL,
-            .range = raw.range,
             .all.args = arguments,
             .all.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FMacro: {
@@ -511,15 +519,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        Syntax* transformer = abstract_expr_i(*body, ctx);
+        SynRef transformer = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SMacro,
-            .ptype = NULL,
-            .range = raw.range,
             .transformer = transformer,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FApplication: {
@@ -530,9 +538,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Not enough terms provided to seal", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
-        SynArray types = mk_ptr_array(8, a);
+        SynArray types = mk_syn_array(8, a);
         {
             RawTree raw_types = raw.branch.nodes.data[2];
             if (!is_special(raw_types)) {
@@ -542,20 +550,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             for (size_t i = 0; i < raw_types.branch.nodes.len; i++) {
-                Syntax* syn = abstract_expr_i(raw_types.branch.nodes.data[i], ctx);
-                push_ptr(syn, &types);
+                SynRef syn = abstract_expr_i(raw_types.branch.nodes.data[i], ctx);
+                push_syn(syn, &types);
             }
         }
 
         size_t body_idx = 3;
-        SynArray implicits = mk_ptr_array(8, a);
+        SynArray implicits = mk_syn_array(8, a);
         {
             RawTree raw_implicits = raw.branch.nodes.data[3];
             if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
                 body_idx++;
                 for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
-                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], ctx);
-                    push_ptr(syn, &implicits);
+                    SynRef syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], ctx);
+                    push_syn(syn, &implicits);
                 }
             }
         }
@@ -568,18 +576,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
             ? &raw.branch.nodes.data[body_idx]
             : raw_slice(&raw, body_idx, ctx.pia);
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SSeal,
-            .ptype = NULL,
-            .range = raw.range,
             .seal.type = type,
             .seal.types = types,
             .seal.implicits = implicits,
             .seal.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FUnseal: {
@@ -587,7 +595,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Not enough terms provided to unseal", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* sealed; 
+        SynRef sealed; 
         Symbol binder;
         {
 
@@ -637,19 +645,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         RawTree *raw_term = (raw.branch.nodes.len == body_idx+1)
             ? &raw.branch.nodes.data[body_idx]
             : raw_slice(&raw, body_idx, ctx.pia);
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SUnseal,
-            .ptype = NULL,
-            .range = raw.range,
             .unseal.sealed = sealed,
             .unseal.binder = binder,
             .unseal.types = types,
             .unseal.implicits = implicits,
             .unseal.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FVariant: {
@@ -667,18 +675,24 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             // TODO (FEAT): caese special handling of unit, true, false syntaxes
             //              - make 'normal' types
             if (symbol_eq(lit, string_to_symbol(mv_string("unit")))) {
-                Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitUnit, .ptype = NULL, .range = raw.range, .boolean = true,};
+                Syntax syn = {.type = SLitUnit};
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = raw.range}, ctx.tape);
                 return res;
             }
             if (symbol_eq(lit, string_to_symbol(mv_string("true")))) {
-                Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .ptype = NULL, .range = raw.range, .boolean = true,};
+                Syntax syn = {.type = SLitBool, .boolean = true,};
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = raw.range}, ctx.tape);
                 return res;
             }
             else if (symbol_eq(lit, string_to_symbol(mv_string("false")))) {
-                Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {.type = SLitBool, .ptype = NULL,  .range = raw.range, .boolean = false,};
+                Syntax syn = {.type = SLitBool, .boolean = false,};
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = raw.range}, ctx.tape);
                 return res;
             } else {
                 // Check that we are indeed getting a result
@@ -690,14 +704,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                     throw_pi_error(ctx.point, err);
                 };
 
-                Syntax* res = mem_alloc(sizeof(Syntax), a);
-                *res = (Syntax) {
+                Syntax syn = {
                     .type = SConstructor,
-                    .ptype = NULL,
-                    .range = raw.range,
-                    .constructor.enum_type = NULL,
+                    .constructor.has_enum_type = None,
                     .constructor.tagname = msym.atom.symbol,
                 };
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = raw.range}, ctx.tape);
                 return res;
             }
         }
@@ -707,7 +721,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         } else {
             // Get the Type portion of the projector 
-            Syntax* var_type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+            SynRef var_type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
             // Check that we are indeed getting a result
             // Get the tag gname of the variant
@@ -718,17 +732,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 throw_pi_error(ctx.point, err);
             };
 
-            Syntax* res = mem_alloc(sizeof(Syntax), a);
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SConstructor,
-                .ptype = NULL,
-                .range = raw.range,
+                .constructor.has_enum_type = Some,
                 .constructor.enum_type = var_type,
                 .constructor.tagname = msym.atom.symbol,
             };
+            SynRef res = new_syntax(ctx.tape);
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             return res;
         }
-        break;
     }
     case FMatch: {
         if (raw.branch.nodes.len < 2) {
@@ -741,7 +755,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Match expects first argument to be expression (use parentheses '(' and ')')", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* sval = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef sval = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
         ClauseArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
         
@@ -821,7 +835,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree *raw_term = (raw_clause.branch.nodes.len == 2)
                 ? &raw_clause.branch.nodes.data[1]
                 : raw_slice(&raw_clause, 1, ctx.pia);
-            Syntax* clause_body = abstract_expr_i(*raw_term, ctx);
+            SynRef clause_body = abstract_expr_i(*raw_term, ctx);
 
             SynClause* clause = mem_alloc(sizeof(SynClause), a);
             *clause = (SynClause) {
@@ -833,14 +847,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             push_ptr(clause, &clauses);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SMatch,
-            .ptype = NULL,
-            .range = raw.range,
             .match.val = sval,
             .match.clauses = clauses,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FStructure: {
@@ -850,18 +864,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* sbase;
+        Option_t has_base;
+        SynRef sbase;
         size_t start_idx = 1;
         // Get the type of the structure
         if (!is_special(raw.branch.nodes.data[1])) {
             start_idx = 2;
+            has_base = Some;
             sbase = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         } else {
-            sbase = NULL;
+            has_base = None;
+            sbase = (SynRef){};
         }
 
         // Construct a structure
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len, a);
         for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
@@ -884,27 +901,28 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            Syntax* syn = abstract_expr_i(*val_desc, ctx);
+            SynRef syn = abstract_expr_i(*val_desc, ctx);
 
             // Check that there are no duplicates, then insert
             size_t found_idx;
-            if (sym_ptr_find(&found_idx, field, fields)) {
+            if (sym_syn_find(&found_idx, field, fields)) {
                 err.range = fdesc.range;
                 err.message = mv_cstr_doc("Duplicate field in structure.", a);
                 throw_pi_error(ctx.point, err);
             }
             
-            sym_ptr_insert(field, syn, &fields);
+            sym_syn_insert(field, syn, &fields);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SStructure,
-            .ptype = NULL,
-            .range = raw.range,
+            .structure.has_base = has_base,
             .structure.base = sbase,
             .structure.fields = fields,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FProjector: {
@@ -915,7 +933,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         }
 
         // Get the source portion of the proector 
-        Syntax* source = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef source = abstract_expr_i(raw.branch.nodes.data[2], ctx);
 
         // Get the symbol portion of the projector
         RawTree msym = raw.branch.nodes.data[1];
@@ -929,8 +947,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     }
     case FInstance: {
         SymbolArray params = mk_symbol_array(0, a);
-        SymPtrAssoc implicits = mk_sym_ptr_assoc(0, a);
-        Syntax* constraint;
+        SymPtrAMap implicits = mk_sym_ptr_amap(0, a);
+        SynRef constraint;
 
         size_t start_idx = 1;
         RawTree current = raw.branch.nodes.data[start_idx];
@@ -972,7 +990,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         constraint = abstract_expr_i(current, ctx);
         start_idx++;
 
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - start_idx, a);
+        SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len - start_idx, a);
         for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
@@ -995,21 +1013,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            Syntax* syn = abstract_expr_i(*val_desc, ctx);
+            SynRef syn = abstract_expr_i(*val_desc, ctx);
 
-            sym_ptr_insert(field, syn, &fields);
+            sym_syn_insert(field, syn, &fields);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = (Syntax) {
             .type = SInstance,
-            .ptype = NULL,
-            .range = raw.range,
             .instance.params = params,
             .instance.implicits = implicits,
             .instance.constraint = constraint,
             .instance.fields = fields,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynamic: {
@@ -1019,15 +1037,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        Syntax* dynamic = abstract_expr_i(*body, ctx);
+        SynRef dynamic = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynamic,
-            .ptype = NULL,
-            .range = raw.range,
             .dynamic = dynamic,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynamicUse: {
@@ -1036,15 +1054,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Malformed use expression: expects at least 1 arg.", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* use = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef use = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynamicUse,
-            .ptype = NULL,
-            .range = raw.range,
             .use = use,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynamicSet: {
@@ -1053,17 +1071,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Malformed set expression: expects 2 args.", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* dynamic = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* val = abstract_expr_i(*(raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia)), ctx);
+        SynRef dynamic = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef val = abstract_expr_i(*(raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia)), ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynamicSet,
-            .ptype = NULL,
-            .range = raw.range,
             .dynamic_set.dynamic = dynamic,
             .dynamic_set.new_val = val,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynamicLet: {
@@ -1102,20 +1120,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             ? &raw.branch.nodes.data[index]
             : raw_slice(&raw, index, ctx.pia);
 
-        Syntax* body = abstract_expr_i(*raw_body, ctx);
+        SynRef body = abstract_expr_i(*raw_body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynamicLet,
-            .ptype = NULL,
-            .range = raw.range,
             .dyn_let_expr.bindings = bindings,
             .dyn_let_expr.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FLet: {
-        SymSynAMap bindings = mk_sym_ptr_amap(raw.branch.nodes.len - 1, a);
+        SymSynAMap bindings = mk_sym_syn_amap(raw.branch.nodes.len - 1, a);
         size_t index = 1;
 
         bool special = true;
@@ -1140,11 +1158,11 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 }
 
                 shadow_var(sym, ctx.env);
-                Syntax *bind_body = bind.branch.nodes.len == 2
+                SynRef bind_body = bind.branch.nodes.len == 2
                     ? abstract_expr_i(bind.branch.nodes.data[1], ctx)
                     : abstract_expr_i(*raw_slice(&bind, 1, ctx.pia), ctx);
 
-                sym_ptr_insert(sym, bind_body, &bindings);
+                sym_syn_insert(sym, bind_body, &bindings);
             }
         }
 
@@ -1160,17 +1178,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
+        SynRef body = abstract_expr_i(raw.branch.nodes.data[index], ctx);
         shadow_pop(bindings.len, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SLet,
-            .ptype = NULL,
-            .range = raw.range,
             .let_expr.bindings = bindings,
             .let_expr.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FIf: {
@@ -1179,21 +1197,21 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Term former 'if' expects precisely 3 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
-        SynArray terms = mk_ptr_array(3, a);
+        SynArray terms = mk_syn_array(3, a);
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
-            Syntax* term = abstract_expr_i(raw.branch.nodes.data[i], ctx);
-            push_ptr(term, &terms);
+            SynRef term = abstract_expr_i(raw.branch.nodes.data[i], ctx);
+            push_syn(term, &terms);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SIf,
-            .ptype = NULL,
-            .range = raw.range,
             .if_expr.condition = terms.data[0],
             .if_expr.true_branch = terms.data[1],
             .if_expr.false_branch = terms.data[2],
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FCond: {
@@ -1202,7 +1220,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Term former 'cond' expects at least one term!", a);
             throw_pi_error(ctx.point, err);
         }
-        SynArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
+        PtrArray clauses = mk_ptr_array(raw.branch.nodes.len - 2, a);
         for (size_t i = 1; i < raw.branch.nodes.len - 1; i++) {
             RawTree raw_clause = raw.branch.nodes.data[i];
             if (raw_clause.type != RawBranch) {
@@ -1222,12 +1240,12 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
             
-            Syntax* condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
+            SynRef condition = abstract_expr_i(raw_clause.branch.nodes.data[0], ctx);
             
             RawTree* branch_term = (raw_clause.branch.nodes.len == 2)
                 ? &raw_clause.branch.nodes.data[1]
                 : raw_slice(&raw_clause, 1, ctx.pia);
-            Syntax* branch = abstract_expr_i(*branch_term, ctx);
+            SynRef branch = abstract_expr_i(*branch_term, ctx);
 
             CondClause* clause = mem_alloc(sizeof(CondClause), a);
             *clause = (CondClause) {.condition = condition, .branch = branch};
@@ -1236,7 +1254,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         }
 
         RawTree else_clause = raw.branch.nodes.data[raw.branch.nodes.len - 1];
-        Syntax* otherwise = NULL;
+        SynRef otherwise;
         {
             if (else_clause.type != RawBranch) {
                 err.range = else_clause.range;
@@ -1251,8 +1269,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
             
             RawTree else_cond = else_clause.branch.nodes.data[0];
-            Syntax* cond = abstract_expr_i(else_cond, ctx);
-            if (!(cond->type == SLitBool && cond->boolean == true)) {
+            SynRef cond = abstract_expr_i(else_cond, ctx);
+            Syntax cond_syn = get_syntax(cond, ctx.tape);
+            if (!(cond_syn.type == SLitBool && cond_syn.boolean == true)) {
                 err.range = else_clause.range;
                 err.message = mv_cstr_doc("The final clause in a 'cond' must always have a condition that is\n"
                                           " the literal :true.", a);
@@ -1265,14 +1284,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             otherwise = abstract_expr_i(*branch_term, ctx);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SCond,
-            .ptype = NULL,
-            .range = raw.range,
             .cond.clauses = clauses,
             .cond.otherwise = otherwise,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FLabels: {
@@ -1282,7 +1301,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* entry = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef entry = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
         SymPtrAssoc terms = mk_sym_ptr_assoc(raw.branch.nodes.len - 2, a);
         for (size_t i = 2; i < raw.branch.nodes.len; i++) {
@@ -1301,7 +1320,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
             
             size_t index = 1;
-            SymPtrAssoc arguments = mk_sym_ptr_assoc(8, a);
+            SymPtrAMap arguments = mk_sym_ptr_amap(8, a);
             if (is_special(label_expr->branch.nodes.data[index])) {
                 Result args_out = get_annotated_symbol_list(&arguments, label_expr->branch.nodes.data[index++], ctx);
                 if (args_out.type == Err) {
@@ -1320,7 +1339,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             RawTree* raw_term = (label_expr->branch.nodes.len == index + 1)
                 ? &label_expr->branch.nodes.data[index]
                 : raw_slice(label_expr, index, ctx.pia);
-            Syntax* res = abstract_expr_i(*raw_term, ctx);
+            SynRef res = abstract_expr_i(*raw_term, ctx);
             SynLabelBranch* branch = mem_alloc(sizeof(SynLabelBranch), a);
             *branch = (SynLabelBranch) {
                 .args = arguments,
@@ -1329,14 +1348,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             sym_ptr_bind(label, branch, &terms);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SLabels,
-            .ptype = NULL,
-            .range = raw.range,
             .labels.entry = entry,
             .labels.terms = terms,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FGoTo: {
@@ -1353,19 +1372,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        PtrArray args = mk_ptr_array(raw.branch.nodes.len - 2, a);
+        SynArray args = mk_syn_array(raw.branch.nodes.len - 2, a);
         for (size_t i = 2; i < raw.branch.nodes.len; i++) {
-            push_ptr(abstract_expr_i(raw.branch.nodes.data[i], ctx), &args);
+            push_syn(abstract_expr_i(raw.branch.nodes.data[i], ctx), &args);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SGoTo,
-            .ptype = NULL,
-            .range = raw.range,
             .go_to.label = label->atom.symbol,
             .go_to.args = args,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FWithReset: {
@@ -1391,7 +1410,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* expr = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef expr = abstract_expr_i(raw.branch.nodes.data[2], ctx);
 
         if (!get_symbol_list(&handle_binds, raw.branch.nodes.data[3]) || handle_binds.len != 3) {
             err.range = raw.branch.nodes.data[3].range;
@@ -1402,19 +1421,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         Symbol in_sym = handle_binds.data[1];
         Symbol cont_sym = handle_binds.data[2];
 
-        Syntax* handler = abstract_expr_i(raw.branch.nodes.data[4], ctx);
+        SynRef handler = abstract_expr_i(raw.branch.nodes.data[4], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SWithReset,
-            .ptype = NULL,
-            .range = raw.range,
             .with_reset.point_sym = reset_point_sym,
             .with_reset.expr = expr,
             .with_reset.in_sym = in_sym,
             .with_reset.cont_sym = cont_sym,
             .with_reset.handler = handler,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FResetTo: {
@@ -1424,20 +1443,20 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* rpoint = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* rarg = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        SynRef rpoint = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef rarg = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        Syntax syn = {
             .type = SResetTo,
-            .ptype = NULL,
-            .range = raw.range,
             .reset_to.point = rpoint,
             .reset_to.arg = rarg,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FSequence: {
-        SynArray elements = mk_ptr_array(raw.branch.nodes.len - 1, a);
+        PtrArray elements = mk_ptr_array(raw.branch.nodes.len - 1, a);
         size_t num_binds = 0;
         for (size_t i = 1; i < raw.branch.nodes.len; i++) {
             RawTree tree = raw.branch.nodes.data[i];
@@ -1482,13 +1501,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         }
         shadow_pop(num_binds, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SSequence,
-            .ptype = NULL,
-            .range = raw.range,
             .sequence.elements = elements,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FModule:
@@ -1502,16 +1521,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SIs,
-            .ptype = NULL,
-            .range = raw.range,
             .is = {.val = term, .type = type},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FInTo: {
@@ -1521,16 +1540,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SInTo,
-            .ptype = NULL,
-            .range = raw.range,
             .into = {.val = term, .type = type},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FOutOf: {
@@ -1540,16 +1559,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SOutOf,
-            .ptype = NULL,
-            .range = raw.range,
             .into = {.val = term, .type = type},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FName: {
@@ -1561,7 +1580,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
 
         RawTree namer = raw.branch.nodes.data[1];
         Symbol name = {};
-        PtrArray args = {};
+        SynArray args = {};
         if (namer.type == RawBranch) {
             RawTreePiList name_list = namer.branch.nodes;
             if (name_list.len < 1) {
@@ -1576,9 +1595,9 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
             name = name_list.data[0].atom.symbol;
 
-            args = mk_ptr_array(name_list.len - 1, a);
+            args = mk_syn_array(name_list.len - 1, a);
             for (size_t i = 1; i < name_list.len; i++) {
-                push_ptr(abstract_expr_i(name_list.data[i], ctx), &args);
+                push_syn(abstract_expr_i(name_list.data[i], ctx), &args);
             }
         }
         else if (!is_symbol(raw.branch.nodes.data[1])) {
@@ -1589,15 +1608,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         else {
             name = raw.branch.nodes.data[1].atom.symbol;
         }
-        Syntax* body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SName,
-            .ptype = NULL,
-            .range = raw.range,
             .name = {.name = name, .body = body, .args = args},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FUnName: {
@@ -1607,15 +1626,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SUnName,
-            .ptype = NULL,
-            .range = raw.range,
             .unname = term,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FWiden: {
@@ -1625,16 +1644,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SWiden,
-            .ptype = NULL,
-            .range = raw.range,
             .widen = {.val = term, .type = type},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FNarrow: {
@@ -1644,16 +1663,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SNarrow,
-            .ptype = NULL,
-            .range = raw.range,
             .narrow = {.val = term, .type = type},
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FSizeOf: {
@@ -1663,15 +1682,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SSizeOf,
-            .ptype = NULL,
-            .range = raw.range,
             .size = term,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FAlignOf: {
@@ -1681,15 +1700,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SAlignOf,
-            .ptype = NULL,
-            .range = raw.range,
             .size = term,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FOffsetOf: {
@@ -1705,16 +1724,16 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         Symbol field = raw.branch.nodes.data[1].atom.symbol;
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[2], ctx);
         
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SOffsetOf,
-            .ptype = NULL,
-            .range = raw.range,
             .offset_of.field = field,
             .offset_of.body = term,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynAlloc: {
@@ -1723,15 +1742,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Term former 'dyn-alloc' expects precisely 1 argument!", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynAlloc,
-            .ptype = NULL,
-            .range = raw.range,
             .size = term,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FProcType: {
@@ -1746,27 +1765,27 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         
-        PtrArray arg_types = mk_ptr_array(raw_args.branch.nodes.len, a);
+        SynArray arg_types = mk_syn_array(raw_args.branch.nodes.len, a);
 
         for (size_t i = 0; i < raw_args.branch.nodes.len; i++) {
-            Syntax* arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], ctx);
-            push_ptr(arg_ty, &arg_types);
+            SynRef arg_ty = abstract_expr_i(raw_args.branch.nodes.data[i], ctx);
+            push_syn(arg_ty, &arg_types);
         }
 
-        Syntax* return_type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef return_type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SProcType,
-            .ptype = NULL,
-            .range = raw.range,
             .proc_type.args = arg_types,
             .proc_type.return_type = return_type,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FStructType: {
-        SymSynAMap field_types = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        SymSynAMap field_types = mk_sym_syn_amap(raw.branch.nodes.len, a);
 
         size_t start_idx = 1;
         bool packed = false;
@@ -1804,19 +1823,19 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             };
 
             RawTree* raw_ty = (fdesc.branch.nodes.len == 2) ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia);
-            Syntax* field_ty = abstract_expr_i(*raw_ty, ctx);
+            SynRef field_ty = abstract_expr_i(*raw_ty, ctx);
 
-            sym_ptr_insert(field, field_ty, &field_types);
+            sym_syn_insert(field, field_ty, &field_types);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SStructType,
-            .ptype = NULL,
-            .range = raw.range,
             .struct_type.fields = field_types,
             .struct_type.packed = packed,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FEnumType: {
@@ -1875,8 +1894,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 sym_ptr_insert(mname.atom.symbol, types, &enum_variants);
             } else {
                 Symbol tagname;
-                PtrArray* types = mem_alloc(sizeof(PtrArray), a);
-                *types = mk_ptr_array(edesc.branch.nodes.len - 1, a);
+                SynArray* types = mem_alloc(sizeof(PtrArray), a);
+                *types = mk_syn_array(edesc.branch.nodes.len - 1, a);
 
                 if (!get_fieldname(&edesc.branch.nodes.data[0], &tagname)) {
                     err.range = edesc.branch.nodes.data[0].range;
@@ -1885,22 +1904,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 };
 
                 for (size_t i = 1; i < edesc.branch.nodes.len; i++) {
-                    Syntax* field_ty = abstract_expr_i(edesc.branch.nodes.data[i], ctx);
-                    push_ptr(field_ty, types);
+                    SynRef field_ty = abstract_expr_i(edesc.branch.nodes.data[i], ctx);
+                    push_syn(field_ty, types);
                 }
 
                 sym_ptr_insert(tagname, types, &enum_variants);
             }
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SEnumType,
-            .ptype = NULL,
-            .range = raw.range,
             .enum_type.tag_size = tag_size,
             .enum_type.variants = enum_variants,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FResetType: {
@@ -1909,17 +1928,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             err.message = mv_cstr_doc("Reset type former expects exactly 2 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
-        Syntax* in_ty = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        Syntax* out_ty = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef in_ty = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef out_ty = abstract_expr_i(raw.branch.nodes.data[2], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SResetType,
-            .ptype = NULL,
-            .range = raw.range,
             .reset_type.in = in_ty,
             .reset_type.out = out_ty,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDynamicType: {
@@ -1929,15 +1948,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
         RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        Syntax* dyn_ty = abstract_expr_i(*body, ctx);
+        SynRef dyn_ty = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDynamicType,
-            .ptype = NULL,
-            .range = raw.range,
             .dynamic_type = dyn_ty,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FNamedType: {
@@ -1956,62 +1975,89 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         Symbol name = rname->atom.symbol;
 
         RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
-        Syntax* rec_body = abstract_expr_i(*body, ctx);
+        SynRef rec_body = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SNamedType,
-            .ptype = NULL,
-            .range = raw.range,
             .named_type.name = name,
             .named_type.body = rec_body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDistinctType: {
-        if (raw.branch.nodes.len <= 1) {
+        if (raw.branch.nodes.len <= 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Malformed Distinct Type expression: expects at least 1 arg.", a);
+            err.message = mv_cstr_doc("Malformed Distinct Type expression: expects at least 2 args.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        Syntax* distinct = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Distinct Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
+        SynRef distinct = abstract_expr_i(*body, ctx);
+
+        Syntax syn = {
             .type = SDistinctType,
-            .ptype = NULL,
-            .range = raw.range,
-            .distinct_type = distinct,
+            .distinct_type.name = name,
+            .distinct_type.body = distinct,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FOpaqueType: {
-        if (raw.branch.nodes.len <= 1) {
+        if (raw.branch.nodes.len <= 2) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Malformed Opaque Type expression: expects at least 1 arg.", a);
+            err.message = mv_cstr_doc("Malformed Opaque Type expression: expects at least 2 args.", a);
             throw_pi_error(ctx.point, err);
         }
-        RawTree* body = raw.branch.nodes.len == 2 ? &raw.branch.nodes.data[1] : raw_slice(&raw, 1, ctx.pia);
-        Syntax* opaque = abstract_expr_i(*body, ctx);
+       
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Opaque Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        RawTree* body = raw.branch.nodes.len == 3 ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
+        SynRef opaque = abstract_expr_i(*body, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SOpaqueType,
-            .ptype = NULL,
-            .range = raw.range,
-            .opaque_type = opaque,
+            .opaque_type.name = name,
+            .opaque_type.body = opaque,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FTraitType: {
-        if (raw.branch.nodes.len < 2) {
+        if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
             err.message = mv_cstr_doc("Wrong number of terms to trait type former.", a);
             throw_pi_error(ctx.point, err);
         }
 
-        RawTree raw_vars = raw.branch.nodes.data[1];
+        RawTree* rname = &raw.branch.nodes.data[1];
+        if (!is_symbol(*rname)) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Malformed Trait Type expression: 1st arg to be name.", a);
+            throw_pi_error(ctx.point, err);
+        }
+        Symbol name = rname->atom.symbol;
+        
+        RawTree raw_vars = raw.branch.nodes.data[2];
         SymbolArray vars = mk_symbol_array(raw_vars.branch.nodes.len, a);
 
         if (!get_symbol_list(&vars, raw_vars)) {
@@ -2020,8 +2066,8 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymPtrAMap fields = mk_sym_ptr_amap(raw.branch.nodes.len - 2, a);
-        for (size_t i = 2; i < raw.branch.nodes.len; i++) {
+        SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len - 3, a);
+        for (size_t i = 3; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
                 err.range = fdesc.range;
@@ -2041,7 +2087,7 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 err.message = mv_cstr_doc("Trait has malformed field name.", a);
                 throw_pi_error(ctx.point, err);
             }
-            Syntax* syn;
+            SynRef syn;
             if (fdesc.branch.nodes.len == 2) {
                 syn = abstract_expr_i(fdesc.branch.nodes.data[1], ctx);
             } else {
@@ -2049,17 +2095,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 syn = abstract_expr_i(*raw_term, ctx);
             }
 
-            sym_ptr_insert(field, syn, &fields);
+            sym_syn_insert(field, syn, &fields);
         }
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = STraitType,
-            .ptype = NULL,
-            .range = raw.range,
+            .trait.name = name,
             .trait.vars = vars,
             .trait.fields = fields,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FAllType: {
@@ -2084,17 +2131,17 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         } else {
             raw_term = raw_slice(&raw, 2, ctx.pia);
         }
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SAllType,
-            .ptype = NULL,
-            .range = raw.range,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FSealedType: {
@@ -2113,14 +2160,14 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         shadow_vars(vars, ctx.env);
 
         size_t body_idx = 2;
-        SynArray implicits = mk_ptr_array(8, a);
+        SynArray implicits = mk_syn_array(8, a);
         {
             RawTree raw_implicits = raw.branch.nodes.data[body_idx];
             if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
                 body_idx++;
                 for (size_t i = 0; i < raw_implicits.branch.nodes.len; i++) {
-                    Syntax* syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], ctx);
-                    push_ptr(syn, &implicits);
+                    SynRef syn = abstract_expr_i(raw_implicits.branch.nodes.data[i], ctx);
+                    push_syn(syn, &implicits);
                 }
             }
         }
@@ -2131,18 +2178,18 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         } else {
             raw_term = raw_slice(&raw, body_idx, ctx.pia);
         }
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SSealedType,
-            .ptype = NULL,
-            .range = raw.range,
             .sealed_type.vars = vars,
             .sealed_type.implicits = implicits,
             .sealed_type.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FFamily: {
@@ -2165,31 +2212,31 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             ? &raw.branch.nodes.data[2]
             : raw_slice(&raw, 2, ctx.pia);
         
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
         shadow_pop(vars.len, ctx.env);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = STypeFamily,
-            .ptype = NULL,
-            .range = raw.range,
             .bind_type.bindings = vars,
             .bind_type.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FLiftCType: {
         RawTree* raw_term = (raw.branch.nodes.len == 2)
             ? &raw.branch.nodes.data[1]
             : raw_slice(&raw, 1, ctx.pia);
-        Syntax* c_type = abstract_expr_i(*raw_term, ctx);
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        SynRef c_type = abstract_expr_i(*raw_term, ctx);
+        Syntax syn = {
             .type = SLiftCType,
-            .ptype = NULL,
-            .range = raw.range,
             .c_type = c_type,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FReinterpretNative:
@@ -2200,23 +2247,23 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
         RawTree* raw_term = (raw.branch.nodes.len == 3)
             ? &raw.branch.nodes.data[2]
             : raw_slice(&raw, 2, ctx.pia);
 
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SReinterpret,
-            .ptype = NULL,
-            .range = raw.range,
             .reinterpret.from_native = former == FReinterpretNative,
             .reinterpret.type = type, 
             .reinterpret.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FConvertNative:
@@ -2227,23 +2274,23 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
 
         RawTree* raw_term = (raw.branch.nodes.len == 3)
             ? &raw.branch.nodes.data[2]
             : raw_slice(&raw, 2, ctx.pia);
 
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SConvert,
-            .ptype = NULL,
-            .range = raw.range,
             .convert.from_native = former == FConvertNative,
             .convert.type = type, 
             .convert.body = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FTypeOf: {
@@ -2256,15 +2303,15 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             ? &raw.branch.nodes.data[1]
             : raw_slice(&raw, 1, ctx.pia);
 
-        Syntax* body = abstract_expr_i(*raw_term, ctx);
+        SynRef body = abstract_expr_i(*raw_term, ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = STypeOf,
-            .ptype = NULL,
-            .range = raw.range,
             .type_of = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FDescribe: {
@@ -2274,24 +2321,22 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Syntax* abs = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        SymbolArray* path = try_get_path(abs, a);
+        SynRef abs = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SymbolArray* path = try_get_path(abs, ctx);
 
-        if (path) {
-            Syntax* res = mem_alloc(sizeof(Syntax), a);
-            *res = (Syntax) {
-                .type = SDescribe,
-                .ptype = NULL,
-                .range = raw.range,
-                .to_describe = *path,
-            };
-            return res;
-        } else {
+        if (!path) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mk_cstr_doc("describe expects argument to be a path!", a);
             throw_pi_error(ctx.point, err);
         }
-        break;
+        Syntax syn = {
+            .type = SDescribe,
+            .to_describe = *path,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
     }
     case FQuote: {
         if (raw.branch.nodes.len != 2) {
@@ -2302,13 +2347,13 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
 
         RawTree body = raw.branch.nodes.data[1];
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SQuote,
-            .ptype = NULL,
-            .range = raw.range,
             .quoted = body,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     case FCapture: {
@@ -2329,31 +2374,32 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
                 type = entry.vtype;
             }
             
-            Syntax* res = mem_alloc(sizeof(Syntax), a);
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SCapture,
-                .ptype = NULL,
-                .range = capture.range,
                 .capture.value = value,
                 .capture.type = type,
             };
+            SynRef res = new_syntax(ctx.tape);
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             return res;
         }
 
-        Syntax* cap = abstract_expr_i(capture, ctx);
-        if (cap->type != SAbsVariable) {
+        SynRef cap = abstract_expr_i(capture, ctx);
+        Syntax cap_syn = get_syntax(cap, ctx.tape);
+        if (cap_syn.type != SAbsVariable) {
             err.range = capture.range;
             err.message = mk_cstr_doc("Capture term former must capture a symbol or path", a);
             throw_pi_error(ctx.point, err);
         } else {
-            Syntax* res = mem_alloc(sizeof(Syntax), a);
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SCapture,
-                .ptype = NULL,
-                .range = capture.range,
-                .capture.value = cap->abvar.value,
-                .capture.type = cap->ptype,
+                .capture.value = cap_syn.abvar.value,
+                .capture.type = cap_syn.abvar.type,
             };
+            SynRef res = new_syntax(ctx.tape);
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             return res;
         }
     }
@@ -2399,64 +2445,23 @@ Syntax* mk_term(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         if (flags & DPAbstract)
             panic(mv_string("not implemented: developer-print abstract."));
 
-        Syntax* inner = abstract_expr_i(raw.branch.nodes.data[curr_node], ctx);
+        SynRef inner = abstract_expr_i(raw.branch.nodes.data[curr_node], ctx);
 
-        Syntax* res = mem_alloc(sizeof(Syntax), a);
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SDevAnnotation,
-            .ptype = NULL,
-            .range = raw.range,
             .dev.flags = flags,
             .dev.inner = inner,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
     }
     panic(mv_string("Invalid term-former provided to mk_term."));
 }
 
-void get_array_shape(RawTree raw, U64Array* shape_out, Allocator *a, PiErrorPoint *point) {
-    if (raw.type == RawBranch && raw.branch.hint == HData) {
-        if (raw.branch.nodes.len == 0) {
-            PicoError err = (PicoError) {
-                .range = raw.range,
-                .message = mk_cstr_doc("Array literal must have > 1 terms", a),
-            };
-            throw_pi_error(point, err);
-        }
-        push_u64(raw.branch.nodes.len, shape_out);
-        get_array_shape(raw.branch.nodes.data[0], shape_out, a, point);
-    }
-}
-
-void mk_array_inner(PtrArray* terms, uint64_t depth, U64Array expected_shape, RawTree raw, AbstractionCtx ctx) {
-    Allocator* a = ctx.gpa;
-    if (raw.type == RawBranch && raw.branch.hint == HData) {
-        if (expected_shape.len <= depth) {
-            PicoError err = (PicoError) {
-                .range = raw.range,
-                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape - too deep.", a),
-            };
-            throw_pi_error(ctx.point, err);
-        }
-        if (raw.branch.nodes.len != expected_shape.data[depth]) {
-            PicoError err = (PicoError) {
-                .range = raw.range,
-                .message = mk_cstr_doc("Non-rectangular array: this part does not match the expected shape.", a),
-            };
-            throw_pi_error(ctx.point, err);
-        }
-        for (size_t i = 0; i < raw.branch.nodes.len; i++) {
-            mk_array_inner(terms, depth + 1, expected_shape, raw.branch.nodes.data[i], ctx);
-        }
-    } else {
-        // just abstract and push
-        Syntax* term = abstract_expr_i(raw, ctx);
-        push_ptr(term, terms);
-    }
-}
-
-MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
+MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionICtx ctx) {
     // Call the function (uses Pico ABI)
     MacroResult output;
     RawTreePiList input = raw.branch.nodes;
@@ -2562,81 +2567,81 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionCtx ctx) {
     return output;
 }
 
-Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
+SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx) {
     // TODO: add debug checks that shadow_env.len is preserved 
     PicoError err = {.range = raw.range};
     Allocator* a = ctx.gpa;
-    Syntax* res = mem_alloc(sizeof(Syntax), a);
     // Resolution does not perform type analysis, so we set the type pointer to NULL
     // This is then resolved in the typechecking stage;
-    res->ptype = NULL;
     switch (raw.type) {
     case RawAtom: {
+        SynRef res = new_syntax(ctx.tape);
         switch(raw.atom.type) {
         case ASymbol: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SVariable,
-                .ptype = NULL,
-                .range = raw.range,
                 .variable = raw.atom.symbol,
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         case AIntegral: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SLitUntypedIntegral,
-                .ptype = NULL,
-                .range = raw.range,
                 .integral.value = raw.atom.int_64,
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         case AFloating: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SLitUntypedFloating,
-                .ptype = NULL,
-                .range = raw.range,
                 .floating.value = raw.atom.float_64,
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         case ABool: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SLitBool,
-                .ptype = NULL,
-                .range = raw.range,
                 .boolean = (bool) raw.atom.int_64,
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         case AString: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SLitString,
-                .ptype = NULL,
-                .range = raw.range,
                 .string = raw.atom.string,
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         case ACapture: {
-            *res = (Syntax) {
+            Syntax syn = {
                 .type = SAbsVariable,
-                .ptype = raw.atom.capture.type,
-                .range = raw.range,
+                .abvar.type = raw.atom.capture.type,
                 .abvar.value = raw.atom.capture.value,
                 .abvar.index = 0,
                 // TODO: symbol?
             };
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
             break;
         }
         default:
             panic(mv_string("Don't know how to make a literal from this atom!."));
         }
+        return res;
         break;
     }
     case RawBranch: {
         // Currently, can only have function calls, so all Raw lists compile down to an application
-
         if (raw.branch.nodes.len < 1) {
             err.range = raw.range;
             err.message = mk_cstr_doc("Raw Syntax must have at least one element!", a);
@@ -2674,15 +2679,13 @@ Syntax* abstract_expr_i(RawTree raw, AbstractionCtx ctx) {
         }
         break;
     }
-    default: {
+    default:
         panic(mv_string("Internal Error: Name Resolution Received an invalid Raw Syntax Tree"));
     }
-    }
-    return res;
 }
 
 
-TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionCtx ctx) {
+TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
     Allocator* a = ctx.gpa;
     PicoError err = {.range = raw.range};
     TopLevel res;
@@ -2704,13 +2707,13 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         RawTree* raw_term = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
 
         shadow_var(sym, ctx.env);
-        Syntax* term = abstract_expr_i(*raw_term, ctx);
+        SynRef out = abstract_expr_i(*raw_term, ctx);
         shadow_pop(1, ctx.env);
 
         res = (TopLevel) {
             .type = TLDef,
             .def.bind = sym,
-            .def.value = term,
+            .def.value = out,
         };
 
         break;
@@ -2736,7 +2739,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionCtx ctx) {
         // [.inline-hint <hint>]
 
         shadow_var(sym, ctx.env);
-        SymPtrAMap properties = mk_sym_ptr_amap(raw.branch.nodes.len, a);
+        SymSynAMap properties = mk_sym_syn_amap(raw.branch.nodes.len, a);
         for (size_t i = 2; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
@@ -2759,9 +2762,9 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionCtx ctx) {
             }
 
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            Syntax* syn = abstract_expr_i(*val_desc, ctx);
+            SynRef syn = abstract_expr_i(*val_desc, ctx);
 
-            sym_ptr_insert(field, syn, &properties);
+            sym_syn_insert(field, syn, &properties);
         }
         shadow_pop(1, ctx.env);
 
@@ -2804,7 +2807,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionCtx ctx) {
     return res;
 }
 
-TopLevel abstract_i(RawTree raw, AbstractionCtx ctx) {
+TopLevel abstract_i(RawTree raw, AbstractionICtx ctx) {
     Allocator* a = ctx.gpa;
     // first: try a unique toplevel-form
     bool unique_toplevel = false;
@@ -3006,17 +3009,15 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                         throw_pi_error(point, err);
                     }
 
-                    SymbolArray members = mk_symbol_array(4, a);
+                    SymbolArray members = mk_symbol_array(symlist.branch.nodes.len, a);
                     for (size_t i = 0; i < symlist.branch.nodes.len; i++) {
                         RawTree rsymbol = symlist.branch.nodes.data[i];
-                        for (size_t i = 0; i < raw->branch.nodes.len; i++) {
-                            if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
-                                push_symbol(rsymbol.atom.symbol, &members);
-                            } else {
-                                err.range = rsymbol.range;
-                                err.message = mv_cstr_doc("Expecting a symbol here.", a);
-                                throw_pi_error(point, err);
-                            }
+                        if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
+                          push_symbol(rsymbol.atom.symbol, &members);
+                        } else {
+                          err.range = rsymbol.range;
+                          err.message = mv_cstr_doc("Expecting a symbol here.", a);
+                          throw_pi_error(point, err);
                         }
                     }
                     SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
@@ -3120,7 +3121,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
 // is a macro, and so we need to be able to resolve the module lookup at abstraction
 // time. Comptime head gets the 'head' of an application like this, so we know
 // if it is a macro/term former & can abstract accordingly
-ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx) {
+ComptimeHead comptime_head(RawTree raw, AbstractionICtx ctx) {
     if (is_symbol(raw)) {
         Symbol sym = raw.atom.symbol;
         ShadowEntry entry = shadow_env_lookup(sym, ctx.env);
@@ -3136,30 +3137,33 @@ ComptimeHead comptime_head(RawTree raw, AbstractionCtx ctx) {
             break;
         }
     }
-    Syntax* syn = abstract_expr_i(raw, ctx);
-    if (syn->type == SAbsVariable) {
-        if (syn->ptype->sort == TPrim && syn->ptype->prim == TFormer) {
-            return (ComptimeHead){.type = HeadFormer, .former = *((TermFormer*)syn->abvar.value)};
-        } else if (syn->ptype->sort == TPrim && syn->ptype->prim == TMacro) {
-            return (ComptimeHead){.type = HeadMacro, .macro_addr = *((uint64_t*)syn->abvar.value)};
+    SynRef ref = abstract_expr_i(raw, ctx);
+    Syntax syn = get_syntax(ref, ctx.tape);
+    if (syn.type == SAbsVariable) {
+        if (syn.abvar.type->sort == TPrim && syn.abvar.type->prim == TFormer) {
+            return (ComptimeHead){.type = HeadFormer, .former = *((TermFormer*)syn.abvar.value)};
+        } else if (syn.abvar.type->sort == TPrim && syn.abvar.type->prim == TMacro) {
+            return (ComptimeHead){.type = HeadMacro, .macro_addr = *((uint64_t*)syn.abvar.value)};
         }
     }
-    return (ComptimeHead){.type = HeadSyntax, .syn= syn};
+    return (ComptimeHead){.type = HeadSyntax, .syn = ref};
 }
 
-Module* try_get_module(Syntax* syn, ShadowEnv* env) {
-    switch (syn->type) {
+Module* try_get_module(SynRef ref, AbstractionICtx ctx) {
+    Syntax syn = get_syntax(ref, ctx.tape);
+    switch (syn.type) {
     case SVariable: {
-        ShadowEntry se = shadow_env_lookup(syn->variable, env);
+        ShadowEntry se = shadow_env_lookup(syn.variable, ctx.env);
         if ((se.type == SGlobal || se.type == SLocal) && se.is_module) {
             return se.module;
         }
         break;
     }
     case SProjector: {
-        Module *module = try_get_module(syn->projector.val, env);
+        Syntax syn = get_syntax(ref, ctx.tape);
+        Module *module = try_get_module(syn.projector.val, ctx);
         if (module) {
-            ModuleEntry* entry = get_def(syn->projector.field, module);
+            ModuleEntry* entry = get_def(syn.projector.field, module);
             if (entry->is_module) { return entry->value; }
             else { return NULL; }
         } else {
@@ -3172,19 +3176,20 @@ Module* try_get_module(Syntax* syn, ShadowEnv* env) {
     return NULL;
 }
 
-SymbolArray* try_get_path(Syntax* syn, Allocator* a) {
-    SymbolArray arr = mk_symbol_array(8, a);
+SymbolArray* try_get_path(SynRef ref, AbstractionICtx ctx) {
+    SymbolArray arr = mk_symbol_array(8, ctx.gpa);
     bool running = true;
     while (running) {
-        switch (syn->type) {
+        Syntax syn = get_syntax(ref, ctx.tape);
+        switch (syn.type) {
         case SVariable: {
-            push_symbol(syn->variable, &arr);
+            push_symbol(syn.variable, &arr);
             running = false;
             break;
         }
         case SProjector: {
-            push_symbol(syn->projector.field, &arr);
-            syn = syn->projector.val;
+            push_symbol(syn.projector.field, &arr);
+            ref = syn.projector.val;
             break;
         }
         default:
@@ -3192,12 +3197,12 @@ SymbolArray* try_get_path(Syntax* syn, Allocator* a) {
         }
     }
     reverse_symbol_array(arr);
-    SymbolArray* out = mem_alloc(sizeof(SymbolArray), a);
+    SymbolArray* out = mem_alloc(sizeof(SymbolArray), ctx.gpa);
     *out = arr;
     return out;
 }
 
-DevFlag check_dev_flags(RawTree raw, AbstractionCtx ctx) {
+DevFlag check_dev_flags(RawTree raw, AbstractionICtx ctx) {
     DevFlag flags = DevNone;
     for (size_t i = 1; i < raw.branch.nodes.len; i++) {
         RawTree ann = raw.branch.nodes.data[i];
@@ -3229,10 +3234,9 @@ bool is_special(RawTree raw) {
     return raw.type == RawBranch && raw.branch.hint == HSpecial; 
 }
 
-Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, AbstractionCtx ctx) {
+SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, AbstractionICtx ctx) {
     Allocator *a = ctx.gpa;
-    Syntax* res = mem_alloc(sizeof(Syntax), a);
-    Module* m = try_get_module(source, ctx.env);
+    Module* m = try_get_module(source, ctx);
     if (m) {
         // TODO (INVESTIGATION): do we have a better way to manage lookup
         // Note: seems like having to check for the special case of
@@ -3240,24 +3244,28 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Abs
         ModuleEntry* e = get_def(msym->atom.symbol, m);
         if (e) {
             if (e->is_module) {
-                *res = (Syntax) {
+                Syntax syn = {
                     .type = SProjector,
-                    .ptype = NULL,
-                    .range = range,
                     .projector.field = msym->atom.symbol,
                     .projector.val = source,
                 };
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = range}, ctx.tape);
+                return res;
             } else {
-                *res = (Syntax) {
+                Syntax syn = {
                     .type = SAbsVariable,
-                    .ptype = &e->type,
-                    .range = msym->range,
                     .abvar.index = 0,
                     .abvar.value = (e->type.sort == TKind || e->type.sort == TConstraint) ? &e->value : e->value,
+                    .abvar.type = &e->type,
                     .abvar.symbol = msym->atom.symbol,
                 };
+                SynRef res = new_syntax(ctx.tape);
+                set_syntax(res, syn , ctx.tape);
+                set_range(res, (SynRange){.term = range}, ctx.tape);
+                return res;
             }
-            return res;
         } else {
             PicoError err = (PicoError) {
                 .range = msym->range,
@@ -3267,13 +3275,14 @@ Syntax* resolve_module_projector(Range range, Syntax* source, RawTree* msym, Abs
             throw_pi_error(ctx.point, err);
         }
     } else {
-        *res = (Syntax) {
+        Syntax syn = {
             .type = SProjector,
-            .ptype = NULL,
-            .range = range,
             .projector.field = msym->atom.symbol,
             .projector.val = source,
         };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = range}, ctx.tape);
         return res;
     }
 }

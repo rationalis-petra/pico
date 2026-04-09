@@ -43,7 +43,7 @@ a 'normal' language to Relic, we follow a thre-step process - consider the
 following "python-style" code:
 
 ```python
-print-ln(to-string(2 + 3))
+write-line(to-string(2 + 3))
 ```
 
 ### Step 1: Convert Operators
@@ -52,7 +52,7 @@ In Relic, arithemetic operators such as '+', '-' and '*' are actually just
 regular functions. They therefore use the same syntax as a reular function call
 
 ```clojure
-print-ln(to-string(+ (2, 3))
+write-line(to-string(+ (2, 3))
 ```
 
 ### Step 2: Move Parentheses
@@ -61,7 +61,7 @@ Another difference between Relic and other languages is that the function is inc
 in the parentheses of a function-call, so the expression now becomes
 
 ```clojure
-(print-ln, (to-string, (+, 2, 3))
+(write-line, (to-string, (+, 2, 3))
 ```
 
 
@@ -71,14 +71,14 @@ The final difference is that Relic does not use commas to separate function
 arguments, only whitespace, so we can safely remove them:
 
 ```clojure
-(print-ln (to-string (+ 2 3))
+(write-line (to-string (+ 2 3))
 ```
 
 Indeed, if you run `pico repl` and type the above into the input, you should see
 '5' printed to the console.
 
 ```clojure
-user > (print-ln (to-string (+ 2 3))
+user > (write-line (to-string (+ 2 3))
 5
 :unit
 ```
@@ -146,8 +146,8 @@ will evaluate to '10'.
 
 ```clojure
 user > (def greet proc [name] seq 
-         (print "Hello, ")
-         (print-ln name)
+         (write-string "Hello, ")
+         (write-line name)
          10)
 Defined greet : Proc [String] Unit
 user > (greet "Bob")
@@ -166,8 +166,8 @@ user > (def get-name proc [] "Robert")
 Defined get-name : Proc [] String
 user > (def greet proc [] seq
   [let! name (get-name)]
-  (print "Hello, ")
-  (print-ln name))
+  (write-string "Hello, ")
+  (write-line name))
 Define greet : Proc [] Unit
 user > (greet)
 Hello, Robert
@@ -180,7 +180,7 @@ into a single looping construct, called `loop`. A simple for-loop is below:
 
 ```clojure
 user > (loop [for i from 1 upto 10]
-  (print-ln (to-string i)))
+  (write-line (to-string i)))
 ```
 
 We can also add a `while` to our loop, if we so desire, which will cause an
@@ -189,7 +189,7 @@ early termination.
 ```clojure
 user > (loop [for i from 1 upto 10]
              [while (< i 8)]
-  (print-ln (to-string i)))
+  (write-line (to-string i)))
 ```
 
 We can even add multiple loops in parallel. As with `while`, the loop will 
@@ -199,10 +199,10 @@ terminate if any of the individual loops (termed 'drivers') terminate.
 user > (loop [for i from 1 upto 10]
              [for j from 10 downto 1]
   (seq 
-    (print "i, j: ")
-    (print (to-string i))
-    (print ", ")
-    (print-ln (to-string j))))
+    (write-string "i, j: ")
+    (write-string (to-string i))
+    (write-string ", ")
+    (write-line (to-string j))))
 ```
 
 ### Types
@@ -329,7 +329,7 @@ which does exactly that.
 ```clojure
 ;; Open is similar to 'import' in other languages, by "opening" the list module,
 ;; we gain access to the functions inside
-user > (open data.list)
+user > (import (data.list :all))
 user > (def str-list (list "bannana" "apple" "orange"))
 Defined str-list : List String
 user > (def ilist (data.list -10 5 6))

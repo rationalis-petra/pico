@@ -19,6 +19,7 @@ typedef enum {
 } CodegenBackend;
 
 typedef struct {
+    SynTape tape;
     Target target;
     Allocator *a;
     ErrorPoint* point;
@@ -30,9 +31,9 @@ void teardown_codegen();
 
 LinkData generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx);
 
-LinkData generate_expr(Syntax* syn, Environment* env, CodegenContext ctx);
+LinkData generate_expr(SynRef syn, Environment* env, CodegenContext ctx);
 
-void generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx);
+void generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx);
 
 void clear_target(Target target);
 

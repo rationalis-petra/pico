@@ -24,12 +24,19 @@ typedef struct {
     };
 } MacroResult;
 
-TopLevel abstract(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point);
-Syntax* abstract_expr(RawTree raw, Environment* env, Allocator* a, PiErrorPoint* point);
+typedef struct {
+    SynTape tape;
+    Allocator *a;
+    Environment *env;
+    PiErrorPoint* point;
+} AbstractionCtx;
+
+TopLevel abstract(RawTree raw, AbstractionCtx ctx);
+SynRef abstract_expr(RawTree raw, AbstractionCtx ctx);
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point);
 RawTree* raw_slice(RawTree* raw, size_t drop, PiAllocator* pia);
 
-// Helper functions for implementing macros (used in the standard library)
+// Helper functions for implementing macros (also used in the standard library)
 bool eq_symbol(RawTree* raw, Symbol s);
 bool is_symbol(RawTree raw);
 

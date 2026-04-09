@@ -24,7 +24,4 @@ uint8_t num_bytes_utf8(uint8_t head);
 // returns 0 if head is an invalid start of a utf-8 string.
 uint8_t point_size_utf8(uint32_t codepoint);
 
-// encode_string
-// decode_string
-
 #endif

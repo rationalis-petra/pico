@@ -130,7 +130,7 @@ void build_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a
     convert_c_fn(relic_range, &fn_ctype, type, ass, a, point); 
 }
 
-Range get_range(RawTree syntax) {
+Range get_raw_range(RawTree syntax) {
     return syntax.range;
 }
 
@@ -138,7 +138,7 @@ void build_get_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocato
     // Proc type
     CType fn_ctype = mk_fn_ctype(pia, 1, "Synatx", mk_syntax_ctype(pia), mk_range_ctype(pia));
 
-    convert_c_fn(get_range, &fn_ctype, type, ass, a, point); 
+    convert_c_fn(get_raw_range, &fn_ctype, type, ass, a, point); 
 }
 
 void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {

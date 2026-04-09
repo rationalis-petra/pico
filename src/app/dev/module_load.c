@@ -1,5 +1,3 @@
-#include "app/module_load.h"
-
 #include "platform/memory/region.h"
 #include "platform/memory/executable.h"
 #include "components/assembler/assembler.h"
@@ -15,6 +13,7 @@
 
 #include "pico/stdlib/meta/meta.h"
 
+#include "app/dev/module_load.h"
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, String filename, Package* package, Module* parent, PiAllocator module_allocator, RegionAllocator* region) {
 
@@ -109,7 +108,11 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Resolution
         // -------------------------------------------------------------------------
 
-        TopLevel abs = abstract(res.result, env, &itera, &pi_point);
+        SynTape tape = mk_syn_tape(&ra, 128);
+        AbstractionCtx ab_ctx = {
+            .tape = tape, .env = env, .a = &itera, .point = &pi_point,
+        };
+        TopLevel abs = abstract(res.result, ab_ctx);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -118,7 +121,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pico_itera, .point = &pi_point, .target = target, .logger = logger
         };
         type_check(&abs, env, tc_ctx);
 
@@ -129,14 +132,17 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
         // -------------------------------------------------------------------------
         // Evaluation
         // -------------------------------------------------------------------------
-        pico_run_toplevel(abs, target, links, module, &itera, &point);
+        EvalCtx ev_ctx = {
+            .tape = tape, .target = target, .links = links, .module = module, .a = &ra, .point = &point
+        };
+        pico_run_toplevel(abs, ev_ctx);
     }
     return;
 
@@ -221,8 +227,11 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // -------------------------------------------------------------------------
         // Resolution
         // -------------------------------------------------------------------------
-
-        TopLevel abs = abstract(res.result, env, &itera, &pi_point);
+        SynTape tape = mk_syn_tape(&ra, 128);
+        AbstractionCtx ab_ctx = {
+            .tape = tape, .env = env, .a = &itera, .point = &pi_point,
+        };
+        TopLevel abs = abstract(res.result, ab_ctx);
 
         // -------------------------------------------------------------------------
         // Type Checking
@@ -231,7 +240,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Note: typechecking annotates the syntax tree with types, but doesn't have
         // an output.
         TypeCheckContext tc_ctx = {
-            .a = &itera, .pia = &pia, .point = &pi_point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pia, .point = &pi_point, .target = target, .logger = logger
         };
         type_check(&abs, env, tc_ctx);
 
@@ -242,7 +251,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .a = &itera, .point = &point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -250,7 +259,10 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Evaluation
         // -------------------------------------------------------------------------
 
-        pico_run_toplevel(abs, target, links, current, &itera, &point);
+        EvalCtx ev_ctx = {
+            .tape = tape, .target = target, .links = links, .module = current, .a = &itera, .point = &point
+        };
+        pico_run_toplevel(abs, ev_ctx);
     }
 
  on_exit:

@@ -4,6 +4,7 @@
 
 // See: https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.34.2200
 // See: http://cambium.inria.fr/~fpottier/pprint/doc/pprint/
+// TODO: allow newline to depend on stream
 
 typedef struct {
     bool flatten;
@@ -15,7 +16,7 @@ typedef struct {
 void render_doc(Document* doc, RenderState state, OStream* os) {
     switch (doc->type) {
     case LineDocument:
-        write_string(mv_string("\n"), os);
+        write_string(mv_string("\r\n"), os);
         for (size_t i = 0; i < state.indent; i++) {
             write_string(mv_string(" "), os);
             *state.current_column = state.indent;
@@ -64,7 +65,7 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
                 *state.current_column += 1;
             } else {
                 if (i + 1 < doc->docs.len) {
-                    write_impl('\n', os);
+                    write_string(mv_string("\r\n"), os);
                     for (size_t i = 0; i < state.indent; i++) {
                         write_string(mv_string(" "), os);
                     }
@@ -81,7 +82,7 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
                 Document* next_doc = doc->docs.data[i];
                 state.flatten = next_doc->requirement.fin == Finite
                     && next_doc->requirement.cols + *state.current_column + 1 < state.width;
-                if (i + 1 < doc->docs.len) write_string(mv_string(state.flatten ? " " : "\n"), os);
+                if (i + 1 < doc->docs.len) write_string(mv_string(state.flatten ? " " : "\r\n"), os);
             }
         }
         break;
@@ -89,7 +90,7 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
         for (size_t i = 0; i < doc->docs.len; i++) {
             render_doc(doc->docs.data[i], state, os);
             if (i + 1 < doc->docs.len) {
-                write_impl('\n', os) ;
+                write_string(mv_string("\r\n"), os);
                 for (size_t i = 0; i < state.indent; i++) {
                     write_string(mv_string(" "), os);
                 }
@@ -118,7 +119,7 @@ void write_doc(Document* doc, uint16_t width, OStream* os) {
 void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
     switch (doc->type) {
     case LineDocument:
-        write_fstring(mv_string("\n"), os);
+        write_fstring(mv_string("\r\n"), os);
         for (size_t i = 0; i < state.indent; i++) {
             write_fstring(mv_string(" "), os);
             *state.current_column = state.indent;
@@ -167,7 +168,7 @@ void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
                 *state.current_column += 1;
             } else {
                 if (i + 1 < doc->docs.len) {
-                    write_fstring(mv_string("\n"), os);
+                    write_fstring(mv_string("\r\n"), os);
                     for (size_t i = 0; i < state.indent; i++) {
                         write_fstring(mv_string(" "), os);
                     }
@@ -187,7 +188,7 @@ void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
                 if (state.flatten) {
                     write_fstring(mv_string(" "), os);
                 } else {
-                    write_fstring(mv_string(" \n"), os);
+                    write_fstring(mv_string("\r\n"), os);
                     for (size_t i = 0; i < state.indent; i++) {
                         write_fstring(mv_string(" "), os);
                     }
@@ -200,7 +201,7 @@ void frender_doc(Document* doc, RenderState state, FormattedOStream* os) {
         for (size_t i = 0; i < doc->docs.len; i++) {
             frender_doc(doc->docs.data[i], state, os);
             if (i + 1 < doc->docs.len) {
-                write_fstring(mv_string("\n"), os) ;
+                write_fstring(mv_string("\r\n"), os) ;
                 for (size_t i = 0; i < state.indent; i++) {
                     write_fstring(mv_string(" "), os);
                 }

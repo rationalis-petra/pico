@@ -26,7 +26,7 @@ int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
 ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
 
 // Implementation details
-static void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point);
+static void generate(SynRef ref, SynTape tape, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point);
 
 LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
@@ -43,11 +43,11 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
     case TLDef: {
         // Note: types can only be recursive via 'Name', so we do not recursively bind if
         // generating a type.
-        Symbol* recsym = top.def.value->ptype->sort != TKind ? 
+        Symbol* recsym = get_type(top.def.value, ctx.tape)->sort != TKind ? 
             &top.def.bind : NULL;
         // TODO: no address env should be here... use a pvm environment instead...
         AddressEnv* a_env = mk_address_env(env, recsym, a);
-        generate(*top.def.value, a_env, ctx.target, &links, a, ctx.point);
+        generate(top.def.value, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
     }
@@ -61,7 +61,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
     }
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
-        generate(*top.expr, a_env, ctx.target, &links, a, ctx.point);
+        generate(top.expr, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
     }
@@ -89,7 +89,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
     return links;
 }
 
-LinkData pvm_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
+LinkData pvm_generate_expr(SynRef ref, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     AddressEnv* a_env = mk_address_env(env, NULL, a);
     LinkData links = (LinkData) {
@@ -100,7 +100,7 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
         .cd_links = mk_link_meta_array(8, a),
         .dd_links = mk_link_meta_array(8, a),
     };
-    generate(*syn, a_env, ctx.target, &links, a, ctx.point);
+    generate(ref, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
     delete_address_env(a_env, a);
 
     // The data chunk may be moved around during code-generation via 'realloc'
@@ -125,7 +125,7 @@ LinkData pvm_generate_expr(Syntax* syn, Environment* env, CodegenContext ctx) {
     return links;
 }
 
-void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
+void pvm_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     AddressEnv* a_env = mk_type_address_env(env, NULL, a);
     LinkData links = (LinkData) {
@@ -136,11 +136,12 @@ void pvm_generate_type_expr(Syntax* syn, TypeEnv* env, CodegenContext ctx) {
         .cd_links = mk_link_meta_array(8, a),
         .dd_links = mk_link_meta_array(8, a),
     };
-    generate(*syn, a_env, ctx.target, &links, a, ctx.point);
+    generate(syn, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
     delete_address_env(a_env, a);
 }
 
-void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point) {
+void generate(SynRef ref, SynTape tape, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point) {
+    Syntax syn = get_syntax(ref, tape);
     switch (syn.type) {
     case SLitUntypedIntegral: 
         panic(mv_string("Internal Error: Codegen provided untyped integral"));
@@ -180,7 +181,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         break;
     }
     case SMacro: {
-        generate(*syn.transformer, env, target, links, a, point);
+        generate(syn.transformer, tape, env, target, links, a, point);
         break;
     }
     case SApplication: {
@@ -268,19 +269,19 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         break;
     }
     case SIs:
-        generate(*syn.is.val, env, target, links, a, point);
+        generate(syn.is.val, tape, env, target, links, a, point);
         break;
     case SInTo:
-        generate(*syn.into.val, env, target, links, a, point);
+        generate(syn.into.val, tape, env, target, links, a, point);
         break;
     case SOutOf:
-        generate(*syn.out_of.val, env, target, links, a, point);
+        generate(syn.out_of.val, tape, env, target, links, a, point);
         break;
     case SName:
-        generate(*syn.name.body, env, target, links, a, point);
+        generate(syn.name.body, tape, env, target, links, a, point);
         break;
     case SUnName:
-        generate(*syn.unname, env, target, links, a, point);
+        generate(syn.unname, tape, env, target, links, a, point);
         break;
     case SWiden:
         not_implemented(mv_string("PVM Widen Generation"));
@@ -344,7 +345,7 @@ void generate(Syntax syn, AddressEnv* env, Target target, LinkData* links, Alloc
         not_implemented(mv_string("PVM Trait-Type Generation"));
         break;
     case SReinterpret:
-        generate(*syn.reinterpret.body, env, target, links, a, point);
+        generate(syn.reinterpret.body, tape, env, target, links, a, point);
         break;
     case SConvert: {
         not_implemented(mv_string("PVM Convert Generation"));

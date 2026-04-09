@@ -88,17 +88,21 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // -------------------------------------------------------------------------
     // Analysis
     // -------------------------------------------------------------------------
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+    SynTape tape = mk_syn_tape(&ra, 128);
+    AbstractionCtx ab_ctx = {
+        .tape = tape, .env = env, .a = &ra, .point = &pi_point,
+    };
+    TopLevel abs = abstract(res.result, ab_ctx);
 
     Logger* logger = get_structured_logger(log);
     TypeCheckContext tc_ctx = {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = pia, .point = &pi_point, .target = target, .logger = logger,
     };
     type_check(&abs, env, tc_ctx);
 
     clear_target(target);
     CodegenContext cg_ctx = {
-        .a = &ra, .point = &point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -106,7 +110,10 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
     // -------------------------------------------------------------------------
     // Evaluation
     // -------------------------------------------------------------------------
-    EvalResult evres = pico_run_toplevel(abs, target, links, module, &ra, &point);
+    EvalCtx ev_ctx = {
+        .tape = tape, .target = target, .links = links, .module = module, .a = &ra, .point = &point
+    };
+    EvalResult evres = pico_run_toplevel(abs, ev_ctx);
 
     if (evres.type == ERValue) {
         if (callbacks.on_expr) {
@@ -548,18 +555,22 @@ void test_typecheck_internal(const char *string, Environment* env, TypeCallbacks
     // Resolution
     // -------------------------------------------------------------------------
 
-    TopLevel abs = abstract(res.result, env, &ra, &pi_point);
+    SynTape tape = mk_syn_tape(&ra, 128);
+    AbstractionCtx ab_ctx = {
+        .tape = tape, .env = env, .a = &ra, .point = &pi_point,
+    };
+    TopLevel abs = abstract(res.result, ab_ctx);
 
     Logger* logger = get_structured_logger(log);
     TypeCheckContext ctx = (TypeCheckContext) {
-        .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = pia, .point = &pi_point, .target = gen_target, .logger = logger,
     };
     on_typecheck = true;
     type_check(&abs, env, ctx);
 
     if (abs.type == TLExpr) {
         if (callbacks.on_expr) {
-            callbacks.on_expr(abs.expr->ptype, data, log);
+            callbacks.on_expr(get_type(abs.expr, tape), data, log);
         }
     } else {
         if (callbacks.on_top) {
