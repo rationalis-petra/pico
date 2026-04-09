@@ -43,7 +43,7 @@ a 'normal' language to Relic, we follow a thre-step process - consider the
 following "python-style" code:
 
 ```python
-print-ln(to-string(2 + 3))
+write-line(to-string(2 + 3))
 ```
 
 ### Step 1: Convert Operators
