@@ -20,7 +20,7 @@
 #include "app/help_string.h"
 #include "app/repl.h"
 
-static const char* version = "0.2.1";
+static const char* version = "0.2.2";
 
 
 int main(int argc, char** argv) {
