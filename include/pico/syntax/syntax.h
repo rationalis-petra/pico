@@ -55,6 +55,7 @@ typedef enum {
     SConstructor,
     SVariant,
     SMatch,
+    SArray,
     SStructure,
     SProjector,
     SInstance,
@@ -89,6 +90,7 @@ typedef enum {
 
     // Types & Type formers
     SProcType,
+    SArrayType,
     SStructType,
     SEnumType,
     SResetType,
@@ -214,6 +216,11 @@ typedef struct {
     SynRef val;
     ClauseArray clauses;
 } SynMatch;
+
+typedef struct {
+    SynArray dimensions;
+    SynRef body;
+} SynMkArray;
 
 typedef struct {
     Option_t has_base;

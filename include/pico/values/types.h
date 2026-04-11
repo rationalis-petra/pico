@@ -44,6 +44,7 @@ typedef enum {
 typedef enum {
     TPrim,
     TProc,
+    TArray,
     TStruct,
     TEnum,
     TReset,
@@ -80,6 +81,11 @@ typedef struct {
     AddrPiList implicits;
     PiType* ret;
 } ProcType;
+
+typedef struct {
+    I64PiList dims;
+    PiType* element;
+} ArrayType;
 
 typedef struct {
     SymAddrPiAMap fields;
@@ -152,6 +158,7 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
+        ArrayType array;
         ProcType proc;
         StructType structure;
         EnumType enumeration;

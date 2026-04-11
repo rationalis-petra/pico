@@ -68,6 +68,7 @@ typedef enum TermFormer {
     FUnseal,
     FVariant,
     FMatch,
+    FArray,
     FStructure,
     FProjector,
     FInstance,
@@ -104,6 +105,7 @@ typedef enum TermFormer {
     FDynAlloc,
 
     // Type formers
+    FArrayType,
     FProcType,
     FStructType,
     FEnumType,
