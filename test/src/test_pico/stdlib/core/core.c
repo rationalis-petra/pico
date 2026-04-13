@@ -288,7 +288,25 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     //      Array
     // 
     // -----------------------------------------------------
-    // typedef uint32_t[4] chunk;
+    if (test_start(log, mv_string("1d-array-literal"))) {
+        int64_t expected[] = {1, 2, 3, 4};
+        TEST_EQ("(array {4} [1 2 3 4])");
+    }
+
+    if (test_start(log, mv_string("1d-array-literal-inferred-size"))) {
+        int64_t expected[] = {2, 4, 6, 8};
+        TEST_EQ("(array [2 4 6 8])");
+    }
+
+    if (test_start(log, mv_string("2d-array-literal"))) {
+        int64_t expected[] = {1, 2, 3, 4, 5, 6, 7, 8};
+        TEST_EQ("(array {2 4} [[1 2 3 4] [5 6 7 8]])");
+    }
+
+    if (test_start(log, mv_string("2d-array-literal-inferred-size"))) {
+        int64_t expected[] = {2, 4, 6, 8, 10, 12, 14, 16};
+        TEST_EQ("(array [[2 4 6 8] [10 12 14 16]])");
+    }
 
     // -----------------------------------------------------
     // 

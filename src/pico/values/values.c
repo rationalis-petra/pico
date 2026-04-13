@@ -71,6 +71,32 @@ void delete_name(Name n) {};
 Name copy_name(Name n, Allocator* a) { return n; };
 #pragma GCC diagnostic pop
 
+
+// Helper Functions for iterating over Arrays in C
+U64Array mk_zero_index(uint64_t len, Allocator *a) {
+    U64Array ret = mk_u64_array(len, a);
+    ret.len = len;
+    memset(ret.data, 0, len * sizeof(uint64_t));
+    return ret;
+}
+
+bool index_less(U64Array index, U64Array dims) {
+    if (index.len == 0 && dims.len == 0) return false;
+      
+    return index.data[0] < dims.data[0];
+}
+
+size_t index_offset(U64Array index, U64Array dims) {
+    size_t out = 0;
+    size_t subarr_size = 1;
+    for (size_t i = 1; i <= dims.len; i++) {
+        out += subarr_size * index.data[dims.len - i];
+        subarr_size *= dims.data[dims.len - i];
+    }
+    return out;
+}
+
+
 // Helper functions for dynamic variables
 // Need to maintain a set of current/valid vars + default values
 // so new threads know what to copy!
@@ -262,6 +288,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FMatch:
         out = mk_str_doc(mv_string("::match"), a);
         break;
+    case FArray:
+        out = mk_str_doc(mv_string("::array"), a);
+        break;
     case FStructure:
         out = mk_str_doc(mv_string("::structure"), a);
         break;
@@ -347,6 +376,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
         break;
 
         // Type formers
+    case FArrayType:
+        out = mk_str_doc(mv_string("::Array"), a);
+        break;
     case FStructType:
         out = mk_str_doc(mv_string("::Struct"), a);
         break;

@@ -499,6 +499,41 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     }
 }
 
+void* mk_array_ty(size_t len, uint64_t* data, void* elt) {
+    PiAllocator pia = get_std_temp_allocator();
+
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
+    *ty = (PiType) {
+        .sort = TArray,
+        .array.dims.data = data,
+        .array.dims.len = len,
+        .array.dims.size = len,
+        .array.dims.gpa = pia,
+        .array.element = elt,
+    };
+    return ty;
+}
+
+void gen_mk_array_ty(Location dest, Location ndimensions, Location dims, Location elt, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(Mov, reg(RDI, sz_64), ndimensions, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), dims, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), elt, ass, a, point);
+#elif ABI == WIN_64
+    build_binary_op(Mov, reg(RCX, sz_64), ndimensions, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), dims, ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), elt, ass, a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    generate_c_call(mk_array_ty, ass, a, point);
+
+    if (dest.type != Dest_Register && dest.reg != RAX) {
+        build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);
+    }
+}
+
 void* mk_enum_ty(size_t len, uint8_t tagsize, uint64_t* shape, SymAddrPiCell* data) {
     PiAllocator pia = get_std_temp_allocator();
 

@@ -116,6 +116,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("<variant>");
     case SMatch:
         return mv_string("match");
+    case SArray:
+        return mv_string("array");
     case SStructure:
         return mv_string("struct");
     case SProjector:
@@ -178,6 +180,8 @@ String syntax_type_to_string(Syntax_t type) {
         // Types & Type formers
     case SProcType:
         return mv_string("Proc");
+    case SArrayType:
+        return mv_string("Array");
     case SStructType:
         return mv_string("Struct");
     case SEnumType:
@@ -508,6 +512,9 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         push_ptr(mk_str_doc(mv_string(")"), a), &nodes);
         out = mv_sep_doc(nodes, a);
         break;
+    }
+    case SArray: {
+        panic(mv_string("not implemented: pretty syntax for array"));
     }
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax.structure.fields.len, a);
@@ -863,6 +870,21 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         PtrArray nodes = mk_ptr_array(4, a) ;
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         push_ptr(pretty_syntax_internal(syntax.proc_type.return_type, tape, ctx, a), &nodes);
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
+    case SArrayType: {
+        panic(mv_string("not implemented: pretty syntax for array"));
+        PtrArray nodes = mk_ptr_array(3, a) ;
+        push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Array", a), a), a), &nodes);
+
+        PtrArray dim_nodes = mk_ptr_array(syntax.array_type.dimensions.len, a) ;
+        for (size_t i = 0; i < syntax.array_type.dimensions.len; i++)  {
+            push_ptr(pretty_u64(syntax.array_type.dimensions.data[i], a), &dim_nodes);
+        }
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), &nodes);
+        push_ptr(pretty_syntax_internal(syntax.array_type.element, tape, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;

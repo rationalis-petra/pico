@@ -848,6 +848,24 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SArray: {
+        PiType* type = mk_uvar(ctx.pia);
+        for (size_t i = 0; i < untyped.array.elements.len; i++) {
+            type_check_i(untyped.array.elements.data[i], type, (Range){}, env, ctx);
+        }
+        PiType* arr_type = mem_alloc(sizeof(PiType), ctx.a);
+        U64PiList dims = mk_U64_list(untyped.array.dimensions.len, ctx.pia);
+        for (size_t i = 0; i < untyped.array.dimensions.len; i++) {
+            push_U64(untyped.array.dimensions.data[i], &dims);
+        }
+        *arr_type = (PiType) {
+            .sort = TArray,
+            .array.dims = dims,
+            .array.element = type,
+        };
+        set_type(ref, arr_type, ctx.tape);
+        break;
+    }
     case SStructure: {
         if (untyped.structure.has_base == Some) {
             bool all_fields_required;
@@ -1431,6 +1449,14 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
         SynRef ret = untyped.proc_type.return_type;
         type_check_i(ret, t, (Range){}, env, ctx);
+        break;
+    }
+    case SArrayType: {
+        PiType* t = call_alloc(sizeof(PiType), ctx.pia);
+        *t = (PiType){.sort = TKind, .kind.nargs = 0};
+        set_type(ref, t, ctx.tape);;
+
+        type_check_i(untyped.array_type.element, t, (Range){}, env, ctx);
         break;
     }
     case SStructType: {
@@ -2051,6 +2077,12 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SArray: {
+        for (size_t i = 0; i < syn.array.elements.len; i++) {
+            post_unify(syn.array.elements.data[i], env, ctx);
+        }
+        break;
+    }
     case SStructure: {
         if (syn.structure.has_base == Some) {
             post_unify(syn.structure.base, env, ctx);
@@ -2221,6 +2253,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
     // Types & Type formers
     case SProcType:
+    case SArrayType:
     case SStructType:
     case SEnumType:
     case SResetType:
@@ -2376,6 +2409,12 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SArray: {
+      for (size_t i = 0; i < typed.array.elements.len; i++) {
+          squash_types(typed.array.elements.data[i], env, ctx);
+      }
+      break;
+    }
     case SStructure: {
         if (typed.structure.has_base == Some) {
             squash_types(typed.structure.base, env, ctx);
@@ -2522,6 +2561,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         squash_types(typed.proc_type.return_type, env, ctx);
+        break;
+    }
+    case SArrayType: {
+        squash_types(typed.array_type.element, env, ctx);
         break;
     }
     case SStructType: {

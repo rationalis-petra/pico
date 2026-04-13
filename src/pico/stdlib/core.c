@@ -282,6 +282,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("instance"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FArray;
+    sym = string_to_symbol(mv_string("array"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
     add_def(module, sym, type, &former, null_segments, NULL);
@@ -372,6 +376,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
     former = FProcType;
     sym = string_to_symbol(mv_string("Proc"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FArrayType;
+    sym = string_to_symbol(mv_string("Array"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FStructType;

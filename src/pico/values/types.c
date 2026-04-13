@@ -47,6 +47,11 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         sdelete_addr_list(t.proc.args);
         break;
     }
+    case TArray: {
+        delete_pi_type_p(t.array.element, pia);
+        sdelete_U64_list(t.array.dims);
+        break;
+    }
     case TStruct: {
         for (size_t i = 0; i < t.structure.fields.len; i++)
             delete_pi_type_p(t.structure.fields.data[i].val, pia);
@@ -182,6 +187,11 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.proc.args = copy_addr_list(t.proc.args, (TyCopier)copy_pi_type_p, pia);
         break;
+    case TArray: {
+        out.array.element = copy_pi_type_p(t.array.element, pia); 
+        out.array.dims = scopy_U64_list(t.array.dims, pia);
+        break;
+    }
     case TStruct:
         out.structure.packed = t.structure.packed;
         out.structure.fields = copy_sym_addr_piamap(t.structure.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
@@ -274,7 +284,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
 Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
-    case TPrim:
+    case TPrim: {
         switch (type->prim) {
         case Unit:  {
             out = mk_str_doc(mv_string(":unit"), a);
@@ -363,12 +373,62 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         }
         }
         break;
+    }
     case TProc: {
         void** addr = (void**) val;
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
         push_ptr(pretty_ptr(*addr, a), &nodes);
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TArray: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
+        U64Array dims = (U64Array) {
+            .len =  type->array.dims.len,
+            .size =  type->array.dims.size,
+            .data =  type->array.dims.data,
+        };
+        U64Array index = mk_zero_index(dims.len, a);
+        PtrArray array_stack = mk_ptr_array(dims.len, a);
+        for (size_t i = 0; i < dims.len; i++) {
+            PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+            *arr = mk_ptr_array(dims.data[i], a);
+            push_ptr(arr, &array_stack);
+        }
+        PiType* elt_type = type->array.element;
+        size_t elt_offset = pi_size_align(pi_size_of(*elt_type), pi_align_of(*elt_type));
+        while (index_less(index, dims)) {
+            size_t base = index_offset(index, dims);
+            size_t inner_len = dims.data[dims.len - 1];
+            PtrArray* inner_nodes = array_stack.data[array_stack.len - 1];
+            for (size_t i = 0; i < inner_len; i++) {
+                size_t index = base + i;
+                push_ptr(pretty_pi_value(val + (index * elt_offset), elt_type, params, a), inner_nodes);
+            }
+            index.data[dims.len - 1] = inner_len;
+
+            // We are done, now increment the index!
+            size_t level = 1;
+            uint64_t curr_idx = index.data[dims.len - level];
+            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
+                if (level + 1 < dims.len) {
+                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
+                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
+                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
+                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
+                }
+
+                index.data[dims.len - level] = 0;
+                level++;
+                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+            }
+            index.data[dims.len - level] = curr_idx + 1;
+        }
+        PtrArray* array_nodes = array_stack.data[0];
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TUVar:
@@ -651,6 +711,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
+
     case TProc: {
         PtrArray head_nodes = mk_ptr_array(4, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &head_nodes);
@@ -672,6 +733,21 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type_internal(type->proc.ret, ctx, a), a), &nodes);
 
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
+    case TArray: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
+
+        PtrArray dim_nodes = mk_ptr_array(type->array.dims.len, a);
+        for (size_t i = 0; i < type->array.dims.len; i++) {
+            push_ptr(pretty_u64(type->array.dims.data[i], a), &dim_nodes);
+        }
+        push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), a), a), &nodes);
+
+        push_ptr(pretty_type_internal(type->array.element, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -1119,6 +1195,21 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
+    case TArray: {
+        size_t align = 1;
+        size_t size = 1;
+        Result_t res = pi_maybe_size_of(*(PiType*)type.array.element, &size);
+        if (res != Ok) return res;
+        res = pi_maybe_align_of(*(PiType*)type.array.element, &align);
+        if (res != Ok) return res;
+        *out = pi_size_align(size, align);
+        size_t total_len = 1;
+        for (size_t i = 0; i < type.array.dims.len; i++) {
+            total_len *= type.array.dims.data[i];
+        }
+        *out = *out * total_len;
+        return Ok;
+    }
     case TStruct: {
         size_t align = 1;
         size_t total = 0; 
@@ -1276,6 +1367,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
+    case TArray:
+        return pi_maybe_align_of(*type.array.element, out);
     case TStruct: {
         // TODO (INVESTIGATE BUG): determine how we calculate alignment of
         //   packed struct? is it minimum of all fields?
@@ -1725,6 +1818,14 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         }
         return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
         break;
+    case TArray:
+        if (lhs->array.dims.len != rhs->array.dims.len) return false;
+        for (size_t i = 0; i < lhs->array.dims.len; i++) {
+            if (lhs->array.dims.data[i] != rhs->array.dims.data[i]) return false;
+        }
+
+        return pi_type_eql_i(lhs->array.element, rhs->array.element, array);
+        break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
         if (lhs->structure.packed != rhs->structure.packed) return false;
@@ -1950,6 +2051,21 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
+    case TArray: {
+        size_t len = 1; 
+        for (size_t i = 0; i < type->array.dims.len; i++) {
+            len *= type->array.dims.data[i];
+        }
+        PiType* elt_ty = type->array.element;
+        size_t elt_offset = pi_size_align(pi_size_of(*elt_ty), pi_align_of(*elt_ty));
+        for (size_t i = 0; i < len; i++) {
+            size_t offset = elt_offset * i;
+            if (!pi_value_eql(elt_ty, lhs + offset, rhs + offset, a)) {
+                return false;
+            }
+        }
+        return true;
+    } 
     case TProc: {
         void** addrlhs = (void**) lhs;
         void** addrrhs = (void**) rhs;
@@ -2165,6 +2281,28 @@ PiType* mk_dynamic_type(PiAllocator* a, PiType* t) {
     PiType* dyn = call_alloc(sizeof(PiType), a);
     *dyn = (PiType){.sort = TDynamic, .dynamic = t};
     return dyn;
+}
+
+PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
+    va_list args;
+    va_start(args, ndims);
+    
+    U64PiList dims = mk_U64_list(ndims, pia);
+    for (size_t i = 0; i < ndims ; i++) {
+        uint64_t dimension = va_arg(args, uint64_t);
+        push_U64(dimension, &dims);
+    }
+
+    PiType* element = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* proc = call_alloc(sizeof(PiType), pia);
+    *proc = (PiType) {
+        .sort = TArray,
+        .array.dims = dims,
+        .array.element = element,
+    };
+    return proc;
 }
 
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...) {

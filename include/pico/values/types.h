@@ -83,7 +83,7 @@ typedef struct {
 } ProcType;
 
 typedef struct {
-    I64PiList dims;
+    U64PiList dims;
     PiType* element;
 } ArrayType;
 
@@ -264,6 +264,9 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 // Generators 
 PiType* mk_prim_type(PiAllocator* pia, PrimType t);
 PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
+
+// Sample usage: mk_array_type(a, 2, dim1, dim2, elt_ty)
+PiType* mk_array_type(PiAllocator* pia, size_t ndims, ...);
 
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);

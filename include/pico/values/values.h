@@ -40,6 +40,11 @@ Symbol copy_symbol(Symbol s, Allocator* a);
 void delete_name(Name n);
 Name copy_name(Name n, Allocator* a);
 
+// Tools for iterating over arrays in C
+U64Array mk_zero_index(uint64_t , Allocator* a);
+bool index_less(U64Array index, U64Array dims);
+size_t index_offset(U64Array index, U64Array dims);
+
 // Dynamic Variables
 void init_dynamic_vars(Allocator* a);
 void clear_dynamic_vars();
@@ -52,6 +57,8 @@ void delete_dynamic_var(uint64_t var);
 void* get_dynamic_val(uint64_t dvar);
 void set_dynamic_val(uint64_t dvar, void* new_val, size_t size);
 void* get_dynamic_memory();
+
+
 
 typedef enum TermFormer {
     // Top Level Former

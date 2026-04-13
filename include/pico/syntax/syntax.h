@@ -218,8 +218,8 @@ typedef struct {
 } SynMatch;
 
 typedef struct {
-    SynArray dimensions;
-    SynRef body;
+    U64Array dimensions;
+    SynArray elements;
 } SynMkArray;
 
 typedef struct {
@@ -377,6 +377,11 @@ typedef struct {
 } SynProcType;
 
 typedef struct {
+    U64Array dimensions;
+    SynRef element;
+} SynArrayType;
+
+typedef struct {
     SymSynAMap fields;
     bool packed;
 } SynStructType;
@@ -446,6 +451,7 @@ struct Syntax {
         SynConstructor constructor;
         SynVariant variant;
         SynMatch match;
+        SynMkArray array;
         SynStructure structure;
         SynProjector projector;
         SynInstance instance;
@@ -475,6 +481,7 @@ struct Syntax {
         SynOffsetOf offset_of;
 
         SynProcType proc_type;
+        SynArrayType array_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynResetType reset_type;

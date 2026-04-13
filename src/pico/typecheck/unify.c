@@ -239,7 +239,24 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 
         // Unify the return values
         return unify_internal(lhs->proc.ret, rhs->proc.ret, rename, ctx);
-        
+        break;
+    }
+    case TArray: {
+        if (lhs->array.dims.len != rhs->array.dims.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: attempting to unify two arrays of different dimensionality.", a)
+            };
+        }
+        for (size_t i = 0; i < lhs->array.dims.len; i++) {
+            if (lhs->array.dims.data[i] != rhs->array.dims.data[i]) {
+                return (UnifyResult) {
+                    .type = USimpleError,
+                    .message = mv_cstr_doc("Unification failed: attempting to unify two arrays where at least one dimension has a different length.", a)
+                };
+            }
+        }
+        return unify_internal(lhs->array.element, rhs->array.element, rename, ctx);
         break;
     }
     case TStruct: {
@@ -663,7 +680,9 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
         return has_unification_vars_p(*type.proc.ret);
-        break;
+    }
+    case TArray: {
+        return has_unification_vars_p(*type.array.element);
     }
     case TStruct: {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
@@ -671,7 +690,6 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
         return false;
-        break;
     }
     case TEnum: {
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
@@ -682,7 +700,6 @@ bool has_unification_vars_p(PiType type) {
             }
         }
         return false;
-        break;
     }
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
@@ -787,6 +804,10 @@ void squash_type(PiType* type, UnifyContext ctx) {
             squash_type((PiType*)(type->proc.args.data[i]), ctx);
         }
         squash_type(type->proc.ret, ctx);
+        break;
+    }
+    case TArray: {
+        squash_type(type->array.element, ctx);
         break;
     }
     case TStruct: {

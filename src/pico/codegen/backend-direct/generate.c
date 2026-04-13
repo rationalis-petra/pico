@@ -886,6 +886,27 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         break; 
     }
+    case SArray: {
+        // TODO: account for SIMD alignment
+        // TODO: account for polymorphism
+        PiType* array_type = strip_type(type);
+        size_t stack_size = pi_stack_size_of(*array_type);
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
+        data_stack_grow(env, stack_size);
+
+        size_t dest_offset = 0;
+        size_t elt_size = pi_size_of(*array_type->array.element);
+        size_t elt_offset = pi_size_align(elt_size, pi_align_of(*array_type->array.element));
+        size_t elt_stack_size = pi_stack_align(elt_size);
+        for (size_t i = 0; i < syn.array.elements.len; i++) {
+            generate_i(syn.array.elements.data[i], env, ictx);
+            generate_stack_move(dest_offset + elt_stack_size, 0, elt_size, ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(elt_stack_size), ass, a, point);
+            data_stack_shrink(env, elt_stack_size);
+            dest_offset += elt_offset;
+        }
+        break;
+    }
     case SStructure: {
         PiType* struct_type = strip_type(type);
         if (is_variable_in(type, env)) {
@@ -2447,6 +2468,38 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
+        break;
+    }
+    case SArrayType: {
+        // TODO: account for SIMD alignment
+        // TODO: account for polymorphism
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.array_type.dimensions.len * ADDRESS_SIZE), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.proc_type.args.len; i++) {
+            uint64_t arg = syn.array_type.dimensions.data[i];
+            // TODO: check dimension can fit
+            // Set dimension
+            build_binary_op(Mov, reg(R9, sz_64), imm32(arg), ass, a, point);
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 1
+            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+        }
+        // Stash the dimension array data
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+        generate_i(syn.array_type.element, env, ictx);
+        build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+        build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+        data_stack_shrink(env, 2 * ADDRESS_SIZE);
+
+        // Finally, generate function call to make type
+        gen_mk_array_ty(reg(RAX, sz_64), imm32(syn.array_type.dimensions.len), reg(RAX, sz_64), reg(R9, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        break;
         break;
     }
     case SStructType: {

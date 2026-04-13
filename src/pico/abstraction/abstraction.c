@@ -1,3 +1,4 @@
+#include <string.h>
 #include "platform/machine_info.h"
 
 #include "platform/signals.h"
@@ -40,6 +41,10 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
 SymbolArray* try_get_path(SynRef syn, AbstractionICtx ctx);
 DevFlag check_dev_flags(RawTree curr, AbstractionICtx ctx);
 bool is_special(RawTree curr);
+
+// Array-specific helpers
+void deduce_dimension(U64Array* dims, RawTree nodes, AbstractionICtx ctx);
+RawTreePiList next_node_arr(U64Array* index, U64Array dims, RawTree nodes, AbstractionICtx ctx);
 
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -851,6 +856,64 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             .type = SMatch,
             .match.val = sval,
             .match.clauses = clauses,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FArray: {
+        U64Array dims = mk_u64_array(2, a);
+        SynArray elements = mk_syn_array(16, a);
+        // Special Case: Empty Array
+        if (raw.branch.nodes.len == 1) {
+            Syntax syn = {
+                .type = SArray,
+                .array.dimensions = dims,
+                .array.elements = elements,
+            };
+            SynRef res = new_syntax(ctx.tape);
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+            return res;
+        }
+
+        // Are array dimensions provided?  
+        size_t idx = 1;
+        if (raw.branch.nodes.data[idx].type == RawBranch &&
+            raw.branch.nodes.data[idx].branch.hint == HImplicit) {
+            RawTreePiList nodes = raw.branch.nodes.data[idx].branch.nodes;
+            for (size_t i = 0; i < nodes.len; i++) {
+                RawTree dim = nodes.data[i];
+                if (dim.type != RawAtom || dim.atom.type != AIntegral)
+                    array_incorrect_dimtype(dim, ctx);
+                push_u64((uint64_t)dim.atom.int_64, &dims);
+            }
+            idx++;
+        }
+
+        if (idx + 1 != raw.branch.nodes.len) {
+            array_incorrect_numterms(raw, idx + 1, ctx);
+        }
+        RawTree nodes = raw.branch.nodes.data[idx];
+        if (idx == 1) {
+            deduce_dimension(&dims, nodes, ctx);
+        }
+        // Actual Values
+        U64Array index = mk_zero_index(dims.len, a);
+        while (index_less(index, dims)) {
+            RawTreePiList local_nodes = next_node_arr(&index, dims, nodes, ctx);
+            size_t last = dims.data[dims.len - 1];
+            for (size_t i = 0; i < last; i++) {
+                SynRef syn = abstract_expr_i(local_nodes.data[i], ctx);
+                push_syn(syn, &elements);
+            }
+        }
+        
+        Syntax syn = {
+            .type = SArray,
+            .array.dimensions = dims,
+            .array.elements = elements,
         };
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
@@ -1778,6 +1841,41 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             .type = SProcType,
             .proc_type.args = arg_types,
             .proc_type.return_type = return_type,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FArrayType: {
+        // (Array [n m ...] T)
+        if (raw.branch.nodes.len != 3) {
+            array_tyformer_incorrect_numterms(raw, ctx);
+        }
+
+        RawTree raw_dimensions = raw.branch.nodes.data[1];
+        RawTree raw_type = raw.branch.nodes.data[2];
+
+
+        if (raw_dimensions.type != RawBranch || raw_dimensions.branch.hint != HSpecial) {
+            array_tyformer_incorrect_dimformat(raw, ctx);
+        }
+
+        RawTreePiList rdims = raw_dimensions.branch.nodes;
+        U64Array dimensions = mk_u64_array(rdims.len, a);
+
+        for (size_t i = 0; i < rdims.len; i++) {
+            RawTree rdim = rdims.data[i];
+            if (rdim.type != RawAtom || rdim.atom.type != AIntegral) {
+                array_tyformer_dim_not_number(rdim, ctx);
+            }
+            push_u64(rdim.atom.int_64, &dimensions);
+        }
+
+        Syntax syn = {
+            .type = SArrayType,
+            .array_type.dimensions = dimensions,
+            .array_type.element = abstract_expr_i(raw_type, ctx),
         };
         SynRef res = new_syntax(ctx.tape);
         set_syntax(res, syn , ctx.tape);
@@ -3284,5 +3382,59 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = range}, ctx.tape);
         return res;
+    }
+}
+
+void deduce_dimension(U64Array *dims, RawTree nodes, AbstractionICtx ctx) {
+  bool on_node = (nodes.type == RawBranch && nodes.branch.hint == HSpecial);
+  while (on_node) {
+      push_u64(nodes.branch.nodes.len, dims);
+      if (nodes.branch.nodes.len > 0) {
+          nodes = nodes.branch.nodes.data[0];
+          on_node = (nodes.type == RawBranch && nodes.branch.hint == HSpecial);
+      } else {
+          on_node = false;
+      }
+  }
+}
+
+RawTreePiList next_node_arr(U64Array *index, U64Array dims, RawTree nodes, AbstractionICtx ctx) {
+    // TODO: harden?
+    if (nodes.type != RawBranch || nodes.branch.hint != HSpecial) {
+        array_incorrect_format(nodes, ctx);
+    }
+
+    if (dims.len == 1) {
+        // Special case: there is only one node array.
+        index->data[0] = dims.data[0];
+        return nodes.branch.nodes;
+    } else {
+        // Mulidimensional array case:
+        // retrieve the array asoociated with the current index
+        for (size_t i = 0; i < dims.len - 1; i++) {
+            if (nodes.branch.nodes.len != dims.data[i]) {
+                array_incorrect_size(nodes, dims.data[i], ctx);
+            }
+            nodes = nodes.branch.nodes.data[index->data[i]];
+            if (nodes.type != RawBranch || nodes.branch.hint != HSpecial) {
+                array_incorrect_format(nodes, ctx);
+            }
+        }
+
+        // Propagate increment upwards
+        size_t layer = 2;
+        bool prop = true;
+        while (prop & (layer <= dims.len)) {
+            index->data[index->len - layer]++;
+            // Propagate changes to next layer if we are at the end of the
+            // current subarray AND there exist another layer
+            prop = (index->data[index->len - layer] >= dims.data[index->len - layer])
+                && layer != dims.len;
+            if (prop ) {
+                index->data[index->len - layer] = 0;
+            }
+            layer++;
+        }
+        return nodes.branch.nodes;
     }
 }

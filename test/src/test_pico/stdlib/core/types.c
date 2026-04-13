@@ -21,7 +21,7 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
 
     // -----------------------------------------------------
     // 
-    //      Type Constructors
+    //      Type Formers and Primitives
     // 
     // -----------------------------------------------------
 
@@ -30,9 +30,23 @@ void run_pico_stdlib_core_type_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("I64");
     }
 
+    //  Proc
+    // -----------------------------------------------------
     if (test_start(log, mv_string("proc-const"))) {
         PiType* expected = mk_proc_type(pia, 2, mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64), mk_prim_type(pia, Int_64));
         TEST_EQ("(Proc [I64 I64] I64)");
+    }
+
+    //  Array
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("1d-array"))) {
+        PiType* expected = mk_array_type(pia, 1, 4, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Array [4] I64)");
+    }
+
+    if (test_start(log, mv_string("2d-array"))) {
+        PiType* expected = mk_array_type(pia, 2, 4, 2, mk_prim_type(pia, Int_64));
+        TEST_EQ("(Array [4 2] I64)");
     }
 
     //  Structure
