@@ -1,3 +1,5 @@
+#include "platform/machine_info.h"
+#if ARCH == AMD64
 #include <string.h>
 
 #include "platform/signals.h"
@@ -671,3 +673,5 @@ U8Array free_registers(U8Array inputs, Allocator* a) {
     }
     return out_registers;
 }
+
+#endif

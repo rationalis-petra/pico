@@ -7,6 +7,7 @@
 #include "pico/data/sym_size_assoc.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/environment.h"
+#include "pico/binding/type_env.h"
 
 typedef struct AddressEnv AddressEnv;
 
@@ -54,9 +55,6 @@ typedef struct {
 } Binding;
 
 ARRAY_HEADER(Binding, binding, Binding)
-
-// Forward decl
-typedef struct TypeEnv TypeEnv;
 
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
 AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);

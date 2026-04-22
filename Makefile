@@ -86,7 +86,7 @@ endif
 
 ## Platform specifics and configuration
 ##-------------------------------------
-RELEASE_FLAGS := $(RELEASE_FLAGS) -Ofast -Werror -g
+RELEASE_FLAGS := $(RELEASE_FLAGS) -O3 -ffast-math -Werror -g
 DEBUG_FLAGS := $(DEBUG_FLAGS) -O0 -DDEBUG -DDEBUG_ASSERT -g3 -gdwarf-2 
 
 ifeq ($(WINDOW_SYSTEM), X11)

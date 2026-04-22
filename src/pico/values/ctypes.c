@@ -260,6 +260,8 @@ size_t c_prim_size_of(CPrimInt type)
     case CLongLong:
         return 8;
     }
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("not implemented: c_prim_size_of for aarch64."));
 #else 
 #error "Unknown host ABI"
 #endif
@@ -330,6 +332,8 @@ size_t c_size_of(CType type) {
         panic(mv_string("Cannot take size of incomplete c type"));
     }
 
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("not implemented: c_size_of for aarch64."));
 #else 
 #error "Unknown architecture when compiling c_size_of not implemented"
 #endif
@@ -393,6 +397,8 @@ size_t c_align_of(CType type) {
         panic(mv_string("Cannot take align of incomplete c type"));
     }
 
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("not implemented: c_align_of for aarch64."));
 #else 
 #error "Win 64 c alignof not implemented"
 #endif
@@ -626,6 +632,8 @@ void init_ctypes() {
 #if (ABI == SYSTEM_V_64 || ABI == WIN_64)
     c_size_type = (CType) {.sort = CSPrimInt, .prim = (CPrimInt){.prim = CLongLong, .is_signed = Unsigned}};
     c_void = (CType){.sort = CSVoid};
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("not implemented: init_ctypes for aarch64."));
 #else 
 #error "Unknown host ABI"
 #endif

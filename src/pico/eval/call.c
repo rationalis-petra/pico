@@ -1,3 +1,4 @@
+#include "platform/machine_info.h"
 #include "platform/signals.h"
 
 #include "pico/eval/call.h"
@@ -90,6 +91,7 @@ void call_unit_fn(void *function, Allocator *a) {
     void* vstack_memory_ptr = vstack_memory + 4095; 
 
     // TODO: swap so this is backend independent (use foreign_adapters to call) 
+#if ARCH == AMD64
     int64_t out;
     __asm__ __volatile__(
                          // save nonvolatile registers
@@ -134,6 +136,11 @@ void call_unit_fn(void *function, Allocator *a) {
                            // Clobbers are either registers we change (output cannot be trusted)
                            // or registers we don't want compiler to assign to input values
                          : "rax", "r13", "r14", "r15");
+#elif ARCH == AARCH64
+    panic(mv_string("not implemented: unit call for aarch64"));
+#else
+    #error "Unsupported ARCH"
+#endif
 }
 
 Document* pretty_res(EvalResult res, Allocator* a) {

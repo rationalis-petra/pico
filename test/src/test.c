@@ -35,7 +35,7 @@
 #include "test_assembler/test_assembler.h"
 #include "test_pvm/test_pvm.h"
 
-void all_suites(TestLog* log, Allocator* a);
+void all_suites(TestLog* log, Allocator* a, CodegenBackend backend);
 TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator* a);
 
 int main(int argc, char** argv) {
@@ -63,19 +63,11 @@ int main(int argc, char** argv) {
     FormattedOStream* cos = mk_formatted_ostream(cout, stdalloc);
     TestLog* log = setup_testlog(command, cos, stdalloc);
 
-    // Initialization order here is not important
-    init_ctypes();
-    init_asm();
-    init_symbols(stdalloc);
-    init_dynamic_vars(stdalloc);
-    thread_init_dynamic_vars();
-    init_codegen(command.opts.backend, stdalloc);
-
     set_std_istream(cin);
     set_std_ostream(cout);
 
     finish_setup(log);
-    all_suites(log, stdalloc);
+    all_suites(log, stdalloc, command.opts.backend);
     out = summarize_tests(log, stdalloc);
 
     delete_test_log(log, stdalloc);
@@ -119,11 +111,31 @@ TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator *a
 }
 
 
-void all_suites(TestLog *log, Allocator *a) {
+void all_suites(TestLog *log, Allocator *a, CodegenBackend backend) {
+    init_asm();
     if (suite_start(log, mv_string("assembler"))) {
         run_assembler_tests(log, a);
         suite_end(log);
     }
+
+#ifdef AARCH_64
+    if (test_start(log, mv_string("aarch64-fail"))) {
+        test_fail(log);
+    }
+#endif
+
+    // If the assembler is broken, all tests from this point forward should be
+    // skipped as incorrect assembly will be generated, potentially producing
+    // false positives
+    if (!all_passed(log)) return;
+
+    // Initialization order here is not important
+    Allocator* stdalloc = get_std_allocator();
+    init_ctypes();
+    init_symbols(stdalloc);
+    init_dynamic_vars(stdalloc);
+    thread_init_dynamic_vars();
+    init_codegen(backend, stdalloc);
 
     if (suite_start(log, mv_string("pvm"))) {
         run_pvm_tests(log, a);

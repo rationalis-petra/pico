@@ -183,6 +183,8 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
         }
 
       } else {
+        terminal_write_string_unbuffered(buf_contents);
+        edit_pos = get_cursor_pos();
         if (pressed_enter) {
           terminal_write_string_unbuffered(mv_string("\r\ninternal error: failed to eval\r\n"));
           return true;

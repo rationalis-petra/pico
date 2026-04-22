@@ -2473,6 +2473,9 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionICtx ctx) {
 
     // TODO: swap so this is backend independent (use foreign_adapters to call) 
     int64_t out;
+
+
+#if ARCH == AMD64
     __asm__ __volatile__(
                          // save nonvolatile registers
                          "push %%rbp       \n" // Nonvolatile on System V + Win64
@@ -2562,6 +2565,11 @@ MacroResult eval_macro(ComptimeHead head, RawTree raw, AbstractionICtx ctx) {
                            // Clobbers are either registers we change (output cannot be trusted)
                            // or registers we don't want compiler to assign to input values
                          : "rax", "r13", "r14", "r15");
+#elif ARCH == AARCH64
+    panic(mv_string("TODO: implement macro calls for AARCH64"));
+#else
+  #error "Calling convention: Unknown Windows ABI"
+#endif
 
     set_std_temp_allocator(old_temp_alloc);
     return output;

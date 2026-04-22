@@ -39,6 +39,9 @@ TestLog* mk_test_log(FormattedOStream* stream, Verbosity v, Allocator* a);
 void finish_setup(TestLog* log);
 void delete_test_log(TestLog* log, Allocator* a);
 
+// Return true if all tests run thus far have passed, and false otherwise.
+bool all_passed(TestLog* log);
+
 bool suite_start(TestLog* log, String name);
 void suite_end(TestLog* log);
 
