@@ -258,10 +258,6 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("unseal"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
-    former = FProjector;
-    sym = string_to_symbol(mv_string("."));
-    add_def(module, sym, type, &former, null_segments, NULL);
-
     former = FDynamic;
     sym = string_to_symbol(mv_string("dynamic"));
     add_def(module, sym, type, &former, null_segments, NULL);
@@ -286,8 +282,16 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     sym = string_to_symbol(mv_string("array"));
     add_def(module, sym, type, &former, null_segments, NULL);
 
+    former = FArrayElt;
+    sym = string_to_symbol(mv_string("aelt"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
     former = FStructure;
     sym = string_to_symbol(mv_string("struct"));
+    add_def(module, sym, type, &former, null_segments, NULL);
+
+    former = FProjector;
+    sym = string_to_symbol(mv_string("."));
     add_def(module, sym, type, &former, null_segments, NULL);
 
     former = FVariant;

@@ -499,16 +499,16 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
     }
 }
 
-void* mk_array_ty(size_t len, uint64_t* data, void* elt) {
+void* mk_array_ty(size_t len, Dimension* data, void* elt) {
     PiAllocator pia = get_std_temp_allocator();
 
     PiType* ty = call_alloc(sizeof(PiType), &pia);
     *ty = (PiType) {
         .sort = TArray,
-        .array.dims.data = data,
-        .array.dims.len = len,
-        .array.dims.size = len,
-        .array.dims.gpa = pia,
+        .array.dimensions.data = data,
+        .array.dimensions.len = len,
+        .array.dimensions.size = len,
+        .array.dimensions.gpa = pia,
         .array.element = elt,
     };
     return ty;

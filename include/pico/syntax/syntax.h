@@ -56,6 +56,7 @@ typedef enum {
     SVariant,
     SMatch,
     SArray,
+    SArrayElt,
     SStructure,
     SProjector,
     SInstance,
@@ -221,6 +222,11 @@ typedef struct {
     U64Array dimensions;
     SynArray elements;
 } SynMkArray;
+
+typedef struct {
+    SynArray index;
+    SynRef array;
+} SynArrayElt;
 
 typedef struct {
     Option_t has_base;
@@ -452,6 +458,7 @@ struct Syntax {
         SynVariant variant;
         SynMatch match;
         SynMkArray array;
+        SynArrayElt array_elt;
         SynStructure structure;
         SynProjector projector;
         SynInstance instance;

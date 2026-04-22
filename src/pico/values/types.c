@@ -6,6 +6,7 @@
 #include "data/string.h"
 #include "data/result.h"
 
+#include "pico/data/client/meta/list_impl.h"
 #include "pico/data/symbol_array.h"
 #include "pico/data/rename_array.h"
 #include "components/pretty/standard_types.h"
@@ -13,6 +14,8 @@
 #include "pico/typecheck/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
+
+PICO_LIST_COMMON_IMPL(Dimension, dim, Dim);
 
 struct UVarGenerator {
     uint64_t counter;
@@ -49,7 +52,7 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
     }
     case TArray: {
         delete_pi_type_p(t.array.element, pia);
-        sdelete_U64_list(t.array.dims);
+        sdelete_dim_list(t.array.dimensions);
         break;
     }
     case TStruct: {
@@ -189,7 +192,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         break;
     case TArray: {
         out.array.element = copy_pi_type_p(t.array.element, pia); 
-        out.array.dims = scopy_U64_list(t.array.dims, pia);
+        out.array.dimensions = scopy_dim_list(t.array.dimensions, pia);
         break;
     }
     case TStruct:
@@ -385,11 +388,14 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     case TArray: {
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
-        U64Array dims = (U64Array) {
-            .len =  type->array.dims.len,
-            .size =  type->array.dims.size,
-            .data =  type->array.dims.data,
-        };
+        U64Array dims = mk_zero_index(type->array.dimensions.len, a);
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            if (type->array.dimensions.data[i].is_uvar) {
+                panic(mv_string("Cannot print array when type has undefined ."));
+            }
+            push_u64(type->array.dimensions.data[i].val, &dims);
+        }
+
         U64Array index = mk_zero_index(dims.len, a);
         PtrArray array_stack = mk_ptr_array(dims.len, a);
         for (size_t i = 0; i < dims.len; i++) {
@@ -741,9 +747,14 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
 
-        PtrArray dim_nodes = mk_ptr_array(type->array.dims.len, a);
-        for (size_t i = 0; i < type->array.dims.len; i++) {
-            push_ptr(pretty_u64(type->array.dims.data[i], a), &dim_nodes);
+        PtrArray dim_nodes = mk_ptr_array(type->array.dimensions.len, a);
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            Dimension dim = type->array.dimensions.data[i];
+            if (dim.is_uvar) {
+                push_ptr(mk_cstr_doc("?", a), &dim_nodes);
+            } else {
+                push_ptr(pretty_u64(dim.val, a), &dim_nodes);
+            }
         }
         push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), a), a), &nodes);
 
@@ -1204,8 +1215,13 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
         if (res != Ok) return res;
         *out = pi_size_align(size, align);
         size_t total_len = 1;
-        for (size_t i = 0; i < type.array.dims.len; i++) {
-            total_len *= type.array.dims.data[i];
+        for (size_t i = 0; i < type.array.dimensions.len; i++) {
+            Dimension dim = type.array.dimensions.data[i]; 
+            if (dim.is_uvar) {
+                panic(mv_string("Cannot get size of array: dimensions are not resolved."));
+            } else {
+                total_len *= dim.val;
+            }
         }
         *out = *out * total_len;
         return Ok;
@@ -1819,9 +1835,17 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
         return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
         break;
     case TArray:
-        if (lhs->array.dims.len != rhs->array.dims.len) return false;
-        for (size_t i = 0; i < lhs->array.dims.len; i++) {
-            if (lhs->array.dims.data[i] != rhs->array.dims.data[i]) return false;
+        if (lhs->array.dimensions.len != rhs->array.dimensions.len) return false;
+        for (size_t i = 0; i < lhs->array.dimensions.len; i++) {
+            Dimension lhd = lhs->array.dimensions.data[i];
+            Dimension rhd = rhs->array.dimensions.data[i];
+            if (lhd.is_uvar != rhd.is_uvar) return false;
+            if (lhd.is_uvar) {
+                // TODO (BUG): do proper structural equality here
+                return lhd.uvar.target == rhd.uvar.target;
+            } else {
+                return lhd.val == rhd.val;
+            }
         }
 
         return pi_type_eql_i(lhs->array.element, rhs->array.element, array);
@@ -2053,8 +2077,11 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         break;
     case TArray: {
         size_t len = 1; 
-        for (size_t i = 0; i < type->array.dims.len; i++) {
-            len *= type->array.dims.data[i];
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            if (type->array.dimensions.data[i].is_uvar) {
+                panic(mv_string("Cannot compare values of Array type with undecided dimension."));
+            }
+            len *= type->array.dimensions.data[i].val;
         }
         PiType* elt_ty = type->array.element;
         size_t elt_offset = pi_size_align(pi_size_of(*elt_ty), pi_align_of(*elt_ty));
@@ -2287,10 +2314,13 @@ PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
     va_list args;
     va_start(args, ndims);
     
-    U64PiList dims = mk_U64_list(ndims, pia);
+    DimPiList dims = mk_dim_list(ndims, pia);
     for (size_t i = 0; i < ndims ; i++) {
-        uint64_t dimension = va_arg(args, uint64_t);
-        push_U64(dimension, &dims);
+        Dimension dim = {
+            .is_uvar = false,
+            .val = va_arg(args, uint64_t),
+        };
+        push_dim(dim, &dims);
     }
 
     PiType* element = va_arg(args, PiType*);
@@ -2299,7 +2329,7 @@ PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
     PiType* proc = call_alloc(sizeof(PiType), pia);
     *proc = (PiType) {
         .sort = TArray,
-        .array.dims = dims,
+        .array.dimensions = dims,
         .array.element = element,
     };
     return proc;

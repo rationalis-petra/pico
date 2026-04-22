@@ -853,17 +853,51 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < untyped.array.elements.len; i++) {
             type_check_i(untyped.array.elements.data[i], type, (Range){}, env, ctx);
         }
-        PiType* arr_type = mem_alloc(sizeof(PiType), ctx.a);
-        U64PiList dims = mk_U64_list(untyped.array.dimensions.len, ctx.pia);
+        PiType* arr_type = mem_alloc(sizeof(PiType), a);
+        DimPiList dims = mk_dim_list(untyped.array.dimensions.len, ctx.pia);
         for (size_t i = 0; i < untyped.array.dimensions.len; i++) {
-            push_U64(untyped.array.dimensions.data[i], &dims);
+            Dimension dim = {
+                .is_uvar = false,
+                .val = untyped.array.dimensions.data[i],
+            };
+            push_dim(dim, &dims);
         }
         *arr_type = (PiType) {
             .sort = TArray,
-            .array.dims = dims,
+            .array.dimensions = dims,
             .array.element = type,
         };
         set_type(ref, arr_type, ctx.tape);
+        break;
+    }
+    case SArrayElt: {
+        PiType* array_type = call_alloc(sizeof(PiType), ctx.pia); 
+        PiType* elt_type = mk_uvar(ctx.pia);
+        DimPiList dimensions = mk_dim_list(untyped.array.dimensions.len, ctx.pia);
+        for (size_t i = 0; i < untyped.array.dimensions.len; i++) {
+            Dimension dim = mk_dim_uvar(ctx.pia);
+            push_dim(dim, &dimensions);
+        }
+        *array_type = (PiType) {
+            .sort = TArray, 
+            .array.dimensions = dimensions,
+            .array.element = elt_type,
+        };
+
+        Range arr_src = get_range(ref, ctx.tape).term;
+        type_check_i(untyped.array_elt.array, array_type, arr_src, env, ctx);
+
+        for (size_t i = 0; i < untyped.array_elt.index.len; i++) {
+            PiType* index_type = call_alloc(sizeof(PiType), ctx.pia); 
+            *index_type = (PiType) {
+                .sort = TPrim, 
+                .prim = UInt_64,
+            };
+            Range range = get_range(untyped.array_elt.index.data[i], ctx.tape).term;
+            type_check_i(untyped.array_elt.index.data[i], index_type, range, env, ctx);
+        }
+
+        set_type(ref, elt_type, ctx.tape);
         break;
     }
     case SStructure: {
@@ -2083,6 +2117,13 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
         break;
     }
+    case SArrayElt: {
+        for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+            post_unify(syn.array_elt.index.data[i], env, ctx);
+        }
+        post_unify(syn.array_elt.array, env, ctx);
+        break;
+    }
     case SStructure: {
         if (syn.structure.has_base == Some) {
             post_unify(syn.structure.base, env, ctx);
@@ -2410,10 +2451,17 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         break;
     }
     case SArray: {
-      for (size_t i = 0; i < typed.array.elements.len; i++) {
-          squash_types(typed.array.elements.data[i], env, ctx);
-      }
-      break;
+        for (size_t i = 0; i < typed.array.elements.len; i++) {
+            squash_types(typed.array.elements.data[i], env, ctx);
+        }
+        break;
+    }
+    case SArrayElt: {
+        for (size_t i = 0; i < typed.array_elt.index.len; i++) {
+            squash_types(typed.array_elt.index.data[i], env, ctx);
+        }
+        squash_types(typed.array_elt.array, env, ctx);
+        break;
     }
     case SStructure: {
         if (typed.structure.has_base == Some) {

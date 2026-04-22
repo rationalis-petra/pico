@@ -118,6 +118,8 @@ String syntax_type_to_string(Syntax_t type) {
         return mv_string("match");
     case SArray:
         return mv_string("array");
+    case SArrayElt:
+        return mv_string("array-elt");
     case SStructure:
         return mv_string("struct");
     case SProjector:
@@ -515,6 +517,9 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     }
     case SArray: {
         panic(mv_string("not implemented: pretty syntax for array"));
+    }
+    case SArrayElt: {
+        panic(mv_string("not implemented: pretty syntax for array-elt"));
     }
     case SStructure: {
         PtrArray nodes = mk_ptr_array(2 + syntax.structure.fields.len, a);

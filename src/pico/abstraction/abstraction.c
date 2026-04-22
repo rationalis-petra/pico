@@ -29,9 +29,9 @@ typedef struct {
 } ComptimeHead;
 
 
-// Internal functions declarations needed for interface implementation
-SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx);
+// Internal functions declarations needed forthe  interface implementation 
 TopLevel abstract_i(RawTree raw, AbstractionICtx ctx);
+SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx);
 
 SynRef mk_application_body(SynRef fn_syn, RawTree raw, AbstractionICtx ctx);
 SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx);
@@ -46,6 +46,7 @@ bool is_special(RawTree curr);
 void deduce_dimension(U64Array* dims, RawTree nodes, AbstractionICtx ctx);
 RawTreePiList next_node_arr(U64Array* index, U64Array dims, RawTree nodes, AbstractionICtx ctx);
 
+// Module header helpers
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point);
@@ -665,6 +666,167 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
     }
+    case FArray: {
+        U64Array dims = mk_u64_array(2, a);
+        SynArray elements = mk_syn_array(16, a);
+        // Special Case: Empty Array
+        if (raw.branch.nodes.len == 1) {
+            Syntax syn = {
+                .type = SArray,
+                .array.dimensions = dims,
+                .array.elements = elements,
+            };
+            SynRef res = new_syntax(ctx.tape);
+            set_syntax(res, syn , ctx.tape);
+            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+            return res;
+        }
+
+        // Are array dimensions provided?  
+        size_t idx = 1;
+        if (raw.branch.nodes.data[idx].type == RawBranch &&
+            raw.branch.nodes.data[idx].branch.hint == HImplicit) {
+            RawTreePiList nodes = raw.branch.nodes.data[idx].branch.nodes;
+            for (size_t i = 0; i < nodes.len; i++) {
+                RawTree dim = nodes.data[i];
+                if (dim.type != RawAtom || dim.atom.type != AIntegral)
+                    array_incorrect_dimtype(dim, ctx);
+                push_u64((uint64_t)dim.atom.int_64, &dims);
+            }
+            idx++;
+        }
+
+        if (idx + 1 != raw.branch.nodes.len) {
+            array_incorrect_numterms(raw, idx + 1, ctx);
+        }
+        RawTree nodes = raw.branch.nodes.data[idx];
+        if (idx == 1) {
+            deduce_dimension(&dims, nodes, ctx);
+        }
+        // Actual Values
+        U64Array index = mk_zero_index(dims.len, a);
+        while (index_less(index, dims)) {
+            RawTreePiList local_nodes = next_node_arr(&index, dims, nodes, ctx);
+            size_t last = dims.data[dims.len - 1];
+            for (size_t i = 0; i < last; i++) {
+                SynRef syn = abstract_expr_i(local_nodes.data[i], ctx);
+                push_syn(syn, &elements);
+            }
+        }
+        
+        Syntax syn = {
+            .type = SArray,
+            .array.dimensions = dims,
+            .array.elements = elements,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FArrayElt: {
+        if (raw.branch.nodes.len != 3) {
+            array_elt_incorrect_numterms(raw, ctx);
+        }
+        SynArray index;
+        RawTree raw_index = raw.branch.nodes.data[1];
+        if (raw_index.type == RawBranch && raw_index.branch.hint == HSpecial) {
+            index = mk_syn_array(raw_index.branch.nodes.len, a);
+            for (size_t i = 0; i < raw_index.branch.nodes.len; i++) {
+                push_syn(abstract_expr_i(raw_index.branch.nodes.data[i], ctx), &index);
+            }
+        } else {
+            index = mk_syn_array(1, a);
+            push_syn(abstract_expr_i(raw_index, ctx), &index);
+        }
+        
+        Syntax syn = {
+            .type = SArrayElt,
+            .array_elt.index = index,
+            .array_elt.array = abstract_expr_i(raw.branch.nodes.data[2], ctx),
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FStructure: {
+        Option_t has_base;
+        SynRef sbase;
+        size_t start_idx = 1;
+
+        // Get the type of the structure
+        if (raw.branch.nodes.len > 1) {
+            if (!is_special(raw.branch.nodes.data[1])) {
+                start_idx = 2;
+                has_base = Some;
+                sbase = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+            } else {
+                has_base = None;
+                sbase = (SynRef){};
+            }
+        }
+
+        // Construct a structure
+        SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len, a);
+        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
+            RawTree fdesc = raw.branch.nodes.data[i];
+            if (fdesc.type != RawBranch) {
+                struct_bad_fdesc_type(fdesc, ctx);
+            }
+            
+            if (fdesc.branch.nodes.len < 2) {
+                struct_bad_fdesc_len(fdesc, ctx);
+            }
+
+            Symbol field;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+              struct_bad_fdesc_fieldname(fdesc, ctx);
+            }
+
+            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
+            SynRef syn = abstract_expr_i(*val_desc, ctx);
+
+            // Check that there are no duplicates, then insert
+            size_t found_idx;
+            if (sym_syn_find(&found_idx, field, fields)) {
+                struct_duplicate_fieldname(fdesc, field, ctx);
+            }
+            
+            sym_syn_insert(field, syn, &fields);
+        }
+
+        Syntax syn = {
+            .type = SStructure,
+            .structure.has_base = has_base,
+            .structure.base = sbase,
+            .structure.fields = fields,
+        };
+        SynRef res = new_syntax(ctx.tape);
+        set_syntax(res, syn , ctx.tape);
+        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
+        return res;
+    }
+    case FProjector: {
+        if (raw.branch.nodes.len != 3) {
+            err.range = raw.range;
+            err.message = mv_cstr_doc("Projection term former needs two arguments!", a);
+            throw_pi_error(ctx.point, err);
+        }
+
+        // Get the source portion of the proector 
+        SynRef source = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+
+        // Get the symbol portion of the projector
+        RawTree msym = raw.branch.nodes.data[1];
+        if (msym.type != RawAtom && msym.atom.type != ASymbol) {
+            err.range = msym.range;
+            err.message = mv_cstr_doc("Second argument to projection term former should be symbol", a);
+            throw_pi_error(ctx.point, err);
+        }
+
+        return resolve_module_projector(raw.range, source, &msym, ctx);
+    }
     case FVariant: {
         if (raw.branch.nodes.len == 2) {
             // Check that we are indeed getting a result
@@ -861,152 +1023,6 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         set_syntax(res, syn , ctx.tape);
         set_range(res, (SynRange){.term = raw.range}, ctx.tape);
         return res;
-    }
-    case FArray: {
-        U64Array dims = mk_u64_array(2, a);
-        SynArray elements = mk_syn_array(16, a);
-        // Special Case: Empty Array
-        if (raw.branch.nodes.len == 1) {
-            Syntax syn = {
-                .type = SArray,
-                .array.dimensions = dims,
-                .array.elements = elements,
-            };
-            SynRef res = new_syntax(ctx.tape);
-            set_syntax(res, syn , ctx.tape);
-            set_range(res, (SynRange){.term = raw.range}, ctx.tape);
-            return res;
-        }
-
-        // Are array dimensions provided?  
-        size_t idx = 1;
-        if (raw.branch.nodes.data[idx].type == RawBranch &&
-            raw.branch.nodes.data[idx].branch.hint == HImplicit) {
-            RawTreePiList nodes = raw.branch.nodes.data[idx].branch.nodes;
-            for (size_t i = 0; i < nodes.len; i++) {
-                RawTree dim = nodes.data[i];
-                if (dim.type != RawAtom || dim.atom.type != AIntegral)
-                    array_incorrect_dimtype(dim, ctx);
-                push_u64((uint64_t)dim.atom.int_64, &dims);
-            }
-            idx++;
-        }
-
-        if (idx + 1 != raw.branch.nodes.len) {
-            array_incorrect_numterms(raw, idx + 1, ctx);
-        }
-        RawTree nodes = raw.branch.nodes.data[idx];
-        if (idx == 1) {
-            deduce_dimension(&dims, nodes, ctx);
-        }
-        // Actual Values
-        U64Array index = mk_zero_index(dims.len, a);
-        while (index_less(index, dims)) {
-            RawTreePiList local_nodes = next_node_arr(&index, dims, nodes, ctx);
-            size_t last = dims.data[dims.len - 1];
-            for (size_t i = 0; i < last; i++) {
-                SynRef syn = abstract_expr_i(local_nodes.data[i], ctx);
-                push_syn(syn, &elements);
-            }
-        }
-        
-        Syntax syn = {
-            .type = SArray,
-            .array.dimensions = dims,
-            .array.elements = elements,
-        };
-        SynRef res = new_syntax(ctx.tape);
-        set_syntax(res, syn , ctx.tape);
-        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
-        return res;
-    }
-    case FStructure: {
-        if (raw.branch.nodes.len < 2) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Structure term former needs a structure type argument", a);
-            throw_pi_error(ctx.point, err);
-        }
-
-        Option_t has_base;
-        SynRef sbase;
-        size_t start_idx = 1;
-        // Get the type of the structure
-        if (!is_special(raw.branch.nodes.data[1])) {
-            start_idx = 2;
-            has_base = Some;
-            sbase = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        } else {
-            has_base = None;
-            sbase = (SynRef){};
-        }
-
-        // Construct a structure
-        SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len, a);
-        for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
-            RawTree fdesc = raw.branch.nodes.data[i];
-            if (fdesc.type != RawBranch) {
-                err.range = fdesc.range;
-                err.message = mv_cstr_doc("Structure expects all field descriptors to be lists.", a);
-                throw_pi_error(ctx.point, err);
-            }
-            
-            if (fdesc.branch.nodes.len < 2) {
-                err.range = fdesc.range;
-                err.message = mv_cstr_doc("Structure expects all field descriptors to have at least 2 elements.", a);
-                throw_pi_error(ctx.point, err);
-            }
-
-            Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
-                err.range = fdesc.branch.nodes.data[0].range;
-                err.message = mv_cstr_doc("Structure has malformed field name.", a);
-                throw_pi_error(ctx.point, err);
-            }
-
-            RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
-            SynRef syn = abstract_expr_i(*val_desc, ctx);
-
-            // Check that there are no duplicates, then insert
-            size_t found_idx;
-            if (sym_syn_find(&found_idx, field, fields)) {
-                err.range = fdesc.range;
-                err.message = mv_cstr_doc("Duplicate field in structure.", a);
-                throw_pi_error(ctx.point, err);
-            }
-            
-            sym_syn_insert(field, syn, &fields);
-        }
-
-        Syntax syn = {
-            .type = SStructure,
-            .structure.has_base = has_base,
-            .structure.base = sbase,
-            .structure.fields = fields,
-        };
-        SynRef res = new_syntax(ctx.tape);
-        set_syntax(res, syn , ctx.tape);
-        set_range(res, (SynRange){.term = raw.range}, ctx.tape);
-        return res;
-    }
-    case FProjector: {
-        if (raw.branch.nodes.len != 3) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Projection term former needs two arguments!", a);
-            throw_pi_error(ctx.point, err);
-        }
-
-        // Get the source portion of the proector 
-        SynRef source = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-
-        // Get the symbol portion of the projector
-        RawTree msym = raw.branch.nodes.data[1];
-        if (msym.type != RawAtom && msym.atom.type != ASymbol) {
-            err.range = msym.range;
-            err.message = mv_cstr_doc("Second argument to projection term former should be symbol", a);
-            throw_pi_error(ctx.point, err);
-        }
-
-        return resolve_module_projector(raw.range, source, &msym, ctx);
     }
     case FInstance: {
         SymbolArray params = mk_symbol_array(0, a);

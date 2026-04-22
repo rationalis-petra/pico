@@ -907,6 +907,50 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
         break;
     }
+    case SArrayElt: {
+        PiType* val_type = strip_type(type);
+        PiType* array_type = strip_type(get_type(syn.array_elt.array, ictx.tape));
+        size_t elt_size = pi_size_of(*val_type);
+        size_t offset_size = pi_size_align(elt_size, pi_align_of(*val_type));
+        size_t stack_size = pi_stack_align(elt_size);
+
+        build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
+        data_stack_grow(env, stack_size);
+        int64_t dest_level = get_stack_head(env);
+        for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+            generate_i(syn.array_elt.index.data[i], env, ictx);
+        }
+
+        size_t block_size = offset_size;
+        build_binary_op(Mov, reg(RAX, sz_64), imm32(0), ass, a, point);
+        for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+            // Calculate the source offset from the array start
+            build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RAX, sz_64), reg(RDX, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm32(block_size), ass, a, point);
+            build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
+
+            block_size *= array_type->array.dimensions.data[syn.array_elt.index.len - (i + 1)].val;
+        }
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_shrink(env, (syn.array_elt.index.len - 1) * ADDRESS_SIZE);
+
+        generate_i(syn.array_elt.array, env, ictx);
+        int64_t current_level = get_stack_head(env);
+
+        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RDX, sz_64), imm32(dest_level - current_level), ass, a, point);
+
+        build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RCX, sz_64), rref32(RSP, dest_level - current_level - ADDRESS_SIZE, sz_64), ass, a, point);
+
+        generate_monomorphic_copy(RDX, RCX, elt_size, ass, a, point);
+        size_t discard = dest_level - current_level;
+        build_binary_op(Add, reg(RSP, sz_64), imm32(discard), ass, a, point);
+        data_stack_shrink(env, discard);
+        break;
+    }
     case SStructure: {
         PiType* struct_type = strip_type(type);
         if (is_variable_in(type, env)) {
@@ -2473,18 +2517,22 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SArrayType: {
         // TODO: account for SIMD alignment
         // TODO: account for polymorphism
-        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.array_type.dimensions.len * ADDRESS_SIZE), ass, a, point);
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.array_type.dimensions.len * sizeof(Dimension)), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
         for (size_t i = 0; i < syn.proc_type.args.len; i++) {
             uint64_t arg = syn.array_type.dimensions.data[i];
             // TODO: check dimension can fit
             // Set dimension
+
+            // Move false (not uvar)
+            build_binary_op(Mov, reg(R9, sz_64), imm32(0), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm8(1), ass, a, point);
+
+            // Move dimension (val)
             build_binary_op(Mov, reg(R9, sz_64), imm32(arg), ass, a, point);
             build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
-
-            // Now, incremenet index by 1
-            build_binary_op(Add, reg(RCX, sz_64), imm32(1), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), imm8(1), ass, a, point);
         }
         // Stash the dimension array data
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);

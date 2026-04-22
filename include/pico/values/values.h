@@ -73,11 +73,12 @@ typedef enum TermFormer {
     FApplication,
     FSeal,
     FUnseal,
-    FVariant,
-    FMatch,
     FArray,
+    FArrayElt,
     FStructure,
     FProjector,
+    FVariant,
+    FMatch,
     FInstance,
 
     // Dynamic Binding

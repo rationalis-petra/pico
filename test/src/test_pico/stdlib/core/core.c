@@ -308,6 +308,16 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(array [[2 4 6 8] [10 12 14 16]])");
     }
 
+    if (test_start(log, mv_string("elt-of-array"))) {
+        int64_t expected = 9;
+        TEST_EQ("(aelt 2 (array [3 7 9 12]))");
+    }
+
+    if (test_start(log, mv_string("elt-of-array"))) {
+        int64_t expected = 3;
+        TEST_EQ("(aelt [1 0] (array [[2 4 6 8] [3 7 9 12]]))");
+    }
+
     // -----------------------------------------------------
     // 
     //      Struct

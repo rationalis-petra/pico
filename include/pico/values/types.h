@@ -19,6 +19,8 @@ typedef struct PiType PiType;
 // Forward declaration: these types are defined and used
 // in unify.c
 typedef struct UVarType UVarType;
+typedef struct UVarDim UVarDim;
+typedef struct Dimension Dimension;
 
 typedef enum {
     Int_8  = 0b000,
@@ -82,8 +84,22 @@ typedef struct {
     PiType* ret;
 } ProcType;
 
+struct UVarDim {
+    Dimension* target;
+};
+
+struct Dimension {
+    bool is_uvar;
+    union {
+        uint64_t val;
+        UVarDim uvar;
+    };
+};
+
+PICO_LIST_HEADER(Dimension, dim, Dim);
+
 typedef struct {
-    U64PiList dims;
+    DimPiList dimensions;
     PiType* element;
 } ArrayType;
 
@@ -313,6 +329,5 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
 PiType* mk_string_type(PiAllocator* pia);
-
 
 #endif

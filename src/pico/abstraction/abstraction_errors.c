@@ -3,7 +3,6 @@
 #include "pico/abstraction/abstraction_errors.h"
 
 
-
 // ------------------------------------------------------------
 //   Expression/Value Formers
 // ------------------------------------------------------------
@@ -76,6 +75,65 @@ _Noreturn void array_incorrect_size(RawTree raw, uint64_t expected, AbstractionI
     throw_pi_error(ctx.point, err);
 }
 
+_Noreturn void array_elt_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+    Document* message;
+    if (raw.branch.nodes.len > 3) {
+        message = mv_cstr_doc("aelt type has received too many terms - expect to receive only an index and an array.", ctx.gpa);
+    } else if (raw.branch.nodes.len == 2) {
+        message = mv_cstr_doc("aelt is missing an array.", ctx.gpa);
+    } else {
+        message = mv_cstr_doc("aelt is missing both an index and an array.", ctx.gpa);
+    }
+    
+    PicoError err = {
+        .range = raw.range,
+        .message = message,
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+
+// Structure
+// ----------
+_Noreturn void struct_bad_fdesc_type(RawTree fdesc, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = fdesc.range,
+        .message = mv_cstr_doc("Invalid Field Descriptor. Field descriptors have the format [.fieldname value]", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void struct_bad_fdesc_len(RawTree fdesc, AbstractionICtx ctx) {
+    // TODO: detect the specific error '. fieldname value' and point out the issue.
+    PicoError err = {
+        .range = fdesc.range,
+        .message = mv_cstr_doc("Invaild field descriptor (contains too many elements). Field descriptos have the format\n"
+                               "[.fieldname value].", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void struct_bad_fdesc_fieldname(RawTree fdesc, AbstractionICtx ctx) {
+  PicoError err = {
+    .range = fdesc.branch.nodes.data[0].range,
+    .message = mv_cstr_doc(
+        "Structure has malformed fieldname, fieldnames are "
+        "symbols and must therefore use symbol rules.\n"
+        "Symbol rules: must start with a letter, and not contain spaces "
+        "or special characters, i.e. any paren/bracket '{([])}', dots, \n"
+        "colons or semicolons.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, AbstractionICtx ctx) {
+    PicoError err = {
+        .range = fdesc.range,
+        .message = mv_cstr_doc("Duplicate field in structure.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
 // ------------------------------------------------------------
 //   Type Formers
 // ------------------------------------------------------------
@@ -88,7 +146,6 @@ _Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx
     } else {
         message = mv_cstr_doc("Proc type missing both argument list and return argument.", ctx.gpa);
     }
-
     
     PicoError err = {
         .range = raw.range,
