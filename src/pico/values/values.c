@@ -291,6 +291,9 @@ Document* pretty_former(TermFormer op, Allocator* a) {
     case FArray:
         out = mk_str_doc(mv_string("::array"), a);
         break;
+    case FArrayElt:
+        out = mk_str_doc(mv_string("::array-elt"), a);
+        break;
     case FStructure:
         out = mk_str_doc(mv_string("::structure"), a);
         break;

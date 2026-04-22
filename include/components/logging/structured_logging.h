@@ -2,6 +2,7 @@
 #define __COMPONENTS_LOGGING_STRUCTURED_LOGGING_H
 
 #include "data/string.h"
+#include "data/stream.h"
 
 #include "platform/memory/allocator.h"
 

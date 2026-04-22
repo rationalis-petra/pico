@@ -1,10 +1,13 @@
 #include "platform/machine_info.h"
+#include "platform/signals.h"
+
 #include "pico/data/client/allocator.h"
 
 void* call_alloc(size_t size, PiAllocator* pa) {
     void* alloc_fn = pa->vtable->pi_alloc;
     void* ctx = pa->ctx_ptr;
     void* out;
+#if ABI == SYSTEM_V_64 || ABI == WIN_64
     __asm__ __volatile__("push %3 \n"
                          "push %2 \n"
                          "call *%1 \n"
@@ -15,12 +18,18 @@ void* call_alloc(size_t size, PiAllocator* pa) {
                          , "r" (size)
                          , "r" (ctx));
     return out;
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("Not implemented: call_alloc for SysV-aarch64"));
+#else 
+#error "Unsupported ABI"
+#endif
 }
 
 void* call_realloc(void* data, size_t size, PiAllocator* pa) {
     void* realloc_fn = pa->vtable->pi_realloc;
     void* ctx = pa->ctx_ptr;
     void* out = NULL;
+#if ABI == SYSTEM_V_64 || ABI == WIN_64
     __asm__ __volatile__("push %4 \n"
                          "push %3 \n"
                          "push %2 \n"
@@ -31,6 +40,11 @@ void* call_realloc(void* data, size_t size, PiAllocator* pa) {
                          , "r" (size)
                          , "r" (data)
                          , "r" (ctx));
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("Not implemented: call_realloc for SysV-aarch64"));
+#else 
+#error "Unsupported ABI"
+#endif
 
     return out;
 }
@@ -38,6 +52,7 @@ void* call_realloc(void* data, size_t size, PiAllocator* pa) {
 void call_free(void* data, PiAllocator* pa) {
     void* free_fn = pa->vtable->pi_free;
     void* ctx = pa->ctx_ptr;
+#if ABI == SYSTEM_V_64 || ABI == WIN_64
     __asm__ __volatile__("push %2 \n"
                          "push %1 \n"
                          "call *%0 \n"
@@ -45,6 +60,11 @@ void call_free(void* data, PiAllocator* pa) {
                          : "r" (free_fn)
                          , "r" (data)
                          , "r" (ctx));
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("Not implemented: call_free for SysV-aarch64"));
+#else 
+#error "Unsupported ABI"
+#endif
 }
 
 Allocator convert_to_callocator(PiAllocator* pa) {
@@ -137,6 +157,8 @@ void* pi_alloc_adapter() {
           "push %rcx\n"
           "ret\n"
           );
+#elif ABI == SYSTEM_V_AARCH64
+    //        panic("Not implemented: pi_alloc_adapter for SysV-aarch64");
 #else
 #error "Unknown calling convention"
 #endif
@@ -204,6 +226,8 @@ void* pi_realloc_adapter() {
       "push %rcx\n"
       "ret\n"
         );
+#elif ABI == SYSTEM_V_AARCH64
+  //    panic("Not implemented: pi_realloc_adapter for SysV-aarch64");
 #else
 #error "Unknown calling convention"
 #endif
@@ -265,6 +289,8 @@ void pi_free_adapter() {
         "push %rcx\n"
         "ret\n"
         );
+#elif ABI == SYSTEM_V_AARCH64
+  //    panic("Not implemented: pi_free_adapter for SysV-aarch64");
 #else
 #error "Unknown calling convention"
 #endif

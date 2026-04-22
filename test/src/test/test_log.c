@@ -60,6 +60,11 @@ void finish_setup(TestLog *log) {
     log->setup_time = query_performance_timer();
 }
 
+// Return true if all tests run thus far have passed, and false otherwise.
+bool all_passed(TestLog* log) {
+    return log->failed_tests == 0;
+}
+
 bool suite_start(TestLog *log, String name) {
     String* str = mem_alloc(sizeof(String), log->gpa);
     *str = name;

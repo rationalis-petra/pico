@@ -1,6 +1,7 @@
+#include "platform/machine_info.h"
+#if ARCH == AMD64
 #include "data/meta/array_impl.h"
 
-#include "platform/machine_info.h"
 #include "platform/signals.h"
 
 #include "pico/codegen/codegen.h"
@@ -1122,3 +1123,5 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
         backlink_children(field_offset, start_idx, &head, tree.branch.nodes, target, links);
     }
 }
+
+#endif

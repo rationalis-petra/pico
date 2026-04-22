@@ -785,6 +785,8 @@ void bd_convert_c_fn(void* cfn, CType* ctype, PiType* ptype, Assembler* ass, All
     }
     build_nullary_op(Ret, ass, a, point);
 
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("TODO: implement convert_c_fn for SysV-aarch64"));
 #else
 #error "convert_c_fun not implemented for unknonw arch"
 #endif
@@ -921,6 +923,8 @@ bool can_reinterpret_prim(CPrimInt ctype, PrimType ptype) {
         return false;
     }
     }
+#elif ABI == SYSTEM_V_AARCH64 
+    panic(mv_string("TODO: implement can_reinterpret for SYSV-AARCH64"));
 #else
 #error "can_reinterpret_prim not implemented for unknonw arch"
 #endif

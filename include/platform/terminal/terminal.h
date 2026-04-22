@@ -13,7 +13,7 @@
 //     Streaming Interface
 // 
 // ------------------------------------------------------------
-typedef struct OStream OStream;
+struct OStream;
 
 typedef enum {
     Normal,
@@ -26,10 +26,10 @@ void init_terminal(Allocator* a);
 // TODO: move these operations into a components/formattedstream, which
 // wraps a 'true' interface centererd around input/output *events*
 typedef struct FormattedOStream FormattedOStream;
-FormattedOStream* mk_formatted_ostream(OStream* os, Allocator* a);
+FormattedOStream* mk_formatted_ostream(struct OStream* os, Allocator* a);
 void delete_formatted_ostream(FormattedOStream* os, Allocator* a);
 void write_fstring(String string, FormattedOStream* os);
-OStream* fos(FormattedOStream* os);
+struct OStream* fos(FormattedOStream* os);
 
 FormattedOStream* get_formatted_stdout();
 

@@ -67,6 +67,7 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
 
+    // TODO: delegate this work to the backend
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
     build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
@@ -84,6 +85,8 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
     build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
     build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("Not implemented: build_store_fn for aarch64"));
 #else
 #error "Unknown calling convention"
 #endif
@@ -164,6 +167,8 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 
     build_unary_op(Push, reg(R14, sz_64), ass, a, point);
 
+#elif ABI == SYSTEM_V_AARCH64
+    panic(mv_string("Not implemented: build_load_fn for aarch64"));
 #else
 #error "Unknown calling convention"
 #endif

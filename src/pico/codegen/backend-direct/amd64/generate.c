@@ -1,3 +1,5 @@
+#include "platform/machine_info.h"
+#if ARCH == AMD64
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -3123,3 +3125,4 @@ void* const_fold(SynRef ref, AddressEnv *env, InternalContext ictx) {
     throw_error(ictx.point, cleanup_point.error_message);
 }
 
+#endif
