@@ -335,7 +335,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Ensure the target is 'fresh' for code-gen
         clear_target(gen_target);
         CodegenContext cg_ctx = {
-            .tape = tape, .a = &itera, .point = &err_point, .target = gen_target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pico_itera, .point = &err_point, .target = gen_target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 

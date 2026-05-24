@@ -107,6 +107,10 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         break;
     }
     case TTraitInstance: {
+        sdelete_sym_list(t.instance.over);
+        for (size_t i = 0; i < t.instance.implicits.len; i++)
+            delete_pi_type_p(t.instance.implicits.data[i], pia);
+        sdelete_addr_list(t.instance.implicits);
         for (size_t i = 0; i < t.instance.args.len; i++)
             delete_pi_type_p(t.instance.args.data[i], pia);
         sdelete_addr_list(t.instance.args);
@@ -219,6 +223,8 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     case TTraitInstance:
         out.instance.instance_of = t.instance.instance_of;
         out.instance.name = t.instance.name;
+        out.instance.over = scopy_sym_list(t.instance.over, pia);
+        out.instance.implicits = copy_addr_list(t.instance.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.instance.args = copy_addr_list(t.instance.args,  (TyCopier)copy_pi_type_p, pia);
         out.instance.fields = copy_sym_addr_piamap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
@@ -268,7 +274,15 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         break;
 
     case TUVar:
-        out.uvar = copy_uvar(t.uvar, pia);
+        // TODO (BUG): pi_type_subst copies the type before doing a
+        //   substitution, and substitution happens as part of unification, 
+        //   in particular, when a uvar is instantiated, the substititions are
+        //   propagated in. This can lead to a uvar being copied, cutting a logical
+        //   like we wish to be there. This part of the logic (in uvar_subst,
+        //   towards the end) should be replaced by something that does
+        //   appropriate analysis. Then the copy below may be uncommented.
+        // out.uvar = copy_uvar(t.uvar, pia);
+        out.uvar = t.uvar; 
         break;
     case TPrim:
         out.prim = t.prim;
@@ -1540,7 +1554,7 @@ PiType* unname_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* 
         if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
             sym_ptr_bind(ty->named.name, ty, &binds);
-            ty = pi_type_subst(ty->named.type, binds, pia, a);
+            ty = pi_type_subst(ty->named.type, binds, NULL, pia, a);
         } else if (ty->sort == TUVar) {
             PiType* maybe_ty = try_get_uvar(ty->uvar);
             unwrapping = maybe_ty ? true : false;
@@ -1561,7 +1575,7 @@ PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* 
         } else if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
             sym_ptr_bind(ty->named.name, ty, &binds);
-            ty = pi_type_subst(ty->named.type, binds, pia, a);
+            ty = pi_type_subst(ty->named.type, binds, NULL, pia, a);
         } else if (ty->sort == TUVar) {
             PiType* maybe_ty = try_get_uvar(ty->uvar);
             unwrapping = maybe_ty ? true : false;
@@ -1591,72 +1605,79 @@ PiType* strip_type(PiType *ty) {
     return ty;
 }
 
-void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a) {
+void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
         for (size_t i = 0; i < body->proc.implicits.len; i++) {
-            type_app_subst(body->proc.implicits.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->proc.implicits.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->proc.args.len; i++) {
-            type_app_subst(body->proc.args.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->proc.args.data[i], subst, shadowed, pia, logger, a);
         }
-        type_app_subst(body->proc.ret, subst, shadowed, pia, a);
+        type_app_subst(body->proc.ret, subst, shadowed, pia, logger, a);
         break;
     case TStruct:
         for (size_t i = 0; i < body->structure.fields.len; i++) {
-            type_app_subst(body->structure.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->structure.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
         break;
     case TEnum:
         for (size_t i = 0; i < body->enumeration.variants.len; i++) {
             PtrArray* variant = body->enumeration.variants.data[i].val;
             for (size_t j = 0; j < variant->len; j++) {
-                type_app_subst(variant->data[j], subst, shadowed, pia, a);
+                type_app_subst(variant->data[j], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TReset:
-        type_app_subst(body->reset.in, subst, shadowed, pia, a);
-        type_app_subst(body->reset.out, subst, shadowed, pia, a);
+        type_app_subst(body->reset.in, subst, shadowed, pia, logger, a);
+        type_app_subst(body->reset.out, subst, shadowed, pia, logger, a);
         break;
     case TResumeMark:
         panic(mv_string("not implemetned type-app for ResumeMark"));
         break;
     case TDynamic:
-        type_app_subst(body->dynamic, subst, shadowed, pia, a);
+        type_app_subst(body->dynamic, subst, shadowed, pia, logger, a);
         break;
     case TNamed:
         push_symbol(body->named.name, shadowed);
-        type_app_subst(body->named.type, subst, shadowed, pia, a);
+        type_app_subst(body->named.type, subst, shadowed, pia, logger, a);
         shadowed->len--;
         if (body->named.args) {
             for (size_t i = 0; i < body->named.args->len; i++) {
-                type_app_subst(body->named.args->data[i], subst, shadowed, pia, a);
+                type_app_subst(body->named.args->data[i], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TDistinct:
-        type_app_subst(body->distinct.type, subst, shadowed, pia, a);
+        type_app_subst(body->distinct.type, subst, shadowed, pia, logger, a);
         if (body->distinct.args) {
             for (size_t i = 0; i < body->distinct.args->len; i++) {
-                type_app_subst(body->distinct.args->data[i], subst, shadowed, pia, a);
+                type_app_subst(body->distinct.args->data[i], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TTrait:
         // TODO (BUG): ensure to shadow trait variables here.
         for (size_t i = 0; i < body->trait.fields.len; i++) {
-            type_app_subst(body->trait.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->trait.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
         break;
     case TTraitInstance: // note: not a "real" type in the theory
+        for (size_t i = 0; i < body->instance.over.len; i++) {
+            push_symbol(body->instance.over.data[i], shadowed);
+        }
         for (size_t i = 0; i < body->instance.args.len; i++) {
-            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
+        }
+        for (size_t i = 0; i < body->instance.args.len; i++) {
+            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->instance.fields.len; i++) {
-            type_app_subst(body->instance.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->instance.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
+        shadowed->len -= body->instance.over.len;
         break;
 
     // Quantified Types
@@ -1679,9 +1700,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         for (size_t i = 0; i < body->sealed.implicits.len; i++) {
             PiType* implicit = body->sealed.implicits.data[i];
-            type_app_subst(implicit, subst, shadowed, pia, a);
+            type_app_subst(implicit, subst, shadowed, pia, logger, a);
         }
-        type_app_subst(body->sealed.body, subst, shadowed, pia, a);
+        type_app_subst(body->sealed.body, subst, shadowed, pia, logger, a);
 
         shadowed->len -= body->sealed.vars.len;
         break;
@@ -1695,12 +1716,26 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         for (size_t i = 0; i < body->binder.vars.len; i++) {
             push_symbol(body->binder.vars.data[i], shadowed);
         }
-        type_app_subst(body->binder.body, subst, shadowed, pia, a);
+        type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
         shadowed->len -= body->binder.vars.len;
         break;
 
     case TUVar:
         add_subst(body->uvar, subst, a);
+        if (logger) {
+            PtrArray docs = mk_ptr_array(2, a);
+            push_ptr(mv_str_doc(mv_string("adding subst to"), a), &docs);
+            push_ptr(pretty_type(body, default_ptp, a), &docs);
+            push_ptr(mv_str_doc(mv_string(":"), a), &docs);
+            PtrArray subst_nodes = mk_ptr_array(subst.len, a);
+            for (size_t i = 0; i < subst.len; i++) {
+                push_ptr(mk_str_doc(view_symbol_string(subst.data[i].key), a), &docs);
+                push_ptr(mv_str_doc(mv_string("->"), a), &docs);
+                push_ptr(pretty_type(subst.data[i].val, default_ptp, a), &docs);
+            }
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(subst_nodes, a), a), &docs);
+            log_doc(mv_sep_doc(docs, a), logger);
+        }
         break;
 
     // Kinds (higher kinds not supported)
@@ -1735,7 +1770,7 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             SymAddrPiCell cell = family.trait.fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
             SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, a);
+            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
             sdelete_symbol_array(shadowed);
             sym_addr_insert(cell.key, new_type, &new_fields);
         }
@@ -1752,6 +1787,12 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             .sort = TTraitInstance,
             .instance.instance_of = family.trait.id,
             .instance.name = family.trait.name,
+            // Note: over and implicits are left null, as that type of instance
+            //     can only be produced by an (instance ...) form, so regluar
+            //     type apps will always produce an instance with empty over/implicits
+            .instance.over = {.len = 0},
+            .instance.implicits = {.len = 0},
+
             .instance.args = saved_args,
             .instance.fields = new_fields,
         };
@@ -1800,17 +1841,17 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
 
         PiType* new_type = copy_pi_type_p(family.binder.body, pia);
         SymbolArray shadowed = mk_symbol_array(8, a);
-        type_app_subst (new_type, subst, &shadowed, pia, a);
+        type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
         sdelete_symbol_array(shadowed);
         sdelete_sym_ptr_assoc(subst);
         return new_type;
     }
 }
 
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a) {
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* logger, PiAllocator* pia, Allocator* a) {
     PiType* new_type = copy_pi_type_p(type, pia);
     SymbolArray shadowed = mk_symbol_array(8, a);
-    type_app_subst(new_type, binds, &shadowed, pia, a);
+    type_app_subst(new_type, binds, &shadowed, pia, logger, a);
     sdelete_symbol_array(shadowed);
     return new_type;
 }
@@ -1901,7 +1942,23 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     }
         // 'Special'
     case TDistinct:
-        panic(mv_string("pi_type_eql_i not implemented for distinct types"));
+        if (lhs->distinct.source_module != rhs->distinct.source_module)
+            return false;
+        if (lhs->distinct.id != rhs->distinct.id)
+            return false;
+        if (lhs->distinct.type != rhs->distinct.type)
+            return false;
+        if (!lhs->distinct.args != !rhs->distinct.args)
+            return false;
+        if (lhs->distinct.args) {
+            if (lhs->distinct.args->len != rhs->distinct.args->len)
+                return false;
+            for (size_t i = 0; i < lhs->distinct.args->len; i++) {
+                if (!pi_type_eql_i(lhs->distinct.args->data[i], rhs->distinct.args->data[i], array))
+                    return false;
+            }
+        }
+        return true;
     case TTrait:
         return lhs->trait.id == rhs->trait.id;
 
@@ -1909,11 +1966,28 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     case TTraitInstance: {
         if (lhs->instance.instance_of != rhs->instance.instance_of) return false;
 
+        if (lhs->instance.over.len != rhs->instance.over.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->instance.over.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->binder.vars.data[i],
+                .r_name = rhs->binder.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+        if (lhs->instance.implicits.len != rhs->instance.implicits.len) return false;
+        for (size_t i = 0; i < lhs->instance.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->instance.implicits.data[i], rhs->instance.implicits.data[i], array))
+                return false;
+        }
+
         if (lhs->instance.args.len != rhs->instance.args.len) return false;
         for (size_t i = 0; i < lhs->instance.args.len; i++) {
             if (!pi_type_eql_i(lhs->instance.args.data[i], rhs->instance.args.data[i], array))
                 return false;
         }
+        array->len -= lhs->instance.over.len;
         return true;
     }
 

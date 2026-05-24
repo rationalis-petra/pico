@@ -100,6 +100,9 @@ void refresh_env(Environment* env) {
     sdelete_symbol_array(arr);
 
     // Get all implicits
+    // TODO: We should flush old instances from the current module?
+    //       otherwise we will get stale instance bugs, where a instance is
+    //       bound to a non-instance, but still lives on in the env's instances
     PtrArray instances = get_defined_instances(module, env->gpa);
     for (size_t i = 0; i < instances.len; i++ ) {
         InstanceSrc* instance = instances.data[i];
@@ -113,8 +116,22 @@ void refresh_env(Environment* env) {
             name_ptr_insert(instance->id, p, &env->instances);
         }
 
-        // Add this instance to the array
-        push_ptr(instance, p);
+        // Has the instance been replaced
+        size_t replaces = p->len;
+        for (size_t i = 0; i < p->len; i++) {
+            InstanceSrc* other = p->data[i];
+            if (other->src == instance->src && symbol_eq(other->src_sym, instance->src_sym)) {
+                replaces = i;
+            }
+        }
+         // Add this instance to the array, or overwrite the existing source.
+        if (replaces == p->len) {
+            push_ptr(instance, p);
+        } else {
+            InstanceSrc* other = p->data[replaces];
+            p->data[replaces] = instance;
+            mem_free(other, env->gpa);
+        }
     }
     sdelete_ptr_array(instances);
 }

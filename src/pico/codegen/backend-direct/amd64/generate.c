@@ -69,6 +69,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
             .target = ctx.target,
             .links = &links,
             .a = ctx.a,
+            .pia = ctx.pia,
             .point = ctx.point,
             .logger = ctx.logger,
         };
@@ -96,6 +97,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
             .target = ctx.target,
             .links = &links,
             .a = ctx.a,
+            .pia = ctx.pia,
             .point = ctx.point,
             .logger = ctx.logger,
         };
@@ -152,6 +154,7 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
         .target = ctx.target,
         .links = &links,
         .a = ctx.a,
+        .pia = ctx.pia,
         .point = ctx.point,
         .logger = ctx.logger,
     };
@@ -205,6 +208,7 @@ void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
         .target = ctx.target,
         .links = &links,
         .a = ctx.a,
+        .pia = ctx.pia,
         .point = ctx.point,
         .logger = ctx.logger,
     };
@@ -495,6 +499,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SProcedure: {
+
         // Get the curret address 
         void* proc_address = get_instructions(target.code_aux).data;
         proc_address += get_instructions(target.code_aux).len;
@@ -504,6 +509,45 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         backlink_code(target, out.backlink, links);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
+
+        // if in a polymorphic instance, add the parametes of that instance to
+        // the function parameters (a closure will be made around this function)
+        if (in_poly_instance(env)) {
+            // InstanceArgs;
+            InstanceArgs iargs = get_instance_implicits(env);
+            SymPtrAMap implicits = mk_sym_ptr_amap(iargs.implicits->len + syn.procedure.implicits.len, a);
+            AddrPiList implicit_types = mk_addr_list(iargs.implicits->len + syn.procedure.implicits.len, ictx.pia);
+            for (size_t i = 0; i < iargs.implicits->len; i++) {
+                sym_ptr_insert(iargs.implicits->data[i].key, iargs.implicits->data[i].val, &implicits);
+                push_addr(iargs.implicits->data[i].val, &implicit_types);
+            }
+            for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
+                sym_ptr_insert(syn.procedure.implicits.data[i].key, syn.procedure.implicits.data[i].val, &implicits);
+                push_addr(syn.procedure.implicits.data[i].val, &implicit_types);
+            }
+            Syntax new_proc = {
+                .type = SProcedure,
+                .procedure.args = syn.procedure.args,
+                .procedure.implicits = implicits,
+                .procedure.body = syn.procedure.body,
+                .procedure.preserve_dyn_memory = syn.procedure.preserve_dyn_memory,
+            };
+            PiType* old_type = get_type(ref, ictx.tape);
+            PiType* new_type = mem_alloc(sizeof(PiType), a);
+            *new_type = (PiType) {
+                .sort = TProc,
+                .proc.args = old_type->proc.args,
+                .proc.implicits = implicit_types,
+                .proc.ret = old_type->proc.ret,
+            };
+            SynRef new_ref = new_syntax(ictx.tape);
+            set_syntax(new_ref, new_proc, ictx.tape);
+            set_type(new_ref, new_type, ictx.tape);
+            set_range(new_ref, get_range(ref, ictx.tape), ictx.tape);
+            generate_polymorphic(*iargs.types, new_ref, env, ictx);
+            // TODO: register the offset in current as a poly instance procedure offset.
+            return;
+        }
 
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
@@ -1221,74 +1265,120 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SInstance: {
-        /* Instances work as follows:
-         * • Instances as values are expected to be passed as pointers and allocated temporarily. 
-         * • Non-parametric instances are simply pointers : codegen generates a
-         *   malloc and then assigns all values.
-         * • Parametric instances are functions (which may be instantiated by
-         *   the runtime)
-         */
+      /* From the perspective of a user, all instances are values where
+       * (size-of i) == (size-of Address) for any instance i. From the
+       * perspective of code-generation, however, there are two kinds of
+       *  instances:
+       *
+       * Non-parametric instances
+       * ------------------------
+       *  These are the simpler variety: code-generation proceeds similarly to
+       *  structures, except first some temporary space is allocated and then
+       *  the instance is stored in that. If a module defines this instance, it
+       *  simbly copies the memory into its own.
+       *
+       * Parametric instances
+       * --------------------
+       *  These are functions which take in a set of types and implicits,
+       *  returning a new instance. Parametric instance functions are then
+       *  instantiated by the type-checker at compile-time.
+       * 
+       *  In order to preserve the calling convention of instances, a lookup
+       *  buffer/table is used, with the addresses of the relevant 'proc's in
+       *  the code for the instance. Before an instance function is called,
+       *  these addresses are replaced with wrappers which transparently pass
+       *  through their arguments while instantiating the type/instance
+       *  arguments for the instance, i.e. they form a sort of closure.
+       * 
+       *  Note: usage of local functions in this context won't work well? 
+       *   How to fix local functinos...
+       *   - Make them local state and therad through
+       *   - 
+       * OR Just monomorphize...
+       */
 
-        size_t immediate_sz = 0;
-        for (size_t i = 0; i < type->instance.fields.len; i++) {
-            immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.fields.data[i].val));
-            immediate_sz += pi_size_of(*(PiType*)type->instance.fields.data[i].val);
-        }
-        build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
-        generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+        if (syn.instance.params.len > 0) {
+            // 
+            void* instance_address = get_instructions(target.code_aux).data;
+            instance_address += get_instructions(target.code_aux).len;
 
-        // Grow by address size to account for the fact that the for loop
-        // keeps an address for the current field, which is updated each iteration.
-        data_stack_grow(env, ADDRESS_SIZE);
-        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            // Generate procedure value (push the address onto the stack)
+            AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)instance_address), ass, a, point);
+            backlink_code(target, out.backlink, links);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
 
-        // TODO (BUG): generate code that doesn't assume fields are in same order   
+            // Now, change the target and the assembler, such that code is now
+            // generated in the 'code segment'. Then, generate the function body
+            ass = target.code_aux;
+            target.target = target.code_aux;
+            ictx.target = target;
 
-        // Alignment
-        size_t index_offset = 0;
-        for (size_t i = 0; i < type->instance.fields.len; i++) {
-            // Generate field
-            SynRef val = syn.instance.fields.data[i].val;
-            generate_i(val, env, ictx);
+            generate_polymorphic_instance(syn.instance.params, ref, env, ictx);
+        } else {
+            // TODO: account for if instances / implicits.len > 0
 
-            // The offset tells us how far up the stack we look to find the instance ptr
-            size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
-            size_t val_stack_sz = pi_stack_align(val_sz);
+            size_t immediate_sz = 0;
+            for (size_t i = 0; i < type->instance.fields.len; i++) {
+                immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.fields.data[i].val));
+                immediate_sz += pi_size_of(*(PiType*)type->instance.fields.data[i].val);
+            }
+            build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
+            generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
-            // Retrieve index (ptr) 
-            // TODO (BUG): Check offset is < int8_t max.
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
+            // Grow by address size to account for the fact that the for loop
+            // keeps an address for the current field, which is updated each iteration.
+            data_stack_grow(env, ADDRESS_SIZE);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
-            // Align RCX
-            size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
-            if (index_offset != aligned_offset) {
-                size_t align = aligned_offset - index_offset;
-                build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
+            // TODO (BUG): generate code that doesn't assume fields are in same order   
+
+            // Alignment
+            size_t index_offset = 0;
+            for (size_t i = 0; i < type->instance.fields.len; i++) {
+                // Generate field
+                SynRef val = syn.instance.fields.data[i].val;
+                generate_i(val, env, ictx);
+
+                // The offset tells us how far up the stack we look to find the instance ptr
+                size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
+                size_t val_stack_sz = pi_stack_align(val_sz);
+
+                // Retrieve index (ptr) 
+                // TODO (BUG): Check offset is < int8_t max.
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
+
+                // Align RCX
+                size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
+                if (index_offset != aligned_offset) {
+                    size_t align = aligned_offset - index_offset;
+                    build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
+                }
+
+                // TODO (check if should replace with stack copy/move)
+                generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
+
+                // We need to increment the current field index to be able to access
+                // the next
+                build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
+                index_offset += val_sz;
+
+                // Pop value from stack
+                build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
+                data_stack_shrink(env, val_stack_sz);
+
+                // Override index with new value
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
             }
 
-            // TODO (check if should replace with stack copy/move)
-            generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
-
-            // We need to increment the current field index to be able to access
-            // the next
-            build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
-            index_offset += val_sz;
-
-            // Pop value from stack
-            build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
-            data_stack_shrink(env, val_stack_sz);
-
-            // Override index with new value
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
             build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+
+            // Note: we don't shrink as the final address (on stack) is accounted
+            // for by the 'grow' prior to the above for-loop
         }
-
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-        build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
-        build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
-
-        // Note: we don't shrink as the final address (on stack) is accounted
-        // for by the 'grow' prior to the above for-loop
         break;
     }
     case SConstructor: {

@@ -22,6 +22,7 @@ typedef struct {
     SynTape tape;
     Target target;
     Allocator *a;
+    PiAllocator* pia;
     ErrorPoint* point;
     Logger* logger;
 } CodegenContext;

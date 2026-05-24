@@ -137,6 +137,9 @@ _Noreturn void struct_duplicate_fieldname(RawTree fdesc, Symbol fname, Abstracti
 // ------------------------------------------------------------
 //   Type Formers
 // ------------------------------------------------------------
+
+// Array
+// -----
 _Noreturn void proc_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
     Document* message;
     if (raw.branch.nodes.len > 3) {
@@ -201,6 +204,46 @@ _Noreturn void array_tyformer_dim_not_number(RawTree raw, AbstractionICtx ctx) {
     PicoError err = {
         .range = raw.range,
         .message = mv_cstr_doc("The dimensions of an Array type should all be numeric literals.", ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+// Trait
+// -----
+
+_Noreturn void trait_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx) {
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_cstr_doc("The 'Trait' type form (Trait <name> [<Type Param>] <field-descriptor>*).", ctx.gpa), &nodes);
+    if (raw.branch.nodes.len < 2) {
+        push_ptr(mv_cstr_doc("However, the Trait has no arguments, and is therefore missing both a name and type parameter list.", ctx.gpa), &nodes);
+    } else {
+        push_ptr(mv_cstr_doc("However, the Trait only has one argument, and is therefore missing a type parameter list.", ctx.gpa), &nodes);
+    }
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_hsep_doc(nodes, ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void trait_tyformer_incorrect_name(RawTree raw, AbstractionICtx ctx) {
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_cstr_doc("The 'Trait' type form (Trait <name> [<Type Param>] <field-descriptor>*).", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("However, the Trait provided has a name that is not a symbol, and is therefore invalid.", ctx.gpa), &nodes);
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_hsep_doc(nodes, ctx.gpa),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx ctx) {
+    PtrArray nodes = mk_ptr_array(2, ctx.gpa);
+    push_ptr(mv_cstr_doc("The 'Trait' type form (Trait <name> [<Type Param>] <field-descriptor>*).", ctx.gpa), &nodes);
+    push_ptr(mv_cstr_doc("However, the parameter list provided is invaild.", ctx.gpa), &nodes);
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_hsep_doc(nodes, ctx.gpa),
     };
     throw_pi_error(ctx.point, err);
 }

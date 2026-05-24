@@ -47,6 +47,7 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
     // by code in the 'true' branches of the nonlocal exits, and may be stored
     // in registers, so they cannotbe changed (unless marked volatile).
     Allocator ra = ra_to_gpa(region);
+    PiAllocator pico_ra = convert_to_pallocator(&ra);
 
     IStream* volatile cp_in = mk_capturing_istream(cin, &ra);
     reset_bytecount(cp_in);
@@ -162,7 +163,7 @@ bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Mo
           Environment* env = env_from_module(module, &point, &ra);
 
           CodegenContext cg_ctx = {
-              .tape = result.tape, .a = &ra, .point = &point, .target = gen_target,
+              .tape = result.tape, .a = &ra, .pia = &pico_ra, .point = &point, .target = gen_target,
           };
           LinkData links = generate_toplevel(result.checked_term, env, cg_ctx);
 

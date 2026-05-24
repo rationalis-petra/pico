@@ -1,6 +1,7 @@
 #ifndef __PICO_VALUES_MODULAR_H
 #define __PICO_VALUES_MODULAR_H
 
+#include "data/meta/array_header.h"
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
@@ -28,10 +29,14 @@ typedef struct {
 
 typedef struct {
     uint64_t id;
+    SymbolPiList over;
+    AddrPiList dependencies;
     AddrPiList args;
     Symbol src_sym;
     Module* src;
 } InstanceSrc;
+
+ARRAY_HEADER(InstanceSrc, inst_src, InstSrc)
 
 /* Declarations and Modules
  * ------------------------
@@ -69,6 +74,9 @@ typedef struct {
  *   these may need to be copied into the defining module. 
  * • Expressions may contain (or be) procedures, again, meaning that if defined
  *   then the procedure code needs to be copied by the defining module.
+ * • Finally, an expression may define a trait instance that has implicit parameters.
+ *   This is the most complex, as future type-generation phases may generate
+ *   new values (a new instance/closure?). 
  * 
  * To accommodate this, code generation has two copyable targets as follows: 
  * • There is a 'eval segment' assembler, which is the entry-point to the experssion.

@@ -52,6 +52,7 @@ void test_skip(TestLog* log);
 void test_fail(TestLog* log);
 
 Logger* get_structured_logger(TestLog* log);
+void clear_logger(TestLog* log);
 
 void test_log_error(TestLog* log, String message);
 void test_log_info(TestLog* log, String message);

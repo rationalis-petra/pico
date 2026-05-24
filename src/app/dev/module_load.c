@@ -132,7 +132,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .tape = tape, .a = &itera, .point = &point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pico_itera, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -251,7 +251,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
         // Ensure the target is 'fresh' for code-gen
         clear_target(target);
         CodegenContext cg_ctx = {
-            .tape = tape, .a = &itera, .point = &point, .target = target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pia, .point = &point, .target = target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 

@@ -1055,7 +1055,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.range = current.range;
             err.message = mv_cstr_doc("Invalid instance", a);
             throw_pi_error(ctx.point, err);
-        default: panic(mv_string("invalid hint!"));
+        default: panic(mv_string("Invalid hint!"));
         }
 
         parse_implicits:
@@ -1872,20 +1872,30 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         RawTree raw_dimensions = raw.branch.nodes.data[1];
         RawTree raw_type = raw.branch.nodes.data[2];
 
-
-        if (raw_dimensions.type != RawBranch || raw_dimensions.branch.hint != HSpecial) {
+        if (raw_dimensions.type == RawBranch && raw_dimensions.branch.hint != HSpecial) {
             array_tyformer_incorrect_dimformat(raw, ctx);
         }
+        else if (raw_dimensions.type == RawAtom && raw_dimensions.atom.type != AIntegral) {
+            array_tyformer_dim_not_number(raw_dimensions, ctx);
+        }
 
-        RawTreePiList rdims = raw_dimensions.branch.nodes;
-        U64Array dimensions = mk_u64_array(rdims.len, a);
+        U64Array dimensions;
+        if (raw_dimensions.type == RawAtom) {
+            // TODO: check for negative
+            dimensions = mk_u64_array(1, a);
+            push_u64(raw_dimensions.atom.int_64, &dimensions);
+        } else {
+            RawTreePiList rdims = raw_dimensions.branch.nodes;
+            dimensions = mk_u64_array(rdims.len, a);
 
-        for (size_t i = 0; i < rdims.len; i++) {
-            RawTree rdim = rdims.data[i];
-            if (rdim.type != RawAtom || rdim.atom.type != AIntegral) {
-                array_tyformer_dim_not_number(rdim, ctx);
+            for (size_t i = 0; i < rdims.len; i++) {
+                RawTree rdim = rdims.data[i];
+                if (rdim.type != RawAtom || rdim.atom.type != AIntegral) {
+                    array_tyformer_dim_not_number(rdim, ctx);
+                }
+                // TODO: check for negative
+                push_u64(rdim.atom.int_64, &dimensions);
             }
-            push_u64(rdim.atom.int_64, &dimensions);
         }
 
         Syntax syn = {
@@ -2157,17 +2167,18 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FTraitType: {
+        /** Trait Type 
+         * ---------------- 
+         * Vaild Forms:
+         *  Trait <name> [.field val]+
+         */
         if (raw.branch.nodes.len < 3) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Wrong number of terms to trait type former.", a);
-            throw_pi_error(ctx.point, err);
+            trait_tyformer_incorrect_numterms(raw, ctx);
         }
 
         RawTree* rname = &raw.branch.nodes.data[1];
         if (!is_symbol(*rname)) {
-            err.range = raw.range;
-            err.message = mv_cstr_doc("Malformed Trait Type expression: 1st arg to be name.", a);
-            throw_pi_error(ctx.point, err);
+            trait_tyformer_incorrect_name(raw, ctx);
         }
         Symbol name = rname->atom.symbol;
         

@@ -20,6 +20,13 @@ typedef enum {
     Bold,
     Dim,
 } FontBoldness;
+
+typedef enum {
+    PItalic    = 0x1,
+    PBold      = 0x2,
+    PDim       = 0x4,
+    PUnderline = 0x8,
+} FontProperties;
  
 void init_terminal(Allocator* a);
 

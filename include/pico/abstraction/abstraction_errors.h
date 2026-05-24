@@ -45,6 +45,9 @@ _Noreturn void array_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ct
 _Noreturn void array_tyformer_incorrect_dimformat(RawTree raw, AbstractionICtx ctx);
 _Noreturn void array_tyformer_dim_not_number(RawTree raw, AbstractionICtx ctx);
 
+_Noreturn void trait_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ctx);
+_Noreturn void trait_tyformer_incorrect_name(RawTree raw, AbstractionICtx ctx);
+_Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx ctx);
 
 
 #endif

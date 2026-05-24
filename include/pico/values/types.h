@@ -4,6 +4,7 @@
 #include "data/array.h"
 #include "data/result.h"
 #include "components/pretty/document.h"
+#include "components/logging/structured_logging.h"
 
 #include "pico/data/client/list.h"
 #include "pico/data/client/symbol_list.h"
@@ -128,6 +129,14 @@ typedef struct {
 typedef struct {
     uint64_t instance_of;
     Symbol name;
+
+    // Optional, only used for instances that are parametric, i.e.
+    // implementing to-string for a list only if implemented for 
+    // contents.
+    SymbolPiList over; 
+    AddrPiList implicits; 
+
+    // The types the instance is implemented for.
     AddrPiList args; 
     SymAddrPiAMap fields; 
 } TraitInstance; 
@@ -226,7 +235,7 @@ static const PrettyValParams default_pvp = {
 Document* pretty_pi_value(void* val, PiType* types, PrettyValParams params, Allocator* a);
 Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
 
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* log, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
 bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
 

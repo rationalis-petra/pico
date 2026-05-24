@@ -91,6 +91,16 @@ void address_end_proc(AddressEnv* env, Allocator* a);
 void address_start_poly(SymbolArray types, BindingArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
 
+void address_start_poly_instance(SymbolArray* types, BindingArray args, SymPtrAMap* implicits, AddressEnv* env, Allocator* a);
+void address_end_poly_instance(AddressEnv* env, Allocator* a);
+bool in_poly_instance(AddressEnv* env);
+
+typedef struct {
+    SymbolArray* types;
+    SymPtrAMap* implicits;
+} InstanceArgs;
+InstanceArgs get_instance_implicits(AddressEnv* env);
+
 // get_base is essentially only used by describe, when generating description
 // strings of values. 
 Environment* get_addr_base(AddressEnv* env);

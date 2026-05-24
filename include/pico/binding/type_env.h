@@ -33,7 +33,11 @@ typedef enum {
 
 typedef struct {
     InstanceEntry_t type;
-    AbsVariable abvar;
+    union {
+        AbsVariable abvar;
+        // If ambiguous, return names/modules defining values.
+        InstSrcArray ambiguous_sources;
+    };
 } InstanceEntry;
 
 typedef enum {

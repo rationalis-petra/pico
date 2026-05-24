@@ -71,35 +71,48 @@ InstanceEntry type_instance_lookup(uint64_t id, AddrPiList args, TypeEnv* env) {
         return (InstanceEntry) {.type = IENotFound,};
     }
 
-    size_t eql_count = 0;
     InstanceEntry out = {.type = IENotFound,};
+    InstSrcArray sources = mk_inst_src_array(1, env->gpa);
     for (size_t i = 0; i < instances->len; i++) {
         InstanceSrc* src = instances->data[i];
         bool eql = true;
-        for (size_t i = 0 ; i < args.len; i++) {
-            eql &=  pi_type_eql(src->args.data[i], args.data[i], env->gpa);
-        }
-        if (eql) {
-            if (eql_count > 0) {
-                return (InstanceEntry) {.type = IEAmbiguous,};
+
+        if (src->over.len > 0) {
+            panic(mv_string("Unhandled: parametric instance lookup. Please implement me."));
+        } else {
+            for (size_t i = 0 ; i < args.len; i++) {
+                eql &= pi_type_eql(src->args.data[i], args.data[i], env->gpa);
             }
-            eql_count++;
+            if (eql) {
+                push_inst_src(*src, &sources);
 
-            ModuleEntry* m_entry = get_def(src->src_sym, src->src);
-            if (!m_entry) panic(mv_string("Module entry is null!"));
+                ModuleEntry* m_entry = get_def(src->src_sym, src->src);
+                if (!m_entry) panic(mv_string("Module entry is null!"));
 
-            if (m_entry->is_module) {
-                panic(mv_string("env_lookup cannot yet handle modules"));
+                if (m_entry->is_module) {
+                    panic(mv_string("type_instance_lookup cannot yet handle modules"));
+                }
+
+                out = (InstanceEntry) {
+                    .type = IEAbsSymbol,
+                    .abvar.index = 0,
+                    .abvar.value = m_entry->value,
+                };
             }
-
-            out = (InstanceEntry) {
-                .type = IEAbsSymbol,
-                .abvar.index = 0,
-                .abvar.value = m_entry->value,
-            };
         }
     }
-    return out;
+    switch (sources.len) { 
+    case 0:
+        return (InstanceEntry) {.type = IENotFound,};
+    case 1:
+        mem_free(sources.data, &sources.gpa);
+        return out;
+    default:
+        return (InstanceEntry) {
+            .type = IEAmbiguous,
+            .ambiguous_sources = sources,
+        }; 
+    }
 }
 
 void type_var (Symbol var, PiType* type, TypeEnv* env) {

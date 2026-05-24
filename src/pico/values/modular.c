@@ -6,6 +6,7 @@
 
 #include "data/num.h"
 #include "data/array.h"
+#include "data/meta/array_impl.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
 
@@ -39,6 +40,7 @@ typedef struct {
     SymSArrAMap* backlinks;
 } ModuleEntryInternal;
 
+ARRAY_COMMON_IMPL(InstanceSrc, inst_src, InstSrc)
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
 AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, symbol_cmp, entry, Entry)
 
@@ -456,6 +458,8 @@ PtrArray get_defined_instances(Module* module, Allocator* a) {
             InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
             *entry = (InstanceSrc) {
                 .id = m_entry.type.instance.instance_of,
+                .over = m_entry.type.instance.over,
+                .dependencies = m_entry.type.instance.implicits,
                 .args = m_entry.type.instance.args,
                 .src_sym = module->entries.data[i].key,
                 .src = module,

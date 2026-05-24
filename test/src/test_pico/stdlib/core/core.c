@@ -6,7 +6,7 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env); clear_logger(log);
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
@@ -657,16 +657,35 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     // TODO: enable me!
-    /* if (test_start(log, mv_string("instance-const-unaligned"))) { */
-    /*     int64_t expected = -98; */
-    /*     RUN("(def Inhabited Trait [A] [.value A])"); */
-    /*     // TODO (BUG) */
-    /*     // swapping the order of below statements gives an 'ambiguous instance' error? */
-    /*     RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)"); */
-    /*     RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])"); */
+    if (test_start(log, mv_string("instance-const-unaligned"))) {
+        int64_t expected = -98;
+        RUN("(def Inhabited Trait Inhabited [A] [.value A])");
 
-    /*     TEST_EQ("(get-value {I8} 5)"); */
-    /* } */
+        // TODO (BUG)
+        // swapping the order of below statements gives an 'ambiguous instance' error?
+        RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])");
+        RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
+        TEST_EQ("(get-value {I8} 5)");
+    }
+
+    /*
+    if (test_start(log, mv_string("instance-dependent"))) {
+        RUN("(def Addable Trait Addable [A] [.add Proc [A A] A])");
+        RUN("(def ID Distinct ID Family [A] A)");
+        RUN("(def add-i64 instance (Addable I64)"
+            "  [.add i64.+])");
+        RUN("(def add-id instance [A] {(inner (Addable A))} (Addable (ID A))"
+            "  [.add proc [x y] "
+            "    (into (ID A) (inner.add"
+            "      (out-of (ID A) x) "
+            "      (out-of (ID A) y)))])");
+        RUN("(def poly-add all [A] proc {(add (Addable A))} [(x A) (y A)] (add.add x y))");
+        //        TEST_EQ()
+
+        int64_t expected = 72;
+        TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");
+    }
+    */
 
     // -----------------------------------------------------
     // 

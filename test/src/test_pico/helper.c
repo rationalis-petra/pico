@@ -102,7 +102,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
     clear_target(target);
     CodegenContext cg_ctx = {
-        .tape = tape, .a = &ra, .point = &point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = pia, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 

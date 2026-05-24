@@ -558,9 +558,56 @@ _Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeC
     Allocator* a = ctx.a;
     PtrArray nodes = mk_ptr_array(3, a);
 
-    push_ptr(mv_cstr_doc("Attempting to creats an instance with field ", a), &nodes);
+    push_ptr(mv_cstr_doc("Attempting to create an instance with field ", a), &nodes);
     push_ptr(mk_paren_doc("'", "'.", mv_str_doc(view_symbol_string(name), a), a), &nodes);
     push_ptr(mv_cstr_doc("However, the trait the instace is being made from does not have this field", a), &nodes);
+
+    PicoError err = {
+        .range = range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+// Instance Resolution
+// ------------------------------------------------------------
+_Noreturn void type_error_instance_not_found(SynRef syn, PiType* instance, TypeCheckContext ctx) {
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(3, a);
+    Range range = get_range(syn, ctx.tape).term;
+
+    push_ptr(mv_cstr_doc("Could not find instance of type", a), &nodes);
+    push_ptr(pretty_type(instance, default_ptp, a), &nodes);
+
+    PicoError err = {
+        .range = range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(ctx.point, err);
+}
+
+_Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstSrcArray sources, TypeCheckContext ctx) {
+
+    Allocator* a = ctx.a;
+    PtrArray nodes = mk_ptr_array(4, a);
+    Range range = get_range(syn, ctx.tape).term;
+
+    push_ptr(mv_cstr_doc("Ambiguities encountered when attempting to resolve instance of type:", a), &nodes);
+    push_ptr(pretty_type(instance, default_ptp, a), &nodes);
+    push_ptr(mv_cstr_doc("Possible instances include:", a), &nodes);
+
+    PtrArray sources_nodes = mk_ptr_array(sources.len, a);
+    for (size_t i = 0; i < sources.len; i++) {
+        InstanceSrc source = sources.data[i];
+        PtrArray source_nodes = mk_ptr_array(4, a); 
+        push_ptr(mv_cstr_doc("• Module:", a), &source_nodes);
+        push_ptr(mv_str_doc(symbol_to_string(module_name(source.src), a), a), &source_nodes);
+        push_ptr(mv_cstr_doc("Definition:", a), &source_nodes);
+        push_ptr(mv_str_doc(symbol_to_string(source.src_sym, a), a), &source_nodes);
+
+        push_ptr(mv_nest_doc(2, mv_hsep_doc(source_nodes, a), a), &sources_nodes);
+    }
+    push_ptr(mv_vsep_doc(sources_nodes, a), &nodes);
 
     PicoError err = {
         .range = range,

@@ -536,7 +536,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 type_error_incorrect_num_args_all_noproc(all_type, ref, false, ctx);
             }
             
-            PiType* ret_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, a);
+            PiType* ret_type = pi_type_subst(all_type->binder.body, type_binds, ctx.logger, ctx.pia, a);
             set_type(ref, ret_type, ctx.tape);;
         } else {
             // Check that all type args are actually types!
@@ -548,7 +548,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
         
             // Bind the vars in the all type to specific types!
-            PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, a);
+            PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.logger, ctx.pia, a);
             if (proc_type->proc.args.len != untyped.all_application.args.len) {
                 type_error_incorrect_num_args(all_type, ref, InvValues, ctx);
             }
@@ -588,7 +588,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         if (sealed_type->sealed.implicits.len > 0) {
             not_implemented(mv_string("Sealing with implicits."));
         }
-        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.pia, a);
+        PiType* body_type = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.logger, ctx.pia, a);
 
         type_check_i(untyped.seal.body, body_type, get_range(untyped.seal.type, ctx.tape).term, env, ctx);
         break;
@@ -612,7 +612,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
             type_qvar(untyped.unseal.types.data[i], ty, env);
         }
-        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.pia, a);
+        PiType* var_ty = pi_type_subst(sealed_type->sealed.body, type_binds, ctx.logger, ctx.pia, a);
         type_var(untyped.unseal.binder, var_ty, env);
         type_infer_i(untyped.unseal.body, env, ctx);
         set_type(ref, get_type(untyped.unseal.body, ctx.tape), ctx.tape);;
@@ -1066,6 +1066,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg, ty_ty, env);
         }
 
+        AddrPiList implicit_types = mk_addr_list(untyped.instance.implicits.len, ctx.pia);
         for (size_t i = 0; i < untyped.instance.implicits.len; i++) {
             SymPtrCell arg = untyped.instance.implicits.data[i];
             PiType* aty;
@@ -1074,6 +1075,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             } else  {
                 aty = mk_uvar(ctx.pia);
             }
+            push_addr(aty, &implicit_types);
             type_var(arg.key, aty, env);
         }
 
@@ -1082,6 +1084,12 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         if (ty->sort != TTraitInstance) {
             type_error_instance_invalid_type(ty, get_range(untyped.instance.constraint, ctx.tape).term, ctx);
         }
+
+        ty->instance.over = mk_sym_list(untyped.instance.params.len, ctx.pia);
+        for (size_t i = 0; i < untyped.instance.params.len; i++) {
+            push_sym(untyped.instance.params.data[i], &ty->instance.over);
+        }
+        ty->instance.implicits = implicit_types;
 
         if (untyped.instance.fields.len != ty->instance.fields.len) {
             type_error_instance_wrong_nfields(get_range(ref, ctx.tape).term, ty->instance.fields.len, untyped.instance.fields.len, ctx);
@@ -1940,11 +1948,9 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     break;
                 }
                 case IENotFound:
-                    err.message = mv_cstr_doc("Implicit argument cannot be instantiated - instance not found!", ctx.a);
-                    throw_pi_error(ctx.point, err);
+                    type_error_instance_not_found(ref, arg_ty, ctx);
                 case IEAmbiguous:
-                    err.message = mv_cstr_doc("Implicit argument cannot be instantiated - ambiguous instances!", ctx.a);
-                    throw_pi_error(ctx.point, err);
+                    type_error_ambiguous_instance(ref, arg_ty, e.ambiguous_sources, ctx);
                 default:
                     panic(mv_string("Invalid instance entry type!"));
                 }
@@ -1975,7 +1981,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             sym_ptr_bind(all_type->binder.vars.data[i], get_syntax(type, ctx.tape).type_val, &type_binds);
         }
         // TODO (BUG): this type probably wants unwrapping
-        PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.pia, ctx.a);
+        PiType* proc_type = pi_type_subst(all_type->binder.body, type_binds, ctx.logger, ctx.pia, ctx.a);
 
         // Early exit if we don't need to do any instantiation.
         if (proc_type->sort != TProc) return;
@@ -2002,12 +2008,10 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                 set_syntax(ref, syn, ctx.tape);
                 break;
             }
-            case IENotFound:
-                err.message = mv_cstr_doc("Implicit argument cannot be instantiated - instance not found!", ctx.a);
-                throw_pi_error(ctx.point, err);
-            case IEAmbiguous:
-                err.message = mv_cstr_doc("Implicit argument cannot be instantiated - ambiguous instances!", ctx.a);
-                throw_pi_error(ctx.point, err);
+                case IENotFound:
+                    type_error_instance_not_found(ref, arg_ty, ctx);
+                case IEAmbiguous:
+                    type_error_ambiguous_instance(ref, arg_ty, e.ambiguous_sources, ctx);
             default:
                 panic(mv_string("Invalid instance entry type!"));
             }
@@ -2033,7 +2037,7 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_qvar(arg, arg_ty, env);
         }
         PiType* src_ty = get_type(syn.unseal.sealed, ctx.tape);
-        PiType* var_ty = pi_type_subst(src_ty->sealed.body, type_binds, ctx.pia, ctx.a);
+        PiType* var_ty = pi_type_subst(src_ty->sealed.body, type_binds, ctx.logger, ctx.pia, ctx.a);
         type_var(syn.unseal.binder, var_ty, env);
         post_unify(syn.unseal.body, env, ctx);
         pop_types(env, syn.all.args.len + 1);
@@ -2740,7 +2744,7 @@ void* eval_typed_expr(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
 
     // TODO (INVESTIGATE): is LinkData needed
     CodegenContext cg_ctx = {
-        .tape = ctx.tape, .a = a, .point = &cleanup_point, .target = gen_target, 
+        .tape = ctx.tape, .a = a, .pia = ctx.pia, .point = &cleanup_point, .target = gen_target, 
     };
     generate_type_expr(ref, env, cg_ctx);
 

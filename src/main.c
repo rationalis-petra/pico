@@ -22,7 +22,6 @@
 
 static const char* version = "0.2.2";
 
-
 int main(int argc, char** argv) {
     // Setup
     Allocator* stdalloc = get_std_allocator();

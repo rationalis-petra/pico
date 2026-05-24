@@ -35,6 +35,7 @@ typedef struct {
     Target target;
     InternalLinkData* links;
     Allocator *a;
+    PiAllocator *pia;
     ErrorPoint* point;
     Logger* logger;
 } InternalContext;

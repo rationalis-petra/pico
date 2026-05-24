@@ -647,7 +647,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
     
     for (size_t i = 0; i < uvar->substitutions.len; i++) {
         SymPtrAssoc* subst = uvar->substitutions.data[i];
-        type = pi_type_subst(type, *subst, ctx.pia, ctx.a);
+        type = pi_type_subst(type, *subst, ctx.logger, ctx.pia, ctx.a);
     }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
@@ -1000,7 +1000,7 @@ void squash_type(PiType* type, UnifyContext ctx) {
             for (size_t j = 0; j < binds->len; j++) {
                 squash_type(binds->data[j].val, ctx);
             }
-            *type = *pi_type_subst(type, *binds, pia, a);
+            *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
         }
 
         if (ctx.logger) end_section(ctx.logger);
