@@ -50,7 +50,23 @@ EvalResult pico_run_toplevel(TopLevel top, EvalCtx ctx);
 
 void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
 
+/**
+ * Given the address of a procedure with type Proc [] Unit, run the procedure.
+ *
+ * Procudure is run with a fresh temporary allocator and dynamic memory,
+ * allocated from the allocator. All allocated memory is freed.
+ */
 void call_unit_fn(void* function, Allocator* a);
+
+/**
+ * Given the address of a procedure with type Proc [] A, for some
+ * (non-parametric) type A, run the procedure and store the output
+ * in `dest`. valsize must be (size-of A). 
+ * 
+ * Procudure is run with a fresh temporary allocator and dynamic memory,
+ * allocated from the allocator. All allocated memory is freed.
+ */
+void call_value_fn(void* function, size_t valsize, void* dest, Allocator* a);
 
 Document* pretty_res(EvalResult res, Allocator* a);
 

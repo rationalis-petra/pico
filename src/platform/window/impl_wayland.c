@@ -1,6 +1,6 @@
 #include "platform/machine_info.h"
 
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
+#if defined(WINDOW_SYSTEM) && (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 2)
 #include <string.h> // for memset, TODO: remove?
 
 #include "platform/window/window.h"

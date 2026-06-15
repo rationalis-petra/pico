@@ -9,6 +9,7 @@
 #include "platform/signals.h"
 #include "platform/machine_info.h"
 #include "platform/memory/executable.h"
+#include "platform/memory/arena.h"
 #include "platform/terminal/terminal.h"
 
 #include "data/stream.h"
@@ -51,6 +52,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
             .cc_links = mk_link_meta_array(32, a),
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
+            .closure_links = mk_closure_link_array(8, a),
         },
         .gotolinks = mk_sym_sarr_assoc(8, a),
     };
@@ -64,10 +66,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         AddressEnv* a_env = mk_address_env(env, recsym, a);
         size_t out_sz = pi_size_of(*get_type(top.def.value, ctx.tape));
 
+        ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
         InternalContext ictx = {
             .tape = ctx.tape,
             .target = ctx.target,
             .links = &links,
+            .procs_to_generate = &procs_to_generate,
             .a = ctx.a,
             .pia = ctx.pia,
             .point = ctx.point,
@@ -77,6 +81,11 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         generate_entry(out_sz, ctx.target, a, ctx.point);
         generate_i(top.def.value, a_env, ictx);
         generate_exit(out_sz, ctx.target, a, ctx.point);
+
+        while (procs_to_generate.len != 0) {
+            ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            generate_deferred_proc(deferred, a_env, ictx);
+        }
 
         delete_address_env(a_env, a);
         break;
@@ -92,10 +101,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     case TLExpr: {
         AddressEnv* a_env = mk_address_env(env, NULL, a);
 
+        ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
         InternalContext ictx = {
             .tape = ctx.tape,
             .target = ctx.target,
             .links = &links,
+            .procs_to_generate = &procs_to_generate,
             .a = ctx.a,
             .pia = ctx.pia,
             .point = ctx.point,
@@ -106,6 +117,11 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         generate_entry(out_sz, ctx.target, a, ctx.point);
         generate_i(top.expr, a_env, ictx);
         generate_exit(out_sz, ctx.target, a, ctx.point);
+
+        while (procs_to_generate.len != 0) {
+            ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            generate_deferred_proc(deferred, a_env, ictx);
+        }
 
         delete_address_env(a_env, a);
         break;
@@ -146,13 +162,17 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
+            .closure_links = mk_closure_link_array(8, a),
         },
         .gotolinks = mk_sym_sarr_assoc(8, a),
     };
 
+    ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
     InternalContext ictx = {
+        .tape = ctx.tape,
         .target = ctx.target,
         .links = &links,
+        .procs_to_generate = &procs_to_generate,
         .a = ctx.a,
         .pia = ctx.pia,
         .point = ctx.point,
@@ -164,6 +184,11 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
     generate_i(syn, a_env, ictx);
     generate_exit(out_sz, ctx.target, a, ctx.point);
 
+    while (procs_to_generate.len != 0) {
+        ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+        generate_deferred_proc(deferred, a_env, ictx);
+    }
+
     delete_address_env(a_env, a);
 
     // The data chunk may be moved around during code-generation via 'realloc'
@@ -172,17 +197,17 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
-        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
+        *address_ptr = ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
         void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
-        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
+        *address_ptr = ctx.target.data_aux->data + link.dest_offset;
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
         void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
-        *address_ptr= ctx.target.data_aux->data + link.dest_offset;
+        *address_ptr = ctx.target.data_aux->data + link.dest_offset;
     }
 
     return links.links;
@@ -199,14 +224,17 @@ void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
+            .closure_links = mk_closure_link_array(8, a),
         },
         .gotolinks = mk_sym_sarr_assoc(8, a),
     };
 
+    ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
     InternalContext ictx = {
         .tape = ctx.tape,
         .target = ctx.target,
         .links = &links,
+        .procs_to_generate = &procs_to_generate,
         .a = ctx.a,
         .pia = ctx.pia,
         .point = ctx.point,
@@ -218,48 +246,200 @@ void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     generate_i(syn, a_env, ictx);
     generate_exit(out_sz, ctx.target, a, ctx.point);
 
+    while (procs_to_generate.len != 0) {
+        ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+        generate_deferred_proc(deferred, a_env, ictx);
+    }
+
     delete_address_env(a_env, a);
 }
 
+InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData data, Allocator* a) {
+  // Return Value 
+  U64Array closure_starts = mk_u64_array(data.links.len, a);
+
+  // Utility values, used in boty
+  ArenaAllocator* arena = make_arena_allocator(1024, a);
+  Allocator aa = aa_to_gpa(arena);
+  PiAllocator pia = convert_to_pallocator(&aa);
+  ClosureLinkArray links = data.links;
+  // TODO: setup an error point for codegen.
+  ErrorPoint* point = NULL;
+
+  for (size_t i = 0; i < links.len; i++) {
+    push_u64(get_instructions(target).len, &closure_starts);
+    ClosureLink link = links.data[i];
+
+    PiType* inner_type = link.inner_type;
+    /**
+     * Note: The *closure_type* in the link does not have the variables instantiated
+     *       for appropirate types, so we substitute in.
+     */
+    PiType* closure_type = pi_type_subst(link.closure_type, data.type_binds, NULL, &pia, &aa);
+    // Generate a call to the code segment: A polymorphic function which
+    // • Accepts the types as argument (on static stack)  
+    // • Accepts the 
+    if (closure_type->sort == TAll) {
+      panic(mv_string("Do not yet support All in instance closure generation"));
+    } else {
+      /**
+       * The interface this function should present is a regular proc, meaning we:
+       * • Generate the procedure prelude code.
+       * • Add Type Args.
+       * • Add Implicit Args.
+       * • If needed, copy return value to regular (static) stack.
+       * • Proc clean-up.
+       */
+      // Proc prelude
+      build_unary_op(Push, reg(VSTACK_HEAD, sz_64), target, a, point);
+      build_unary_op(Push, reg(DMEM_REGISTER, sz_64), target, a, point);
+      build_unary_op(Push, reg(RBP, sz_64), target, a, point);
+      build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), target, a, point);
+
+      for (size_t i = 0; i < data.type_encodings.len; i++) {
+        build_binary_op(Mov, reg(RAX, sz_64), imm64(data.type_encodings.data[i]), target, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), target, a, point);
+      }
+      for (size_t i = 0; i < data.implicits.len; i++) {
+        build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)data.implicits.data[i]), target, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), target, a, point);
+      }
+      size_t closure_args_size = 0;
+      AddrPiList desired_args = closure_type->proc.args;
+      for (size_t i = 0; i < desired_args.len; i++) {
+        PiType* arg = desired_args.data[i];
+        size_t arg_size = pi_stack_size_of(*arg);
+        closure_args_size += arg_size;
+      }
+
+      // TODO: Add appropriate assertions when in debug, to ensure this access
+      //       is valid.
+      AddrPiList args_to_adapt = inner_type->binder.body->proc.args;
+      SymbolArray types = mk_symbol_array(inner_type->binder.vars.len, &aa);
+      for (size_t i = 0; i < inner_type->binder.vars.len; i++) {
+          push_symbol(inner_type->binder.vars.data[i], &types);
+      }
+      size_t src_offset = 0;
+      for (size_t i = 0; i < args_to_adapt.len; i++) {
+          PiType* argty = closure_type->proc.args.data[i];
+          PiType* paramty = args_to_adapt.data[i];
+          // Copy arg to current location: 
+
+          build_binary_op(Mov, reg(RCX, sz_64), reg(RBP, sz_64), target, a, point);
+          build_binary_op(Sub, reg(RCX, sz_64), imm32(src_offset), target, a, point);
+          size_t arg_size = pi_stack_size_of(*argty);
+          if (is_variable_for(paramty, types)) {
+              // As is not vaiable for us, we need to move to variable stack.
+              build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), target, a, point);
+              generate_monomorphic_copy(VSTACK_HEAD, RCX, arg_size, target, a, point);
+              build_unary_op(Push, reg(VSTACK_HEAD, sz_64), target, a, point);
+          } else {
+              build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), target, a, point);
+              generate_monomorphic_copy(RSP, RCX, arg_size, target, a, point);
+          }
+      }
+
+      void* callee = data.code_segment.data + link.fn_start;
+      build_binary_op(Mov, reg(RAX, sz_64), imm64((int64_t)callee), target, a, point);
+      build_unary_op(Call, reg(RAX, sz_64), target, a, point);
+
+
+      // Return on Variable Stack
+      // R15 is the 'destination' on the variable stack of a return
+      // argument.
+
+      // If is variable, copy to static stack, else if arg
+      // is already on stack; don't need to do anything
+      if (is_variable_for(inner_type->binder.body->proc.ret, types)) {
+          size_t out_size = pi_stack_size_of(*closure_type->proc.ret);
+          // Copy from varstack to our stack 
+          build_unary_op(Pop, reg(RCX, sz_64), target, a, point);
+          build_binary_op(Sub, reg(RSP, sz_64), imm32(out_size), target, a, point);
+          generate_monomorphic_copy(RSP, RCX, out_size, target, a, point);
+
+          // Pop value from variable stack
+          build_binary_op(Add, reg(VSTACK_HEAD, sz_64), imm32(out_size), target, a, point);
+      } 
+
+      // Codegen function teardown:
+      // + restore old RBP & VSTACK_HEAD in registers
+      // + stash return address
+      // + copy result down stack, accounting for
+      //   + Return address, old RBP & old RSP
+      //   + all arguments
+      // + return to stashed address
+
+      // Storage of function output 
+      size_t ret_size = pi_stack_size_of(*closure_type->proc.ret);
+
+      // Note: R9, DMEM_REGISTER, VSTACK_HEAD, RBP were saved previously (in the prolog)
+      //       RBX is for the return address, as it is non-volatile on SysV
+      //       and Windows (important as stack_mode may call c code!)
+      build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 24, sz_64), target, a, point);
+      build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 16, sz_64), target, a, point);
+      /* TODO: This should be factored in somehow...
+      if (!syn.procedure.preserve_dyn_memory) {
+          build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), rref8(RBP, 8, sz_64), target, a, point);
+      }
+      */
+      build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), target, a, point);
+
+      generate_stack_move(closure_args_size + 4 * ADDRESS_SIZE, 0, ret_size, target, a, point);
+
+      // Pop args
+      build_binary_op(Add, reg(RSP, sz_64), imm32(closure_args_size + 4 * ADDRESS_SIZE), target, a, point);
+
+      // push return address 
+      build_unary_op(Push, reg(RBX, sz_64), target, a, point);
+      build_nullary_op(Ret, target, a, point);
+    }
+  }
+
+  delete_arena_allocator(arena);
+  return (InstanceClosures) {
+    .closure_starts = closure_starts,
+  };
+}
+
 static void generate_entry(size_t out_sz, Target target, Allocator *a, ErrorPoint *point) {
-    // Generate as if this is a native function called as 
-    // void function(void* out_mem, void* dyamic_memor, void* temp_memory, void* shadow_stack_memory)
+  // Generate as if this is a native function called as 
+  // void function(void* out_mem, void* dyamic_memor, void* temp_memory, void* shadow_stack_memory)
 
-    Assembler* ass = target.target;
-    build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-    build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
-    build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
-    build_unary_op(Push, reg(RSI, sz_64), ass, a, point);
-    build_unary_op(Push, reg(R15, sz_64), ass, a, point);
-    build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-    build_unary_op(Push, reg(DVARS_REGISTER, sz_64), ass, a, point);
-    build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
+  Assembler* ass = target.target;
+  build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
+  build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
+  build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
+  build_unary_op(Push, reg(RSI, sz_64), ass, a, point);
+  build_unary_op(Push, reg(R15, sz_64), ass, a, point);
+  build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+  build_unary_op(Push, reg(DVARS_REGISTER, sz_64), ass, a, point);
+  build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
 
-    // Push the argument onto the stack
+  // Push the argument onto the stack
 #if ABI == SYSTEM_V_64
-    if (out_sz != 0) {
-        build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
-    }
+  if (out_sz != 0) {
+    build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
+  }
 
-    // Both VSTACK_HEAD and R15 have same value, as the variable stack has not moved
-    build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RSI, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(RCX, sz_64), ass, a, point);
+  // Both VSTACK_HEAD and R15 have same value, as the variable stack has not moved
+  build_binary_op(Mov, reg(R15, sz_64), reg(RSI, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RSI, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(RDX, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(RCX, sz_64), ass, a, point);
 #elif ABI == WIN_64
-    if (out_sz != 0) {
-        build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
-    }
+  if (out_sz != 0) {
+    build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+  }
 
-    build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(R8, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(R9, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(R15, sz_64), reg(RDX, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(RDX, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(DVARS_REGISTER, sz_64), reg(R8, sz_64), ass, a, point);
+  build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), reg(R9, sz_64), ass, a, point);
 #endif
 
-    // Code generated here may assume $RBP is the base of the stack, they are
-    // not aware of all the values we just pushed;
-    build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+  // Code generated here may assume $RBP is the base of the stack, they are
+  // not aware of all the values we just pushed;
+  build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 }
 
 static void generate_exit(size_t out_sz, Target target, Allocator *a, ErrorPoint *point) {
@@ -499,117 +679,22 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SProcedure: {
-
-        // Get the curret address 
-        void* proc_address = get_instructions(target.code_aux).data;
-        proc_address += get_instructions(target.code_aux).len;
-
         // Generate procedure value (push the address onto the stack)
-        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)proc_address), ass, a, point);
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
         backlink_code(target, out.backlink, links);
+        ProcDefer to_generate = {
+          .proc = ref,
+          .backlink_from = target.target,
+          .backlink = out.backlink,
+          .in_poly_instance = false
+        };
+        if (in_poly_instance(env)) {
+            to_generate.in_poly_instance = true;
+            to_generate.instance_args = get_instance_implicits(env);
+        }
+        push_proc_defer(to_generate, ictx.procs_to_generate);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
-
-        // if in a polymorphic instance, add the parametes of that instance to
-        // the function parameters (a closure will be made around this function)
-        if (in_poly_instance(env)) {
-            // InstanceArgs;
-            InstanceArgs iargs = get_instance_implicits(env);
-            SymPtrAMap implicits = mk_sym_ptr_amap(iargs.implicits->len + syn.procedure.implicits.len, a);
-            AddrPiList implicit_types = mk_addr_list(iargs.implicits->len + syn.procedure.implicits.len, ictx.pia);
-            for (size_t i = 0; i < iargs.implicits->len; i++) {
-                sym_ptr_insert(iargs.implicits->data[i].key, iargs.implicits->data[i].val, &implicits);
-                push_addr(iargs.implicits->data[i].val, &implicit_types);
-            }
-            for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-                sym_ptr_insert(syn.procedure.implicits.data[i].key, syn.procedure.implicits.data[i].val, &implicits);
-                push_addr(syn.procedure.implicits.data[i].val, &implicit_types);
-            }
-            Syntax new_proc = {
-                .type = SProcedure,
-                .procedure.args = syn.procedure.args,
-                .procedure.implicits = implicits,
-                .procedure.body = syn.procedure.body,
-                .procedure.preserve_dyn_memory = syn.procedure.preserve_dyn_memory,
-            };
-            PiType* old_type = get_type(ref, ictx.tape);
-            PiType* new_type = mem_alloc(sizeof(PiType), a);
-            *new_type = (PiType) {
-                .sort = TProc,
-                .proc.args = old_type->proc.args,
-                .proc.implicits = implicit_types,
-                .proc.ret = old_type->proc.ret,
-            };
-            SynRef new_ref = new_syntax(ictx.tape);
-            set_syntax(new_ref, new_proc, ictx.tape);
-            set_type(new_ref, new_type, ictx.tape);
-            set_range(new_ref, get_range(ref, ictx.tape), ictx.tape);
-            generate_polymorphic(*iargs.types, new_ref, env, ictx);
-            // TODO: register the offset in current as a poly instance procedure offset.
-            return;
-        }
-
-        // Now, change the target and the assembler, such that code is now
-        // generated in the 'code segment'. Then, generate the function body
-        ass = target.code_aux;
-        target.target = target.code_aux;
-        ictx.target = target;
-
-        // Codegen function setup
-        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
-        build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
-        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
-
-        // Codegen Procedure Body 
-        size_t args_size = 0;
-        SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
-        for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
-            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.implicits.data[i]);
-            args_size += pi_stack_align(arg_size);
-            sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
-        }
-
-        SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
-        for (size_t i = 0; i < syn.procedure.args.len; i++) {
-            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.args.data[i]);
-            args_size += arg_size;
-            sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
-        }
-
-        address_start_proc(impl_sizes, arg_sizes, env, a);
-        generate_i(syn.procedure.body, env, ictx);
-        address_end_proc(env, a);
-
-        // Codegen function teardown:
-        // + restore old RBP & VSTACK_HEAD in registers
-        // + stash return address
-        // + copy result down stack, accounting for
-        //   + Return address, old RBP & old RSP
-        //   + all arguments
-        // + return to stashed address
-
-        // Storage of function output 
-        size_t ret_size = pi_stack_size_of(*get_type(syn.procedure.body, ictx.tape));
-
-        // Note: R9, DMEM_REGISTER, VSTACK_HEAD, RBP were saved previously (in the prolog)
-        //       RBX is for the return address, as it is non-volatile on SysV
-        //       and Windows (important as stack_mode may call c code!)
-        build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 24, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
-        if (!syn.procedure.preserve_dyn_memory) {
-          build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
-        }
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-
-        generate_stack_move(args_size + 4 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
-
-        // Pop args
-        build_binary_op(Add, reg(RSP, sz_64), imm32(args_size + 4 * ADDRESS_SIZE), ass, a, point);
-
-        // push return address 
-        build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
-        build_nullary_op(Ret, ass, a, point);
         break;
     }
     case SAll: {
@@ -793,6 +878,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             
             generate_i(arg, env, ictx);
 
+            // TODO: (simblification) aren't implicits always non-variable?
             // The argument is variable for for the callee
             if (is_variable_for(paramty, ctype_vars)) {
                 // Is it also variable in our context?
@@ -3155,6 +3241,297 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     }
 #endif
 }
+
+void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext ictx) {
+#ifdef DEBUG_ASSERT
+    int64_t old_head = get_stack_head(env);
+#endif
+    SynRef ref = deferred.proc;
+    ErrorPoint* point = ictx.point;
+    Allocator* a = ictx.a;
+    Target target = ictx.target;
+    InternalLinkData* links = ictx.links;
+    Syntax syn = get_syntax(ref, ictx.tape);
+    PiType* type = get_type(ref, ictx.tape);
+
+    Assembler* ass = target.target;
+    switch (syn.type) {
+    case SProcedure: {
+        void** caller_loc = (void*)get_instructions(deferred.backlink_from).data + deferred.backlink; 
+        set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
+        // Now, change the target and the assembler, such that code is now
+        // generated in the 'code segment'. Then, generate the function body
+        ass = target.code_aux;
+        target.target = target.code_aux;
+        ictx.target = target;
+
+        // If in a polymorphic instance, add the parameters of that instance to
+        // the function parameters (a closure will be made around this function)
+        if (deferred.in_poly_instance) {
+            InstanceArgs iargs = deferred.instance_args;
+            SymPtrAMap implicits = mk_sym_ptr_amap(iargs.implicits->len + syn.procedure.implicits.len, a);
+            AddrPiList implicit_types = mk_addr_list(iargs.implicits->len + syn.procedure.implicits.len, ictx.pia);
+            PiType* old_type = get_type(ref, ictx.tape);
+            PiType* new_type = mem_alloc(sizeof(PiType), a);
+            *new_type = (PiType) {
+                .sort = TProc,
+                .proc.args = old_type->proc.args,
+                .proc.implicits = implicit_types,
+                .proc.ret = old_type->proc.ret,
+            };
+            PiType* all_type = mem_alloc(sizeof(PiType), a);
+            SymbolPiList vars = mk_sym_list(iargs.implicits->len, ictx.pia);
+            for (size_t i = 0; i < iargs.types->len; i++) {
+                push_sym(iargs.types->data[i], &vars);
+            }
+            *all_type = (PiType) {
+                .sort = TAll,
+                .binder.vars = vars,
+                .binder.body = new_type,
+            };
+            instance_link_fn(get_pos(target.target), deferred.backlink, old_type, all_type, links, a);
+
+            for (size_t i = 0; i < iargs.implicits->len; i++) {
+                sym_ptr_insert(iargs.implicits->data[i].key, iargs.implicits->data[i].val, &implicits);
+                push_addr(iargs.implicits->data[i].val, &implicit_types);
+            }
+            for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
+                sym_ptr_insert(syn.procedure.implicits.data[i].key, syn.procedure.implicits.data[i].val, &implicits);
+                push_addr(syn.procedure.implicits.data[i].val, &implicit_types);
+            }
+            Syntax new_proc = {
+                .type = SProcedure,
+                .procedure.args = syn.procedure.args,
+                .procedure.implicits = implicits,
+                .procedure.body = syn.procedure.body,
+                .procedure.preserve_dyn_memory = syn.procedure.preserve_dyn_memory,
+            };
+            SynRef new_ref = new_syntax(ictx.tape);
+            set_syntax(new_ref, new_proc, ictx.tape);
+            set_type(new_ref, new_type, ictx.tape);
+            set_range(new_ref, get_range(ref, ictx.tape), ictx.tape);
+            generate_polymorphic(*iargs.types, new_ref, env, ictx);
+            // TODO: register the offset in current as a poly instance procedure offset.
+            return;
+        }
+
+        // Codegen function setup
+        build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+        build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
+        build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+
+        // Codegen Procedure Body 
+        size_t args_size = 0;
+        SymSizeAssoc impl_sizes = mk_sym_size_assoc(syn.procedure.implicits.len, a);
+        for (size_t i = 0; i < syn.procedure.implicits.len; i++) {
+            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.implicits.data[i]);
+            args_size += pi_stack_align(arg_size);
+            sym_size_bind(syn.procedure.implicits.data[i].key , arg_size , &impl_sizes);
+        }
+
+        SymSizeAssoc arg_sizes = mk_sym_size_assoc(syn.procedure.args.len, a);
+        for (size_t i = 0; i < syn.procedure.args.len; i++) {
+            size_t arg_size = pi_stack_size_of(*(PiType*)type->proc.args.data[i]);
+            args_size += arg_size;
+            sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
+        }
+
+        address_start_proc(impl_sizes, arg_sizes, env, a);
+        generate_i(syn.procedure.body, env, ictx);
+        address_end_proc(env, a);
+
+        // Codegen function teardown:
+        // + restore old RBP & VSTACK_HEAD in registers
+        // + stash return address
+        // + copy result down stack, accounting for
+        //   + Return address, old RBP & old RSP
+        //   + all arguments
+        // + return to stashed address
+
+        // Storage of function output 
+        size_t ret_size = pi_stack_size_of(*get_type(syn.procedure.body, ictx.tape));
+
+        // Note: R9, DMEM_REGISTER, VSTACK_HEAD, RBP were saved previously (in the prolog)
+        //       RBX is for the return address, as it is non-volatile on SysV
+        //       and Windows (important as stack_mode may call c code!)
+        build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 24, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 16, sz_64), ass, a, point);
+        if (!syn.procedure.preserve_dyn_memory) {
+          build_binary_op(Mov, reg(DMEM_REGISTER, sz_64), rref8(RBP, 8, sz_64), ass, a, point);
+        }
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+
+        generate_stack_move(args_size + 4 * ADDRESS_SIZE, 0, ret_size, ass, a, point);
+
+        // Pop args
+        build_binary_op(Add, reg(RSP, sz_64), imm32(args_size + 4 * ADDRESS_SIZE), ass, a, point);
+
+        // push return address 
+        build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
+        build_nullary_op(Ret, ass, a, point);
+        break;
+    }
+    case SAll: {
+        void* all_address = get_instructions(target.code_aux).data;
+        all_address += get_instructions(target.code_aux).len;
+
+        // Generate procedure value (push the address onto the stack)
+        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), ass, a, point);
+        backlink_code(target, out.backlink, links);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        // Now, change the target and the assembler, such that code is now
+        // generated in the 'code segment'. Then, generate the function body
+        ass = target.code_aux;
+        target.target = target.code_aux;
+        ictx.target = target;
+
+        generate_polymorphic(syn.all.args, syn.all.body, env, ictx);
+        break;
+    }
+    case SInstance: {
+        panic(mv_string("TODO: implement me!"));
+      /* From the perspective of a user, all instances are values where
+       * (size-of i) == (size-of Address) for any instance i. From the
+       * perspective of code-generation, however, there are two kinds of
+       *  instances:
+       *
+       * Non-parametric instances
+       * ------------------------
+       *  These are the simpler variety: code-generation proceeds similarly to
+       *  structures, except first some temporary space is allocated and then
+       *  the instance is stored in that. If a module defines this instance, it
+       *  simbly copies the memory into its own.
+       *
+       * Parametric instances
+       * --------------------
+       *  These are functions which take in a set of types and implicits,
+       *  returning a new instance. Parametric instance functions are then
+       *  instantiated by the type-checker at compile-time.
+       * 
+       *  In order to preserve the calling convention of instances, a lookup
+       *  buffer/table is used, with the addresses of the relevant 'proc's in
+       *  the code for the instance. Before an instance function is called,
+       *  these addresses are replaced with wrappers which transparently pass
+       *  through their arguments while instantiating the type/instance
+       *  arguments for the instance, i.e. they form a sort of closure.
+       * 
+       *  Note: usage of local functions in this context won't work well? 
+       *   How to fix local functinos...
+       *   - Make them local state and therad through
+       *   - 
+       * OR Just monomorphize...
+       */
+
+        if (syn.instance.params.len > 0) {
+            // 
+            void* instance_address = get_instructions(target.code_aux).data;
+            instance_address += get_instructions(target.code_aux).len;
+
+            // Generate procedure value (push the address onto the stack)
+            AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)instance_address), ass, a, point);
+            backlink_code(target, out.backlink, links);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
+
+            // Now, change the target and the assembler, such that code is now
+            // generated in the 'code segment'. Then, generate the function body
+            ass = target.code_aux;
+            target.target = target.code_aux;
+            ictx.target = target;
+
+            generate_polymorphic_instance(syn.instance.params, ref, env, ictx);
+        } else {
+            // TODO: account for if instances / implicits.len > 0
+
+            size_t immediate_sz = 0;
+            for (size_t i = 0; i < type->instance.fields.len; i++) {
+                immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.fields.data[i].val));
+                immediate_sz += pi_size_of(*(PiType*)type->instance.fields.data[i].val);
+            }
+            build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
+            generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            // Grow by address size to account for the fact that the for loop
+            // keeps an address for the current field, which is updated each iteration.
+            data_stack_grow(env, ADDRESS_SIZE);
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+
+            // TODO (BUG): generate code that doesn't assume fields are in same order   
+
+            // Alignment
+            size_t index_offset = 0;
+            for (size_t i = 0; i < type->instance.fields.len; i++) {
+                // Generate field
+                SynRef val = syn.instance.fields.data[i].val;
+                generate_i(val, env, ictx);
+
+                // The offset tells us how far up the stack we look to find the instance ptr
+                size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
+                size_t val_stack_sz = pi_stack_align(val_sz);
+
+                // Retrieve index (ptr) 
+                // TODO (BUG): Check offset is < int8_t max.
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
+
+                // Align RCX
+                size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
+                if (index_offset != aligned_offset) {
+                    size_t align = aligned_offset - index_offset;
+                    build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
+                }
+
+                // TODO (check if should replace with stack copy/move)
+                generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
+
+                // We need to increment the current field index to be able to access
+                // the next
+                build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
+                index_offset += val_sz;
+
+                // Pop value from stack
+                build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
+                data_stack_shrink(env, val_stack_sz);
+
+                // Override index with new value
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+            }
+
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+
+            // Note: we don't shrink as the final address (on stack) is accounted
+            // for by the 'grow' prior to the above for-loop
+        }
+        break;
+    }
+
+    default: {
+        panic(mv_string("Invalid Argument to generate_deferred_proc"));
+    }
+    }
+
+#ifdef DEBUG_ASSERT
+    int64_t new_head = get_stack_head(env);
+    int64_t diff = old_head - new_head;
+    if (diff < 0) panic(mv_string("diff < 0!"));
+
+    // This is for generating procedures, so stak should not be affected at the end
+    if (diff != 0) {
+        String actual = string_i64(diff, a);
+        String message = string_ncat(a, 2,
+                                     mv_string("Address environment constraint violated: expected size of the stack is wrong!\n"),
+                                     mv_string("Expected 0, as is procedure generation but got "), 
+                                     actual);
+        panic(message);
+    }
+#endif
+}
+
 
 size_t calc_variant_stack_size(PtrArray* types) {
     size_t total = 0;

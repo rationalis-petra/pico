@@ -129,24 +129,43 @@ Module* get_module(Symbol symbol, Package* package);
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent);
 void delete_module(Module* module);
 
-// If we are going to define the result of evaluating (target), then it must be prepped
-// so that the code and data segments are owned by the module.
-// This needs to be done BEFORE evaluation
+/**
+ * If we are going to define the result of evaluating (target), then it must be prepped
+ * so that the code and data segments are owned by the module.
+ * This needs to be done BEFORE evaluation
+ */
 Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
 
-// Add a value definition in to the module's namespace. Must be prepped (see above)
+/**
+ * Add a value definition in to the module's namespace. Must be prepped (see above)
+ */
 Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
 
-// Add a module definition in to the module's namespace. 
+/**
+ * Add a module definition in to the module's namespace. 
+ */
 Result add_module_def(Module* module, Symbol symbol, Module* child);
 
-// Add a declaration into the module's namespace. New declarations will override
-// old ones.
+/**
+ *  Get the instantiation of an instance, given a set of types, and a set of
+ *  dependent instances. May create a new instance, or return a cached instance,
+ *  if one already exists.  
+ *  If there is a significant error (e.g. the symbol does not exist), then the
+ *  function will return NULL.
+ */
+void* get_instantiation(Module* module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray instances); 
+
+/**
+ * Add a declaration into the module's namespace. New declarations will override
+ * old ones.
+ */
 Result add_decl(Module* module, Symbol symbol, ModuleDecl decl); 
 
-// Add an import clause into a module's namespace
-// Note: The import clause will be copied, so the caller is still responsible
-//       for cleaning up its copy of the clause.
+/**
+ * Add an import clause into a module's namespace
+ * Note: The import clause will be copied, so the caller is still responsible
+ *       for cleaning up its copy of the clause.
+ */
 void add_import_clause(ImportClause clause, Module* module);
 
 ModuleEntry* get_def(Symbol symbol, Module* module);

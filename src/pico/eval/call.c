@@ -1,4 +1,5 @@
 #include "platform/machine_info.h"
+#include "platform/memory/arena.h"
 #include "platform/signals.h"
 
 #include "pico/eval/call.h"
@@ -59,9 +60,11 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* dvars = get_dynamic_memory();
     void* dynamic_memory = mem_alloc(4096, a);
     void* vstack_memory_space = mem_alloc(4096, a);
-    void* vstack_memory_ptr = vstack_memory_space + 4096; 
+    void* vstack_memory_ptr = vstack_memory_space + 4096;
 
-    PiAllocator new_temp_alloc = convert_to_pallocator(a);
+    ArenaAllocator* arena = make_arena_allocator(4096, a);
+    Allocator aa = aa_to_gpa(arena);
+    PiAllocator new_temp_alloc = convert_to_pallocator(&aa);
     PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
     typedef void*(*RunExpression)(void*, void*, void*, void*); 
     RunExpression run = (RunExpression)get_instructions(target.target).data;
@@ -80,6 +83,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     mem_free(vstack_memory_space, a);
     mem_free(dynamic_memory, a);
     set_std_temp_allocator(old_temp_alloc);
+    delete_arena_allocator(arena);
 
     return out;
 }
@@ -141,6 +145,96 @@ void call_unit_fn(void *function, Allocator *a) {
 #else
     #error "Unsupported ARCH"
 #endif
+
+    mem_free(dynamic_memory, a);
+    mem_free(vstack_memory, a);
+}
+
+void call_value_fn(void *function, size_t valsize, void *dest, Allocator *a) {
+
+    void* dvars = get_dynamic_memory();
+    void* dynamic_memory = mem_alloc(4096, a);
+    void* vstack_memory = mem_alloc(4096, a);
+    void* vstack_memory_ptr = vstack_memory + 4095; 
+
+    ArenaAllocator* arena = make_arena_allocator(4096, a);
+    Allocator aa = aa_to_gpa(arena);
+    PiAllocator new_temp_alloc = convert_to_pallocator(&aa);
+    PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
+
+    // TODO: swap so this is backend independent (use foreign_adapters to call) 
+#if ARCH == AMD64
+    int64_t out;
+    __asm__ __volatile__(
+                         // save nonvolatile registers
+                         "push %%rbp       \n" // Nonvolatile on System V + Win64
+                         "push %%rbx       \n" // Nonvolatile on System V + Win64
+                         "push %%rdi       \n" // Nonvolatile on Win 64
+                         "push %%rsi       \n" // Nonvolatile on Win 64
+                         "push %%r15       \n" // for dynamic vars
+                         "push %%r14       \n" // for dynamic memory space
+                         "push %%r13       \n" // for control/indexing memory space
+                         "push %%r12       \n" // Nonvolatile on System V + Win64
+
+                         "mov %4, %%r13    \n"
+                         "mov %3, %%r12    \n"
+                         "mov %2, %%r14    \n"
+                         "mov %2, %%r15    \n"
+
+                         // First store the function to call in RAX, in case
+                         // the compiler has stored it as an offset to rbp
+                         // then we can set rbp and call
+                         "mov %1, %%rax \n"
+                         "mov %%rsp, %%rbp \n"
+
+                         // Call function, which will push value onto stack
+                         "call *%%rax         \n"
+
+                         // Copy value into dest
+#if ABI == SYSTEM_V_64
+                         "mov %5, %%rdi    \n"
+                         "mov %%rsp, %%rsi    \n"
+                         "mov %6, %%rdx    \n"
+                         "call memcpy\n"
+#elif ABI == WIN_64
+                         "mov %5, %%rcx   \n"
+                         "mov %%rsp, %%rdx   \n"
+                         "mov %6, %%r8    \n"
+                         "call memcpy\n"
+#else
+#error "Unrecognized ABI"
+#endif
+
+
+                         "pop %%r12        \n"
+                         "pop %%r13        \n"
+                         "pop %%r14        \n"
+                         "pop %%r15        \n"
+                         "pop %%rsi        \n" 
+                         "pop %%rdi        \n" 
+                         "pop %%rbx        \n"
+                         "pop %%rbp        \n"
+                         : "=r" (out)
+
+                         : "r" (function)
+                           , "r" (vstack_memory_ptr)
+                           , "r" (dynamic_memory)
+                           , "r" (dvars)
+                           , "r" (dest)
+                           , "r" (valsize)
+                           // Clobbers are either registers we change (output cannot be trusted)
+                           // or registers we don't want compiler to assign to input values
+                         : "rax", "r13", "r14", "r15");
+#elif ARCH == AARCH64
+    panic(mv_string("not implemented: unit call for aarch64"));
+#else
+    #error "Unsupported ARCH"
+#endif
+
+    mem_free(dynamic_memory, a);
+    mem_free(vstack_memory, a);
+    set_std_temp_allocator(old_temp_alloc);
+    delete_arena_allocator(arena);
 }
 
 Document* pretty_res(EvalResult res, Allocator* a) {

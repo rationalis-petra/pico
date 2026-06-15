@@ -9,4 +9,6 @@ LinkData pvm_generate_expr(SynRef syn, Environment* env, CodegenContext ctx);
 
 void pvm_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx);
 
+InstanceClosures pvm_generate_instance_closures(Assembler *target, ClosureGenData data, Allocator* a);
+
 #endif

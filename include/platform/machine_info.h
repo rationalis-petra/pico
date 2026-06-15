@@ -1,7 +1,6 @@
 #ifndef __PLATFORM_MACHINE_INFO_H
 #define __PLATFORM_MACHINE_INFO_H
 
-
 #define AMD64 1
 #define AARCH64 2
 

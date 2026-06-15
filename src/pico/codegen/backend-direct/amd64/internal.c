@@ -40,6 +40,8 @@ int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
 
 ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
 
+ARRAY_COMMON_IMPL(ProcDefer, proc_defer, ProcDefer);
+
 void backlink_global(Target target, Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     if (target.target == target.code_aux) {
         // Step 1: Try lookup or else create & insert 
@@ -103,6 +105,17 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
 
     // Step 2: insert offset into array
     push_size(offset, sarr);
+}
+
+void instance_link_fn(uint64_t fn_start, uint64_t defsite, PiType* proc, PiType* all, InternalLinkData* links, Allocator* a) {
+    ClosureLink link = {
+        .fn_start = fn_start,
+        .defsite = defsite,
+        .closure_type = proc,
+        .inner_type = all,
+    };
+
+    push_closure_link(link, &links->links.closure_links);
 }
 
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {

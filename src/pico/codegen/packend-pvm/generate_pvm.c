@@ -24,6 +24,7 @@ int compare_link_meta(LinkMetaData lhs, LinkMetaData rhs) {
 }
 
 ARRAY_CMP_IMPL(LinkMetaData, compare_link_meta, link_meta, LinkMeta)
+ARRAY_COMMON_IMPL(ClosureLink, closure_link, ClosureLink)
 
 // Implementation details
 static void generate(SynRef ref, SynTape tape, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point);
@@ -138,6 +139,10 @@ void pvm_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     };
     generate(syn, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
     delete_address_env(a_env, a);
+}
+
+InstanceClosures pvm_generate_instance_closures(Assembler *target, ClosureGenData data, Allocator* a) {
+    panic(mv_string("PVM generate instance closures not implemented."));
 }
 
 void generate(SynRef ref, SynTape tape, AddressEnv* env, Target target, LinkData* links, Allocator* a, ErrorPoint* point) {

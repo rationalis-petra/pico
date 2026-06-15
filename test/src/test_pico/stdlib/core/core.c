@@ -38,10 +38,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(widen (is (struct [.x 678] [.y 567] [.z 456]) (Struct [.x U32] [.y U32] [.z U32])).y U64)");
     }
 
-    /* if (test_start(log, mv_string("widen-f32->f64"))) { */
-    /*     float64_t expected = 1.0; */
-    /*     TEST_EQ("(widen (is 1.0 F32) F64)"); */
-    /* } */
+    /*
+    if (test_start(log, mv_string("widen-f32->f64"))) {
+        float64_t expected = 1.0;
+        TEST_EQ("(widen (is 1.0 F32) F64)");
+    }
+    */
 
     if (test_start(log, mv_string("narrow-f64->f32"))) {
         float32_t expected = 1.0;
@@ -207,6 +209,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("proc-all-id"))) {
         int64_t expected = -75;
         TEST_EQ("((all [A] proc [(x A)] x) -75)");
+    }
+
+    if (test_start(log, mv_string("proc-nested"))) {
+        int64_t expected = 5;
+        TEST_EQ("((proc [x y] (let [add proc [a b] (i64.+ a b)] (add x y))) 2 3)");
     }
 
     // -------------------------------------------------------------------------

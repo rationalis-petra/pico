@@ -185,7 +185,11 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     build_unary_op(Push, reg(R15, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
-
+    PiType as_struct = {
+        .sort = TStruct,
+        .structure.fields = type->instance.fields,
+    };
+    generate_stack_size_of(RSI, &as_struct, env, ass, a, point);
     generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
 
     // Push twice: one is the pointer to be returned, the other points to the
