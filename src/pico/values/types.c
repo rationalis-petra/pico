@@ -1792,17 +1792,24 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
 
         PiType* out_ty = call_alloc(sizeof(PiType), pia);
         *out_ty = (PiType) {
-            .sort = TTraitInstance,
-            .instance.instance_of = family.trait.id,
-            .instance.name = family.trait.name,
-            // Note: over and implicits are left null, as that type of instance
-            //     can only be produced by an (instance ...) form, so regluar
-            //     type apps will always produce an instance with empty over/implicits
-            .instance.over = {.len = 0},
-            .instance.implicits = {.len = 0},
-
-            .instance.args = saved_args,
-            .instance.fields = new_fields,
+          .sort = TTraitInstance, .instance.instance_of = family.trait.id,
+          .instance.name = family.trait.name,
+          // Note: over and implicits are left null, as that type of instance
+          //     can only be produced by an (instance ...) form, so regluar
+          //     type apps will always produce an instance with empty
+          //     over/implicits
+          .instance.over = {
+            .len = 0,
+            .data = call_alloc(0, pia),
+            .gpa = *pia
+          },
+          .instance.implicits = {
+            .len = 0,
+            .data = call_alloc(0, pia),
+            .gpa = *pia
+          },
+          .instance.args = saved_args,
+          .instance.fields = new_fields,
         };
         return out_ty;
     } else if (family.sort == TNamed) {
