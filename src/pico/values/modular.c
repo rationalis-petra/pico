@@ -37,7 +37,6 @@ typedef struct {
   U8Array* data_segment;
 
   // For parametric instances, need to keep track of specific instantiations. 
-  size_t num_instances;
   Instances* instances;
 
   // TODO (UB) if a value (e.g. proc) from a module is evaluated, it will give
@@ -53,11 +52,13 @@ typedef struct {
   void* value;
 } InstantiatedInstance;
 
+ARRAY_HEADER(InstantiatedInstance, inst, Inst)
+ARRAY_COMMON_IMPL(InstantiatedInstance, inst, Inst)
+
 struct Instances {
   uint64_t instance_offset;
 
-  uint64_t num_instances;
-  InstantiatedInstance* instances;
+  InstArray instantiations;
 
   uint64_t num_types;
   uint64_t num_implicits;
@@ -197,6 +198,14 @@ void delete_decl_p(ModuleDecl* decl, PiAllocator* pia) {
 }
 
 // Helper
+void delete_instantiation(InstantiatedInstance instance, Module* module) {
+    mem_free(instance.types, &module->allocator);
+    mem_free(instance.implicits, &module->allocator);
+    call_free(*(void**)instance.value, &module->pico_allocator);
+    call_free(instance.value, &module->pico_allocator);
+}
+
+// Helper
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
@@ -214,7 +223,10 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
             }
             sdelete_closure_link_array(*instances->closures);
             mem_free(instances->closures, &module->allocator);
-            mem_free(instances->instances, &module->allocator);
+            for (size_t i = 0; i < instances->instantiations.len; i++) {
+                delete_instantiation(instances->instantiations.data[i], module);
+            }
+            sdelete_inst_array(instances->instantiations);
             mem_free(instances, &module->allocator);
           }
         } else {
@@ -279,18 +291,18 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ed_links.len; i++) {
             LinkMetaData link = links->ed_links.data[i];
-            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            uint8_t* address_ptr = (executable.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cd_links.len; i++) {
             LinkMetaData link = links->cd_links.data[i];
-            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            uint8_t* address_ptr = (out.code.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
 
         for (size_t i = 0; i < links->dd_links.len; i++) {
             LinkMetaData link = links->dd_links.data[i];
-            void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
+            uint8_t* address_ptr = (out.data.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
     }
@@ -300,12 +312,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ec_links.len; i++) {
             LinkMetaData link = links->ec_links.data[i];
-            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            uint8_t* address_ptr = (executable.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
             LinkMetaData link = links->cc_links.data[i];
-            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            uint8_t* address_ptr = (out.code.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
     }
@@ -333,13 +345,10 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
         if (type.sort == TTraitInstance) {
           if (type.instance.over.len == 0) {
             // Regular instance
-            size_t total = 0;
-            for (size_t i = 0; i < type.instance.fields.len; i++) {
-                total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
-                total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
-            }
-            void* new_memory = call_alloc(total, &module->pico_allocator);
-            memcpy(new_memory, *(void**)data, total);
+            // TODO: add pi_instance_size to the types file.
+            size_t instance_size = pi_instance_size_of(type);
+            void* new_memory = call_alloc(instance_size, &module->pico_allocator);
+            memcpy(new_memory, *(void**)data, instance_size);
 
             entry.value = call_alloc(size, &module->pico_allocator);
             memcpy(entry.value, &new_memory, ADDRESS_SIZE);
@@ -353,8 +362,7 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
                 closures->data[i] = copy_closure_link(closures->data[i], &module->pico_allocator);
             }
             *instances = (Instances) {
-              .num_instances = 0,
-              .instances = mem_alloc(0, &module->allocator),
+              .instantiations = mk_inst_array(4, &module->allocator),
 
               .num_types = type.instance.over.len,
               .num_implicits = type.instance.implicits.len,
@@ -485,8 +493,8 @@ void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U
      * Check if a pre-existing instance exists
      */
     Instances existing_instances = *entry->instances;
-    for (size_t i = 0; i < existing_instances.num_instances; i++) {
-      InstantiatedInstance instance = existing_instances.instances[i];
+    for (size_t i = 0; i < existing_instances.instantiations.len; i++) {
+      InstantiatedInstance instance = existing_instances.instantiations.data[i];
 
       // Check if implicits match (do this first because its more likely to fail
       // early).
@@ -532,25 +540,31 @@ void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U
         uint64_t start = generated_closures.closure_starts.data[i];
         uint64_t defsite = entry->instances->closures->data[i].defsite;
 
-        // TODO (UB): use an unaligned store.
-        void** callsite = (void**)entry->code_segment->data + defsite;
-        *callsite = instance_instrs.data + start; 
+        uint8_t* callsite = entry->code_segment->data + defsite;
+        set_unaligned_ptr(callsite, instance_instrs.data + start);
     }
     
-    // Run the expression 
-    void* instance;
-    call_value_fn(entry->code_segment->data + existing_instances.instance_offset, sizeof(void*), &instance, &module->allocator);
+    // Run the expression
+    void* instance = call_instance_fn(
+        entry->code_segment->data + existing_instances.instance_offset,
+        type_encodings,
+        implicits,
+        pi_instance_size_of(entry->type),
+        &module->pico_allocator,
+        &module->allocator);
 
     InstantiatedInstance new_instance = {
         .value = instance,
-        .types = mem_alloc(sizeof(uint64_t) * type_encodings.len, &module->allocator),
-        .implicits = mem_alloc(sizeof(void*) * implicits.len, &module->allocator),
+        .types = call_alloc(sizeof(uint64_t) * type_encodings.len, &module->pico_allocator),
+        .implicits = call_alloc(sizeof(void*) * implicits.len, &module->pico_allocator),
     };
     memcpy(new_instance.types, type_encodings.data, sizeof(uint64_t) * type_encodings.len);
     memcpy(new_instance.implicits, implicits.data, sizeof(void*) * implicits.len);
     
+    push_inst(new_instance, &entry->instances->instantiations);
+    sdelete_u64_array(generated_closures.closure_starts);
     release_executable_allocator(exec);
-    return NULL;
+    return instance;
 }
 
 ModuleEntry* get_def(Symbol symbol, Module* module) {

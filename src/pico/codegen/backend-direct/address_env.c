@@ -397,9 +397,16 @@ void address_start_poly_instance(SymbolArray* types, BindingArray vars, SymPtrAM
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
     new_local->types = *types;
-
-    push_ptr(types, &env->instance_types);
-    push_ptr(implicits, &env->instance_implicits);
+    
+    // The 'new implicits' and 'new types' are because they are pointers to
+    // values on the stack, but may be saved by ProcDefer to outlive the stack-frame.
+    // TODO: come up with a more elegant solution to this... maybe just pass by value?
+    SymPtrAMap* new_implicits = mem_alloc(sizeof(SymPtrAMap), a);
+    *new_implicits = *implicits;
+    SymbolArray* new_types = mem_alloc(sizeof(SymPtrAMap), a);
+    *new_types = *types;
+    push_ptr(new_types, &env->instance_types);
+    push_ptr(new_implicits, &env->instance_implicits);
 
     // We add 3x the register size to account for:
     //   - return address

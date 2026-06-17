@@ -133,17 +133,17 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.links.ed_links.len; i++) {
         LinkMetaData link = links.links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        uint8_t* address_ptr = (get_instructions(ctx.target.target).data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.cd_links.len; i++) {
         LinkMetaData link = links.links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        uint8_t* address_ptr = (get_instructions(ctx.target.code_aux).data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.links.dd_links.len; i++) {
         LinkMetaData link = links.links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        uint8_t* address_ptr = (ctx.target.data_aux->data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
 
@@ -319,14 +319,23 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
       for (size_t i = 0; i < inner_type->binder.vars.len; i++) {
           push_symbol(inner_type->binder.vars.data[i], &types);
       }
-      size_t src_offset = 0;
+      // Source offset: we push 3 values. Combined with the return address, this means
+      // that arguments start at 0x20. Noting that the FIRST argument starts at
+      // the highest point in the stack (large pointer value), this means that
+      // we start with a large value of src_offset that is gradually decreased. 
+      // Note that starting with i = 1 is intentional
+      size_t src_offset = 0x20;
+      for (size_t i = 1; i < closure_type->proc.args.len; i++) {
+          PiType* argty = closure_type->proc.args.data[i];
+          src_offset += pi_stack_size_of(*argty);
+      }
       for (size_t i = 0; i < args_to_adapt.len; i++) {
           PiType* argty = closure_type->proc.args.data[i];
           PiType* paramty = args_to_adapt.data[i];
-          // Copy arg to current location: 
 
+          // Copy arg to current location: 
           build_binary_op(Mov, reg(RCX, sz_64), reg(RBP, sz_64), target, a, point);
-          build_binary_op(Sub, reg(RCX, sz_64), imm32(src_offset), target, a, point);
+          build_binary_op(Add, reg(RCX, sz_64), imm32(src_offset), target, a, point);
           size_t arg_size = pi_stack_size_of(*argty);
           if (is_variable_for(paramty, types)) {
               // As is not vaiable for us, we need to move to variable stack.
@@ -337,6 +346,7 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
               build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), target, a, point);
               generate_monomorphic_copy(RSP, RCX, arg_size, target, a, point);
           }
+          src_offset -= pi_stack_size_of(*argty);
       }
 
       void* callee = data.code_segment.data + link.fn_start;
@@ -1266,7 +1276,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             //
             // -----------------------------------------------------------------
 
-            // Second, generate the structure/instance object
+            // Generate the instance object
             generate_i(syn.projector.val, env, ictx);
             // Both instances (passed by reference) and structs (on variable
             // stack) will occupy an address size on the stack.
@@ -3257,7 +3267,7 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
     Assembler* ass = target.target;
     switch (syn.type) {
     case SProcedure: {
-        void** caller_loc = (void*)get_instructions(deferred.backlink_from).data + deferred.backlink; 
+        uint8_t* caller_loc = get_instructions(deferred.backlink_from).data + deferred.backlink; 
         set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body

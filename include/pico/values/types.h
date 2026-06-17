@@ -243,6 +243,7 @@ bool is_variable_for(PiType *ty, SymbolArray vars);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
+size_t pi_instance_size_of(PiType type);
 
 Result_t pi_maybe_align_of(PiType type, size_t* out);
 Result_t pi_maybe_size_of(PiType type, size_t* out);

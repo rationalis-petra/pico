@@ -140,7 +140,8 @@ InstanceEntry parametric_instance_lookup(InstanceSrc* src, AddrPiList args, Type
             delete_arena_allocator(arena);
             return entry;
         }
-        push_ptr(entry.abvar.value, &implicits);
+        void** instance_ptr = entry.abvar.value;
+        push_ptr(*instance_ptr, &implicits);
     }
     U64Array type_data = mk_u64_array(type_binds.len, &aa);
     for (size_t i = 0; i < type_binds.len; i++) {

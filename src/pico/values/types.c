@@ -1358,6 +1358,14 @@ size_t pi_align_of(PiType type) {
     return out;
 }
 
+size_t pi_instance_size_of(PiType type) {
+    PiType as_struct = {
+        .sort = TStruct,
+        .structure.fields = type.instance.fields,
+    };
+    return pi_size_of(as_struct);
+}
+
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:

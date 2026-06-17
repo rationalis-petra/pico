@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include "data/num.h"
 
-void set_unaligned_ptr(void **dest, void *src) {
+void set_unaligned_ptr(uint8_t *dest, void *src) {
     char* cdest = (char*)dest;
     char* csrc = (char*)&src;
     for (size_t i = 0; i < sizeof(void*); i++) {

@@ -73,17 +73,17 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
     // TODO (INVESTIGATE BUG): check if also backlinking code makes sense?
     for (size_t i = 0; i < links.ed_links.len; i++) {
         LinkMetaData link = links.ed_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.target).data + link.source_offset);
+        uint8_t* address_ptr = (get_instructions(ctx.target.target).data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.cd_links.len; i++) {
         LinkMetaData link = links.cd_links.data[i];
-        void** address_ptr = (void**) ((void*)get_instructions(ctx.target.code_aux).data + link.source_offset);
+        uint8_t* address_ptr = (get_instructions(ctx.target.code_aux).data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
     for (size_t i = 0; i < links.dd_links.len; i++) {
         LinkMetaData link = links.dd_links.data[i];
-        void** address_ptr = (void**) ((void*)ctx.target.data_aux->data + link.source_offset);
+        uint8_t* address_ptr = (ctx.target.data_aux->data + link.source_offset);
         set_unaligned_ptr(address_ptr, ctx.target.data_aux->data + link.dest_offset);
     }
 

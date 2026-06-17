@@ -675,7 +675,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(get-value {I8} 5)");
     }
 
-    /*
     if (test_start(log, mv_string("instance-dependent"))) {
         RUN("(def Addable Trait Addable [A] [.add Proc [A A] A])");
         RUN("(def ID Distinct ID Family [A] A)");
@@ -692,7 +691,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 72;
         TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");
     }
-    */
 
     // -----------------------------------------------------
     // 
