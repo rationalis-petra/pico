@@ -311,7 +311,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 cis->buffer = new_buffer;
                 cis->total_bufsize = new_total_size;
             }
-            uint8_t *base = cis->buffer.bytes + (cis->buffer.memsize - 1);
+            uint8_t *base = cis->buffer.bytes + cis->buffer.memsize;
             for (size_t i = 0; i < size; i++) {
                 base[i] = bytes[i];
             }

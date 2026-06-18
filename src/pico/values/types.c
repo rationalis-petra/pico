@@ -1625,6 +1625,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         type_app_subst(body->proc.ret, subst, shadowed, pia, logger, a);
         break;
+    case TArray: 
+        type_app_subst(body->array.element, subst, shadowed, pia, logger, a);
+        break;
     case TStruct:
         for (size_t i = 0; i < body->structure.fields.len; i++) {
             type_app_subst(body->structure.fields.data[i].val, subst, shadowed, pia, logger, a);

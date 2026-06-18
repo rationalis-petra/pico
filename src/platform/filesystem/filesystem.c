@@ -147,7 +147,11 @@ DirectoryResult open_directory(String name, Allocator* alloc) {
         return (DirectoryResult) {.type = Err, .error = get_record_error_code()};
     }
 #else
-    DIR* handle = opendir((char*)name.bytes);
+    char* dirstr = malloc(name.memsize + 1);
+    memcpy(dirstr, name.bytes, name.memsize);
+    dirstr[name.memsize] = '\0';
+    DIR* handle = opendir(dirstr);
+    free(dirstr);
     if (handle) {
         Directory* dir = mem_alloc(sizeof(Directory), alloc);
         *dir = (Directory) {
