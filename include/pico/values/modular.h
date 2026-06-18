@@ -5,10 +5,10 @@
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
-#include "components/assembler/link_data.h"
 
 #include "pico/data/client/allocator.h"
 #include "pico/data/client/list.h"
+#include "pico/codegen/link_data.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
 #include "pico/values/types.h"

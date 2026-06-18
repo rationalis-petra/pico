@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     init_terminal(a);
 
     OStream* cout = get_stdout_stream();
-    write_string(mv_string("Welcome to the Pico Installer.\n"), cout);
+    st_write_string(mv_string("Welcome to the Pico Installer.\n"), cout);
 
     // Installer should be set-up in the following way:
     // installer-dir

@@ -4,7 +4,6 @@
 #include "data/array.h"
 
 #include "components/assembler/assembler.h"
-#include "components/assembler/link_data.h"
 #include "components/pvm/pvm.h"
 
 /* Polymorphic Virutal Machine: Code Generation
@@ -31,8 +30,8 @@ typedef struct {
     Assembler* exec_segment;
 } PVMTarget;
 
-void generate_term(PVMTerm* term, PVMTarget* target, LinkData* links, PVMGenContext context);
+void generate_term(PVMTerm* term, PVMTarget* target, PVMGenContext context);
 
-void generate_proc(PVMProc* proc, PVMTarget* target, LinkData* links, PVMGenContext context);
+void generate_proc(PVMProc* proc, PVMTarget* target, PVMGenContext context);
 
 #endif

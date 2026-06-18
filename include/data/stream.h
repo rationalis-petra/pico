@@ -53,6 +53,7 @@ void delete_ostream(OStream* stream, Allocator* a);
 // istream methods
 StreamResult peek(IStream* stream, uint32_t* out);
 StreamResult next(IStream* stream, uint32_t* out);
+StreamResult read_line(IStream* stream, String* out);
 size_t bytecount(IStream* stream);
 void reset_bytecount(IStream* stream);
 

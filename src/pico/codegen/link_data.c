@@ -1,4 +1,4 @@
-#include "components/assembler/link_data.h"
+#include "pico/codegen/link_data.h"
 
 ClosureLink copy_closure_link(ClosureLink link, PiAllocator* a) {
     return (ClosureLink) {

@@ -36,8 +36,22 @@ OStream* get_std_ostream() {
 }
 
 uint32_t relic_read_codepoint() {
+    // TODO: change return type to 'proper' result
     uint32_t out;
-    next(current_istream, &out);
+    StreamResult res = next(current_istream, &out);
+    if (res != StreamSuccess) {
+        panic(mv_string("TODO: implement proper error handling in relic_read_codepoint"));
+    }
+    return out;
+}
+
+String relic_read_line() {
+    // TODO: change return type to 'proper' result
+    String out;
+    StreamResult res = read_line(current_istream, &out);
+    if (res != StreamSuccess) {
+        panic(mv_string("TODO: implement proper error handling in relic_read_line"));
+    }
     return out;
 }
 
@@ -62,6 +76,14 @@ void build_read_codepoint_fn(PiType* type, Assembler* ass, PiAllocator* pia, All
     CType fn_ctype = mk_fn_ctype(pia, 0, mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}));
 
     convert_c_fn(relic_read_codepoint, &fn_ctype, type, ass, a, point); 
+
+    delete_c_type(fn_ctype, pia);
+}
+
+void build_read_line_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_string_ctype(pia));
+
+    convert_c_fn(relic_read_line, &fn_ctype, type, ass, a, point); 
 
     delete_c_type(fn_ctype, pia);
 }
@@ -145,6 +167,15 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, UInt_32));
     build_read_codepoint_fn(typep, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("read-codepoint"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+    delete_pi_type_p(typep, pia);
+
+    typep = mk_proc_type(pia, 0, mk_string_type(pia));
+    build_read_line_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("line-codepoint"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

@@ -330,6 +330,10 @@ StreamResult next(IStream* stream, uint32_t* out) {
     }
 }
 
+StreamResult read_line(IStream* stream, String* out) {
+    panic(mv_string("read_line not implemented"));
+}
+
 size_t bytecount(IStream *stream) {
     return stream->bytecount;
 }

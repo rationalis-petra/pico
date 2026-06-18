@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "platform/signals.h"
 #include "platform/memory/allocator.h"
 
 #include "data/string.h"
@@ -31,6 +30,13 @@ String string_from_codepoint(uint32_t codepoint, Allocator *a) {
     push_u32(codepoint, &arr);
     String out = string_from_UTF_32(arr, a);
     sdelete_u32_array(arr);
+    return out;
+}
+
+char* to_c_string(String str, Allocator* a) {
+    char* out = mem_alloc(str.memsize + 1, a);
+    memcpy(out, str.bytes, str.memsize);
+    out[str.memsize] = '\0';
     return out;
 }
 

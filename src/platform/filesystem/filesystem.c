@@ -147,11 +147,9 @@ DirectoryResult open_directory(String name, Allocator* alloc) {
         return (DirectoryResult) {.type = Err, .error = get_record_error_code()};
     }
 #else
-    char* dirstr = malloc(name.memsize + 1);
-    memcpy(dirstr, name.bytes, name.memsize);
-    dirstr[name.memsize] = '\0';
+    char* dirstr = to_c_string(name, get_std_allocator());
     DIR* handle = opendir(dirstr);
-    free(dirstr);
+    mem_free(dirstr, get_std_allocator());
     if (handle) {
         Directory* dir = mem_alloc(sizeof(Directory), alloc);
         *dir = (Directory) {
@@ -284,11 +282,13 @@ String get_current_directory(Allocator* a) {
 
 void set_current_directory(String path) {
 // TODO: convert to valid path (consider encoding)
+    char* c_path = to_c_string(path, get_std_allocator());
 #if OS_FAMILY == WINDOWS
-    SetCurrentDirectory((const char*)path.bytes);
+    SetCurrentDirectory(c_path);
 #else
-    chdir((char*)path.bytes);
+    chdir(c_path);
 #endif
+    mem_free(c_path, get_std_allocator());
 }
 
 // ---------------------------------------------------------------------------
@@ -320,11 +320,9 @@ FileResult open_file(String name, FileMode mode, Allocator *alloc) {
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
     // TODO (PERFORMANCE). Try use API primitives that don't require the null byte.
-    char* c_string = malloc(name.memsize + 1);
-    memcpy(c_string, name.bytes, name.memsize);
-    c_string[name.memsize] = '\0';
-    File* file = (File*)fopen(c_string, mode_str);
-    free(c_string);
+    char* c_name = to_c_string(name, get_std_allocator());
+    File* file = (File*)fopen(c_name, mode_str);
+    mem_free(c_name, get_std_allocator());
     if (file) {
         return (FileResult) {.type = Ok, .file = file};
     } else {
@@ -414,16 +412,22 @@ RecordResult copy_file(String source, String dest) {
     // for non-linux support!
     RecordResult result = {.type = Ok};
     int input, output;
-    if ((input = open((char*)source.bytes, O_RDONLY)) == -1)
+    char* c_source = to_c_string(source, get_std_allocator());
+    if ((input = open(c_source, O_RDONLY)) == -1)
     {
+        mem_free(c_source, get_std_allocator());
         return (RecordResult) {.type = Err, .error = get_record_error_code()};
     }
+    mem_free(c_source, get_std_allocator());
     // Create new or truncate existing at destination
-    if ((output = creat((char*)dest.bytes, 0660)) == -1)
+    char* c_dest = to_c_string(dest, get_std_allocator());
+    if ((output = creat(c_dest, 0660)) == -1)
     {
         close(input);
+        mem_free(c_dest, get_std_allocator());
         return (RecordResult) {.type = Err, .error = get_record_error_code()};
     }
+    mem_free(c_dest, get_std_allocator());
     // sendfile will work with non-socket output (i.e. regular file) under
     // Linux 2.6.33+ and some other unixy systems.
     struct stat file_stat = {0};
@@ -454,16 +458,21 @@ RecordResult copy_file(String source, String dest) {
 }
 
 RecordResult delete_file(String path) {
+    char* c_path = to_c_string(path, get_std_allocator());
 #if OS_FAMILY == UNIX
-    if (unlink((char*)path.bytes) == 0) {
+    if (unlink(c_path) == 0) {
+        mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Ok};
     } else {
+        mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
 #elif OS_FAMILY == WINDOWS
-    if (DeleteFile((char*)path.bytes)) {
+    if (DeleteFile(c_path)) {
+        mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Ok};
     } else {
+        mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
 #else
@@ -475,9 +484,11 @@ RecordResult set_permissions(String file, FilePermissions perms) {
 #if OS_FAMILY == UNIX
     RecordResult res = {.type = Ok};
     mode_t unix_perms = (perms.user << 6) | (perms.group << 3) | perms.other;
-    if (chmod((char *)file.bytes, unix_perms)) {
+    char* c_filename = to_c_string(file, get_std_allocator());
+    if (chmod(c_filename, unix_perms)) {
         res = (RecordResult) {.type = Err, .error = get_record_error_code()};
     }
+    mem_free(c_filename, get_std_allocator());
     return res;
 #elif OS_FAMILY == WINDOWS
     RecordResult res = {.type = Ok};
@@ -489,17 +500,18 @@ RecordResult set_permissions(String file, FilePermissions perms) {
 
 
 RecordResult create_directory(String dirname) {
+    char* c_dirname = to_c_string(dirname, get_std_allocator());
     RecordResult res = {.type = Ok};
 #if OS_FAMILY == WINDOWS
-    if (!CreateDirectory((char*)dirname.bytes, NULL)) {
+    if (!CreateDirectory(c_dirname, NULL)) {
         res = (RecordResult) {.type = Err, .error = get_record_error_code()};
     }
-    return res;
 #elif OS_FAMILY == UNIX
     // TODO: add error checking
-    mkdir((char*)dirname.bytes, 0700);
-    return res;
+    mkdir(c_dirname, 0700);
 #endif
+    mem_free(c_dirname, get_std_allocator());
+    return res;
 }
 
 RecordResult copy_directory_recur(String source, String dest) {
@@ -567,15 +579,20 @@ static int unlink_cb(const char *fpath, const struct stat *sb, int typeflag, str
 
 
 RecordResult delete_directory(String dirname, bool recursive) {
+    char* c_dirname = to_c_string(dirname, get_std_allocator());
 #if OS_FAMILY == UNIX
   if (!recursive) {
-    if (remove((char*)dirname.bytes) == 0) {
-            return (RecordResult){.type = Ok};
+    int res = remove(c_dirname);
+    mem_free(c_dirname, get_std_allocator());
+    if (res == 0) {
+        return (RecordResult){.type = Ok};
     } else {
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
   } else {
-      if (nftw((char*)dirname.bytes, unlink_cb, 64, FTW_DEPTH | FTW_PHYS) == 0) {
+      int res = nftw(c_dirname, unlink_cb, 64, FTW_DEPTH | FTW_PHYS);
+      mem_free(c_dirname, get_std_allocator());
+      if (res == 0) {
           return (RecordResult){.type = Ok};
       } else {
           return (RecordResult){.type = Err, .error = get_record_error_code()};
@@ -583,12 +600,16 @@ RecordResult delete_directory(String dirname, bool recursive) {
   }
 #elif OS_FAMILY == WINDOWS
     if (!recursive) {
-        if (RemoveDirectoryA((char*)dirname.bytes)) {
+        int res = RemoveDirectoryA(c_dirname);
+        mem_free(c_dirname, get_std_allocator());
+        if (res) {
             return (RecordResult){.type = Ok};
         } else {
             return (RecordResult){.type = Err, .error = get_record_error_code()};
         }
     } else {
+        mem_free(c_dirname, get_std_allocator());
+
         Allocator* a = get_std_allocator();
         DirectoryResult res = open_directory(dirname, a);
         if (res.type == Err) return (RecordResult){.type = Err, .error = res.error};
@@ -630,42 +651,50 @@ RecordResult delete_directory(String dirname, bool recursive) {
 }
 
 bool record_exists(String path) {
+  char* c_path = to_c_string(path, get_std_allocator());
 #if OS_FAMILY == WINDOWS
-  DWORD dwAttrib = GetFileAttributes((char*)path.bytes);
-  return (dwAttrib != INVALID_FILE_ATTRIBUTES);
+  DWORD dwAttrib = GetFileAttributes(c_path);
+  bool res = (dwAttrib != INVALID_FILE_ATTRIBUTES);
 #elif OS_FAMILY == UNIX
-  return access((char*)path.bytes, F_OK) == 0;
+  bool res = access(c_path, F_OK) == 0;
 #endif
+  mem_free(c_path, get_std_allocator());
+  return res;
 }
 
 RecordInfo record_info(String path) {
-#if OS_FAMILY == WINDOWS
-    DWORD attributes = GetFileAttributesA((char*)path.bytes);
-    
-    if (attributes == INVALID_FILE_ATTRIBUTES) {
-        // TODO (BUG): properly report errors
-        return (RecordInfo){.type = RINotExists};
-    }
+  char* c_path = to_c_string(path, get_std_allocator());
 
-    if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
-        return (RecordInfo) {
-            .type = RIDirectory,
-        };
-    } else  {
-        return (RecordInfo) {
-            .type = RIFile,
-            // TODO: file size...
-        };
-    } 
+#if OS_FAMILY == WINDOWS
+  DWORD attributes = GetFileAttributesA(c_path);
+  mem_free(c_path, get_std_allocator());
+    
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    // TODO (BUG): properly report errors
+    return (RecordInfo){.type = RINotExists};
+  }
+
+  if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+    return (RecordInfo) {
+      .type = RIDirectory,
+    };
+  } else  {
+    return (RecordInfo) {
+      .type = RIFile,
+      // TODO: file size...
+    };
+  } 
 
 #elif OS_FAMILY == UNIX
   //return access((char*)path.bytes, F_OK) == 0;
 
   int input;
-  if ((input = open((char*)path.bytes, O_RDONLY)) == -1) {
+  if ((input = open(c_path, O_RDONLY)) == -1) {
+      mem_free(c_path, get_std_allocator());
       // TODO (BUG): properly report errors!
       return (RecordInfo){.type = RINotExists};
   }
+  mem_free(c_path, get_std_allocator());
 
   struct stat record_stat = {};
   if (fstat(input, &record_stat) != 0) {
