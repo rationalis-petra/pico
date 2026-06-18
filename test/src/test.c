@@ -28,7 +28,6 @@
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/extra.h"
 
 #include "test/command_line_opts.h"
 #include "test_pico/pico.h"
@@ -56,7 +55,7 @@ int main(int argc, char** argv) {
     sdelete_string_array(args);
 
     if (command.type == CInvalid) {
-        write_string(mv_string("Invalid command - expected one of all, exept, only\n"), cout);
+        st_write_string(mv_string("Invalid command - expected one of all, exept, only\n"), cout);
         return 1;
     }
 

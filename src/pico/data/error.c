@@ -5,7 +5,6 @@
 
 #include "components/pretty/document.h"
 #include "components/pretty/stream_printer.h"
-#include "components/pretty/standard_types.h"
 
 #include "pico/data/error.h"
 
@@ -206,7 +205,7 @@ void not_implemented(String message) {
     if (not_implemented_hook.fn) {
         not_implemented_hook.fn(not_implemented_hook.ctx);
     } else {
-        write_string(mv_string("Unhandled unimplemented exception raised.\n"), get_stdout_stream());
+        st_write_string(mv_string("Unhandled unimplemented exception raised.\n"), get_stdout_stream());
         panic(message);
     }
 }

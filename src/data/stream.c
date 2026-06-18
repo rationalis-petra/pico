@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "platform/filesystem/filesystem.h"
 #include "platform/signals.h"
 #include "data/stream.h"
 
@@ -16,7 +17,7 @@ typedef enum {
 } IStreamType;
 
 typedef struct {
-    FILE* file_ptr;
+    File* file_ptr;
     bool owns;
     bool peeked;
     uint8_t peeked_bytes;
@@ -59,7 +60,7 @@ IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
     IStream* outer_stream = mem_alloc(sizeof(IStream), a);
     const size_t initial_memsize =  1024 * sizeof(uint8_t);
     String buffer = (String) {
-        .memsize = 1,
+        .memsize = 0,
         .bytes = mem_alloc(initial_memsize, a),
     };
 
@@ -71,7 +72,6 @@ IStream* mk_capturing_istream(IStream *stream, Allocator *a) {
         .impl.capturing_istream.total_bufsize = initial_memsize,
         .impl.capturing_istream.gpa = a,
     };
-    memset(buffer.bytes, 0, initial_memsize);
     return outer_stream;
 }
 
@@ -96,7 +96,7 @@ IStream* get_stdin_stream(void) {
             .type = IStreamFile,
             .bytecount = 0,
             .impl.file_istream.peeked = false,
-            .impl.file_istream.file_ptr = stdin,
+            .impl.file_istream.file_ptr = std_in(),
             .impl.file_istream.owns = false,
             .impl.file_istream.encoding = UTF_8,
         };
@@ -107,14 +107,14 @@ IStream* get_stdin_stream(void) {
 }
 
 IStream* open_file_istream(String filename, Allocator* a) {
-    FILE* cfile = fopen((char*)filename.bytes, "r");
-    if (!cfile) return NULL;
+    FileResult res = open_file(filename, Read, a);
+    if (res.type != Ok) return NULL;
 
     IStream* ifile = mem_alloc(sizeof(IStream), a);
     *ifile = (IStream) {
      .type = IStreamFile,
      .impl.file_istream.peeked = false,
-     .impl.file_istream.file_ptr = cfile,
+     .impl.file_istream.file_ptr = res.file,
      .impl.file_istream.owns = true,
      .impl.file_istream.encoding = UTF_8,
     };
@@ -155,7 +155,7 @@ void delete_istream(IStream* stream, Allocator* a) {
     switch (stream->type) {
     case IStreamFile: {
         if (stream->impl.file_istream.owns) {
-            fclose(stream->impl.file_istream.file_ptr);
+            close_file(stream->impl.file_istream.file_ptr);
         }
         mem_free(stream, a);
         break;
@@ -228,24 +228,26 @@ StreamResult next(IStream* stream, uint32_t* out) {
     switch (stream->type) {
     case IStreamFile: {
         if (stream->impl.file_istream.peeked == false) {
-            int next_int = fgetc(stream->impl.file_istream.file_ptr);
+            uint8_t head;
+            bool fail = read_byte(stream->impl.file_istream.file_ptr, &head);
 
-            if (next_int == EOF) {
+            // TODO: improve next_byte function with more return values/encoding
+            if (fail) {
                 *out = 0;
                 return StreamEnd;
             };
             // Assume utf-8 encoding (may be wrong!!)
-            uint8_t head = (uint8_t)next_int;
             uint8_t num_bytes = num_bytes_utf8(head);
             uint8_t in_bytes[4];
             in_bytes[0] = head;
             for (uint8_t i = 1; i < num_bytes; i++) {
-                int next_byte = fgetc(stream->impl.file_istream.file_ptr);
-                if (next_byte == EOF) {
+                uint8_t next_byte;
+                fail = read_byte(stream->impl.file_istream.file_ptr, &next_byte);
+                if (fail) {
                     *out = 0;
                     return StreamEnd;
                 };
-                in_bytes[i] = (uint8_t)next_byte;
+                in_bytes[i] = next_byte;
             }
             if (decode_point_utf8(&num_bytes, in_bytes, out)) {
                 stream->bytecount += num_bytes;
@@ -267,7 +269,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
         if (stream->impl.string_istream.peeked == false) {
             size_t* index = &stream->impl.string_istream.index;
             String* string = &stream->impl.string_istream.string;
-            if (*index == string->memsize - 1) {
+            if (*index == string->memsize) {
                 *out = 0;
                 return StreamEnd;
             };
@@ -305,7 +307,6 @@ StreamResult next(IStream* stream, uint32_t* out) {
                 String new_buffer = (String) {.memsize = cis->buffer.memsize};
                 new_buffer.bytes = mem_alloc(new_total_size, cis->gpa);
                 memcpy(new_buffer.bytes, cis->buffer.bytes, cis->buffer.memsize);
-                memset(new_buffer.bytes + cis->buffer.memsize, 0, new_total_size - cis->buffer.memsize);
                 mem_free(cis->buffer.bytes, cis->gpa);
                 cis->buffer = new_buffer;
                 cis->total_bufsize = new_total_size;
@@ -353,7 +354,7 @@ typedef enum OStreamType {
 } OStreamType;
 
 typedef struct FileOStream {
-    FILE* file_ptr;
+    File* file_ptr;
     bool owns;
     Encoding etype;
 } FileOStream;
@@ -377,7 +378,7 @@ OStream* get_stdout_stream() {
     if (!initialized) {
         initialized = true;
         cout.type = OStreamFile;
-        cout.impl.file_ostream.file_ptr = stdout;
+        cout.impl.file_ostream.file_ptr = std_out();
         cout.impl.file_ostream.owns = false;
         cout.impl.file_ostream.etype = UTF_8;
     }
@@ -385,13 +386,13 @@ OStream* get_stdout_stream() {
 }
 
 OStream* open_file_ostream(String filename, Allocator* a) {
-    FILE* cfile = fopen((char*)filename.bytes, "w");
-    if (!cfile) return NULL;
+    FileResult res = open_file(filename, Write, a);
+    if (res.type != Ok) return NULL;
 
     OStream* ofile = mem_alloc(sizeof(OStream), a);
     *ofile = (OStream) {
         .type = OStreamFile,
-        .impl.file_ostream.file_ptr = cfile,
+        .impl.file_ostream.file_ptr = res.file,
         .impl.file_ostream.owns = false,
         .impl.file_ostream.etype = UTF_8,
     };
@@ -399,7 +400,7 @@ OStream* open_file_ostream(String filename, Allocator* a) {
     return ofile;
 }
 
-OStream *mk_string_ostream(Allocator *a) {
+OStream* mk_string_ostream(Allocator *a) {
     OStream* ostring = mem_alloc(sizeof(OStream), a);
     *ostring = (OStream) {
         .type = OStreamString,
@@ -408,15 +409,14 @@ OStream *mk_string_ostream(Allocator *a) {
     return ostring;
 }
 
-String *current_string(OStream *os, Allocator *a) {
+String* current_string(OStream *os, Allocator *a) {
     if (os->type != OStreamString) {
         return NULL;
     }
     String* out = mem_alloc(sizeof(String), a);
-    out->memsize = os->impl.string_ostream.buffer.len + 1;
+    out->memsize = os->impl.string_ostream.buffer.len;
     out->bytes = mem_alloc(out->memsize, a);
-    memcpy(out->bytes, os->impl.string_ostream.buffer.data, out->memsize - 1);
-    out->bytes[out->memsize - 1] = '\0';
+    memcpy(out->bytes, os->impl.string_ostream.buffer.data, out->memsize);
     return out;
 }
 
@@ -424,7 +424,7 @@ void delete_ostream(OStream* stream, Allocator* a) {
     switch (stream->type) {
     case OStreamFile: {
         if (stream->impl.file_ostream.owns) {
-            fclose(stream->impl.file_ostream.file_ptr);
+            close_file(stream->impl.file_ostream.file_ptr);
         }
         mem_free(stream, a);
         break;
@@ -437,21 +437,21 @@ void delete_ostream(OStream* stream, Allocator* a) {
     }
 }
 
-void write_impl(int char_literal, OStream* stream) {
+void st_write_byte(uint8_t byte, OStream* stream) {
     switch (stream->type) {
     case OStreamFile: {
-        fputc(char_literal, stream->impl.file_ostream.file_ptr);
+        write_byte(stream->impl.file_ostream.file_ptr, byte);
         break;
     }
     case OStreamString: {
         // TODO (BUG): check char_literal < MAX_UINT8
-        push_u8(char_literal, &stream->impl.string_ostream.buffer);
+        push_u8(byte, &stream->impl.string_ostream.buffer);
         break;
     }
     }
 }
 
-void write_codepoint(uint32_t codepoint, OStream* stream) {
+void st_write_codepoint(uint32_t codepoint, OStream* stream) {
     switch (stream->type) {
     case OStreamFile: {
         // for now, we just use UTF-8 encoding
@@ -461,8 +461,12 @@ void write_codepoint(uint32_t codepoint, OStream* stream) {
         data[nchar] = 0;
 
         // Note: This assumes that the output stream is utf-8 encoded
-        //       it also assumes that the char = uint8_t
-        fputs((char*)data, stream->impl.file_ostream.file_ptr);
+        U8Array chunk = {
+            .size = nchar,
+            .len = nchar,
+            .data = data,
+        };
+        write_chunk(stream->impl.file_ostream.file_ptr, chunk);
         break;
     }
     case OStreamString: {
@@ -478,28 +482,35 @@ void write_codepoint(uint32_t codepoint, OStream* stream) {
     }
 }
 
-void write_string(String str, OStream* stream) {
+void st_write_string(String str, OStream* stream) {
     switch (stream->type) {
-    case OStreamFile:
+    case OStreamFile: {
         // TODO (FEATURE): Support outputting to non utf-8 ostreams
-        fputs((char*)str.bytes, stream->impl.file_ostream.file_ptr);
+        // Note: This assumes that the output stream is utf-8 encoded
+        U8Array chunk = {
+            .size = str.memsize,
+            .len = str.memsize,
+            .data = str.bytes,
+        };
+        write_chunk(stream->impl.file_ostream.file_ptr, chunk);
         break;
+    }
     case OStreamString:
-        add_u8_chunk(str.bytes, str.memsize - 1, &stream->impl.string_ostream.buffer);
+        add_u8_chunk(str.bytes, str.memsize, &stream->impl.string_ostream.buffer);
         break;
     }
 }
 
-void write_line(String str, OStream* stream) {
+void st_write_line(String str, OStream* stream) {
     switch (stream->type) {
     case OStreamFile:
         // TODO (FEATURE): Support outputting to non utf-8 ostreams
-        fputs((char*)str.bytes, stream->impl.file_ostream.file_ptr);
-        fputs((char*)"\n", stream->impl.file_ostream.file_ptr);
+        st_write_string(str, stream);
+        st_write_string(mv_string("\n"), stream);
         break;
     case OStreamString:
         // TODO: (windows) - \r\n??, part of stream?
-        add_u8_chunk(str.bytes, str.memsize - 1, &stream->impl.string_ostream.buffer);
+        add_u8_chunk(str.bytes, str.memsize, &stream->impl.string_ostream.buffer);
         add_u8_chunk((uint8_t*)"\n", 1, &stream->impl.string_ostream.buffer);
         break;
     }

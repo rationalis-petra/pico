@@ -97,6 +97,9 @@ typedef enum {
     Read, Write, ReadWrite, Append, ReadAppend
 } FileMode;
 
+File* std_in();
+File* std_out();
+
 RecordResult copy_file(String source, String dest);
 RecordResult delete_file(String path);
 

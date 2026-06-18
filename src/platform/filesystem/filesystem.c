@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "platform/machine_info.h"
@@ -7,6 +8,7 @@
 #include "platform/signals.h"
 
 #include "data/string.h"
+#include "data/stringify.h"
 #include "data/meta/array_impl.h"
 
 #if OS_FAMILY == UNIX
@@ -112,9 +114,11 @@ RecordError get_record_error_code() {
       return ErrFileInUse;
   case EINVAL:
       return ErrInvalidArgument;
-  default:
+  default: {
       // TODO: surely there's a better solution than to panic?
-      panic(mv_string("Unrecognized error code."));
+      Allocator* a = get_std_allocator();
+      panic(string_cat(mv_string("Unrecognized error code: "), string_i32(errno, a), a));
+  }
   }
 #endif
 }
@@ -311,7 +315,12 @@ FileResult open_file(String name, FileMode mode, Allocator *alloc) {
 
     // TODO (BUG): string is utf-8, but this isn't (necessarily) what
     //    the plaform supports/uses. This should be checked.
-    File* file = (File*)fopen((char*)name.bytes, mode_str);
+    // TODO (PERFORMANCE). Try use API primitives that don't require the null byte.
+    char* c_string = malloc(name.memsize + 1);
+    memcpy(c_string, name.bytes, name.memsize);
+    c_string[name.memsize] = '\0';
+    File* file = (File*)fopen(c_string, mode_str);
+    free(c_string);
     if (file) {
         return (FileResult) {.type = Ok, .file = file};
     } else {
@@ -336,16 +345,11 @@ void close_file(File *file) {
 String get_tmpdir(Allocator* a) {
 #if OS_FAMILY == UNIX
 
-    const char str[] = "/tmp";
-    String out = (String) {
-        .memsize = sizeof(str),
-        .bytes = mem_alloc(sizeof(str), a),
-    };
-    memcpy(out.bytes, str, sizeof(str));
-    return out;
+    return mk_string("/tmp", a);
 
 #elif OS_FAMILY == WINDOWS
 
+    // TODO: account for the fact that we expect NO null terminator!
     uint64_t pathlen = GetTempPath(0, NULL);
     String out = (String) {
         .memsize = pathlen,
@@ -390,6 +394,14 @@ bool write_byte(File *file, uint8_t out) {
 
 bool write_chunk(File* file, U8Array arr) {
     return !fwrite(arr.data, sizeof(uint8_t), arr.len, (FILE*)file);
+}
+
+File* std_in() {
+    return (File*) (void*)stdin;
+}
+
+File* std_out() {
+    return (File*) (void*)stdout;
 }
 
 RecordResult copy_file(String source, String dest) {

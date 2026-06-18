@@ -16,14 +16,14 @@ typedef struct {
 void render_doc(Document* doc, RenderState state, OStream* os) {
     switch (doc->type) {
     case LineDocument:
-        write_string(mv_string("\r\n"), os);
+        st_write_string(mv_string("\r\n"), os);
         for (size_t i = 0; i < state.indent; i++) {
-            write_string(mv_string(" "), os);
+            st_write_string(mv_string(" "), os);
             *state.current_column = state.indent;
         }
         break;
     case StringDocument:
-        write_string(doc->string, os);
+        st_write_string(doc->string, os);
         *state.current_column += doc->string.memsize;
         break;
     case CatDocument:
@@ -35,7 +35,7 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
         state.indent += doc->nest.indent;
         if (*state.current_column < state.indent) {
             for (uint16_t i = 0; i < state.indent - *state.current_column; i++) {
-                write_string(mv_string(" "), os);
+                st_write_string(mv_string(" "), os);
             }
             *state.current_column = state.indent;
         }
@@ -61,13 +61,13 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
         for (size_t i = 0; i < doc->docs.len; i++) {
             render_doc(doc->docs.data[i], state, os);
             if (state.flatten) {
-                if (i + 1 < doc->docs.len) write_impl(' ', os);
+                if (i + 1 < doc->docs.len) st_write_byte(' ', os);
                 *state.current_column += 1;
             } else {
                 if (i + 1 < doc->docs.len) {
-                    write_string(mv_string("\r\n"), os);
+                    st_write_string(mv_string("\r\n"), os);
                     for (size_t i = 0; i < state.indent; i++) {
-                        write_string(mv_string(" "), os);
+                        st_write_string(mv_string(" "), os);
                     }
                     *state.current_column = state.indent;
                 }
@@ -82,7 +82,7 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
                 Document* next_doc = doc->docs.data[i];
                 state.flatten = next_doc->requirement.fin == Finite
                     && next_doc->requirement.cols + *state.current_column + 1 < state.width;
-                if (i + 1 < doc->docs.len) write_string(mv_string(state.flatten ? " " : "\r\n"), os);
+                if (i + 1 < doc->docs.len) st_write_string(mv_string(state.flatten ? " " : "\r\n"), os);
             }
         }
         break;
@@ -90,9 +90,9 @@ void render_doc(Document* doc, RenderState state, OStream* os) {
         for (size_t i = 0; i < doc->docs.len; i++) {
             render_doc(doc->docs.data[i], state, os);
             if (i + 1 < doc->docs.len) {
-                write_string(mv_string("\r\n"), os);
+                st_write_string(mv_string("\r\n"), os);
                 for (size_t i = 0; i < state.indent; i++) {
-                    write_string(mv_string(" "), os);
+                    st_write_string(mv_string(" "), os);
                 }
                 *state.current_column = state.indent;
             }

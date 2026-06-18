@@ -57,9 +57,9 @@ size_t bytecount(IStream* stream);
 void reset_bytecount(IStream* stream);
 
 // ostream methods
-void write_impl(int char_literal, OStream* stream);
-void write_codepoint(uint32_t codepoint, OStream* stream);
-void write_string(String str, OStream* stream);
-void write_line(String str, OStream* stream);
+void st_write_byte(uint8_t byte, OStream* stream);
+void st_write_codepoint(uint32_t codepoint, OStream* stream);
+void st_write_string(String str, OStream* stream);
+void st_write_line(String str, OStream* stream);
 
 #endif

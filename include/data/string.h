@@ -5,6 +5,7 @@
 #include "data/array.h"
 
 // A UFT-8 Encoded String
+//  • NO NULL termination
 typedef struct String {
     size_t memsize;
     uint8_t* bytes;

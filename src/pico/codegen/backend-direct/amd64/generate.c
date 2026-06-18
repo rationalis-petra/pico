@@ -3204,11 +3204,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             U8Array instrs = get_instructions(ass);
             PtrArray nodes = mk_ptr_array(4 + (instrs.len - current_loc), a);
 
-            write_string(mv_string("Developer Debug Aid: Generated section (bytes "), get_stdout_stream());
-            write_string(string_u64(current_loc, a), get_stdout_stream());
-            write_string(mv_string(" - "), get_stdout_stream());
-            write_string(string_u64(instrs.len, a), get_stdout_stream());
-            write_string(mv_string(")\n"), get_stdout_stream());
+            st_write_string(mv_string("Developer Debug Aid: Generated section (bytes "), get_stdout_stream());
+            st_write_string(string_u64(current_loc, a), get_stdout_stream());
+            st_write_string(mv_string(" - "), get_stdout_stream());
+            st_write_string(string_u64(instrs.len, a), get_stdout_stream());
+            st_write_string(mv_string(")\n"), get_stdout_stream());
 
             for (size_t i = current_loc; i < instrs.len; i++) {
                 int len = snprintf(NULL, 0, "%02x", instrs.data[i]) + 1;
@@ -3221,7 +3221,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
              
             Document* doc = mv_hsep_doc(nodes, a);
             write_doc_formatted(doc, 120, get_formatted_stdout());
-            write_string(mv_string("\n"), get_stdout_stream());
+            st_write_string(mv_string("\n"), get_stdout_stream());
         }
         break;
     }

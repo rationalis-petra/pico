@@ -42,15 +42,15 @@ uint32_t relic_read_codepoint() {
 }
 
 void relic_write_codepoint(uint32_t point) {
-    write_codepoint(point, current_ostream);
+    st_write_codepoint(point, current_ostream);
 }
 
 void relic_write_string(String str) {
-    write_string(str, current_ostream);
+    st_write_string(str, current_ostream);
 }
 
 void relic_write_line(String str) {
-    write_line(str, current_ostream);
+    st_write_line(str, current_ostream);
 }
 
 void relic_set_terminal_bg_colour(uint8_t r, uint8_t g, uint8_t b) {
