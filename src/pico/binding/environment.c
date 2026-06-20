@@ -71,7 +71,7 @@ Module* path_all(SymbolArray path, Module* root, Module* mfor, ErrorPoint* point
     return current;
 }
 
-bool import_clause_valid(Environment *env, ImportClause clause) {
+ImportClauseStatus import_clause_valid(Environment *env, ImportClause clause) {
     Module* current = package_root_module(get_package(env->base));
 
     for (size_t i = 0; i < clause.path.len; i++) {
@@ -80,13 +80,21 @@ bool import_clause_valid(Environment *env, ImportClause clause) {
           if (e->is_module) {
               current = e->value;
           } else {
-              return false;
+            return (ImportClauseStatus) {
+                .type = ICNotModule,
+                .bad_symbol = clause.path.data[i],
+            };
           }
         } else {
-            return false;
+            return (ImportClauseStatus) {
+                .type = ICNotExists,
+                .bad_symbol = clause.path.data[i],
+            };
         }
     }
-    return true;
+    return (ImportClauseStatus) {
+        .type = ICValid,
+    };
 }
 
 void refresh_env(Environment* env) {

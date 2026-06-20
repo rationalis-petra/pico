@@ -48,7 +48,9 @@ uint32_t relic_read_codepoint() {
 String relic_read_line() {
     // TODO: change return type to 'proper' result
     String out;
-    StreamResult res = read_line(current_istream, &out);
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    StreamResult res = read_line(current_istream, &out, &a);
     if (res != StreamSuccess) {
         panic(mv_string("TODO: implement proper error handling in relic_read_line"));
     }
@@ -175,7 +177,7 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
 
     typep = mk_proc_type(pia, 0, mk_string_type(pia));
     build_read_line_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("line-codepoint"));
+    sym = string_to_symbol(mv_string("read-line"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

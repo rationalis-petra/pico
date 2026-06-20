@@ -47,6 +47,23 @@ CType build_file_result_ctype(PiAllocator* pia) {
                                                    "errcode", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong})));
 }
 
+void relic_current_directory() {
+}
+
+void build_current_dir_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 0, mk_string_ctype(pia));
+
+    convert_c_fn(relic_current_directory, &fn_ctype, type, ass, a, point); 
+}
+
+void build_set_current_dir_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1,
+                                 "path", mk_string_ctype(pia),
+                                 (CType){.sort = CSVoid});
+
+    convert_c_fn(set_current_directory, &fn_ctype, type, ass, a, point); 
+}
+
 void build_open_file_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 2,
                                  "name", mk_string_ctype(pia),
@@ -174,6 +191,22 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     clear_assembler(ass);
     e = get_def(sym, module);
     file_mode_ty = e->value;
+
+    typep = mk_proc_type(pia, 0, mk_string_type(pia));
+    build_current_dir_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("current-directory"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
+    build_set_current_dir_fn(typep, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("set-current-directory"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2, mk_string_type(pia),
                          file_mode_ty,

@@ -12,6 +12,7 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     };
     add_import_all(&imports.clauses, &ra, 1, "core");
     add_import_all(&imports.clauses, &ra, 1, "num");
+    add_import_all(&imports.clauses, &ra, 1, "data");
 
     Exports exports = (Exports) {
         .export_all = true,
@@ -123,6 +124,12 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
         "  [.= u8.=]"
         "  [.!= u8.!=])\n";
     compile_toplevel(eq_u8_trait, module, target, &point, &pi_point, region);
+
+    const char* eq_string_trait = 
+        "(def u8-eq instance (Eq string.String)"
+        "  [.= string.=]"
+        "  [.!= string.!=])\n";
+    compile_toplevel(eq_string_trait, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(abs, string_to_symbol(mv_string("order")), module);
     if (r.type == Err) panic(r.error_message);

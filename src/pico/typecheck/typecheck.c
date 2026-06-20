@@ -75,8 +75,9 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     case TLImport: {
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
-            if (!import_clause_valid(env, clause)) {
-                type_error_invalid_import(clause, top->import.range, ctx);
+            ImportClauseStatus status = import_clause_valid(env, clause);
+            if (!status.type == ICValid) {
+                type_error_invalid_import(clause, status.bad_symbol, status.type != ICNotExists, top->import.range, ctx);
             }
         }
         break;
@@ -407,6 +408,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         if (fn_type->sort == TUVar) {
             // fill in structure 
             PiType* ret = mk_uvar(ctx.pia);
+            set_type(ref, ret, ctx.tape);;
             AddrPiList args = mk_addr_list(16, ctx.pia);
             for (size_t i = 0; i < untyped.application.args.len; i++) {
                 type_infer_i(untyped.application.args.data[i], env, ctx);

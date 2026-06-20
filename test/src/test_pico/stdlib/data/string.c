@@ -1,0 +1,54 @@
+#include "test_pico/stdlib/components.h"
+#include "test_pico/helper.h"
+
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+
+void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
+    TestContext context = (TestContext) {
+        .env = env,
+        .region = region,
+        .log = log,
+        .target = target,
+    };
+
+    if (test_start(log, mv_string("str-memsize"))) {
+        uint64_t expected = 4;
+        TEST_EQ("\"test\".memsize");
+    }
+
+    if (test_start(log, mv_string("pair-fn"))) {
+        uint8_t expected = 'c';
+        TEST_EQ("(string.nth-byte 2 \"lack\")");
+    }
+
+    if (test_start(log, mv_string("eql-null"))) {
+        bool expected = true;
+        TEST_EQ("(string.= \"\" \"\")");
+    }
+    
+    if (test_start(log, mv_string("eql-true"))) {
+        bool expected = true;
+        TEST_EQ("(string.= \"str1\" \"str1\")");
+    }
+
+    if (test_start(log, mv_string("eql-prefix-false"))) {
+        bool expected = false;
+        TEST_EQ("(string.= \"str1\" \"str123\")");
+    }
+
+    if (test_start(log, mv_string("eql-same-len-false"))) {
+        bool expected = false;
+        TEST_EQ("(string.= \"test\" \"lack\")");
+    }
+
+    if (test_start(log, mv_string("not-eql-false"))) {
+        bool expected = false;
+        TEST_EQ("(string.!= \"str1\" \"str1\")");
+    }
+
+    if (test_start(log, mv_string("not-eql-true"))) {
+        bool expected = true;
+        TEST_EQ("(string.!= \"test\" \"lack\")");
+    }
+}

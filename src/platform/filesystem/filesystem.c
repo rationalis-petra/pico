@@ -280,8 +280,9 @@ String get_current_directory(Allocator* a) {
 #endif
 }
 
+// TODO: add error return type 
 void set_current_directory(String path) {
-// TODO: convert to valid path (consider encoding)
+    // TODO: convert to valid path (consider encoding)
     char* c_path = to_c_string(path, get_std_allocator());
 #if OS_FAMILY == WINDOWS
     SetCurrentDirectory(c_path);

@@ -330,8 +330,38 @@ StreamResult next(IStream* stream, uint32_t* out) {
     }
 }
 
-StreamResult read_line(IStream* stream, String* out) {
-    panic(mv_string("read_line not implemented"));
+StreamResult read_line(IStream* stream, String* out, Allocator* a) {
+    size_t num_bytes = 0;
+    size_t total_bytes = 128;
+    uint8_t* bytes = mem_alloc(num_bytes * sizeof(uint8_t), a);
+
+    uint32_t codepoint = 0;
+    while (codepoint != '\n') {
+        StreamResult res = next(stream, &codepoint);
+        if (res != StreamSuccess) {
+            mem_free(bytes, a);
+            return res;
+        }
+
+        uint8_t in_bytes[4];
+        uint8_t num_in_bytes;
+        encode_point_utf8(in_bytes, &num_in_bytes, codepoint);
+        if (num_bytes + num_in_bytes > total_bytes) {
+            total_bytes *= 2;
+            bytes = mem_realloc(bytes, total_bytes, a);
+        }
+        for (size_t i = 0; i < num_in_bytes; i++) {
+            bytes[num_bytes + i] = in_bytes[i];
+        }
+        num_bytes += num_in_bytes;
+    }
+    *out = (String) {
+        .memsize = num_bytes,
+        .bytes = mem_alloc(num_bytes * sizeof(uint8_t), a),
+    };
+    memcpy(out->bytes, bytes, num_bytes);
+    mem_free(bytes, a);
+    return StreamSuccess;
 }
 
 size_t bytecount(IStream *stream) {
@@ -343,12 +373,6 @@ void reset_bytecount(IStream *stream) {
     }
     stream->bytecount = 0;
 }
-
-//string get_n(istream* stream, size_t nchars);
-//string get_all(istream* stream);
-//string get_until(istream* stream, uint32_t codepoint);
-
-
 
 //--------------------------- ostream definitions ---------------------------//
 
