@@ -59,6 +59,11 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  (struct String [.bytes new-bytes] [.memsize (u64.+ ascii.len 1)]))";
     compile_toplevel(from_ascii, module, target, &point, &pi_point, region);
 
+    const char *str_delete =
+        "(def delete proc [(lhs String)] \n"
+        "  memory.free lhs.bytes)";
+    compile_toplevel(str_delete, module, target, &point, &pi_point, region);
+
     const char *str_eql =
         "(def = proc [(lhs String) (rhs String)] \n"
         "  (if (u64.!= lhs.memsize rhs.memsize)  \n"
