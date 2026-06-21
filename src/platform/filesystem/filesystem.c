@@ -90,9 +90,11 @@ struct Directory {
 
 RecordError get_record_error_code() {
     // TODO: account for all documented possible error codes.
+    int err = GetLastError();
 #if OS_FAMILY == WINDOWS
-  switch (GetLastError()) {
+  switch (err) {
   case ERROR_FILE_NOT_FOUND:
+  case ERROR_PATH_NOT_FOUND:
       return ErrDoesNotExist;
   case ERROR_ACCESS_DENIED:
       return ErrPermissionDenied;
@@ -100,9 +102,12 @@ RecordError get_record_error_code() {
       return ErrFileInUse; // TODO (INVESTIGATE) is this correct?
   case ERROR_ALREADY_EXISTS:
       return ErrAlreadyExists;
+  case ERROR_INVALID_NAME:
+      return ErrInvalidArgument;
   default:
       // TODO: surely there's a better solution than to panic?
-      panic(mv_string("Unrecognized error code."));
+      Allocator* a = get_std_allocator();
+      panic(string_cat(mv_string("Unrecognized error code: "), string_i32(err, a), a));
   }
 #else
   switch (errno) {
@@ -125,9 +130,10 @@ RecordError get_record_error_code() {
 
 DirectoryResult open_directory(String name, Allocator* alloc) {
     // TODO: what encoding to filenames use?
+    char* dirstr = to_c_string(name, get_std_allocator());
 #if OS_FAMILY == WINDOWS
 // TODO: the name here is ascii, but our strings are UTF-8!
-    HANDLE handle = CreateFileA((const char*)name.bytes,
+    HANDLE handle = CreateFileA(dirstr,
         0, // Windows is weird, so we don't need to requirest any permissions!
         0, // Don't share
         NULL, // Default security attributes
@@ -135,6 +141,7 @@ DirectoryResult open_directory(String name, Allocator* alloc) {
         FILE_FLAG_BACKUP_SEMANTICS, // Needed for directories
         NULL // No template
     );
+    mem_free(dirstr, get_std_allocator());
 
     if (handle != INVALID_HANDLE_VALUE) {
         Directory* dir = mem_alloc(sizeof(Directory), alloc);
@@ -147,7 +154,6 @@ DirectoryResult open_directory(String name, Allocator* alloc) {
         return (DirectoryResult) {.type = Err, .error = get_record_error_code()};
     }
 #else
-    char* dirstr = to_c_string(name, get_std_allocator());
     DIR* handle = opendir(dirstr);
     mem_free(dirstr, get_std_allocator());
     if (handle) {
@@ -354,12 +360,9 @@ String get_tmpdir(Allocator* a) {
 
     // TODO: account for the fact that we expect NO null terminator!
     uint64_t pathlen = GetTempPath(0, NULL);
-    String out = (String) {
-        .memsize = pathlen,
-        .bytes = mem_alloc(pathlen, a),
-    };
-    GetTempPath(out.memsize, (char*) out.bytes);
-    return out;
+    char* path = mem_alloc(pathlen, a);
+    GetTempPath(pathlen, path);
+    return mv_string(path);
 
 #else
 #error "get_tmpdir not supported for this os"
@@ -448,9 +451,15 @@ RecordResult copy_file(String source, String dest) {
 
     return result;
 #elif OS_FAMILY == WINDOWS
-    if (CopyFile((LPCSTR)source.bytes, (LPCSTR)dest.bytes, false)) {
+    char* c_source = to_c_string(source, get_std_allocator());
+    char* c_dest = to_c_string(dest, get_std_allocator());
+    if (CopyFile(c_source, c_dest, false)) {
+        mem_free(c_dest, get_std_allocator());
+        mem_free(c_source, get_std_allocator());
         return (RecordResult){.type = Ok};
     } else {
+        mem_free(c_dest, get_std_allocator());
+        mem_free(c_source, get_std_allocator());
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
 #else
@@ -459,8 +468,8 @@ RecordResult copy_file(String source, String dest) {
 }
 
 RecordResult delete_file(String path) {
-    char* c_path = to_c_string(path, get_std_allocator());
 #if OS_FAMILY == UNIX
+    char* c_path = to_c_string(path, get_std_allocator());
     if (unlink(c_path) == 0) {
         mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Ok};
@@ -469,11 +478,12 @@ RecordResult delete_file(String path) {
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
 #elif OS_FAMILY == WINDOWS
-    if (DeleteFile(c_path)) {
-        mem_free(c_path, get_std_allocator());
+    char* c_path = to_c_string(path, get_std_allocator());
+    bool success = DeleteFile(c_path);
+    mem_free(c_path, get_std_allocator());
+    if (success) {
         return (RecordResult){.type = Ok};
     } else {
-        mem_free(c_path, get_std_allocator());
         return (RecordResult){.type = Err, .error = get_record_error_code()};
     }
 #else
@@ -498,7 +508,6 @@ RecordResult set_permissions(String file, FilePermissions perms) {
 #error "delete file not supported for this os"
 #endif
 }
-
 
 RecordResult create_directory(String dirname) {
     char* c_dirname = to_c_string(dirname, get_std_allocator());
@@ -577,7 +586,6 @@ static int unlink_cb(const char *fpath, const struct stat *sb, int typeflag, str
     return rv;
 }
 #endif
-
 
 RecordResult delete_directory(String dirname, bool recursive) {
     char* c_dirname = to_c_string(dirname, get_std_allocator());

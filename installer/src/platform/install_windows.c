@@ -18,15 +18,15 @@
 #define CHECK_RESULT(result, action, target)                                               \
     if (result.type == Err)                                                                \
     {                                                                                      \
-        write_string(mv_string("failure: while "), cout);                                  \
-        write_string(mv_string(action), cout);                                             \
-        write_string(mv_string(" "), cout);                                                \
-        write_string(target, cout);                                                        \
-        write_string(mv_string("\n  error code: "), cout);                                 \
-        write_string(string_u64(res.error, &a), cout);                                     \
-        write_string(mv_string("\n"), cout);                                               \
+        st_write_string(mv_string("failure: while "), cout);                                  \
+        st_write_string(mv_string(action), cout);                                             \
+        st_write_string(mv_string(" "), cout);                                                \
+        st_write_string(target, cout);                                                        \
+        st_write_string(mv_string("\n  error: "), cout);                                 \
+        st_write_string(error_description(res.error), cout);                                     \
+        st_write_string(mv_string("\n"), cout);                                               \
         delete_arena_allocator(arena);                                                     \
-        write_string(mv_string("\nInstallation Aborted. Press Enter to Complete."), cout); \
+        st_write_string(mv_string("\nInstallation Aborted. Press Enter to Complete."), cout); \
         uint32_t codepoint;                                                                \
         next(cin, &codepoint);                                                             \
         return 1;                                                                          \
@@ -95,14 +95,14 @@ int install_windows(int argc, char **argv) {
     // it isn't
     StringOption app_data_dir = get_env_var(mv_string("LOCALAPPDATA"));
     if (app_data_dir.type == None) {
-        write_string(mv_string("Couldn't find env var 'LOCALAPDATA'\n"), cout);
+        st_write_string(mv_string("Couldn't find env var 'LOCALAPDATA'\n"), cout);
         return 1;
     }
 
     String bin_dir = path_cat(app_data_dir.val, mv_string("Programs\\pico"), &a);
     if (!record_exists(bin_dir)) {
-         res = create_directory(bin_dir);
-         CHECK_RESULT(res, "creating", bin_dir);
+        res = create_directory(bin_dir);
+        CHECK_RESULT(res, "creating", bin_dir);
     }
 
     // TODO (BUG): check $PATH for our directory first...
@@ -111,14 +111,14 @@ int install_windows(int argc, char **argv) {
     if (path.type == Some && !is_substring(path.val, bin_dir)) {
         Result res = add_to_path(bin_dir, &a);
         if (res.type == Err) {
-            write_string(mv_string("Failed to add bin directory to path\n"), cout);
+            st_write_string(mv_string("Failed to add bin directory to path\n"), cout);
             delete_arena_allocator(arena);
         }
     }
 
-    write_string(mv_string("Folder '"), cout);
-    write_string(bin_dir, cout);
-    write_string(mv_string("' has been added to %PATH% (if it wasn't already there).\n"), cout);
+    st_write_string(mv_string("Folder '"), cout);
+    st_write_string(bin_dir, cout);
+    st_write_string(mv_string("' has been added to %PATH% (if it wasn't already there).\n"), cout);
 
     // First: copy binaries (assests/{pico, keeper}) to ~/.local/bin
     String pico_dest = path_cat(bin_dir, mv_string("pico.exe"), &a);
@@ -148,9 +148,9 @@ int install_windows(int argc, char **argv) {
     res = set_permissions(keeper_dest, exec_perms);
     CHECK_RESULT(res, "settings permissions of", keeper_dest);
 
-    write_string(mv_string("Programs have been copied to folder '"), cout);
-    write_string(bin_dir, cout);
-    write_string(mv_string("'\n"), cout);
+    st_write_string(mv_string("Programs have been copied to folder '"), cout);
+    st_write_string(bin_dir, cout);
+    st_write_string(mv_string("'\n"), cout);
 
     String pico_data_dir = path_cat(app_data_dir.val, mv_string("pico"), &a);
     if (!record_exists(pico_data_dir)) {
@@ -176,11 +176,11 @@ int install_windows(int argc, char **argv) {
     res = copy_directory(archive_base_dir, archive_base_out_dir);
     CHECK_RESULT(res, "copying", archive_base_dir);
 
-    write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
-    write_string(archive_dir, cout);
-    write_string(mv_string("'\n"), cout);
+    st_write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
+    st_write_string(archive_dir, cout);
+    st_write_string(mv_string("'\n"), cout);
     
-    write_string(mv_string("\nInstallation Complete. Press Enter to Quit.\n"), cout);
+    st_write_string(mv_string("\nInstallation Complete. Press Enter to Quit.\n"), cout);
     uint32_t codepoint;
     next(cin, &codepoint);
 
