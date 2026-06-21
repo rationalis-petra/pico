@@ -16,7 +16,6 @@
 #include "app/dev/module_load.h"
 
 void load_module_from_istream(IStream* in, FormattedOStream* serr, String filename, Package* package, Module* parent, PiAllocator module_allocator, RegionAllocator* region) {
-
     // Step 1: Setup necessary state
     Allocator ra = ra_to_gpa(region);
     RegionAllocator* iter_region = make_subregion(region);
@@ -36,6 +35,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
     ModuleHeader* volatile header = NULL;
     Module* volatile module = NULL;
     Module* volatile old_module = NULL;
+    volatile String vol_filename = filename; // Use this so that when we use longjmp, we don't get odd filename behaviour
 
     IStream* cin = mk_capturing_istream(in, &ra);
     reset_bytecount(cin);
@@ -158,7 +158,7 @@ void load_module_from_istream(IStream* in, FormattedOStream* serr, String filena
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cin), serr, filename, &itera);
+    display_error(pi_point.multi, *get_captured_buffer(cin), serr, vol_filename, &itera);
     goto on_error_generic;
 
  on_error:
@@ -192,6 +192,8 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
     Allocator itera = ra_to_gpa(subregion);
     PiAllocator pia = convert_to_pallocator(&itera);
     Logger* logger = NULL;
+
+    volatile String vol_filename = filename; // Use this so that when we use longjmp, we don't get odd filename behaviour
 
     ErrorPoint point;
     if (catch_error(point)) goto on_error;
@@ -272,7 +274,7 @@ void run_script_from_istream(IStream* in, FormattedOStream* serr, String filenam
     return;
 
  on_pi_error:
-    display_error(pi_point.multi, *get_captured_buffer(cin), serr, filename, &itera);
+    display_error(pi_point.multi, *get_captured_buffer(cin), serr, vol_filename, &itera);
     goto on_error_generic;
 
  on_error:
