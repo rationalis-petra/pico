@@ -2319,6 +2319,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     }
     case TProc:
         return false;
+    case TArray:
+        // TODO: update me when dimension can vary 
+        return is_variable_for_recur(ty->array.element, vars, shadowed);
     case TStruct:
         for (size_t i = 0; i < ty->structure.fields.len; i++) {
             if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))

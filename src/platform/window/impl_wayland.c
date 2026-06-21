@@ -345,7 +345,9 @@ PlWindow *pl_create_window(String name, int width, int height) {
 
     // TODO (INVESTIGATE BUG): check the encoding used by wayland - if not
     // UTF-8, convert!
-    xdg_toplevel_set_title(top, (char*)name.bytes);
+    char* c_name = to_c_string(name, wsa);
+    xdg_toplevel_set_title(top, c_name);
+    mem_free(c_name, wsa);
 
     wl_surface_commit(surface); // TOOD: necessary?
     push_ptr(window, &windows);

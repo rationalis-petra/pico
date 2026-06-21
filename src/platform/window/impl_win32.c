@@ -110,16 +110,18 @@ void pl_teardown_window_system() {
 
 PlWindow* pl_create_window(String name, int width, int height) {
     PlWindow *win = mem_alloc(sizeof(PlWindow), wsa);
+    char* c_name = to_c_string(name, wsa);
     HWND window = CreateWindowEx(0, // styles (optional)
                                  wind_class_name,
-                                 (char*)name.bytes,
+                                 c_name,
                                  WS_OVERLAPPEDWINDOW, // window style/type
                                  CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,  // position/size
                                  NULL, // parent
                                  NULL, // Menu
                                  app_handle,
                                  win // This will get passed into the WindowProc function as LPARAM
-                                );
+                                 );
+    mem_free(c_name, wsa);
     if (window) {
         ShowWindow(window, SW_SHOWDEFAULT);
         return win;
