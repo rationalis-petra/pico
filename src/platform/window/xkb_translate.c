@@ -446,6 +446,7 @@ static uint32_t invert_key[] = {
     0,/* KEY_RPAREN, */
     KEY_MINUS,
     KEY_KPPLUS,
+    0,/* Divide */
 
     0,/* KEY_LBRACE, */
     0,/* KEY_RBRACE, */
@@ -457,6 +458,7 @@ static uint32_t invert_key[] = {
 
     KEY_SPACE,
 
+    0 /*KEY_SHIFT*/,
     KEY_ENTER,
     KEY_BACKSPACE,
 };
