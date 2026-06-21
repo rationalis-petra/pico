@@ -90,8 +90,8 @@ struct Directory {
 
 RecordError get_record_error_code() {
     // TODO: account for all documented possible error codes.
-    int err = GetLastError();
 #if OS_FAMILY == WINDOWS
+  int err = GetLastError();
   switch (err) {
   case ERROR_FILE_NOT_FOUND:
   case ERROR_PATH_NOT_FOUND:
@@ -560,6 +560,9 @@ RecordResult copy_directory_recur(String source, String dest) {
             }
         }
 
+        for (size_t i = 0; i < children.len; i++) {
+            mem_free(children.data[i].name.bytes, a);
+        }
         sdelete_dirent_array(children);
         close_directory(dir);
         return (RecordResult){.type = Ok};

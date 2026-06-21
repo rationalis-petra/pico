@@ -114,6 +114,7 @@ int install_unix(int argc, char **argv) {
     st_write_string(mv_string("'\n"), cout);
     
     st_write_string(mv_string("Done!\n"), cout);
+    delete_arena_allocator(arena);
     return 0;
 }
 

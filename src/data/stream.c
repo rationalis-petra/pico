@@ -336,8 +336,8 @@ StreamResult read_line(IStream* stream, String* out, Allocator* a) {
     uint8_t* bytes = mem_alloc(num_bytes * sizeof(uint8_t), a);
 
     uint32_t codepoint = 0;
+    StreamResult res = next(stream, &codepoint);
     while (codepoint != '\n') {
-        StreamResult res = next(stream, &codepoint);
         if (res != StreamSuccess) {
             mem_free(bytes, a);
             return res;
@@ -354,6 +354,7 @@ StreamResult read_line(IStream* stream, String* out, Allocator* a) {
             bytes[num_bytes + i] = in_bytes[i];
         }
         num_bytes += num_in_bytes;
+        res = next(stream, &codepoint);
     }
     *out = (String) {
         .memsize = num_bytes,

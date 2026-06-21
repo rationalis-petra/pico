@@ -184,6 +184,7 @@ int install_windows(int argc, char **argv) {
     uint32_t codepoint;
     next(cin, &codepoint);
 
+    delete_arena_allocator(arena);
     return 0;
 }
 
