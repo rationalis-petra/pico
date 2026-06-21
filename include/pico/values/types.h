@@ -4,6 +4,7 @@
 #include "data/array.h"
 #include "data/result.h"
 #include "components/pretty/document.h"
+#include "components/logging/structured_logging.h"
 
 #include "pico/data/client/list.h"
 #include "pico/data/client/symbol_list.h"
@@ -19,6 +20,8 @@ typedef struct PiType PiType;
 // Forward declaration: these types are defined and used
 // in unify.c
 typedef struct UVarType UVarType;
+typedef struct UVarDim UVarDim;
+typedef struct Dimension Dimension;
 
 typedef enum {
     Int_8  = 0b000,
@@ -44,6 +47,7 @@ typedef enum {
 typedef enum {
     TPrim,
     TProc,
+    TArray,
     TStruct,
     TEnum,
     TReset,
@@ -81,6 +85,25 @@ typedef struct {
     PiType* ret;
 } ProcType;
 
+struct UVarDim {
+    Dimension* target;
+};
+
+struct Dimension {
+    bool is_uvar;
+    union {
+        uint64_t val;
+        UVarDim uvar;
+    };
+};
+
+PICO_LIST_HEADER(Dimension, dim, Dim);
+
+typedef struct {
+    DimPiList dimensions;
+    PiType* element;
+} ArrayType;
+
 typedef struct {
     SymAddrPiAMap fields;
     bool packed;
@@ -106,6 +129,14 @@ typedef struct {
 typedef struct {
     uint64_t instance_of;
     Symbol name;
+
+    // Optional, only used for instances that are parametric, i.e.
+    // implementing to-string for a list only if implemented for 
+    // contents.
+    SymbolPiList over; 
+    AddrPiList implicits; 
+
+    // The types the instance is implemented for.
     AddrPiList args; 
     SymAddrPiAMap fields; 
 } TraitInstance; 
@@ -152,6 +183,7 @@ struct PiType {
     PiType_t sort; 
     union {
         PrimType prim;
+        ArrayType array;
         ProcType proc;
         StructType structure;
         EnumType enumeration;
@@ -203,7 +235,7 @@ static const PrettyValParams default_pvp = {
 Document* pretty_pi_value(void* val, PiType* types, PrettyValParams params, Allocator* a);
 Document* pretty_type(PiType* type, PrettyTypeParams params, Allocator* a);
 
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a);
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* log, PiAllocator* pia, Allocator* a);
 bool pi_type_eql(PiType* lhs, PiType* rhs, Allocator* a);
 bool pi_value_eql(PiType* type, void* lhs, void* rhs, Allocator* a);
 
@@ -211,6 +243,7 @@ bool is_variable_for(PiType *ty, SymbolArray vars);
 
 size_t pi_size_of(PiType type);
 size_t pi_align_of(PiType type);
+size_t pi_instance_size_of(PiType type);
 
 Result_t pi_maybe_align_of(PiType type, size_t* out);
 Result_t pi_maybe_size_of(PiType type, size_t* out);
@@ -258,6 +291,9 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 PiType* mk_prim_type(PiAllocator* pia, PrimType t);
 PiType* mk_dynamic_type(PiAllocator* pia, PiType* t);
 
+// Sample usage: mk_array_type(a, 2, dim1, dim2, elt_ty)
+PiType* mk_array_type(PiAllocator* pia, size_t ndims, ...);
+
 // Sample usage: mk_proc_type(a, 2, arg_1_ty, arg_2_ty, ret_ty)
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...);
 
@@ -303,6 +339,5 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
 // Types from the standard library
 // Struct [.len U64] [.capacity U64] [.bytes Address]
 PiType* mk_string_type(PiAllocator* pia);
-
 
 #endif

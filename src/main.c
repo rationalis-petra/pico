@@ -20,8 +20,7 @@
 #include "app/help_string.h"
 #include "app/repl.h"
 
-static const char* version = "0.2.1";
-
+static const char* version = "0.2.3";
 
 int main(int argc, char** argv) {
     // Setup
@@ -42,13 +41,13 @@ int main(int argc, char** argv) {
 
 #ifdef WINDOW_SYSTEM
     if (pl_init_window_system(stdalloc)) {
-        write_string(mv_string("Warning: failed to init window system!\n"), cout);
+        st_write_string(mv_string("Warning: failed to init window system!\n"), cout);
     }
 #endif
 
 #ifdef USE_VULKAN
     if (init_hedron(stdalloc)) {
-        write_string(mv_string("Warning: failed to init hedron!\n"), cout);
+        st_write_string(mv_string("Warning: failed to init hedron!\n"), cout);
     }
 #endif
 
@@ -88,12 +87,12 @@ int main(int argc, char** argv) {
             .is_eval = false,
         };
 
-        write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
-        write_line(mv_string(version), cout);
-        write_string(mv_string("\n"), cout);
+        st_write_string(mv_string("Pico Relic Compiler\n  version: "), cout);
+        st_write_line(mv_string(version), cout);
+        st_write_string(mv_string("\n"), cout);
 
         if (command.repl.interactive) { 
-            write_line(mv_string("Press 'Ctrl + q' to quit"), cout);
+            st_write_line(mv_string("Press 'Ctrl + q' to quit"), cout);
             terminal_set_raw_mode(true);
             while (repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
                 reset_subregion(subregion);
@@ -116,9 +115,9 @@ int main(int argc, char** argv) {
             
             delete_istream(fin, stdalloc);
         } else {
-            write_string(mv_string("Failed to open file: "), cout);
-            write_string(command.script.filename, cout);
-            write_string(mv_string("\n"), cout);
+            st_write_string(mv_string("Failed to open file: "), cout);
+            st_write_string(command.script.filename, cout);
+            st_write_string(mv_string("\n"), cout);
         }
         break;
     }
@@ -140,22 +139,22 @@ int main(int argc, char** argv) {
         write_help_string(get_formatted_stdout());
         break;
     case CVersion:
-        write_string(mv_string("Pico Relic Compiler - Version "), cout);
-        write_string(mv_string(version), cout);
-        write_string(mv_string("\n"), cout);
-        write_string(mv_string("target: x86_64\n"), cout);
+        st_write_string(mv_string("Pico Relic Compiler - Version "), cout);
+        st_write_string(mv_string(version), cout);
+        st_write_string(mv_string("\n"), cout);
+        st_write_string(mv_string("target: x86_64\n"), cout);
         break;
     case CAtlas:
         run_atlas(base, command.for_atlas, get_formatted_stdout());
         sdelete_string_array(command.for_atlas);
         break;
     case CInvalid:
-        write_string(command.error_message, cout);
-        write_string(mv_string("\n"), cout);
+        st_write_string(command.error_message, cout);
+        st_write_string(mv_string("\n"), cout);
         break;
     default:
-        write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
-        write_string(mv_string("\n"), cout);
+        st_write_string(mv_string("Invalid Command Produced by parse_command!"), cout);
+        st_write_string(mv_string("\n"), cout);
         break;
     }
 

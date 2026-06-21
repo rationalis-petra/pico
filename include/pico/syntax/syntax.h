@@ -55,6 +55,8 @@ typedef enum {
     SConstructor,
     SVariant,
     SMatch,
+    SArray,
+    SArrayElt,
     SStructure,
     SProjector,
     SInstance,
@@ -89,6 +91,7 @@ typedef enum {
 
     // Types & Type formers
     SProcType,
+    SArrayType,
     SStructType,
     SEnumType,
     SResetType,
@@ -214,6 +217,16 @@ typedef struct {
     SynRef val;
     ClauseArray clauses;
 } SynMatch;
+
+typedef struct {
+    U64Array dimensions;
+    SynArray elements;
+} SynMkArray;
+
+typedef struct {
+    SynArray index;
+    SynRef array;
+} SynArrayElt;
 
 typedef struct {
     Option_t has_base;
@@ -370,6 +383,11 @@ typedef struct {
 } SynProcType;
 
 typedef struct {
+    U64Array dimensions;
+    SynRef element;
+} SynArrayType;
+
+typedef struct {
     SymSynAMap fields;
     bool packed;
 } SynStructType;
@@ -439,6 +457,8 @@ struct Syntax {
         SynConstructor constructor;
         SynVariant variant;
         SynMatch match;
+        SynMkArray array;
+        SynArrayElt array_elt;
         SynStructure structure;
         SynProjector projector;
         SynInstance instance;
@@ -468,6 +488,7 @@ struct Syntax {
         SynOffsetOf offset_of;
 
         SynProcType proc_type;
+        SynArrayType array_type;
         SynStructType struct_type;
         SynEnumType enum_type;
         SynResetType reset_type;

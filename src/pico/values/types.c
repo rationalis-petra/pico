@@ -6,6 +6,7 @@
 #include "data/string.h"
 #include "data/result.h"
 
+#include "pico/data/client/meta/list_impl.h"
 #include "pico/data/symbol_array.h"
 #include "pico/data/rename_array.h"
 #include "components/pretty/standard_types.h"
@@ -13,6 +14,8 @@
 #include "pico/typecheck/unify.h"
 #include "pico/values/types.h"
 #include "pico/values/values.h"
+
+PICO_LIST_COMMON_IMPL(Dimension, dim, Dim);
 
 struct UVarGenerator {
     uint64_t counter;
@@ -45,6 +48,11 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         for (size_t i = 0; i < t.proc.args.len; i++)
             delete_pi_type_p(t.proc.args.data[i], pia);
         sdelete_addr_list(t.proc.args);
+        break;
+    }
+    case TArray: {
+        delete_pi_type_p(t.array.element, pia);
+        sdelete_dim_list(t.array.dimensions);
         break;
     }
     case TStruct: {
@@ -99,6 +107,10 @@ void delete_pi_type(PiType t, PiAllocator* pia) {
         break;
     }
     case TTraitInstance: {
+        sdelete_sym_list(t.instance.over);
+        for (size_t i = 0; i < t.instance.implicits.len; i++)
+            delete_pi_type_p(t.instance.implicits.data[i], pia);
+        sdelete_addr_list(t.instance.implicits);
         for (size_t i = 0; i < t.instance.args.len; i++)
             delete_pi_type_p(t.instance.args.data[i], pia);
         sdelete_addr_list(t.instance.args);
@@ -182,6 +194,11 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         out.proc.implicits = copy_addr_list(t.proc.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.proc.args = copy_addr_list(t.proc.args, (TyCopier)copy_pi_type_p, pia);
         break;
+    case TArray: {
+        out.array.element = copy_pi_type_p(t.array.element, pia); 
+        out.array.dimensions = scopy_dim_list(t.array.dimensions, pia);
+        break;
+    }
     case TStruct:
         out.structure.packed = t.structure.packed;
         out.structure.fields = copy_sym_addr_piamap(t.structure.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
@@ -206,6 +223,8 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
     case TTraitInstance:
         out.instance.instance_of = t.instance.instance_of;
         out.instance.name = t.instance.name;
+        out.instance.over = scopy_sym_list(t.instance.over, pia);
+        out.instance.implicits = copy_addr_list(t.instance.implicits,  (TyCopier)copy_pi_type_p, pia);
         out.instance.args = copy_addr_list(t.instance.args,  (TyCopier)copy_pi_type_p, pia);
         out.instance.fields = copy_sym_addr_piamap(t.instance.fields, symbol_id, (TyCopier)copy_pi_type_p, pia);
         break;
@@ -255,7 +274,15 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
         break;
 
     case TUVar:
-        out.uvar = copy_uvar(t.uvar, pia);
+        // TODO (BUG): pi_type_subst copies the type before doing a
+        //   substitution, and substitution happens as part of unification, 
+        //   in particular, when a uvar is instantiated, the substititions are
+        //   propagated in. This can lead to a uvar being copied, cutting a logical
+        //   like we wish to be there. This part of the logic (in uvar_subst,
+        //   towards the end) should be replaced by something that does
+        //   appropriate analysis. Then the copy below may be uncommented.
+        // out.uvar = copy_uvar(t.uvar, pia);
+        out.uvar = t.uvar; 
         break;
     case TPrim:
         out.prim = t.prim;
@@ -274,7 +301,7 @@ PiType copy_pi_type(PiType t, PiAllocator* pia) {
 Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Allocator* a) {
     Document* out = NULL;
     switch (type->sort) {
-    case TPrim:
+    case TPrim: {
         switch (type->prim) {
         case Unit:  {
             out = mk_str_doc(mv_string(":unit"), a);
@@ -363,12 +390,65 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         }
         }
         break;
+    }
     case TProc: {
         void** addr = (void**) val;
         PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mk_str_doc(mv_string("proc"), a), &nodes);
         push_ptr(pretty_ptr(*addr, a), &nodes);
         out = mk_paren_doc("#<", ">", mv_sep_doc(nodes, a), a);
+        break;
+    }
+    case TArray: {
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
+        U64Array dims = mk_zero_index(type->array.dimensions.len, a);
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            if (type->array.dimensions.data[i].is_uvar) {
+                panic(mv_string("Cannot print array when type has undefined ."));
+            }
+            push_u64(type->array.dimensions.data[i].val, &dims);
+        }
+
+        U64Array index = mk_zero_index(dims.len, a);
+        PtrArray array_stack = mk_ptr_array(dims.len, a);
+        for (size_t i = 0; i < dims.len; i++) {
+            PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+            *arr = mk_ptr_array(dims.data[i], a);
+            push_ptr(arr, &array_stack);
+        }
+        PiType* elt_type = type->array.element;
+        size_t elt_offset = pi_size_align(pi_size_of(*elt_type), pi_align_of(*elt_type));
+        while (index_less(index, dims)) {
+            size_t base = index_offset(index, dims);
+            size_t inner_len = dims.data[dims.len - 1];
+            PtrArray* inner_nodes = array_stack.data[array_stack.len - 1];
+            for (size_t i = 0; i < inner_len; i++) {
+                size_t index = base + i;
+                push_ptr(pretty_pi_value(val + (index * elt_offset), elt_type, params, a), inner_nodes);
+            }
+            index.data[dims.len - 1] = inner_len;
+
+            // We are done, now increment the index!
+            size_t level = 1;
+            uint64_t curr_idx = index.data[dims.len - level];
+            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
+                if (level + 1 < dims.len) {
+                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
+                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
+                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
+                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
+                }
+
+                index.data[dims.len - level] = 0;
+                level++;
+                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+            }
+            index.data[dims.len - level] = curr_idx + 1;
+        }
+        PtrArray* array_nodes = array_stack.data[0];
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
         break;
     }
     case TUVar:
@@ -651,6 +731,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         if (out == NULL) panic(mv_string("Invalid type provided to pretty_type."));
         out = mv_style_doc(pstyle, out, a);
         break;
+
     case TProc: {
         PtrArray head_nodes = mk_ptr_array(4, a);
         push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Proc", a)), a), a), &head_nodes);
@@ -672,6 +753,26 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type_internal(type->proc.ret, ctx, a), a), &nodes);
 
+        out = mv_sep_doc(nodes, a);
+        if (should_wrap) out = mk_paren_doc("(", ")", out, a);
+        break;
+    }
+    case TArray: {
+        PtrArray nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mv_str_doc((mk_string("Array", a)), a), a), &nodes);
+
+        PtrArray dim_nodes = mk_ptr_array(type->array.dimensions.len, a);
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            Dimension dim = type->array.dimensions.data[i];
+            if (dim.is_uvar) {
+                push_ptr(mk_cstr_doc("?", a), &dim_nodes);
+            } else {
+                push_ptr(pretty_u64(dim.val, a), &dim_nodes);
+            }
+        }
+        push_ptr(mv_nest_doc(2, mv_group_doc(mk_paren_doc("[", "]", mv_sep_doc(dim_nodes, a), a), a), a), &nodes);
+
+        push_ptr(pretty_type_internal(type->array.element, ctx, a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -1119,6 +1220,26 @@ Result_t pi_maybe_size_of(PiType type, size_t* out) {
     case TProc:
         *out = ADDRESS_SIZE;
         return Ok;
+    case TArray: {
+        size_t align = 1;
+        size_t size = 1;
+        Result_t res = pi_maybe_size_of(*(PiType*)type.array.element, &size);
+        if (res != Ok) return res;
+        res = pi_maybe_align_of(*(PiType*)type.array.element, &align);
+        if (res != Ok) return res;
+        *out = pi_size_align(size, align);
+        size_t total_len = 1;
+        for (size_t i = 0; i < type.array.dimensions.len; i++) {
+            Dimension dim = type.array.dimensions.data[i]; 
+            if (dim.is_uvar) {
+                panic(mv_string("Cannot get size of array: dimensions are not resolved."));
+            } else {
+                total_len *= dim.val;
+            }
+        }
+        *out = *out * total_len;
+        return Ok;
+    }
     case TStruct: {
         size_t align = 1;
         size_t total = 0; 
@@ -1237,6 +1358,14 @@ size_t pi_align_of(PiType type) {
     return out;
 }
 
+size_t pi_instance_size_of(PiType type) {
+    PiType as_struct = {
+        .sort = TStruct,
+        .structure.fields = type.instance.fields,
+    };
+    return pi_size_of(as_struct);
+}
+
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
     switch (type.sort) {
     case TPrim:
@@ -1276,6 +1405,8 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     case TProc:
         *out = sizeof(uint64_t);
         return Ok;
+    case TArray:
+        return pi_maybe_align_of(*type.array.element, out);
     case TStruct: {
         // TODO (INVESTIGATE BUG): determine how we calculate alignment of
         //   packed struct? is it minimum of all fields?
@@ -1431,7 +1562,7 @@ PiType* unname_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* 
         if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
             sym_ptr_bind(ty->named.name, ty, &binds);
-            ty = pi_type_subst(ty->named.type, binds, pia, a);
+            ty = pi_type_subst(ty->named.type, binds, NULL, pia, a);
         } else if (ty->sort == TUVar) {
             PiType* maybe_ty = try_get_uvar(ty->uvar);
             unwrapping = maybe_ty ? true : false;
@@ -1452,7 +1583,7 @@ PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* 
         } else if (ty->sort == TNamed) {
             SymPtrAssoc binds = mk_sym_ptr_assoc(1, a);
             sym_ptr_bind(ty->named.name, ty, &binds);
-            ty = pi_type_subst(ty->named.type, binds, pia, a);
+            ty = pi_type_subst(ty->named.type, binds, NULL, pia, a);
         } else if (ty->sort == TUVar) {
             PiType* maybe_ty = try_get_uvar(ty->uvar);
             unwrapping = maybe_ty ? true : false;
@@ -1482,72 +1613,82 @@ PiType* strip_type(PiType *ty) {
     return ty;
 }
 
-void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Allocator* a) {
+void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAllocator* pia, Logger* logger, Allocator* a) {
     switch (body->sort) {
     case TPrim: break;
     case TProc: 
         for (size_t i = 0; i < body->proc.implicits.len; i++) {
-            type_app_subst(body->proc.implicits.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->proc.implicits.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->proc.args.len; i++) {
-            type_app_subst(body->proc.args.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->proc.args.data[i], subst, shadowed, pia, logger, a);
         }
-        type_app_subst(body->proc.ret, subst, shadowed, pia, a);
+        type_app_subst(body->proc.ret, subst, shadowed, pia, logger, a);
+        break;
+    case TArray: 
+        type_app_subst(body->array.element, subst, shadowed, pia, logger, a);
         break;
     case TStruct:
         for (size_t i = 0; i < body->structure.fields.len; i++) {
-            type_app_subst(body->structure.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->structure.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
         break;
     case TEnum:
         for (size_t i = 0; i < body->enumeration.variants.len; i++) {
             PtrArray* variant = body->enumeration.variants.data[i].val;
             for (size_t j = 0; j < variant->len; j++) {
-                type_app_subst(variant->data[j], subst, shadowed, pia, a);
+                type_app_subst(variant->data[j], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TReset:
-        type_app_subst(body->reset.in, subst, shadowed, pia, a);
-        type_app_subst(body->reset.out, subst, shadowed, pia, a);
+        type_app_subst(body->reset.in, subst, shadowed, pia, logger, a);
+        type_app_subst(body->reset.out, subst, shadowed, pia, logger, a);
         break;
     case TResumeMark:
         panic(mv_string("not implemetned type-app for ResumeMark"));
         break;
     case TDynamic:
-        type_app_subst(body->dynamic, subst, shadowed, pia, a);
+        type_app_subst(body->dynamic, subst, shadowed, pia, logger, a);
         break;
     case TNamed:
         push_symbol(body->named.name, shadowed);
-        type_app_subst(body->named.type, subst, shadowed, pia, a);
+        type_app_subst(body->named.type, subst, shadowed, pia, logger, a);
         shadowed->len--;
         if (body->named.args) {
             for (size_t i = 0; i < body->named.args->len; i++) {
-                type_app_subst(body->named.args->data[i], subst, shadowed, pia, a);
+                type_app_subst(body->named.args->data[i], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TDistinct:
-        type_app_subst(body->distinct.type, subst, shadowed, pia, a);
+        type_app_subst(body->distinct.type, subst, shadowed, pia, logger, a);
         if (body->distinct.args) {
             for (size_t i = 0; i < body->distinct.args->len; i++) {
-                type_app_subst(body->distinct.args->data[i], subst, shadowed, pia, a);
+                type_app_subst(body->distinct.args->data[i], subst, shadowed, pia, logger, a);
             }
         }
         break;
     case TTrait:
         // TODO (BUG): ensure to shadow trait variables here.
         for (size_t i = 0; i < body->trait.fields.len; i++) {
-            type_app_subst(body->trait.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->trait.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
         break;
     case TTraitInstance: // note: not a "real" type in the theory
+        for (size_t i = 0; i < body->instance.over.len; i++) {
+            push_symbol(body->instance.over.data[i], shadowed);
+        }
         for (size_t i = 0; i < body->instance.args.len; i++) {
-            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, a);
+            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
+        }
+        for (size_t i = 0; i < body->instance.args.len; i++) {
+            type_app_subst(body->instance.args.data[i], subst, shadowed, pia, logger, a);
         }
         for (size_t i = 0; i < body->instance.fields.len; i++) {
-            type_app_subst(body->instance.fields.data[i].val, subst, shadowed, pia, a);
+            type_app_subst(body->instance.fields.data[i].val, subst, shadowed, pia, logger, a);
         }
+        shadowed->len -= body->instance.over.len;
         break;
 
     // Quantified Types
@@ -1570,9 +1711,9 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         }
         for (size_t i = 0; i < body->sealed.implicits.len; i++) {
             PiType* implicit = body->sealed.implicits.data[i];
-            type_app_subst(implicit, subst, shadowed, pia, a);
+            type_app_subst(implicit, subst, shadowed, pia, logger, a);
         }
-        type_app_subst(body->sealed.body, subst, shadowed, pia, a);
+        type_app_subst(body->sealed.body, subst, shadowed, pia, logger, a);
 
         shadowed->len -= body->sealed.vars.len;
         break;
@@ -1586,12 +1727,26 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         for (size_t i = 0; i < body->binder.vars.len; i++) {
             push_symbol(body->binder.vars.data[i], shadowed);
         }
-        type_app_subst(body->binder.body, subst, shadowed, pia, a);
+        type_app_subst(body->binder.body, subst, shadowed, pia, logger, a);
         shadowed->len -= body->binder.vars.len;
         break;
 
     case TUVar:
         add_subst(body->uvar, subst, a);
+        if (logger) {
+            PtrArray docs = mk_ptr_array(2, a);
+            push_ptr(mv_str_doc(mv_string("adding subst to"), a), &docs);
+            push_ptr(pretty_type(body, default_ptp, a), &docs);
+            push_ptr(mv_str_doc(mv_string(":"), a), &docs);
+            PtrArray subst_nodes = mk_ptr_array(subst.len, a);
+            for (size_t i = 0; i < subst.len; i++) {
+                push_ptr(mk_str_doc(view_symbol_string(subst.data[i].key), a), &docs);
+                push_ptr(mv_str_doc(mv_string("->"), a), &docs);
+                push_ptr(pretty_type(subst.data[i].val, default_ptp, a), &docs);
+            }
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(subst_nodes, a), a), &docs);
+            log_doc(mv_sep_doc(docs, a), logger);
+        }
         break;
 
     // Kinds (higher kinds not supported)
@@ -1626,7 +1781,7 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
             SymAddrPiCell cell = family.trait.fields.data[i];
             PiType* new_type = copy_pi_type_p(cell.val, pia);
             SymbolArray shadowed = mk_symbol_array(8, a);
-            type_app_subst (new_type, subst, &shadowed, pia, a);
+            type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
             sdelete_symbol_array(shadowed);
             sym_addr_insert(cell.key, new_type, &new_fields);
         }
@@ -1640,11 +1795,24 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
 
         PiType* out_ty = call_alloc(sizeof(PiType), pia);
         *out_ty = (PiType) {
-            .sort = TTraitInstance,
-            .instance.instance_of = family.trait.id,
-            .instance.name = family.trait.name,
-            .instance.args = saved_args,
-            .instance.fields = new_fields,
+          .sort = TTraitInstance, .instance.instance_of = family.trait.id,
+          .instance.name = family.trait.name,
+          // Note: over and implicits are left null, as that type of instance
+          //     can only be produced by an (instance ...) form, so regluar
+          //     type apps will always produce an instance with empty
+          //     over/implicits
+          .instance.over = {
+            .len = 0,
+            .data = call_alloc(0, pia),
+            .gpa = *pia
+          },
+          .instance.implicits = {
+            .len = 0,
+            .data = call_alloc(0, pia),
+            .gpa = *pia
+          },
+          .instance.args = saved_args,
+          .instance.fields = new_fields,
         };
         return out_ty;
     } else if (family.sort == TNamed) {
@@ -1691,17 +1859,17 @@ PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a) 
 
         PiType* new_type = copy_pi_type_p(family.binder.body, pia);
         SymbolArray shadowed = mk_symbol_array(8, a);
-        type_app_subst (new_type, subst, &shadowed, pia, a);
+        type_app_subst (new_type, subst, &shadowed, pia, NULL, a);
         sdelete_symbol_array(shadowed);
         sdelete_sym_ptr_assoc(subst);
         return new_type;
     }
 }
 
-PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, PiAllocator* pia, Allocator* a) {
+PiType* pi_type_subst(PiType* type, SymPtrAssoc binds, Logger* logger, PiAllocator* pia, Allocator* a) {
     PiType* new_type = copy_pi_type_p(type, pia);
     SymbolArray shadowed = mk_symbol_array(8, a);
-    type_app_subst(new_type, binds, &shadowed, pia, a);
+    type_app_subst(new_type, binds, &shadowed, pia, logger, a);
     sdelete_symbol_array(shadowed);
     return new_type;
 }
@@ -1724,6 +1892,22 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             if (!pi_type_eql_i(lhs->proc.args.data[i], rhs->proc.args.data[i], array)) return false;
         }
         return pi_type_eql_i(lhs->proc.ret, rhs->proc.ret, array);
+        break;
+    case TArray:
+        if (lhs->array.dimensions.len != rhs->array.dimensions.len) return false;
+        for (size_t i = 0; i < lhs->array.dimensions.len; i++) {
+            Dimension lhd = lhs->array.dimensions.data[i];
+            Dimension rhd = rhs->array.dimensions.data[i];
+            if (lhd.is_uvar != rhd.is_uvar) return false;
+            if (lhd.is_uvar) {
+                // TODO (BUG): do proper structural equality here
+                return lhd.uvar.target == rhd.uvar.target;
+            } else {
+                return lhd.val == rhd.val;
+            }
+        }
+
+        return pi_type_eql_i(lhs->array.element, rhs->array.element, array);
         break;
     case TStruct:
         if (lhs->structure.fields.len != rhs->structure.fields.len) return false;
@@ -1776,7 +1960,23 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     }
         // 'Special'
     case TDistinct:
-        panic(mv_string("pi_type_eql_i not implemented for distinct types"));
+        if (lhs->distinct.source_module != rhs->distinct.source_module)
+            return false;
+        if (lhs->distinct.id != rhs->distinct.id)
+            return false;
+        if (lhs->distinct.type != rhs->distinct.type)
+            return false;
+        if (!lhs->distinct.args != !rhs->distinct.args)
+            return false;
+        if (lhs->distinct.args) {
+            if (lhs->distinct.args->len != rhs->distinct.args->len)
+                return false;
+            for (size_t i = 0; i < lhs->distinct.args->len; i++) {
+                if (!pi_type_eql_i(lhs->distinct.args->data[i], rhs->distinct.args->data[i], array))
+                    return false;
+            }
+        }
+        return true;
     case TTrait:
         return lhs->trait.id == rhs->trait.id;
 
@@ -1784,11 +1984,28 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
     case TTraitInstance: {
         if (lhs->instance.instance_of != rhs->instance.instance_of) return false;
 
+        if (lhs->instance.over.len != rhs->instance.over.len)
+            return false;
+
+        for (size_t i = 0; i < lhs->instance.over.len; i++) {
+            Rename rn = (Rename) {
+                .l_name = lhs->binder.vars.data[i],
+                .r_name = rhs->binder.vars.data[i],
+            };
+            push_rename(rn, array);
+        }
+        if (lhs->instance.implicits.len != rhs->instance.implicits.len) return false;
+        for (size_t i = 0; i < lhs->instance.implicits.len; i++) {
+            if (!pi_type_eql_i(lhs->instance.implicits.data[i], rhs->instance.implicits.data[i], array))
+                return false;
+        }
+
         if (lhs->instance.args.len != rhs->instance.args.len) return false;
         for (size_t i = 0; i < lhs->instance.args.len; i++) {
             if (!pi_type_eql_i(lhs->instance.args.data[i], rhs->instance.args.data[i], array))
                 return false;
         }
+        array->len -= lhs->instance.over.len;
         return true;
     }
 
@@ -1950,6 +2167,24 @@ bool pi_value_eql(PiType *type, void *lhs, void *rhs, Allocator* a) {
         }
         }
         break;
+    case TArray: {
+        size_t len = 1; 
+        for (size_t i = 0; i < type->array.dimensions.len; i++) {
+            if (type->array.dimensions.data[i].is_uvar) {
+                panic(mv_string("Cannot compare values of Array type with undecided dimension."));
+            }
+            len *= type->array.dimensions.data[i].val;
+        }
+        PiType* elt_ty = type->array.element;
+        size_t elt_offset = pi_size_align(pi_size_of(*elt_ty), pi_align_of(*elt_ty));
+        for (size_t i = 0; i < len; i++) {
+            size_t offset = elt_offset * i;
+            if (!pi_value_eql(elt_ty, lhs + offset, rhs + offset, a)) {
+                return false;
+            }
+        }
+        return true;
+    } 
     case TProc: {
         void** addrlhs = (void**) lhs;
         void** addrrhs = (void**) rhs;
@@ -2165,6 +2400,31 @@ PiType* mk_dynamic_type(PiAllocator* a, PiType* t) {
     PiType* dyn = call_alloc(sizeof(PiType), a);
     *dyn = (PiType){.sort = TDynamic, .dynamic = t};
     return dyn;
+}
+
+PiType *mk_array_type(PiAllocator *pia, size_t ndims, ...) {
+    va_list args;
+    va_start(args, ndims);
+    
+    DimPiList dims = mk_dim_list(ndims, pia);
+    for (size_t i = 0; i < ndims ; i++) {
+        Dimension dim = {
+            .is_uvar = false,
+            .val = va_arg(args, uint64_t),
+        };
+        push_dim(dim, &dims);
+    }
+
+    PiType* element = va_arg(args, PiType*);
+    va_end(args);
+
+    PiType* proc = call_alloc(sizeof(PiType), pia);
+    *proc = (PiType) {
+        .sort = TArray,
+        .array.dimensions = dims,
+        .array.element = element,
+    };
+    return proc;
 }
 
 PiType* mk_proc_type(PiAllocator* pia, size_t nargs, ...) {

@@ -31,16 +31,29 @@ typedef struct {
 } InternalLinkData;
 
 typedef struct {
+    SynRef proc;
+    Assembler* backlink_from;
+    uint64_t backlink;
+    bool in_poly_instance;
+    InstanceArgs instance_args;
+} ProcDefer;
+
+ARRAY_HEADER(ProcDefer, proc_defer, ProcDefer);
+
+typedef struct {
     SynTape tape;
     Target target;
     InternalLinkData* links;
     Allocator *a;
+    PiAllocator *pia;
     ErrorPoint* point;
     Logger* logger;
+    ProcDeferArray* procs_to_generate;
 } InternalContext;
 
 void generate_i(SynRef ref, AddressEnv* env, InternalContext ctx);
 void generate_polymorphic_i(SynRef ref, AddressEnv* env, InternalContext ctx);
+void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext ctx);
 
 void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);
@@ -55,6 +68,8 @@ void backlink_code(Target target, size_t offset, InternalLinkData* links);
 void backlink_data(Target target, size_t offset, InternalLinkData* links);
 void backlink_data_data(Target target, size_t location, size_t offset, InternalLinkData* links);
 void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator* a);
+
+void instance_link_fn(size_t fn_site, size_t defsite, PiType* proc, PiType* all, InternalLinkData* links, Allocator* a);
 
 void generate_stack_copy(Regname dest, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point);
@@ -71,6 +86,7 @@ void generate_perm_malloc(Location dest, Location mem_size, Assembler* ass, Allo
 void gen_mk_family_app(size_t nfields, Assembler* ass, Allocator* a, ErrorPoint* point);
 
 void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret, Assembler* ass, Allocator* a, ErrorPoint* point);
+void gen_mk_array_ty(Location dest, Location ndimensions, Location dims, Location elt, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_struct_ty(Location dest, Location nfields, Location data, bool packed, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_enum_ty(Location dest, SynEnumType shape, uint8_t tagsize, Location data, Assembler* ass, Allocator* a, ErrorPoint* point);
 void gen_mk_reset_ty(Assembler* ass, Allocator* a, ErrorPoint* point);

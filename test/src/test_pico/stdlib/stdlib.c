@@ -93,6 +93,12 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         suite_end(log);
     }
     if (suite_start(log, mv_string("data"))) {
+        if (suite_start(log, mv_string("string"))) {
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_data_string_tests(log, module, env, target, subregion);
+            suite_end(log);
+            release_subregion(subregion);
+        }
         if (suite_start(log, mv_string("pair"))) {
             RegionAllocator* subregion = make_subregion(region);
             run_pico_stdlib_data_pair_tests(log, module, env, target, subregion);

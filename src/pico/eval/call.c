@@ -1,3 +1,7 @@
+#include <string.h>
+
+#include "platform/machine_info.h"
+#include "platform/memory/arena.h"
 #include "platform/signals.h"
 
 #include "pico/eval/call.h"
@@ -32,7 +36,7 @@ EvalResult pico_run_toplevel(TopLevel top, EvalCtx ctx) {
         break;
     }
     case TLDef: {
-        // copy into module
+        // Copy into module
         res = (EvalResult) {
             .type = ERDef,
             .def.name = top.def.bind,
@@ -58,9 +62,11 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     void* dvars = get_dynamic_memory();
     void* dynamic_memory = mem_alloc(4096, a);
     void* vstack_memory_space = mem_alloc(4096, a);
-    void* vstack_memory_ptr = vstack_memory_space + 4096; 
+    void* vstack_memory_ptr = vstack_memory_space + 4096;
 
-    PiAllocator new_temp_alloc = convert_to_pallocator(a);
+    ArenaAllocator* arena = make_arena_allocator(4096, a);
+    Allocator aa = aa_to_gpa(arena);
+    PiAllocator new_temp_alloc = convert_to_pallocator(&aa);
     PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
     typedef void*(*RunExpression)(void*, void*, void*, void*); 
     RunExpression run = (RunExpression)get_instructions(target.target).data;
@@ -79,6 +85,7 @@ void* pico_run_expr(Target target, size_t rsize, Allocator* a, ErrorPoint* point
     mem_free(vstack_memory_space, a);
     mem_free(dynamic_memory, a);
     set_std_temp_allocator(old_temp_alloc);
+    delete_arena_allocator(arena);
 
     return out;
 }
@@ -90,6 +97,7 @@ void call_unit_fn(void *function, Allocator *a) {
     void* vstack_memory_ptr = vstack_memory + 4095; 
 
     // TODO: swap so this is backend independent (use foreign_adapters to call) 
+#if ARCH == AMD64
     int64_t out;
     __asm__ __volatile__(
                          // save nonvolatile registers
@@ -134,6 +142,121 @@ void call_unit_fn(void *function, Allocator *a) {
                            // Clobbers are either registers we change (output cannot be trusted)
                            // or registers we don't want compiler to assign to input values
                          : "rax", "r13", "r14", "r15");
+#elif ARCH == AARCH64
+    panic(mv_string("not implemented: unit call for aarch64"));
+#else
+    #error "Unsupported ARCH"
+#endif
+
+    mem_free(dynamic_memory, a);
+    mem_free(vstack_memory, a);
+}
+
+void* call_instance_fn(void *function, U64Array types, PtrArray implicits, size_t instance_size, PiAllocator* pia, Allocator *a) {
+    void* dvars = get_dynamic_memory();
+    void* dynamic_memory = mem_alloc(4096, a);
+    void* vstack_memory = mem_alloc(4096, a);
+    void* vstack_memory_ptr = vstack_memory + 4095; 
+
+    ArenaAllocator* arena = make_arena_allocator(4096, a);
+    Allocator aa = aa_to_gpa(arena);
+    PiAllocator new_temp_alloc = convert_to_pallocator(&aa);
+    PiAllocator old_temp_alloc = set_std_temp_allocator(new_temp_alloc);
+
+    // TODO: swap so this is backend independent (use foreign_adapters to call)
+#if ARCH == AMD64
+    void* out;
+    __asm__ __volatile__(
+        // save nonvolatile registers
+        "push %%rbp       \n" // Nonvolatile on System V + Win64
+        "push %%rbx       \n" // Nonvolatile on System V + Win64
+        "push %%rdi       \n" // Nonvolatile on Win 64
+        "push %%rsi       \n" // Nonvolatile on Win 64
+        "push %%r15       \n" // for dynamic vars
+        "push %%r14       \n" // for dynamic memory space
+        "push %%r13       \n" // for control/indexing memory space
+        "push %%r12       \n" // Nonvolatile on System V + Win64
+
+        "mov %4, %%r13    \n"
+        "mov %3, %%r12    \n"
+        "mov %2, %%r14    \n"
+        "mov %2, %%r15    \n"
+
+        // setup counter for type loop
+        "mov %6, %%rcx  \n"
+        "add $1, %%rcx  \n"
+        "jmp type_end   \n"
+
+        "type_iter:     \n"
+        "push (%5)      \n"
+        "add $8, %5     \n"
+
+        "type_end:      \n"
+        "loop type_iter \n"
+        // Loop through all types, push them on stack
+
+        "mov %8, %%rcx  \n"
+        "add $1, %%rcx  \n"
+        "jmp implicit_end   \n"
+
+        "implicit_iter: \n"
+        "push (%7)      \n"
+        "add $8, %7     \n"
+
+        "implicit_end: \n"
+        "loop implicit_iter \n"
+        // Loop through all implicits, push them on stack
+
+        // First store the function to call in RAX, in case
+        // the compiler has stored it as an offset to rbp
+        // then we can set rbp and call
+        "mov %1, %%rax \n"
+        "mov %%rsp, %%rbp \n"
+
+        // Call function, which will push value onto stack
+        "call *%%rax         \n"
+
+        // Copy value into dest
+        "pop %0\n"
+
+        "pop %%r12        \n"
+        "pop %%r13        \n"
+        "pop %%r14        \n"
+        "pop %%r15        \n"
+        "pop %%rsi        \n" 
+        "pop %%rdi        \n" 
+        "pop %%rbx        \n"
+        "pop %%rbp        \n"
+        : "=r" (out)
+
+        : "r" (function)
+          , "r" (vstack_memory_ptr)
+          , "r" (dynamic_memory)
+          , "r" (dvars)
+          , "r" (types.data)
+          , "r" (types.len)
+          , "r" (implicits.data)
+          , "r" (implicits.len)
+          // Clobbers are either registers we change (output cannot be trusted)
+          // or registers we don't want compiler to assign to input values
+        : "rax", "r12", "r13", "r14", "r15");
+#elif ARCH == AARCH64
+    panic(mv_string("not implemented: unit call for aarch64"));
+#else
+    #error "Unsupported ARCH"
+#endif
+
+    void* new_memory = call_alloc(instance_size, pia);
+    memcpy(new_memory, out, instance_size);
+
+    void* instance = call_alloc(ADDRESS_SIZE, pia);
+    memcpy(instance, &new_memory, ADDRESS_SIZE);
+
+    mem_free(dynamic_memory, a);
+    mem_free(vstack_memory, a);
+    set_std_temp_allocator(old_temp_alloc);
+    delete_arena_allocator(arena);
+    return instance;
 }
 
 Document* pretty_res(EvalResult res, Allocator* a) {

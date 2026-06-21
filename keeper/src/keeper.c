@@ -32,18 +32,18 @@ void write_header(TermSize termsize, Allocator* a) {
   leftpad.bytes[leftpad_len] = '\0';
 
   OStream* cout = get_stdout_stream();
-  write_string(leftpad, cout);
-  write_string(mv_string("██╗  ██╗███████╗███████╗██████╗ ███████╗██████╗ \r\n"), cout);
-  write_string(leftpad, cout);
-  write_string(mv_string("██║ ██╔╝██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗\r\n"), cout);
-  write_string(leftpad, cout);
-  write_string(mv_string("█████╔╝ █████╗  █████╗  ██████╔╝█████╗  ██████╔╝\r\n"), cout);
-  write_string(leftpad, cout);
-  write_string(mv_string("██╔═██╗ ██╔══╝  ██╔══╝  ██╔═══╝ ██╔══╝  ██╔══██╗\r\n"), cout);
-  write_string(leftpad, cout);
-  write_string(mv_string("██║  ██╗███████╗███████╗██║     ███████╗██║  ██║\r\n"), cout);
-  write_string(leftpad, cout);
-  write_string(mv_string("╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝\r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("██╗  ██╗███████╗███████╗██████╗ ███████╗██████╗ \r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("██║ ██╔╝██╔════╝██╔════╝██╔══██╗██╔════╝██╔══██╗\r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("█████╔╝ █████╗  █████╗  ██████╔╝█████╗  ██████╔╝\r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("██╔═██╗ ██╔══╝  ██╔══╝  ██╔═══╝ ██╔══╝  ██╔══██╗\r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("██║  ██╗███████╗███████╗██║     ███████╗██║  ██║\r\n"), cout);
+  st_write_string(leftpad, cout);
+  st_write_string(mv_string("╚═╝  ╚═╝╚══════╝╚══════╝╚═╝     ╚══════╝╚═╝  ╚═╝\r\n"), cout);
                                                 
   mem_free(leftpad.bytes, a);
 }

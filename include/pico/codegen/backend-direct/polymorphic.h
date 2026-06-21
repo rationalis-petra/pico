@@ -6,6 +6,7 @@
 #include "pico/codegen/backend-direct/internal.h"
 
 void generate_polymorphic(SymbolArray arr, SynRef syn, AddressEnv* env, InternalContext ictx);
+void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* env, InternalContext ictx);
 
 // Type Info
 void generate_pi_type(PiType* type, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point);

@@ -7,6 +7,7 @@
 #include "pico/data/sym_size_assoc.h"
 #include "pico/syntax/syntax.h"
 #include "pico/binding/environment.h"
+#include "pico/binding/type_env.h"
 
 typedef struct AddressEnv AddressEnv;
 
@@ -55,9 +56,6 @@ typedef struct {
 
 ARRAY_HEADER(Binding, binding, Binding)
 
-// Forward decl
-typedef struct TypeEnv TypeEnv;
-
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
 AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
 
@@ -92,6 +90,16 @@ void address_end_proc(AddressEnv* env, Allocator* a);
 
 void address_start_poly(SymbolArray types, BindingArray args, AddressEnv* env, Allocator* a);
 void address_end_poly(AddressEnv* env, Allocator* a);
+
+void address_start_poly_instance(SymbolArray* types, BindingArray args, SymPtrAMap* implicits, AddressEnv* env, Allocator* a);
+void address_end_poly_instance(AddressEnv* env, Allocator* a);
+bool in_poly_instance(AddressEnv* env);
+
+typedef struct {
+    SymbolArray* types;
+    SymPtrAMap* implicits;
+} InstanceArgs;
+InstanceArgs get_instance_implicits(AddressEnv* env);
 
 // get_base is essentially only used by describe, when generating description
 // strings of values. 

@@ -84,21 +84,26 @@ struct AddressEnv {
     Symbol recname;
     
     PtrArray local_envs;
+    PtrArray instance_types;
+    PtrArray instance_implicits;
 };
 
 AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
     AddressEnv* a_env = (AddressEnv*)mem_alloc(sizeof(AddressEnv), a);
-    a_env->rec = sym != NULL;
-    if (a_env->rec)
-        a_env->recname = *sym;
-    a_env->local_envs = mk_ptr_array(32, a);
-    a_env->env = env;
+    *a_env = (AddressEnv) {
+      .rec = sym != NULL,
+      .recname = sym ? *sym: (Symbol){},
+      .local_envs = mk_ptr_array(32, a),
+      .instance_types = mk_ptr_array(8, a),
+      .instance_implicits = mk_ptr_array(8, a),
+      .env = env,
+    };
     
     LocalAddrs* local = mem_alloc(sizeof(LocalAddrs), a);
     *local = (LocalAddrs) {
         .stack_head = 0,
         .vars = mk_saddr_array(32, a),
-        .types = mk_symbol_array(0, a),
+        .types = mk_symbol_array(8, a),
     };
     push_ptr(local, &a_env->local_envs);
 
@@ -386,6 +391,87 @@ void address_end_poly(AddressEnv* env, Allocator* a) {
     pop_ptr(&env->local_envs);
     sdelete_saddr_array(old_locals->vars);
     mem_free(old_locals, a);
+}
+
+void address_start_poly_instance(SymbolArray* types, BindingArray vars, SymPtrAMap* implicits, AddressEnv* env, Allocator* a) {
+    LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
+    new_local->vars = mk_saddr_array(32, a);
+    new_local->types = *types;
+    
+    // The 'new implicits' and 'new types' are because they are pointers to
+    // values on the stack, but may be saved by ProcDefer to outlive the stack-frame.
+    // TODO: come up with a more elegant solution to this... maybe just pass by value?
+    SymPtrAMap* new_implicits = mem_alloc(sizeof(SymPtrAMap), a);
+    *new_implicits = *implicits;
+    SymbolArray* new_types = mem_alloc(sizeof(SymPtrAMap), a);
+    *new_types = *types;
+    push_ptr(new_types, &env->instance_types);
+    push_ptr(new_implicits, &env->instance_implicits);
+
+    // We add 3x the register size to account for:
+    //   - return address
+    //   - R15  (stack base)
+    //   - old RBP
+    int64_t arg_offset = 3 * REGISTER_SIZE;
+
+    SAddr padding = (SAddr){ };
+    padding.type = SASentinel;
+    padding.stack_offset = 0;
+    push_saddr(padding, &new_local->vars);
+
+    // Variables are in reverse order!
+    // due to how the stack pushes/pops args.
+    // This also means that we push args first, then types!
+    for (size_t i = vars.len; i > 0; i--) {
+        SAddr local;
+        local.symbol = vars.data[i - 1].sym;
+        local.stack_offset = arg_offset;
+
+        if (vars.data[i - 1].is_variable) {
+            local.type = SAIndexed;
+            arg_offset += REGISTER_SIZE;
+        } else {
+            local.type = SADirect;
+            arg_offset += vars.data[i - 1].size;
+        }
+
+        push_saddr(local, &new_local->vars);
+    }
+
+    for (size_t i = types->len; i > 0; i--) {
+        SAddr local;
+        local.type = SADirect;
+
+        local.symbol = types->data[i - 1];
+        local.stack_offset = arg_offset;
+        arg_offset += REGISTER_SIZE;
+
+        push_saddr(local, &new_local->vars);
+    }
+
+    new_local->stack_head = 0;
+    push_ptr(new_local, &env->local_envs);
+}
+
+void address_end_poly_instance(AddressEnv* env, Allocator* a) {
+    pop_ptr(&env->instance_implicits);
+    LocalAddrs* old_locals = env->local_envs.data[env->local_envs.len - 1];
+    pop_ptr(&env->local_envs);
+    sdelete_saddr_array(old_locals->vars);
+    mem_free(old_locals, a);
+}
+
+bool in_poly_instance(AddressEnv *env) {
+    return env->instance_implicits.len != 0;
+}
+
+InstanceArgs get_instance_implicits(AddressEnv* env) {
+  // TODO: panic if len == 0 and in the debug checks are on
+  size_t idx = env->instance_implicits.len - 1;
+  return (InstanceArgs) {
+    .types = (SymbolArray*)env->instance_types.data[idx],
+    .implicits = (SymPtrAMap*)env->instance_implicits.data[idx],
+  };
 }
 
 Environment *get_addr_base(AddressEnv *env) {

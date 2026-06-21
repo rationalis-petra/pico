@@ -8,12 +8,14 @@
 String string_bool(bool val, Allocator* a) {
     if (val) {
         char truestr[] = "true";
-        char* str = mem_alloc(sizeof(truestr), a);
+        // subtract null terminator
+        char* str = mem_alloc(sizeof(truestr) - sizeof(char), a);
         strcpy(str, truestr);
         return mv_string(str);
     } else {
         char falsestr[] = "false";
-        char* str = mem_alloc(sizeof(falsestr), a);
+        // subtract null terminator
+        char* str = mem_alloc(sizeof(falsestr) - sizeof(char), a);
         strcpy(str, falsestr);
         return mv_string(str);
     }

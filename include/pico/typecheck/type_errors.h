@@ -32,7 +32,6 @@ typedef struct {
 // After unification, checkif typecheck was successful
 void check_result_out(UnifyResult out, Range range, UnifyReason reason, Allocator* a, PiErrorPoint* point);
 
-
 // Variable
 _Noreturn void type_error_unexpected_module(SynRef syn, Module* module, TypeCheckContext ctx);
 _Noreturn void type_error_unknown_var(SynRef syn, TypeCheckContext ctx);
@@ -41,7 +40,7 @@ _Noreturn void type_error_unknown_var(SynRef syn, TypeCheckContext ctx);
 _Noreturn void type_error_invalid_declaration(Symbol type, SynRef arg, TypeCheckContext ctx);
 
 // Import
-_Noreturn void type_error_invalid_import(ImportClause clause, Range range, TypeCheckContext ctx);
+_Noreturn void type_error_invalid_import(ImportClause clause, Symbol bad, bool exists, Range range, TypeCheckContext ctx);
 
 // Procedure
 _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef proc, TypeCheckContext ctx);
@@ -91,6 +90,9 @@ _Noreturn void type_error_instance_invalid_type(PiType* type, Range range, TypeC
 _Noreturn void type_error_instance_wrong_nfields(Range range, size_t expected, size_t actual, TypeCheckContext ctx);
 _Noreturn void type_error_instance_missing_field(Range range, Symbol name, TypeCheckContext ctx);
 
+// Instance Resolution
+_Noreturn void type_error_instance_not_found(SynRef syn, PiType* instance, TypeCheckContext ctx);
+_Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstSrcArray sources, TypeCheckContext ctx);
 
 // Type Formers
 _Noreturn void type_error_family_must_have_args(SynRef family, TypeCheckContext ctx);

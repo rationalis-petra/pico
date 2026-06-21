@@ -60,6 +60,11 @@ void finish_setup(TestLog *log) {
     log->setup_time = query_performance_timer();
 }
 
+// Return true if all tests run thus far have passed, and false otherwise.
+bool all_passed(TestLog* log) {
+    return log->failed_tests == 0;
+}
+
 bool suite_start(TestLog *log, String name) {
     String* str = mem_alloc(sizeof(String), log->gpa);
     *str = name;
@@ -82,10 +87,7 @@ bool test_start(TestLog* log, String name) {
 void test_pass(TestLog* log) {
     log->passed_tests++;
 
-    if (log->slogger) {
-        delete_logger(log->slogger);
-        log->slogger = NULL;
-    }
+    clear_logger(log);
 
     if (!log->in_test) {
         panic(mv_string("Ending test suite - passing a test but one has not been started!"));
@@ -111,10 +113,7 @@ void test_skip(TestLog* log) {
         panic(mv_string("Ending test suite - passing a test but one has not been started!"));
     }
 
-    if (log->slogger) {
-        delete_logger(log->slogger);
-        log->slogger = NULL;
-    }
+    clear_logger(log);
 
     log->in_test = false;
     if (log->verbosity.show_passes) {
@@ -140,10 +139,7 @@ void test_fail(TestLog* log) {
         log_to_formatted_ostream(log->slogger, 120, log->stream);
     }
 
-    if (log->slogger) {
-        delete_logger(log->slogger);
-        log->slogger = NULL;
-    }
+    clear_logger(log);
 
     if (log->verbosity.show_fails) {
         start_coloured_text(fail_colour, log->stream);
@@ -168,6 +164,13 @@ Logger* get_structured_logger(TestLog *log) {
         log->slogger = make_logger(log->gpa);
     }
     return log->slogger;
+}
+
+void clear_logger(TestLog* log) {
+    if (log->slogger) {
+        delete_logger(log->slogger);
+        log->slogger = NULL;
+    }
 }
 
 void test_log_error(TestLog* log, String message) {

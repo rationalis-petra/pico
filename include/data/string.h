@@ -5,6 +5,7 @@
 #include "data/array.h"
 
 // A UFT-8 Encoded String
+//  • NO NULL termination
 typedef struct String {
     size_t memsize;
     uint8_t* bytes;
@@ -13,6 +14,8 @@ typedef struct String {
 String mk_string(const char* str, Allocator* a);
 String mv_string(const char* str);
 String string_from_codepoint(uint32_t codepoint, Allocator* a);
+
+char* to_c_string(String str, Allocator* a);
 
 void delete_string(String str, Allocator* a);
 String copy_string(const String str, Allocator* a);

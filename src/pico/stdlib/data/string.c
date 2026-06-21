@@ -9,12 +9,13 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(5, &ra),
+        .clauses = mk_import_clause_array(6, &ra),
     };
     add_import_all(&imports.clauses, &ra, 1, "core");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 2, "data", "list");
+    add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
 
     Exports exports = (Exports) {
@@ -57,6 +58,30 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  (store {U8} (num-to-address (u64.+ ascii.len (address-to-num new-bytes))) 0)\n"
         "  (struct String [.bytes new-bytes] [.memsize (u64.+ ascii.len 1)]))";
     compile_toplevel(from_ascii, module, target, &point, &pi_point, region);
+
+    const char *str_delete =
+        "(def delete proc [(lhs String)] \n"
+        "  memory.free lhs.bytes)";
+    compile_toplevel(str_delete, module, target, &point, &pi_point, region);
+
+    const char *str_eql =
+        "(def = proc [(lhs String) (rhs String)] \n"
+        "  (if (u64.!= lhs.memsize rhs.memsize)  \n"
+        "    :false                              \n"
+        "    (seq                                \n"
+        "      [let! idx (local 0)]              \n"
+        "      (loop [for i from 0 below lhs.memsize] \n"
+        "            [while (u8.= (nth-byte i lhs) (nth-byte i rhs))] \n"
+        "        (set idx i))                    \n"
+        "      (if (u64.= 0 lhs.memsize)         \n "
+        "          :true                         \n "
+        "          (u64.= (get idx) (u64.- lhs.memsize 1))))))";
+    compile_toplevel(str_eql, module, target, &point, &pi_point, region);
+
+    const char *str_not_eql =
+        "(def != proc [(lhs String) (rhs String)] \n"
+        "  bool.not (= lhs rhs))";
+    compile_toplevel(str_not_eql, module, target, &point, &pi_point, region);
 
     Result r = add_module_def(data, string_to_symbol(mv_string("string")), module);
     if (r.type == Err) panic(r.error_message);

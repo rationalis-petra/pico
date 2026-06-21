@@ -92,7 +92,7 @@ OStream *fos(FormattedOStream *os) {
 }
 
 void write_fstring(String string, FormattedOStream *os) {
-    write_string(string, os->os);
+    st_write_string(string, os->os);
 }
 
 FormattedOStream *get_formatted_stdout() {
@@ -112,7 +112,7 @@ void start_coloured_text(Colour colour, FormattedOStream* os) {
       char str[32];
       Colour colour = os->colours[os->colour_len];
       size_t len = snprintf(str, 31, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-      write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
+      write_fstring((String){.bytes = (uint8_t*)str, .memsize = len}, os);
   }
 }
 
@@ -130,7 +130,7 @@ void end_coloured_text(FormattedOStream* os) {
         char str[24];
         Colour colour = os->colours[os->colour_len];
         size_t len = snprintf(str, 23, "\x1b[38;2;%"PRIu8";%"PRIu8";%"PRIu8"m", colour.r, colour.g, colour.b);
-        write_fstring((String){.bytes = (uint8_t*)str, .memsize = len + 1}, os);
+        write_fstring((String){.bytes = (uint8_t*)str, .memsize = len}, os);
     }
 }
 
@@ -518,7 +518,7 @@ void send_output_terminal_event(OutTermEvent event) {
   case OTPosCursor: {
       char str[16];
       size_t len = snprintf(str, 16, "\x1b[%" PRIu16 ";%" PRIu16 "H", event.cursor_pos.row, event.cursor_pos.col);
-      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len + 1});
+      terminal_write_string_unbuffered((String){.bytes = (uint8_t*)str, .memsize = len});
       break;
   }
   case OTChar: {
@@ -545,7 +545,7 @@ void terminal_write_string_unbuffered(String string) {
     // TODO: check for error code? return error on error code
     WriteConsole(std_cout, 
         string.bytes,
-        string.memsize - 1, // TODO : this arg may be write as is 'number of chars to write' (uft-8)?
+        string.memsize, // TODO : this arg may be write as is 'number of chars to write' (uft-8)?
         &num_chars_written,
         NULL);
 #else

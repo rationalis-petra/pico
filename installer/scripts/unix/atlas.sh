@@ -1,2 +1,2 @@
 #!/bin/sh
-pico atlas "$@"
+pico atlas $@

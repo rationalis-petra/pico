@@ -5,6 +5,16 @@
 // We store all registers (even ones that are caller saved) to avoid generating
 // different code for different ABIs,
 
+#if ABI == SYSTEM_V_AARCH64
+int set_jump(jump_buf buf) {
+    return setjmp(buf);
+}
+
+_Noreturn void long_jump(jump_buf buf, int val) {
+    longjmp(buf, val);
+}
+#else
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 __attribute__((naked))
@@ -63,6 +73,8 @@ int set_jump(jump_buf buf) {
           "xor %eax, %eax\n"
           "ret\n"
           );
+#elif ABI == SYSTEM_V_AARCH64
+    #error "set_jump not implemented for SysV-aarch64"
 #else
 #error "Unknown calling convention"
 #endif
@@ -111,9 +123,13 @@ void long_jump(jump_buf buf, int val) {
           // jmp to the cached RIP, making it look as if setjmp just returned!
           "jmp *0(%rcx)\n"
     );
+#elif ABI == SYSTEM_V_AARCH64
+#error "set_jump not implemented for SysV-aarch64"
 #else
 #error "Unknown calling convention"
 #endif
 }
 #pragma GCC diagnostic pop
 
+
+#endif

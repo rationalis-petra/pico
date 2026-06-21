@@ -13,18 +13,18 @@
 
 #include "install.h"
 
-#define CHECK_RESULT(result, action, target)               \
-    if (result.type == Err) {                               \
-        write_string(mv_string("failure: while "), cout);   \
-        write_string(mv_string(action), cout);              \
-        write_string(mv_string(" "), cout);                 \
-        write_string(target, cout);                         \
-        write_string(mv_string("\n  error code: "), cout);  \
-        write_string(string_u64(res.error, &a), cout);      \
-        write_string(mv_string("\n"), cout);                \
-        delete_arena_allocator(arena);                      \
-        return 1;                                           \
-    }                                                       \
+#define CHECK_RESULT(result, action, target)                    \
+    if (result.type == Err) {                                   \
+        st_write_string(mv_string("failure: while "), cout);    \
+        st_write_string(mv_string(action), cout);               \
+        st_write_string(mv_string(" "), cout);                  \
+        st_write_string(target, cout);                          \
+        st_write_string(mv_string("\n  error code: "), cout);   \
+        st_write_string(string_u64(res.error, &a), cout);       \
+        st_write_string(mv_string("\n"), cout);                 \
+        delete_arena_allocator(arena);                          \
+        return 1;                                               \
+    }                                                           \
 
 int install_unix(int argc, char **argv) {
     Allocator* stdalloc = get_std_allocator();
@@ -37,7 +37,7 @@ int install_unix(int argc, char **argv) {
     // it isn't
     StringOption home_dir = get_env_var(mv_string("HOME"));
     if (home_dir.type == None) {
-        write_string(mv_string("Couldn't find env var 'HOME'\n"), cout);
+        st_write_string(mv_string("Couldn't find env var 'HOME'\n"), cout);
         return 1;
     }
 
@@ -80,9 +80,9 @@ int install_unix(int argc, char **argv) {
     CHECK_RESULT(res, "setting permissions of", atlas_dest);
 
 
-    write_string(mv_string("Programs have been copied to '"), cout);
-    write_string(bin_dir, cout);
-    write_string(mv_string("'\n"), cout);
+    st_write_string(mv_string("Programs have been copied to '"), cout);
+    st_write_string(bin_dir, cout);
+    st_write_string(mv_string("'\n"), cout);
 
 
     // Copy Archive to archive_dir
@@ -109,11 +109,12 @@ int install_unix(int argc, char **argv) {
     res = copy_directory(archive_base_dir, archive_base_out_dir);
     CHECK_RESULT(res, "copying", archive_base_dir);
 
-    write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
-    write_string(archive_dir, cout);
-    write_string(mv_string("'\n"), cout);
+    st_write_string(mv_string("Archive (Documentation) has been copied to '"), cout);
+    st_write_string(archive_dir, cout);
+    st_write_string(mv_string("'\n"), cout);
     
-    write_string(mv_string("Done!\n"), cout);
+    st_write_string(mv_string("Done!\n"), cout);
+    delete_arena_allocator(arena);
     return 0;
 }
 

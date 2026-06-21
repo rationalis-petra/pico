@@ -335,7 +335,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
         // Ensure the target is 'fresh' for code-gen
         clear_target(gen_target);
         CodegenContext cg_ctx = {
-            .tape = tape, .a = &itera, .point = &err_point, .target = gen_target, .logger = logger
+            .tape = tape, .a = &itera, .pia = &pico_itera, .point = &err_point, .target = gen_target, .logger = logger
         };
         LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -379,10 +379,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
 
  on_pi_error: {
         if (old_module) set_std_current_module(old_module);
-        release_subregion(iter_region);
-        release_executable_allocator(exec);
         MultiError error;
-
 
         if (pi_point.multi.has_many) {
             PtrArray copied_errors = mk_ptr_array(pi_point.multi.errors.len, &ra); 

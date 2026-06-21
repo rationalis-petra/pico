@@ -65,6 +65,8 @@ PiType* mk_uvar(PiAllocator* a);
 PiType* mk_uvar_integral(PiAllocator* a, Range range);
 PiType* mk_uvar_floating(PiAllocator* a, Range range);
 
+Dimension mk_dim_uvar(PiAllocator* a);
+
 UnifyResult add_field_constraint(UVarType* uvar, Range range, Symbol field, PiType* field_ty, UnifyContext ctx);
 UnifyResult add_variant_constraint(UVarType* uvar, Range range, Symbol field, AddrPiList types, UnifyContext ctx);
 

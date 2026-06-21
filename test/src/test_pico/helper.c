@@ -102,7 +102,7 @@ void run_toplevel_internal(const char *string, Module *module, Environment* env,
 
     clear_target(target);
     CodegenContext cg_ctx = {
-        .tape = tape, .a = &ra, .point = &point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = pia, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 
@@ -185,7 +185,7 @@ void expr_eql(PiType* type, void* val, void* data, TestLog* log) {
         Document* doc = pretty_pi_value(data, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
-        write_fstring(mv_string("\nGot: "), os);
+        write_fstring(mv_string("\n     Got: "), os);
         doc = pretty_pi_value(val, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
@@ -207,7 +207,7 @@ void expr_assert_eql(PiType* type, void* val, void* data, TestLog* log) {
         Document* doc = pretty_pi_value(data, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
-        write_fstring(mv_string("\nGot: "), os);
+        write_fstring(mv_string("\n     Got: "), os);
         doc = pretty_pi_value(val, type, default_pvp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
@@ -271,7 +271,7 @@ void expr_stdout(PiType* type, void* val, void* data, TestLog* log) {
             FormattedOStream* os = get_fstream(log);
             write_fstring(mv_string("Expected: "), os);
             write_fstring(vals.expected, os);
-            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(mv_string("\n     Got: "), os);
             write_fstring(actual, os);
             write_fstring(mv_string("\n"), os);
             test_fail(log);
@@ -295,7 +295,7 @@ void expr_assert_stdout(PiType* type, void* val, void* data, TestLog* log) {
             FormattedOStream* os = get_fstream(log);
             write_fstring(mv_string("Expected: "), os);
             write_fstring(vals.expected, os);
-            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(mv_string("\n     Got: "), os);
             write_fstring(actual, os);
             write_fstring(mv_string("\n"), os);
             test_fail(log);
@@ -378,7 +378,7 @@ void expr_mem(PiType* type, void* val, void* data, TestLog* log) {
             FormattedOStream* os = get_fstream(log);
             write_fstring(mv_string("Expected: "), os);
             write_fstring(string_hex_mem(vals.expected, vals.memsize, &gpa), os);
-            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(mv_string("\n     Got: "), os);
             write_fstring(string_hex_mem(vals.actual, vals.memsize, &gpa), os);
             write_fstring(mv_string("\n"), os);
             test_fail(log);
@@ -401,7 +401,7 @@ void assert_expr_mem(PiType* type, void* val, void* data, TestLog* log) {
             FormattedOStream* os = get_fstream(log);
             write_fstring(mv_string("Expected: "), os);
             write_fstring(string_hex_mem(vals.expected, vals.memsize, &gpa), os);
-            write_fstring(mv_string("\nGot: "), os);
+            write_fstring(mv_string("\n     Got: "), os);
             write_fstring(string_hex_mem(vals.actual, vals.memsize, &gpa), os);
             write_fstring(mv_string("\n"), os);
             test_fail(log);
@@ -626,7 +626,7 @@ void type_eql(PiType* type, void* data, TestLog* log) {
         Document* doc = pretty_type(data, default_ptp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);
-        write_fstring(mv_string("\nGot: "), os);
+        write_fstring(mv_string("\n     Got: "), os);
         doc = pretty_type(type, default_ptp, &gpa);
         write_doc_formatted(doc, 120, os);
         delete_doc(doc, &gpa);

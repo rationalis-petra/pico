@@ -50,7 +50,27 @@ EvalResult pico_run_toplevel(TopLevel top, EvalCtx ctx);
 
 void* pico_run_expr(Target target, size_t size, Allocator* a, ErrorPoint* point);
 
+/**
+ * Given the address of a procedure with type Proc [] Unit, run the procedure.
+ *
+ * Procudure is run with a fresh temporary allocator and dynamic memory,
+ * allocated from the allocator. All allocated memory is freed.
+ */
 void call_unit_fn(void* function, Allocator* a);
+
+/**
+ * Given the address of a procedure which corresponds to an instane which 
+ * is type-polymorphic, e.g. instance [A] {(show (Show A))} (Show (List A)) ...
+ * call the function with a specific set of types and implicits. Requires
+ * additional modifications to the functions to work properly.
+ * 
+ * The pico allocator is used to allocate memory for the instance and
+ * the instance pointer
+ * 
+ * Procudure is run with a fresh temporary allocator and dynamic memory,
+ * allocated from the allocator. All this memory is freed.
+ */
+void* call_instance_fn(void *function, U64Array types, PtrArray implicits, size_t instance_size, PiAllocator* pia, Allocator *a);
 
 Document* pretty_res(EvalResult res, Allocator* a);
 

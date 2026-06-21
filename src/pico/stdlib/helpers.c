@@ -70,7 +70,7 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 
     clear_target(target);
     CodegenContext cg_ctx = {
-        .tape = tape, .a = &ra, .point = &point, .target = target, .logger = logger,
+        .tape = tape, .a = &ra, .pia = &pia, .point = &point, .target = target, .logger = logger,
     };
     LinkData links = generate_toplevel(abs, env, cg_ctx);
 

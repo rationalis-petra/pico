@@ -2,7 +2,6 @@
 
 #include "pico/data/error.h"
 #include "pico/codegen/codegen.h"
-#include "pico/codegen/backend-direct/address_env.h"
 #include "pico/codegen/backend-direct/generate.h"
 #include "pico/codegen/backend-direct/foreign_adapters.h"
 #include "pico/codegen/backend-pvm/generate.h"
@@ -43,6 +42,16 @@ void generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
         return bd_generate_type_expr(syn, env, ctx);
     case CodegenPVM:
         return pvm_generate_type_expr(syn, env, ctx);
+    }
+    panic(mv_string("Invalid codegen backend selected."));
+}
+
+InstanceClosures generate_instance_closures(Assembler* target, ClosureGenData data, Allocator* a) {
+    switch (global_backend) {
+    case CodegenDirect:
+        return bd_generate_instance_closures(target, data, a);
+    case CodegenPVM:
+        return pvm_generate_instance_closures(target, data, a);
     }
     panic(mv_string("Invalid codegen backend selected."));
 }

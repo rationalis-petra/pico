@@ -1,6 +1,7 @@
+#include "platform/machine_info.h"
+#if ARCH == AMD64
 #include "data/meta/array_impl.h"
 
-#include "platform/machine_info.h"
 #include "platform/signals.h"
 
 #include "pico/codegen/codegen.h"
@@ -38,6 +39,8 @@ int compare_to_generate(ToGenerate lhs, ToGenerate rhs) {
 }
 
 ARRAY_CMP_IMPL(ToGenerate, compare_to_generate, to_gen, ToGen);
+
+ARRAY_COMMON_IMPL(ProcDefer, proc_defer, ProcDefer);
 
 void backlink_global(Target target, Symbol sym, size_t offset, InternalLinkData* links, Allocator* a) {
     if (target.target == target.code_aux) {
@@ -102,6 +105,17 @@ void backlink_goto(Symbol sym, size_t offset, InternalLinkData* links, Allocator
 
     // Step 2: insert offset into array
     push_size(offset, sarr);
+}
+
+void instance_link_fn(uint64_t fn_start, uint64_t defsite, PiType* proc, PiType* all, InternalLinkData* links, Allocator* a) {
+    ClosureLink link = {
+        .fn_start = fn_start,
+        .defsite = defsite,
+        .closure_type = proc,
+        .inner_type = all,
+    };
+
+    push_closure_link(link, &links->links.closure_links);
 }
 
 void generate_stack_move(size_t dest_stack_offset, size_t src_stack_offset, size_t size, Assembler* ass, Allocator* a, ErrorPoint* point) {
@@ -493,6 +507,41 @@ void gen_mk_proc_ty(Location dest, Location nfields, Location data, Location ret
 #endif
 
     generate_c_call(mk_proc_ty, ass, a, point);
+
+    if (dest.type != Dest_Register && dest.reg != RAX) {
+        build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);
+    }
+}
+
+void* mk_array_ty(size_t len, Dimension* data, void* elt) {
+    PiAllocator pia = get_std_temp_allocator();
+
+    PiType* ty = call_alloc(sizeof(PiType), &pia);
+    *ty = (PiType) {
+        .sort = TArray,
+        .array.dimensions.data = data,
+        .array.dimensions.len = len,
+        .array.dimensions.size = len,
+        .array.dimensions.gpa = pia,
+        .array.element = elt,
+    };
+    return ty;
+}
+
+void gen_mk_array_ty(Location dest, Location ndimensions, Location dims, Location elt, Assembler* ass, Allocator* a, ErrorPoint* point) {
+#if ABI == SYSTEM_V_64
+    build_binary_op(Mov, reg(RDI, sz_64), ndimensions, ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), dims, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), elt, ass, a, point);
+#elif ABI == WIN_64
+    build_binary_op(Mov, reg(RCX, sz_64), ndimensions, ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), dims, ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), elt, ass, a, point);
+#else 
+    #error "Unknown calling convention"
+#endif
+
+    generate_c_call(mk_array_ty, ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
         build_binary_op(Mov, dest, reg(RAX, sz_64), ass, a, point);
@@ -1087,3 +1136,5 @@ void add_rawtree(RawTree tree, Target target, InternalLinkData* links) {
         backlink_children(field_offset, start_idx, &head, tree.branch.nodes, target, links);
     }
 }
+
+#endif

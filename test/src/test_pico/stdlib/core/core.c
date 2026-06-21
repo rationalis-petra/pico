@@ -6,7 +6,7 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env); clear_logger(log);
 #define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
 #define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
 
@@ -38,10 +38,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(widen (is (struct [.x 678] [.y 567] [.z 456]) (Struct [.x U32] [.y U32] [.z U32])).y U64)");
     }
 
-    /* if (test_start(log, mv_string("widen-f32->f64"))) { */
-    /*     float64_t expected = 1.0; */
-    /*     TEST_EQ("(widen (is 1.0 F32) F64)"); */
-    /* } */
+    /*
+    if (test_start(log, mv_string("widen-f32->f64"))) {
+        float64_t expected = 1.0;
+        TEST_EQ("(widen (is 1.0 F32) F64)");
+    }
+    */
 
     if (test_start(log, mv_string("narrow-f64->f32"))) {
         float32_t expected = 1.0;
@@ -209,6 +211,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("((all [A] proc [(x A)] x) -75)");
     }
 
+    if (test_start(log, mv_string("proc-nested"))) {
+        int64_t expected = 5;
+        TEST_EQ("((proc [x y] (let [add proc [a b] (i64.+ a b)] (add x y))) 2 3)");
+    }
+
     // -------------------------------------------------------------------------
     //
     // Conditional testing
@@ -281,6 +288,41 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     if (test_start(log, mv_string("cond-three-clauses"))) {
         int64_t expected = 7;
         TEST_EQ("(cond [:false 3] [:true 7] [:true 2])");
+    }
+
+    // -----------------------------------------------------
+    // 
+    //      Array
+    // 
+    // -----------------------------------------------------
+    if (test_start(log, mv_string("1d-array-literal"))) {
+        int64_t expected[] = {1, 2, 3, 4};
+        TEST_EQ("(array {4} [1 2 3 4])");
+    }
+
+    if (test_start(log, mv_string("1d-array-literal-inferred-size"))) {
+        int64_t expected[] = {2, 4, 6, 8};
+        TEST_EQ("(array [2 4 6 8])");
+    }
+
+    if (test_start(log, mv_string("2d-array-literal"))) {
+        int64_t expected[] = {1, 2, 3, 4, 5, 6, 7, 8};
+        TEST_EQ("(array {2 4} [[1 2 3 4] [5 6 7 8]])");
+    }
+
+    if (test_start(log, mv_string("2d-array-literal-inferred-size"))) {
+        int64_t expected[] = {2, 4, 6, 8, 10, 12, 14, 16};
+        TEST_EQ("(array [[2 4 6 8] [10 12 14 16]])");
+    }
+
+    if (test_start(log, mv_string("elt-of-array"))) {
+        int64_t expected = 9;
+        TEST_EQ("(aelt 2 (array [3 7 9 12]))");
+    }
+
+    if (test_start(log, mv_string("elt-of-array"))) {
+        int64_t expected = 3;
+        TEST_EQ("(aelt [1 0] (array [[2 4 6 8] [3 7 9 12]]))");
     }
 
     // -----------------------------------------------------
@@ -622,16 +664,33 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     // TODO: enable me!
-    /* if (test_start(log, mv_string("instance-const-unaligned"))) { */
-    /*     int64_t expected = -98; */
-    /*     RUN("(def Inhabited Trait [A] [.value A])"); */
-    /*     // TODO (BUG) */
-    /*     // swapping the order of below statements gives an 'ambiguous instance' error? */
-    /*     RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)"); */
-    /*     RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])"); */
+    if (test_start(log, mv_string("instance-const-unaligned"))) {
+        int64_t expected = -98;
+        RUN("(def Inhabited Trait Inhabited [A] [.value A])");
 
-    /*     TEST_EQ("(get-value {I8} 5)"); */
-    /* } */
+        // TODO (BUG)
+        // swapping the order of below statements gives an 'ambiguous instance' error?
+        RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])");
+        RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
+        TEST_EQ("(get-value {I8} 5)");
+    }
+
+    if (test_start(log, mv_string("instance-dependent"))) {
+        RUN("(def Addable Trait Addable [A] [.add Proc [A A] A])");
+        RUN("(def ID Distinct ID Family [A] A)");
+        RUN("(def add-i64 instance (Addable I64)"
+            "  [.add i64.+])");
+        RUN("(def add-id instance [A] {(inner (Addable A))} (Addable (ID A))"
+            "  [.add proc [x y] "
+            "    (into (ID A) (inner.add"
+            "      (out-of (ID A) x) "
+            "      (out-of (ID A) y)))])");
+        RUN("(def poly-add all [A] proc {(add (Addable A))} [(x A) (y A)] (add.add x y))");
+        //        TEST_EQ()
+
+        int64_t expected = 72;
+        TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");
+    }
 
     // -----------------------------------------------------
     // 

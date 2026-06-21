@@ -1,3 +1,5 @@
+#include "platform/machine_info.h"
+#if ARCH == AMD64
 #include <string.h>
 
 #include "platform/signals.h"
@@ -140,6 +142,104 @@ void generate_polymorphic(SymbolArray types, SynRef ref, AddressEnv* env, Intern
 
     build_nullary_op(Ret, ass, a, point);
     address_end_poly(env, a);
+}
+
+void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* env, InternalContext ictx) {
+    Target target = ictx.target;
+    Allocator *a = ictx.a;
+    ErrorPoint* point = ictx.point;
+    Assembler* ass = target.target;
+    Syntax syn = get_syntax(ref, ictx.tape);
+    PiType* type = get_type(ref, ictx.tape);
+
+    BindingArray vars;
+
+    size_t args_size = types.len * REGISTER_SIZE;
+    // Note: What is SAll [A] instance ...? is currently the same as
+    //       instance [A] ...
+    vars = mk_binding_array(syn.instance.implicits.len, a);
+    for (size_t i = 0; i < syn.instance.implicits.len; i++) {
+        PiType* impl_ty = syn.instance.implicits.data[i].val;
+        if (is_variable_for(impl_ty, types)) {
+            args_size += ADDRESS_SIZE;
+            Binding bind = (Binding) {
+                .sym = syn.instance.implicits.data[i].key,
+                .size = ADDRESS_SIZE,
+                .is_variable = true,
+            };
+            push_binding(bind, &vars);
+        } else {
+            size_t arg_sz = pi_stack_size_of(*impl_ty);
+            args_size += arg_sz;
+            Binding bind = (Binding) {
+                .sym = syn.instance.implicits.data[i].key,
+                .size = arg_sz,
+                .is_variable = false,
+            };
+            push_binding(bind, &vars);
+        }
+    }
+    address_start_poly_instance(&types, vars,&syn.instance.implicits, env, a);
+
+    build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
+    build_unary_op(Push, reg(R15, sz_64), ass, a, point);
+
+    build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
+    PiType as_struct = {
+        .sort = TStruct,
+        .structure.fields = type->instance.fields,
+    };
+    generate_stack_size_of(RSI, &as_struct, env, ass, a, point);
+    generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
+
+    // Push twice: one is the pointer to be returned, the other points to the
+    // 'current' field being evaluated
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+    data_stack_grow(env, 2 * REGISTER_SIZE);
+
+    for (size_t i = 0; i < type->instance.fields.len; i++) {
+        SynRef val = syn.instance.fields.data[i].val;
+        // TODO: copy into instance memory
+        generate_i(val, env, ictx);
+        // Generate  
+        PiType* member_type = strip_type(get_type(val, ictx.tape));
+        if (is_variable_in(member_type, env)) {
+            size_t copy_sz = pi_stack_size_of(*type);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(copy_sz), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
+        } else {
+            size_t copy_sz = pi_stack_size_of(*type);
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, copy_sz, sz_64), ass, a, point);
+            generate_monomorphic_copy(R8, RSP, copy_sz, ass, a, point);
+
+            build_binary_op(Add, reg(RSP, sz_64), imm32(copy_sz), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
+        }
+    }
+
+    // Pop the 'working/current' pointer, leaving just the instance.
+    build_binary_op(Add, reg(RSP, sz_64), imm8(REGISTER_SIZE), ass, a, point);
+    data_stack_shrink(env, REGISTER_SIZE);
+
+    // We know that we will be returning an instance pointer, so return on Data Stack
+    size_t ret_sz = pi_stack_size_of(*type);
+    
+    // Next, restore the old stack bases (variable + static)
+    build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+
+    // Now, copy the return address into a (safe) register
+    build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
+    generate_stack_move(0x18 + args_size, 0, ret_sz, ass, a, point);
+
+    // Then the return address
+    build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
+
+    build_nullary_op(Ret, ass, a, point);
+    address_end_poly_instance(env, a);
 }
 
 // Internal helper functions for movement 
@@ -671,3 +771,5 @@ U8Array free_registers(U8Array inputs, Allocator* a) {
     }
     return out_registers;
 }
+
+#endif

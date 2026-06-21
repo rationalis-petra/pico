@@ -53,13 +53,14 @@ void delete_ostream(OStream* stream, Allocator* a);
 // istream methods
 StreamResult peek(IStream* stream, uint32_t* out);
 StreamResult next(IStream* stream, uint32_t* out);
+StreamResult read_line(IStream* stream, String* out, Allocator* a);
 size_t bytecount(IStream* stream);
 void reset_bytecount(IStream* stream);
 
 // ostream methods
-void write_impl(int char_literal, OStream* stream);
-void write_codepoint(uint32_t codepoint, OStream* stream);
-void write_string(String str, OStream* stream);
-void write_line(String str, OStream* stream);
+void st_write_byte(uint8_t byte, OStream* stream);
+void st_write_codepoint(uint32_t codepoint, OStream* stream);
+void st_write_string(String str, OStream* stream);
+void st_write_line(String str, OStream* stream);
 
 #endif

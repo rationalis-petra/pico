@@ -6,14 +6,17 @@
 
 #include "data/num.h"
 #include "data/array.h"
+#include "data/meta/array_impl.h"
 #include "data/meta/amap_header.h"
 #include "data/meta/amap_impl.h"
 
+#include "pico/codegen/codegen.h"
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
 #include "pico/syntax/header.h"
 #include "pico/data/sym_sarr_amap.h"
 #include "pico/data/sym_ptr_amap.h"
+#include "pico/eval/call.h"
 
 /* Module and package implementation details
  * Modules
@@ -23,22 +26,47 @@
  *   • An array of pointers to all addresses where this term is referenced
  */
 
+typedef struct Instances Instances;
 typedef struct {
-    void* value;
-    bool is_module;
-    PiType type;
-    PtrArray* declarations;
+  void* value;
+  bool is_module;
+  PiType type;
+  PtrArray* declarations;
 
-    U8Array* code_segment;
-    U8Array* data_segment;
+  U8Array* code_segment;
+  U8Array* data_segment;
 
-    // TODO (UB) if a value (e.g. proc) from a module is evaluated, it will give
-    // an address. If the original definition is then deleted, the address will
-    // now be dangling. This is an issue if the address has been stored somewhere! 
-    // This may end up needing to be exposed to the user?
-    SymSArrAMap* backlinks;
+  // For parametric instances, need to keep track of specific instantiations. 
+  Instances* instances;
+
+  // TODO (UB) if a value (e.g. proc) from a module is evaluated, it will give
+  // an address. If the original definition is then deleted, the address will
+  // now be dangling. This is an issue if the address has been stored somewhere! 
+  // This may end up needing to be exposed to the user?
+  SymSArrAMap* backlinks;
 } ModuleEntryInternal;
 
+typedef struct {
+  uint64_t* types;
+  void** implicits;
+  void* value;
+} InstantiatedInstance;
+
+ARRAY_HEADER(InstantiatedInstance, inst, Inst)
+ARRAY_COMMON_IMPL(InstantiatedInstance, inst, Inst)
+
+struct Instances {
+  uint64_t instance_offset;
+
+  InstArray instantiations;
+
+  uint64_t num_types;
+  uint64_t num_implicits;
+
+  ClosureLinkArray* closures;
+};
+
+ARRAY_COMMON_IMPL(InstanceSrc, inst_src, InstSrc)
 AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
 AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, symbol_cmp, entry, Entry)
 
@@ -170,6 +198,14 @@ void delete_decl_p(ModuleDecl* decl, PiAllocator* pia) {
 }
 
 // Helper
+void delete_instantiation(InstantiatedInstance instance, Module* module) {
+    mem_free(instance.types, &module->allocator);
+    mem_free(instance.implicits, &module->allocator);
+    call_free(*(void**)instance.value, &module->pico_allocator);
+    call_free(instance.value, &module->pico_allocator);
+}
+
+// Helper
 void delete_module_entry(ModuleEntryInternal entry, Module* module) {
     if (entry.is_module) {
         delete_module(entry.value);
@@ -177,8 +213,22 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
         if (entry.type.sort == TKind || entry.type.sort == TConstraint) {
             delete_pi_type_p(entry.value, &module->pico_allocator);
         } else if (entry.type.sort == TTraitInstance) {
+          if (entry.type.instance.over.len == 0) {
             call_free(*(void**)entry.value, &module->pico_allocator);
             call_free(entry.value, &module->pico_allocator);
+          } else {
+            Instances* instances = entry.instances;
+            for (size_t i = 0; i < instances->closures->len; i++) {
+                delete_closure_link(instances->closures->data[i], &module->pico_allocator);
+            }
+            sdelete_closure_link_array(*instances->closures);
+            mem_free(instances->closures, &module->allocator);
+            for (size_t i = 0; i < instances->instantiations.len; i++) {
+                delete_instantiation(instances->instantiations.data[i], module);
+            }
+            sdelete_inst_array(instances->instantiations);
+            mem_free(instances, &module->allocator);
+          }
         } else {
             call_free(entry.value, &module->pico_allocator);
         }
@@ -241,18 +291,18 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ed_links.len; i++) {
             LinkMetaData link = links->ed_links.data[i];
-            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            uint8_t* address_ptr = (executable.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cd_links.len; i++) {
             LinkMetaData link = links->cd_links.data[i];
-            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            uint8_t* address_ptr = (out.code.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
 
         for (size_t i = 0; i < links->dd_links.len; i++) {
             LinkMetaData link = links->dd_links.data[i];
-            void** address_ptr = (void**) ((void*)out.data.data + link.source_offset);
+            uint8_t* address_ptr = (out.data.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.data.data + link.dest_offset);
         }
     }
@@ -262,12 +312,12 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
         U8Array executable = get_instructions(target);
         for (size_t i = 0; i < links->ec_links.len; i++) {
             LinkMetaData link = links->ec_links.data[i];
-            void** address_ptr = (void**) ((void*)executable.data + link.source_offset);
+            uint8_t* address_ptr = (executable.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
         for (size_t i = 0; i < links->cc_links.len; i++) {
             LinkMetaData link = links->cc_links.data[i];
-            void** address_ptr = (void**) ((void*)out.code.data + link.source_offset);
+            uint8_t* address_ptr = (out.code.data + link.source_offset);
             set_unaligned_ptr(address_ptr, out.code.data + link.dest_offset);
         }
     }
@@ -293,16 +343,34 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
         entry.value = copy_pi_type_p(t_val, &module->pico_allocator);
     } else {
         if (type.sort == TTraitInstance) {
-            size_t total = 0;
-            for (size_t i = 0; i < type.instance.fields.len; i++) {
-                total = pi_size_align(total, pi_align_of(*(PiType*)type.instance.fields.data[i].val));
-                total += pi_size_of(*(PiType*)type.instance.fields.data[i].val);
-            }
-            void* new_memory = call_alloc(total, &module->pico_allocator);
-            memcpy(new_memory, *(void**)data, total);
+          if (type.instance.over.len == 0) {
+            // Regular instance
+            // TODO: add pi_instance_size to the types file.
+            size_t instance_size = pi_instance_size_of(type);
+            void* new_memory = call_alloc(instance_size, &module->pico_allocator);
+            memcpy(new_memory, *(void**)data, instance_size);
 
             entry.value = call_alloc(size, &module->pico_allocator);
             memcpy(entry.value, &new_memory, ADDRESS_SIZE);
+          } else {
+            // Effectively a function
+            Instances* instances = mem_alloc(sizeof(Instances), &module->allocator);
+
+            ClosureLinkArray* closures = mem_alloc(sizeof(ClosureLinkArray), &module->allocator);
+            *closures = scopy_closure_link_array(links->closure_links, &module->allocator);
+            for (size_t i = 0; i < closures->len; i++) {
+                closures->data[i] = copy_closure_link(closures->data[i], &module->pico_allocator);
+            }
+            *instances = (Instances) {
+              .instantiations = mk_inst_array(4, &module->allocator),
+
+              .num_types = type.instance.over.len,
+              .num_implicits = type.instance.implicits.len,
+
+              .closures = closures,
+            };
+            entry.instances = instances;
+          }
         } else {
             entry.value = call_alloc(size, &module->pico_allocator);
             memcpy(entry.value, data, size);
@@ -416,6 +484,89 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
     return (Result) {.type = Ok};
 }
 
+void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray implicits) {
+    ModuleEntryInternal* entry = entry_lookup(symbol, module->entries);
+    if (!entry) return NULL;
+    if (!entry->instances) return NULL; 
+
+    /**
+     * Check if a pre-existing instance exists
+     */
+    Instances existing_instances = *entry->instances;
+    for (size_t i = 0; i < existing_instances.instantiations.len; i++) {
+      InstantiatedInstance instance = existing_instances.instantiations.data[i];
+
+      // Check if implicits match (do this first because its more likely to fail
+      // early).
+      for (size_t j = 0; j < existing_instances.num_implicits; j++) {
+        if (instance.implicits[j] != implicits.data[j]) goto next_instance;
+      }
+      // Check if types match.
+      // TODO: We check on the encodings, but use the types later! Is there some
+      //       way of: adjusting the implementation so types are not required?
+      //       If not then we may run into issues as different types with the
+      //       same encoding get 'squashed' together?
+      for (size_t j = 0; j < existing_instances.num_types; j++) {
+        if (instance.types[j] != type_encodings.data[j]) goto next_instance;
+      }
+
+      // both types and instances match; return this instance!
+      return instance.value;
+
+    next_instance:
+      continue;
+    }
+
+    /**
+     * There is no pre-existing instance, so
+     * • Generate closures (functions) which wrap any polymorphic and implicit
+     *   parameters from the instance
+     * • Patch the executable memory of the instance with the new function pointers
+     * • Do a foreign call into the executable
+     */
+    Allocator exec = mk_executable_allocator(&module->allocator);
+    Assembler* assembler = mk_assembler(current_cpu_feature_flags(), &exec);
+
+    ClosureGenData data = {
+        .links = *existing_instances.closures,
+        .code_segment = *entry->code_segment,
+        .type_binds = type_binds,
+        .type_encodings = type_encodings,
+        .implicits = implicits,
+    };
+    InstanceClosures generated_closures = generate_instance_closures(assembler, data, &module->allocator);
+    U8Array instance_instrs = get_instructions(assembler);
+    for (size_t i = 0; i < generated_closures.closure_starts.len; i++) {
+        uint64_t start = generated_closures.closure_starts.data[i];
+        uint64_t defsite = entry->instances->closures->data[i].defsite;
+
+        uint8_t* callsite = entry->code_segment->data + defsite;
+        set_unaligned_ptr(callsite, instance_instrs.data + start);
+    }
+    
+    // Run the expression
+    void* instance = call_instance_fn(
+        entry->code_segment->data + existing_instances.instance_offset,
+        type_encodings,
+        implicits,
+        pi_instance_size_of(entry->type),
+        &module->pico_allocator,
+        &module->allocator);
+
+    InstantiatedInstance new_instance = {
+        .value = instance,
+        .types = call_alloc(sizeof(uint64_t) * type_encodings.len, &module->pico_allocator),
+        .implicits = call_alloc(sizeof(void*) * implicits.len, &module->pico_allocator),
+    };
+    memcpy(new_instance.types, type_encodings.data, sizeof(uint64_t) * type_encodings.len);
+    memcpy(new_instance.implicits, implicits.data, sizeof(void*) * implicits.len);
+    
+    push_inst(new_instance, &entry->instances->instantiations);
+    sdelete_u64_array(generated_closures.closure_starts);
+    release_executable_allocator(exec);
+    return instance;
+}
+
 ModuleEntry* get_def(Symbol symbol, Module* module) {
     Module* root = module->lexical_parent_package->root_module;
     if (module != root) {
@@ -456,6 +607,8 @@ PtrArray get_defined_instances(Module* module, Allocator* a) {
             InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
             *entry = (InstanceSrc) {
                 .id = m_entry.type.instance.instance_of,
+                .over = m_entry.type.instance.over,
+                .dependencies = m_entry.type.instance.implicits,
                 .args = m_entry.type.instance.args,
                 .src_sym = module->entries.data[i].key,
                 .src = module,

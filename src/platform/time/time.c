@@ -32,7 +32,7 @@ PerfTime time_diff(PerfTime start, PerfTime end) {
     };
 }
 
-#if ABI == SYSTEM_V_64
+#if OS_FAMILY == UNIX
 #include <time.h>
 
 PerfTime query_performance_timer() {

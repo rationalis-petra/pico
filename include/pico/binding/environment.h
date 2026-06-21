@@ -34,7 +34,17 @@ Module* env_module(Environment* env);
 
 // This is used for import clauses in scripts. Determines if an import caluse
 // can be validly added to the current module (module of the environment)
-bool import_clause_valid(Environment* env, ImportClause clause);
+typedef enum {
+    ICValid,
+    ICNotExists,
+    ICNotModule,
+} ImportClauseStatusType;
+
+typedef struct {
+    ImportClauseStatusType type;
+    Symbol bad_symbol;
+} ImportClauseStatus;
+ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause);
 
 EnvEntry env_lookup(Symbol sym, Environment* env);
 PiType* env_lookup_tydecl(Symbol sym, Environment* env);

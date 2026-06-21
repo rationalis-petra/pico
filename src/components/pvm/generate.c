@@ -21,10 +21,10 @@
 // Internal codegen
 //static void generate_instruction(PVMInstruction instruction, PVMTarget *target, LinkData *links, PVMGenContext context);
 
-void generate_term(PVMTerm *term, PVMTarget *target, LinkData *links, PVMGenContext context) {
+void generate_term(PVMTerm *term, PVMTarget *target, PVMGenContext context) {
 }
 
-void generate_proc(PVMProc *proc, PVMTarget *target, LinkData *links, PVMGenContext context) {
+void generate_proc(PVMProc *proc, PVMTarget *target, PVMGenContext context) {
 }
 
 /*

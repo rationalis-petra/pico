@@ -1,6 +1,6 @@
 #include "platform/machine_info.h"
 
-#if (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
+#if defined(WINDOW_SYSTEM) && (OS_FAMILY == UNIX) && (WINDOW_SYSTEM == 1)
 
 // TODO: investigate whehter to use XCB over xlib?
 

@@ -78,6 +78,7 @@ ARRAY_CMP_IMPL(SymPair, cmp_sym_pair, sym_pair, SymPair)
 typedef SymPair SymbolPair;
 
 PiType* trace_uvar(PiType* uvar);
+Dimension* trace_dim(Dimension* uvar);
 
 // Unify two types such they are equal. Assumes they have the same sort
 static UnifyResult unify_eq(PiType *lhs, PiType *rhs,
@@ -239,7 +240,34 @@ UnifyResult unify_eq(PiType *lhs, PiType *rhs, SymPairArray* rename, UnifyContex
 
         // Unify the return values
         return unify_internal(lhs->proc.ret, rhs->proc.ret, rename, ctx);
-        
+        break;
+    }
+    case TArray: {
+        DimPiList lhs_dims = lhs->array.dimensions;
+        DimPiList rhs_dims = rhs->array.dimensions;
+        if (lhs_dims.len != rhs_dims.len) {
+            return (UnifyResult) {
+                .type = USimpleError,
+                .message = mv_cstr_doc("Unification failed: attempting to unify two arrays of different dimensionality.", a)
+            };
+        }
+        for (size_t i = 0; i < lhs_dims.len; i++) {
+            Dimension* lhd = trace_dim(&lhs_dims.data[i]);
+            Dimension* rhd = trace_dim(&rhs_dims.data[i]);
+            if (lhd->is_uvar) {
+                lhd->uvar.target = rhd; 
+            } else if (rhd->is_uvar) {
+                rhd->uvar.target = lhd; 
+            } else {
+                if (lhd->val != rhd->val) {
+                    return (UnifyResult) {
+                        .type = USimpleError,
+                        .message = mv_cstr_doc("Unification failed: attempting to unify two arrays where at least one dimension has a different length.", a)
+                    };
+                }
+            }
+        }
+        return unify_internal(lhs->array.element, rhs->array.element, rename, ctx);
         break;
     }
     case TStruct: {
@@ -619,7 +647,7 @@ UnifyResult uvar_subst(UVarType* uvar, PiType* type, UnifyContext ctx) {
     
     for (size_t i = 0; i < uvar->substitutions.len; i++) {
         SymPtrAssoc* subst = uvar->substitutions.data[i];
-        type = pi_type_subst(type, *subst, ctx.pia, ctx.a);
+        type = pi_type_subst(type, *subst, ctx.logger, ctx.pia, ctx.a);
     }
     uvar->subst = type;
     return (UnifyResult){.type = UOk};
@@ -663,7 +691,9 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
         return has_unification_vars_p(*type.proc.ret);
-        break;
+    }
+    case TArray: {
+        return has_unification_vars_p(*type.array.element);
     }
     case TStruct: {
         for (size_t i = 0; i < type.structure.fields.len; i++) {
@@ -671,7 +701,6 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
         return false;
-        break;
     }
     case TEnum: {
         for (size_t i = 0; i < type.enumeration.variants.len; i++) {
@@ -682,7 +711,6 @@ bool has_unification_vars_p(PiType type) {
             }
         }
         return false;
-        break;
     }
     case TReset: {
         return has_unification_vars_p(*type.reset.in) || has_unification_vars_p(*type.reset.out);
@@ -765,13 +793,20 @@ bool has_unification_vars_p(PiType type) {
 }
 
 PiType* trace_uvar(PiType* uvar) {
-  while ((uvar->sort == TUVar)
+    while ((uvar->sort == TUVar)
          && uvar->uvar->subst != NULL) {
         uvar = uvar->uvar->subst;
     } 
     return uvar;
 }
 
+Dimension* trace_dim(Dimension* uvar) {
+    while ((uvar->is_uvar)
+           && uvar->uvar.target != NULL) {
+        uvar = uvar->uvar.target;
+    } 
+    return uvar;
+}
 
 void squash_type(PiType* type, UnifyContext ctx) {
     Allocator* a = ctx.a;
@@ -787,6 +822,10 @@ void squash_type(PiType* type, UnifyContext ctx) {
             squash_type((PiType*)(type->proc.args.data[i]), ctx);
         }
         squash_type(type->proc.ret, ctx);
+        break;
+    }
+    case TArray: {
+        squash_type(type->array.element, ctx);
         break;
     }
     case TStruct: {
@@ -961,7 +1000,7 @@ void squash_type(PiType* type, UnifyContext ctx) {
             for (size_t j = 0; j < binds->len; j++) {
                 squash_type(binds->data[j].val, ctx);
             }
-            *type = *pi_type_subst(type, *binds, pia, a);
+            *type = *pi_type_subst(type, *binds, ctx.logger, pia, a);
         }
 
         if (ctx.logger) end_section(ctx.logger);
@@ -1027,6 +1066,13 @@ PiType* mk_uvar_floating(PiAllocator* pia, Range range) {
     push_constraint(con, &uvar->uvar->constraints);
     
     return uvar;
+}
+
+Dimension mk_dim_uvar(PiAllocator *a) {
+    return (Dimension) {
+      .is_uvar = true,
+      .uvar = (UVarDim) { .target = NULL },
+    };
 }
 
 UnifyResult add_field_constraint(UVarType *uvar, Range range, Symbol field, PiType *field_ty, UnifyContext ctx) {
