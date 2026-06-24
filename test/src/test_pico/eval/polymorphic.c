@@ -260,6 +260,19 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) 1 2 3 4)");
     }
 
+    if (test_start(log, mv_string("array-polymorphic-constructor-align!=stack"))) {
+        int32_t expected[4] = {1, 2, 3, 4};
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {I32} 1 2 3 4)");
+    }
+
+    /*
+    if (test_start(log, mv_string("array-polymorphic-element"))) {
+        RUN("(def my-array )");
+        int64_t expected[4] = {1, 2, 3, 4};
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) 1 2 3 4)");
+    }
+    */
+
     // -----------------------------------------------------
     // 
     //      Variant

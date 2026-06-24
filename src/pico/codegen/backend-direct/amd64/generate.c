@@ -1055,7 +1055,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             build_binary_op(Mov, reg(R9, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
             build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
             generate_align_to(R8, R9, ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 8, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 8, sz_64), reg(R8, sz_64), ass, a, point);
 
             uint64_t len = total_arr_len(array_type->array.dimensions);
             build_binary_op(Mov, reg(RAX, sz_64), imm32(len), ass, a, point);
