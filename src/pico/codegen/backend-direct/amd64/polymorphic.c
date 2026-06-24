@@ -290,6 +290,21 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             }
             break;
         }
+        case TArray: {
+            generate_align_of(R9, type->array.element, env, ass, a, point);
+            build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+            generate_size_of(R8, type->array.element, env, ass, a, point);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            generate_align_to(R8, R9, ass, a, point);
+
+            build_binary_op(Mov, reg(RAX, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), imm64(total_arr_len(type->array.dimensions)), ass, a, point);
+            build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
+            if (dest != RAX) {
+                build_binary_op(Mov, reg(dest, sz_64), reg(RAX, sz_64), ass, a, point);
+            }
+            break;
+        }
         case TStruct: {
             build_unary_op(Push, imm32(0), ass, a, point);
             for (size_t i = 0; i < type->structure.fields.len; i++) {
@@ -384,6 +399,10 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
                 break;
             }
             }
+            break;
+        }
+        case TArray: {
+            generate_align_of(dest, type->array.element, env, ass, a, point);
             break;
         }
         case TStruct: {

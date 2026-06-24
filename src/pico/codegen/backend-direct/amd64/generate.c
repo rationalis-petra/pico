@@ -1029,23 +1029,102 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break; 
     }
     case SArray: {
-        // TODO: account for SIMD alignment
-        // TODO: account for polymorphism
-        PiType* array_type = strip_type(type);
-        size_t stack_size = pi_stack_size_of(*array_type);
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
-        data_stack_grow(env, stack_size);
+        // TODO: account for SIMD stuff (alignment, registers, etc.)
+        if (is_variable_in(type, env)) {
+            PiType* array_type = strip_type(type);
+            PiType* elt_type = strip_type(array_type->array.element);
+            // Size
+            generate_size_of(RAX, elt_type, env, ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, REGISTER_SIZE);
 
-        size_t dest_offset = 0;
-        size_t elt_size = pi_size_of(*array_type->array.element);
-        size_t elt_offset = pi_size_align(elt_size, pi_align_of(*array_type->array.element));
-        size_t elt_stack_size = pi_stack_align(elt_size);
-        for (size_t i = 0; i < syn.array.elements.len; i++) {
-            generate_i(syn.array.elements.data[i], env, ictx);
-            generate_stack_move(dest_offset + elt_stack_size, 0, elt_size, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm32(elt_stack_size), ass, a, point);
-            data_stack_shrink(env, elt_stack_size);
-            dest_offset += elt_offset;
+            // Align
+            generate_align_of(RAX, elt_type, env, ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, REGISTER_SIZE);
+
+            // Align size to element alignment
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            generate_align_to(R8, R9, ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+
+            // TODO (BUG UB): ensure downcast is correct!
+            // TODO (EFFICIENCY) add support for mov reg, imm8 and then
+            //                   downgrade this frim i32 to i8.
+            build_binary_op(Mov, reg(R9, sz_64), imm32(ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+            generate_align_to(R8, R9, ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 8, sz_64), reg(RAX, sz_64), ass, a, point);
+
+            uint64_t len = total_arr_len(array_type->array.dimensions);
+            build_binary_op(Mov, reg(RAX, sz_64), imm32(len), ass, a, point);
+            build_unary_op(Mul, rref8(RSP, 8, sz_64), ass, a, point);
+
+            build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+            build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
+            data_stack_grow(env, 2*REGISTER_SIZE);
+
+            // Current Relevant state:
+            // [RSP+24] : Element Stack Size
+            // [RSP+16] : Element Aligned Size
+            // [RSP+8]  : Pointer to array on variable stack
+            // [RSP]    : Pointer to current target on variable stack
+            //
+            // RAX : Array stack size
+            // -------------------------------------
+            // Next step: generate each element, copy it onto the stack
+            // 
+
+            for (size_t i = 0; i < syn.array.elements.len; i++) {
+                generate_i(syn.array.elements.data[i], env, ictx);
+                build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+                data_stack_shrink(env, ADDRESS_SIZE);
+
+                // TODO: elements may be static (when we may have variadic arrays)! double-check!
+                build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 24, sz_64), ass, a, point);
+                generate_poly_move(reg(R8, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                // Incerment index
+                build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 16, sz_64), ass, a, point);
+                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                // Pop value from variable stack
+                build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 24, sz_64), ass, a, point);
+                build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(R8, sz_64), ass, a, point);
+            }
+
+            // Current Relevant state:
+            // [RSP+24] : Element Stack Size
+            // [RSP+16] : Element Aligned Size
+            // [RSP+8]  : Pointer to array on variable stack
+            // [RSP]    : Pointer to current target on variable stack
+            // ------------------------------------------------------
+            // Next step: move RSP+8 -> RSP +24, pop 3 elements from stack
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 24, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm8(3*REGISTER_SIZE), ass, a, point);
+
+            data_stack_shrink(env, 3*REGISTER_SIZE);
+        } else {
+            PiType* array_type = strip_type(type);
+            size_t stack_size = pi_stack_size_of(*array_type);
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
+            data_stack_grow(env, stack_size);
+
+            size_t dest_offset = 0;
+            size_t elt_size = pi_size_of(*array_type->array.element);
+            size_t elt_offset = pi_size_align(elt_size, pi_align_of(*array_type->array.element));
+            size_t elt_stack_size = pi_stack_align(elt_size);
+            for (size_t i = 0; i < syn.array.elements.len; i++) {
+                generate_i(syn.array.elements.data[i], env, ictx);
+                generate_stack_move(dest_offset + elt_stack_size, 0, elt_size, ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imm32(elt_stack_size), ass, a, point);
+                data_stack_shrink(env, elt_stack_size);
+                dest_offset += elt_offset;
+            }
         }
         break;
     }

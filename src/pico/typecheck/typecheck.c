@@ -383,6 +383,14 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         type_infer_i(untyped.all.body, env, ctx); 
         pop_types(env, untyped.all.args.len);
         all_ty->binder.body = get_type(untyped.all.body, ctx.tape);
+
+        UnifyContext uctx = (UnifyContext) {
+            .a = ctx.a,
+            .pia = ctx.pia,
+            .current_module = type_env_module(env),
+            .logger = ctx.logger,
+        };
+        squash_type(all_ty, uctx);
         break;
     }
     case SMacro: {

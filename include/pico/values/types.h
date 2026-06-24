@@ -254,6 +254,8 @@ size_t pi_stack_align(size_t in);
 size_t pi_stack_size_of(PiType type);
 Result_t pi_maybe_stack_size_of(PiType type, size_t* out);
 
+uint64_t total_arr_len(DimPiList dim);
+
 // Resource Management
 void delete_pi_type(PiType t, PiAllocator* pia);
 void delete_pi_type_p(PiType* t, PiAllocator* pia);
@@ -269,22 +271,30 @@ uint64_t distinct_id();
 bool is_wider(PiType* narrow, PiType* wide);
 bool is_narrower(PiType* wide, PiType* narrow);
 
-// Recursively extracts the inner type from named types (but not distinct or opaque) 
-// Upon encountering a named type, it will substitute the name for the 
-// (wrapped) named type within the type, then contine descending.
+/**
+ * Recursively extracts the inner type from named types (but not distinct or opaque) 
+ * Upon encountering a named type, it will substitute the name for the 
+ * (wrapped) named type within the type, then contine descending.
+ */
 PiType* unname_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);
 
-// Recursively extracts the inner type from named and distinct types (but not opaque)
-// Upon encountering a named type, it will substitute the name for the 
-// (wrapped) named type within the type, then contine descending.
+/**
+ * Recursively extracts the inner type from named and distinct types (but not opaque)
+ * Upon encountering a named type, it will substitute the name for the 
+ * (wrapped) named type within the type, then contine descending.
+ */
 PiType* unwrap_type(PiType *ty, void* curr_module, PiAllocator* pia, Allocator* a);
 
-// Recursively extracts the inner type from named, distinct and opaque types.
+/**
+ * Recursively extracts the inner type from named, distinct and opaque types.
+ */
 PiType* strip_type(PiType* ty);
 
-// type_app: apply the arguments (args) to a type family (fam)
-//  Memory guarantes: both the arguments (args) and famiy are untouched, and can
-//  be safely deleted etc. without affecting the returned type.
+/**
+ * Apply the arguments (args) to a type family (fam)
+ * • Memory guarantes: both the arguments (args) and famiy are untouched, and can
+ *   be safely deleted etc. without affecting the returned type.
+ */
 PiType* type_app (PiType family, PtrArray args, PiAllocator* pia, Allocator* a);
 
 // Generators 
