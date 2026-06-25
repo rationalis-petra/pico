@@ -282,6 +282,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
     }
 
+    if (test_start(log, mv_string("array-polymorphic-element-small"))) {
+        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        uint8_t expected = 3;
+        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+    }
+
     // -----------------------------------------------------
     // 
     //      Variant

@@ -1152,8 +1152,6 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             generate_align_to(R8, R9, ass, a, point);
             build_unary_op(Push, reg(R8, sz_64), ass, a, point);
 
-            build_binary_op(Mov, rref8(RSP, 16, sz_64), reg(R8, sz_64), ass, a, point);
-
             // Reserve space for element (return value) on dynamic stack, and
             // overwrite raw element size with it
             build_binary_op(Sub, reg(R14, sz_64), reg(R8, sz_64), ass, a, point);
