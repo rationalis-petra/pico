@@ -516,7 +516,48 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         break;
     }
     case SArray: {
-        panic(mv_string("not implemented: pretty syntax for array"));
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mk_str_doc(mv_string("array"), a), &nodes);
+        U64Array dims = syntax.array.dimensions;
+
+        U64Array index = mk_zero_index(dims.len, a);
+        PtrArray array_stack = mk_ptr_array(dims.len, a);
+        for (size_t i = 0; i < dims.len; i++) {
+            PtrArray* arr = mem_alloc(sizeof(PtrArray), a);
+            *arr = mk_ptr_array(dims.data[i], a);
+            push_ptr(arr, &array_stack);
+        }
+        while (index_less(index, dims)) {
+            size_t base = index_offset(index, dims);
+            size_t inner_len = dims.data[dims.len - 1];
+            PtrArray* inner_nodes = array_stack.data[array_stack.len - 1];
+            for (size_t i = 0; i < inner_len; i++) {
+                size_t index = base + i;
+                push_ptr(pretty_syntax_internal(syntax.array.elements.data[index], tape, ctx, a), inner_nodes);
+            }
+            index.data[dims.len - 1] = inner_len;
+
+            // We are done, now increment the index!
+            size_t level = 1;
+            uint64_t curr_idx = index.data[dims.len - level];
+            while (level < dims.len && curr_idx > dims.data[dims.len - level]) {
+                if (level + 1 < dims.len) {
+                    PtrArray* array_nodes = array_stack.data[array_stack.len - level];
+                    PtrArray* parent_nodes = array_stack.data[array_stack.len - (level + 1)];
+                    push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), parent_nodes);
+                    *array_nodes = mk_ptr_array(dims.data[dims.len - level], a);
+                }
+
+                index.data[dims.len - level] = 0;
+                level++;
+                if (level < dims.len) curr_idx = index.data[dims.len - level] + 1;
+            }
+            index.data[dims.len - level] = curr_idx + 1;
+        }
+        PtrArray* array_nodes = array_stack.data[0];
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(*array_nodes, a), a), &nodes);
+        out = mk_paren_doc("(",")", mv_sep_doc(nodes, a), a);
+        break;
     }
     case SArrayElt: {
         panic(mv_string("not implemented: pretty syntax for array-elt"));
@@ -880,7 +921,6 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         break;
     }
     case SArrayType: {
-        panic(mv_string("not implemented: pretty syntax for array"));
         PtrArray nodes = mk_ptr_array(3, a) ;
         push_ptr(mv_style_doc(ty_former_style, mv_str_doc(mk_string("Array", a), a), a), &nodes);
 

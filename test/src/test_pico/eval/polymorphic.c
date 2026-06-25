@@ -265,13 +265,22 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {I32} 1 2 3 4)");
     }
 
-    /*
-    if (test_start(log, mv_string("array-polymorphic-element"))) {
-        RUN("(def my-array )");
-        int64_t expected[4] = {1, 2, 3, 4};
-        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) 1 2 3 4)");
+    if (test_start(log, mv_string("array-polymorphic-constructor-align!=size"))) {
+        typedef struct {
+            uint64_t v1;
+            uint32_t v2;
+        } Expected;
+        Expected expected[4] = {{.v1 = 1, .v2 = 3}, {.v1 = 2, .v2 = 4}, {.v1 = 5, .v2 = 7}, {.v1 = 6, .v2 = 8}};
+        RUN("(def SCT Struct [.v1 U64] [.v2 U32])");
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {SCT}"
+                "  (struct [.v1 1] [.v2 3]) (struct [.v1 2] [.v2 4]) (struct [.v1 5] [.v2 7]) (struct [.v1 6] [.v2 8]))");
     }
-    */
+
+    if (test_start(log, mv_string("array-polymorphic-element"))) {
+        RUN("(def my-array array [1 2 3 4])");
+        int64_t expected = 3;
+        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+    }
 
     // -----------------------------------------------------
     // 

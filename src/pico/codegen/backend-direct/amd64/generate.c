@@ -655,7 +655,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 build_unary_op(Push, reg(R9, sz_64), ass, a, point);
 
             // Structs and Enums are passed by value, and have variable size.
-            } else if (indistinct_type.sort == TStruct || indistinct_type.sort == TEnum || indistinct_type.sort == TSealed) {
+            } else if (indistinct_type.sort == TArray
+                       || indistinct_type.sort == TStruct
+                       || indistinct_type.sort == TEnum
+                       || indistinct_type.sort == TSealed) {
                 size_t value_size = pi_size_of(indistinct_type);
                 size_t stack_size = pi_stack_align(value_size);
                 AsmResult out = build_binary_op(Mov, reg(RCX, sz_64), imm64((uint64_t)e.value), ass, a, point);
@@ -1129,47 +1132,147 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SArrayElt: {
-        PiType* val_type = strip_type(type);
-        PiType* array_type = strip_type(get_type(syn.array_elt.array, ictx.tape));
-        size_t elt_size = pi_size_of(*val_type);
-        size_t offset_size = pi_size_align(elt_size, pi_align_of(*val_type));
-        size_t stack_size = pi_stack_align(elt_size);
+        if (is_variable_in(type, env)) {
+            PiType* val_type = strip_type(type);
+            PiType* array_type = strip_type(get_type(syn.array_elt.array, ictx.tape));
+            
+            // Store element size on stack
+            generate_size_of(R8, val_type, env, ass, a, point);
+            build_unary_op(Push, reg(R8, sz_64), ass, a, point);
 
-        build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
-        data_stack_grow(env, stack_size);
-        int64_t dest_level = get_stack_head(env);
-        for (size_t i = 0; i < syn.array_elt.index.len; i++) {
-            generate_i(syn.array_elt.index.data[i], env, ictx);
+            // Store element aligned size on stack (x2)
+            generate_align_of(R9, val_type, env, ass, a, point);
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            generate_align_to(R8, R9, ass, a, point);
+            build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+            build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+
+            // Store element stack size on stack
+            build_binary_op(Mov, reg(R9, sz_64), imm32(REGISTER_SIZE), ass, a, point);
+            generate_align_to(R8, R9, ass, a, point);
+            build_unary_op(Push, reg(R8, sz_64), ass, a, point);
+
+            build_binary_op(Mov, rref8(RSP, 16, sz_64), reg(R8, sz_64), ass, a, point);
+
+            // Reserve space for element (return value) on dynamic stack, and
+            // overwrite raw element size with it
+            build_binary_op(Sub, reg(R14, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 24, sz_64), reg(R14, sz_64), ass, a, point);
+
+            data_stack_grow(env, 4 * REGISTER_SIZE);
+
+            // [RSP + 24] : Return Value
+            // [RSP + 16] : Aligned Element size
+            // [RSP + 8]  : Aligned Element size
+            // [RSP]      : Stack Element Size 
+            // ----------------------------------------
+
+            for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+                generate_i(syn.array_elt.index.data[i], env, ictx);
+            }
+
+
+            size_t g_offset = syn.array_elt.index.len * REGISTER_SIZE;
+            // [RSP + 24 + g_offest] : Return value
+            // [RSP + 16 + g_offest] : Block size
+            // [RSP + 8 + g_offest]  : Aligned Element size
+            // [RSP + g_offest]      : Stack Element size
+            // .... <index>
+            // ----------------------------------------
+
+            // Keep the desired memory offset in RBX
+            build_binary_op(Mov, reg(RBX, sz_64), imm32(0), ass, a, point);
+            for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+                g_offset -= REGISTER_SIZE;
+                size_t block_size_offset = g_offset + 16;
+
+                // Calculate the source offset contributed by this part of the array from the start
+                build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, block_size_offset, sz_64), ass, a, point);
+                build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RBX, sz_64), reg(RAX, sz_64), ass, a, point);
+
+                // Multiply block size
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, block_size_offset, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RAX, sz_64), imm32(array_type->array.dimensions.data[syn.array_elt.index.len - (i + 1)].val), ass, a, point);
+                build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
+                build_binary_op(Mov, rref8(RSP, block_size_offset, sz_64), reg(RAX, sz_64), ass, a, point);
+            }
+            build_unary_op(Push, reg(RBX, sz_64), ass, a, point);
+            data_stack_shrink(env, (syn.array_elt.index.len - 1) * ADDRESS_SIZE);
+
+            generate_i(syn.array_elt.array, env, ictx);
+
+            // [RSP + 40] : Return value
+            // [RSP + 32] : Block size
+            // [RSP + 24] : Aligned Element size
+            // [RSP + 16] : Stack Element size
+            // [RSP + 8]  : Memory Offset (of element)
+            // [RSP]      : Array
+            // .... <index>
+            // ----------------------------------------
+            build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 40, sz_64), ass, a, point);
+            // Src + 
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Size
+            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 16, sz_64), ass, a, point);
+
+            generate_poly_move(reg(RDX, sz_64), reg(RCX, sz_64), reg(R8, sz_64), ass, a, point);
+
+            // Pop unneded values from static stack
+            build_binary_op(Add, reg(RSP, sz_64), imm32(40), ass, a, point);
+            data_stack_shrink(env, 40);
+
+            // Shrink variable stack
+            build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+
+        } else {
+            PiType* val_type = strip_type(type);
+            PiType* array_type = strip_type(get_type(syn.array_elt.array, ictx.tape));
+            size_t elt_size = pi_size_of(*val_type);
+            size_t offset_size = pi_size_align(elt_size, pi_align_of(*val_type));
+            size_t stack_size = pi_stack_align(elt_size);
+
+            build_binary_op(Sub, reg(RSP, sz_64), imm32(stack_size), ass, a, point);
+            data_stack_grow(env, stack_size);
+            int64_t dest_level = get_stack_head(env);
+            for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+                generate_i(syn.array_elt.index.data[i], env, ictx);
+            }
+
+            size_t block_size = offset_size;
+            build_binary_op(Mov, reg(RAX, sz_64), imm32(0), ass, a, point);
+            for (size_t i = 0; i < syn.array_elt.index.len; i++) {
+                // Calculate the source offset from the array start
+                build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RAX, sz_64), reg(RDX, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
+                build_binary_op(Mov, reg(RCX, sz_64), imm32(block_size), ass, a, point);
+                build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
+
+                block_size *= array_type->array.dimensions.data[syn.array_elt.index.len - (i + 1)].val;
+            }
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_shrink(env, (syn.array_elt.index.len - 1) * ADDRESS_SIZE);
+
+            generate_i(syn.array_elt.array, env, ictx);
+            int64_t current_level = get_stack_head(env);
+
+            build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RDX, sz_64), imm32(dest_level - current_level), ass, a, point);
+
+            build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RCX, sz_64), rref32(RSP, dest_level - current_level - ADDRESS_SIZE, sz_64), ass, a, point);
+
+            generate_monomorphic_copy(RDX, RCX, elt_size, ass, a, point);
+            size_t discard = dest_level - current_level;
+            build_binary_op(Add, reg(RSP, sz_64), imm32(discard), ass, a, point);
+            data_stack_shrink(env, discard);
         }
-
-        size_t block_size = offset_size;
-        build_binary_op(Mov, reg(RAX, sz_64), imm32(0), ass, a, point);
-        for (size_t i = 0; i < syn.array_elt.index.len; i++) {
-            // Calculate the source offset from the array start
-            build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
-            build_binary_op(Add, reg(RAX, sz_64), reg(RDX, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(RDX, sz_64), imm32(0), ass, a, point);
-            build_binary_op(Mov, reg(RCX, sz_64), imm32(block_size), ass, a, point);
-            build_unary_op(Mul, reg(RCX, sz_64), ass, a, point);
-
-            block_size *= array_type->array.dimensions.data[syn.array_elt.index.len - (i + 1)].val;
-        }
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_shrink(env, (syn.array_elt.index.len - 1) * ADDRESS_SIZE);
-
-        generate_i(syn.array_elt.array, env, ictx);
-        int64_t current_level = get_stack_head(env);
-
-        build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RDX, sz_64), imm32(dest_level - current_level), ass, a, point);
-
-        build_binary_op(Mov, reg(RCX, sz_64), reg(RSP, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RCX, sz_64), rref32(RSP, dest_level - current_level - ADDRESS_SIZE, sz_64), ass, a, point);
-
-        generate_monomorphic_copy(RDX, RCX, elt_size, ass, a, point);
-        size_t discard = dest_level - current_level;
-        build_binary_op(Add, reg(RSP, sz_64), imm32(discard), ass, a, point);
-        data_stack_shrink(env, discard);
         break;
     }
     case SStructure: {
