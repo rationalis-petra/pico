@@ -771,6 +771,16 @@ ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a) {
     };
 }
 
+ParseResult build_char_lit(int64_t codepoint, Range range) {
+    return (ParseResult) {
+        .type = ParseSuccess,
+        .result.type = RawAtom,
+        .result.range = range,
+        .result.atom.type = AIntegral,
+        .result.atom.int_64 = codepoint,
+    };
+}
+
 ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
     StreamResult result;
     uint32_t codepoint;
@@ -790,14 +800,11 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
     uint32_t char_lit = codepoint;
     peek(is, &codepoint);
     if (is_whitespace(codepoint) || is_special_char(codepoint)) {
-        return (ParseResult) {
-            .type = ParseSuccess,
-            .result.type = RawAtom,
-            .result.range.start = start,
-            .result.range.end = bytecount(is),
-            .result.atom.type = AIntegral,
-            .result.atom.int_64 = char_lit,
+        Range range = {
+            .start = start,
+            .end = bytecount(is),
         };
+        return build_char_lit(char_lit, range);
     } else if (codepoint == '_') {
         switch (char_lit) {
         case 'b':
@@ -815,15 +822,42 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
             break;
         }
     } else {
-        return (ParseResult) {
-            .type = ParseFail,
-            .error.message = mv_cstr_doc("Unexpected literal beginning with '#': if you meant a char literal\n "
-                                         "ensure there is only one character following the '#' then a space.\n"
-                                         "If you wanted a numeric literal, follow the '#' with a base indicator\n" 
-                                         "character then an underscore, e.g. #b_11 for binary 3" , a),
-            .error.range.start = bytecount(is),
-            .error.range.end = bytecount(is),
+        U32Array u32_name = mk_u32_array(8, a);
+        push_u32(char_lit, &u32_name);
+        while (!(is_whitespace(codepoint) || is_special_char(codepoint))) {
+            push_u32(codepoint, &u32_name);
+            next(is, &codepoint); // consume current token
+            peek(is, &codepoint); // to check if next token is end
+        }
+        String name = string_from_UTF_32(u32_name, a);
+
+        Range range = {
+            .start = start,
+            .end = bytecount(is),
         };
+        if (string_eq(mv_string("null"), name)) {
+            return build_char_lit('\0', range);
+        } else if (string_eq(mv_string("space"), name)) {
+            return build_char_lit(' ', range);
+        } else if (string_eq(mv_string("tab"), name)) {
+            return build_char_lit('\t', range);
+        } else if (string_eq(mv_string("newline"), name)) {
+            return build_char_lit('\n', range);
+        } else if (string_eq(mv_string("return"), name)) {
+            return build_char_lit('\r', range);
+        } else {
+            return (ParseResult) {
+                .type = ParseFail,
+                .error.message = mv_cstr_doc("Unexpected charater literall name '#': most character literals\n "
+                                             "need there is only one character following the '#' then a space or .\n"
+                                             "special character.\n If you wanted a numeric literal, follow the '#' \n"
+                                             "  with a base indicator character then an underscore, e.g. #b_11 for binary 3.\n"
+                                             "If you wanted a named charater, such as #space or #tab, please check \n"
+                                             "  the spelling, and the documentation, to ensure your charater is supported."
+                                             , a),
+                .error.range = range,
+            };
+        }
     }
 }
 

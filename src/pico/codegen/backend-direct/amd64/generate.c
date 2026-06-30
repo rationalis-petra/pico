@@ -2895,6 +2895,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Move false (not uvar)
             build_binary_op(Mov, reg(R9, sz_64), imm32(0), ass, a, point);
+            build_binary_op(Mov, sib(RAX, RCX, 8, sz_64), reg(R9, sz_64), ass, a, point);
             build_binary_op(Add, reg(RCX, sz_64), imm8(1), ass, a, point);
 
             // Move dimension (val)

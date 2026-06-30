@@ -139,6 +139,8 @@ MacroResult loop_macro(RawTreePiList nodes) {
     push_rawtree((RawTree){}, &loop_body_nodes);
     AddrPiList loop_fors = mk_addr_list(2, pia);
     AddrPiList loop_whiles = mk_addr_list(2, pia);
+    AddrPiList loop_end_whiles = mk_addr_list(2, pia);
+    int stage = 0; // 0 = begin conditions, 1 = body terms, 2 = end conditions
     for (size_t i = 1; i < nodes.len; i++) {
         RawTree branch = nodes.data[i];
         if (branch.type == RawBranch && branch.branch.hint == HSpecial) {
@@ -158,6 +160,13 @@ MacroResult loop_macro(RawTreePiList nodes) {
                 };
             }
             if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("for")))) {
+                if (stage != 0) {
+                    return (MacroResult) {
+                        .result_type = Left,
+                        .err.message = mv_string("For clauses can only appear at the beginning of a loop"),
+                        .err.range = branch.branch.nodes.data[0].range,
+                    };
+                }
                 ForRange range;
                 if (branch.branch.nodes.len != 6) {
                     return (MacroResult) {
@@ -235,10 +244,15 @@ MacroResult loop_macro(RawTreePiList nodes) {
                     };
                 }
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("while")))) {
+                if (stage == 1) stage++;
                 RawTree *raw_term = (branch.branch.nodes.len == 2)
                     ? &branch.branch.nodes.data[1]
                     : raw_slice(&branch, 1, pia);
-                push_addr(raw_term, &loop_whiles);
+                if (stage == 0) {
+                    push_addr(raw_term, &loop_whiles);
+                } else {
+                    push_addr(raw_term, &loop_end_whiles);
+                }
             } else if (eq_symbol(&branch.branch.nodes.data[0], string_to_symbol(mv_string("let!")))) {
                 // let! gets an exception because loop bodies contain an
                 // implicit 'seq'
@@ -251,7 +265,17 @@ MacroResult loop_macro(RawTreePiList nodes) {
                 };
             }
         } else {
-            push_rawtree(nodes.data[i], &loop_body_nodes);
+            if (stage == 0) stage ++;
+            // TODO: add error message if stage is 2
+            if (stage == 2) {
+                return (MacroResult) {
+                    .result_type = Left,
+                    .err.message = mv_string("Malformed loop clause: expected on of 'while', 'for'"),
+                    .err.range = branch.branch.nodes.data[0].range,
+                };
+            } else {
+                push_rawtree(nodes.data[i], &loop_body_nodes);
+            }
         }
     }
 
@@ -336,7 +360,6 @@ MacroResult loop_macro(RawTreePiList nodes) {
             };
         }
     }
-
     RawTreePiList loop_body_arg_nodes = mk_rawtree_list(loop_fors.len, pia);
     
     for (size_t i = 0; i < loop_fors.len; i++) {
@@ -438,12 +461,60 @@ MacroResult loop_macro(RawTreePiList nodes) {
     // This index was reserved earlier
     loop_body_nodes.data[1] = if_expr;
 
+
+    // Loop end:
+
     RawTree goto_continue = (RawTree) {
         .type = RawBranch,
         .branch.hint = HExpression,
         .branch.nodes = continue_go_to_nodes,
     };
-    push_rawtree(goto_continue, &loop_body_nodes);
+    if (loop_end_whiles.len > 0) {
+        size_t start_idx = 0;
+        if (!cond_initialized) {
+            loop_condition = *(RawTree*)loop_end_whiles.data[0];
+            start_idx++;
+        }
+        for (size_t i = start_idx; i < loop_end_whiles.len; i++) {
+            RawTree new_condition = *(RawTree*)loop_end_whiles.data[i];
+            RawTreePiList and_fn_nodes = mk_rawtree_list(3, pia);
+            push_rawtree(atom_symbol("."), &and_fn_nodes);
+            push_rawtree(atom_symbol("and"), &and_fn_nodes);
+            push_rawtree(atom_symbol("bool"), &and_fn_nodes);
+            RawTree and = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_fn_nodes,
+            };
+
+            RawTreePiList and_nodes = mk_rawtree_list(3, pia);
+
+            push_rawtree(and, &and_nodes);
+            push_rawtree(loop_condition, &and_nodes);
+            push_rawtree(new_condition, &and_nodes);
+            loop_condition = (RawTree) {
+                .type = RawBranch,
+                .branch.hint = HExpression,
+                .branch.nodes = and_nodes,
+            };
+        }
+
+
+        RawTreePiList if_nodes = mk_rawtree_list(4, pia);
+        push_rawtree(atom_symbol("if"), &if_nodes);
+        push_rawtree(loop_condition, &if_nodes);
+        push_rawtree(goto_continue, &if_nodes);
+        push_rawtree(goto_exit, &if_nodes);
+
+        RawTree end_cond = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = if_nodes,
+        };
+        push_rawtree(end_cond, &loop_body_nodes);
+    } else {
+        push_rawtree(goto_continue, &loop_body_nodes);
+    }
 
     RawTree loop_body = (RawTree) {
         .type = RawBranch,

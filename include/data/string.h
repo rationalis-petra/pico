@@ -25,6 +25,7 @@ String string_from_ASCII(U8Array arr, Allocator* a);
 
 // String utilities:
 
+bool string_eq(const String lhs, const String rhs);
 int string_cmp(const String lhs, const String rhs);
 String string_cat(const String lhs, const String rhs, Allocator* a);
 String string_ncat(Allocator* a, size_t n, ...);

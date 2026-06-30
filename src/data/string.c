@@ -83,6 +83,9 @@ String string_from_ASCII(U8Array arr, Allocator* a) {
     return out;
 }
 
+bool string_eq(const String lhs, const String rhs) {
+    return string_cmp(lhs, rhs) == 0;
+}
 int string_cmp(const String lhs, const String rhs) {
     // TODO: use vector instructions to make this more efficient?
     size_t min_memsize = (lhs.memsize < rhs.memsize)
