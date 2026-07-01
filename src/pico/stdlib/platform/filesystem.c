@@ -34,7 +34,7 @@ uint8_t relic_read_byte(File *file) {
 U8Array relic_read_chunk(File *file, MaybeSize msize) {
     // TODO: The allocator pointer goes on to live in the output array,
     //       and so it will be dangling when this function exits
-    PiAllocator pia = get_std_perm_allocator();
+    PiAllocator pia = get_std_current_allocator();
     Allocator a = convert_to_callocator(&pia);
     return read_chunk(file, !msize.tag, msize.size, &a);
 }
@@ -47,7 +47,10 @@ CType build_file_result_ctype(PiAllocator* pia) {
                                                    "errcode", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong})));
 }
 
-void relic_current_directory() {
+String relic_current_directory() {
+    PiAllocator pia = get_std_current_allocator();
+    Allocator a = convert_to_callocator(&pia);
+    return get_current_directory(&a);
 }
 
 void build_current_dir_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
@@ -194,7 +197,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
 
     typep = mk_proc_type(pia, 0, mk_string_type(pia));
     build_current_dir_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("current-directory"));
+    sym = string_to_symbol(mv_string("get-current-directory"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);

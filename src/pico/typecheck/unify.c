@@ -671,9 +671,14 @@ PiType* try_get_uvar(UVarType *uvar) {
 void add_subst(UVarType* uvar, SymPtrAssoc binds, Allocator* a) {
     // NOTE: We shallow copy here due to the allocation guarantees made 
     //       by the typecheck (caller) function.
-    SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
-    *subst = scopy_sym_ptr_assoc(binds, a);
-    push_addr(subst, &uvar->substitutions);
+
+    // Eliminate all substitutions that are severed
+    // Note: we start by copying the binds because deletion is destructive
+    if (binds.len > 0) {
+        SymPtrAssoc* subst = mem_alloc(sizeof(SymPtrAssoc), a);
+        *subst = scopy_sym_ptr_assoc(binds, a);
+        push_addr(subst, &uvar->substitutions);
+    }
 }
 
 bool has_unification_vars_p(PiType type) {
@@ -1020,7 +1025,7 @@ PiType* mk_uvar(PiAllocator* pia) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = NoDefault,
-        .substitutions = mk_addr_list(8, pia),
+        .substitutions = mk_addr_list(1, pia),
     };
     
     return uvar;
@@ -1035,7 +1040,7 @@ PiType* mk_uvar_integral(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Integral,
-        .substitutions = mk_addr_list(8, pia),
+        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {
@@ -1056,7 +1061,7 @@ PiType* mk_uvar_floating(PiAllocator* pia, Range range) {
         .subst = NULL,
         .constraints = mk_constraint_list(4, pia),
         .default_behaviour = Floating,
-        .substitutions = mk_addr_list(8, pia),
+        .substitutions = mk_addr_list(1, pia),
     };
 
     Constraint con = (Constraint) {

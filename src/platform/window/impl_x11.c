@@ -51,7 +51,6 @@ PlWindow* pl_create_window(String name, int width, int height) {
 
     int blackColour = BlackPixel(x11_display, DefaultScreen(x11_display));
 
-
     Window xwin = XCreateSimpleWindow(x11_display, DefaultRootWindow(x11_display), 0, 0, width, height, 0, blackColour, blackColour);
 	XSetWMProtocols(x11_display, xwin, &WM_DELETE_WINDOW, 1);
 

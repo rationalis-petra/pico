@@ -23,6 +23,8 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
+    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
+
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, a),

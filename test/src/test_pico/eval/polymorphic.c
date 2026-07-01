@@ -91,6 +91,25 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     // -------------------------------------------------------------------------
     //
+    //     Polymorphism in Traits/Instances
+    //
+    // -------------------------------------------------------------------------
+
+    if (test_start(log, mv_string("poly-internal-return-large"))) {
+      RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
+      RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
+      RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
+          "  [.eql proc [l r]\n"
+          "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
+          "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
+      RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
+      bool expected = true;
+      TEST_EQ("(eql (array [1 2]) (array [1 2]))");
+    }
+
+
+    // -------------------------------------------------------------------------
+    //
     //     Static control and binding - seq/let/if/
     //
     // -------------------------------------------------------------------------
@@ -247,6 +266,51 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         RUN("(def nas struct NonAligned [.x 1] [.y -2] [.z 3] [.p -4])");
         int64_t expected = 3;
         TEST_EQ("((all [A] nas.z) {Unit})");
+    }
+
+    // -----------------------------------------------------
+    // 
+    //      Array
+    // 
+    // -----------------------------------------------------
+
+    if (test_start(log, mv_string("array-polymorphic-constructor"))) {
+        int64_t expected[4] = {1, 2, 3, 4};
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) 1 2 3 4)");
+    }
+
+    if (test_start(log, mv_string("array-polymorphic-constructor-align!=stack"))) {
+        int32_t expected[4] = {1, 2, 3, 4};
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {I32} 1 2 3 4)");
+    }
+
+    if (test_start(log, mv_string("array-polymorphic-constructor-align!=size"))) {
+        typedef struct {
+            uint64_t v1;
+            uint32_t v2;
+        } Expected;
+        Expected expected[4] = {{.v1 = 1, .v2 = 3}, {.v1 = 2, .v2 = 4}, {.v1 = 5, .v2 = 7}, {.v1 = 6, .v2 = 8}};
+        RUN("(def SCT Struct [.v1 U64] [.v2 U32])");
+        TEST_EQ("((all [A] proc [(a A) (b A) (c A) (d A)] array {4} [a b c d]) {SCT}"
+                "  (struct [.v1 1] [.v2 3]) (struct [.v1 2] [.v2 4]) (struct [.v1 5] [.v2 7]) (struct [.v1 6] [.v2 8]))");
+    }
+
+    if (test_start(log, mv_string("array-polymorphic-element"))) {
+        RUN("(def my-array array [1 2 3 4])");
+        int64_t expected = 3;
+        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+    }
+
+    if (test_start(log, mv_string("array-polymorphic-element-small"))) {
+        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        uint8_t expected = 3;
+        TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
+    }
+
+    if (test_start(log, mv_string("array-polymorphic-multi-element-access"))) {
+        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        uint8_t expected = 5;
+        TEST_EQ("((all [A] proc {(n (Num A))} [(a (Array [4] A))] (n.+ (aelt 2 a) (aelt 1 a))) my-array)");
     }
 
     // -----------------------------------------------------

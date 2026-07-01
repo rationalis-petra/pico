@@ -100,7 +100,7 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
     compile_toplevel(eq_u8_trait, module, target, &point, &pi_point, region);
 
     const char* eq_string_trait = 
-        "(def u8-eq instance (Eq string.String)"
+        "(def string-eq instance (Eq string.String)"
         "  [.= string.=]"
         "  [.!= string.!=])\n";
     compile_toplevel(eq_string_trait, module, target, &point, &pi_point, region);

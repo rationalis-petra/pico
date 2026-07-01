@@ -627,7 +627,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
     }
 
     // -----------------------------------------------------
-    // 
+    ///
     //  Instances
     // 
     // -----------------------------------------------------
@@ -668,10 +668,8 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = -98;
         RUN("(def Inhabited Trait Inhabited [A] [.value A])");
 
-        // TODO (BUG)
-        // swapping the order of below statements gives an 'ambiguous instance' error?
-        RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])");
         RUN("(def get-value all [A] proc {(in (Inhabited A))} [(x A)] in.value)");
+        RUN("(def i8-inhabited instance (Inhabited I8) [.value -98])");
         TEST_EQ("(get-value {I8} 5)");
     }
 
@@ -686,7 +684,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
             "      (out-of (ID A) x) "
             "      (out-of (ID A) y)))])");
         RUN("(def poly-add all [A] proc {(add (Addable A))} [(x A) (y A)] (add.add x y))");
-        //        TEST_EQ()
 
         int64_t expected = 72;
         TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");

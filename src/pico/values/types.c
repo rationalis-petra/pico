@@ -407,7 +407,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             if (type->array.dimensions.data[i].is_uvar) {
                 panic(mv_string("Cannot print array when type has undefined ."));
             }
-            push_u64(type->array.dimensions.data[i].val, &dims);
+            dims.data[i] = type->array.dimensions.data[i].val;
         }
 
         U64Array index = mk_zero_index(dims.len, a);
@@ -1485,6 +1485,19 @@ Result_t pi_maybe_align_of(PiType type, size_t* out) {
     panic(mv_string("pi_maye_align_of received invalid type."));
 }
 
+
+uint64_t total_arr_len(DimPiList dim) {
+    uint64_t total = 1;
+    for (size_t i = 0; i < dim.len; i++) {
+        if (dim.data[i].is_uvar) {
+            panic(mv_string("pi_maye_align_of received invalid type."));
+        } else {
+            total *= dim.data[i].val;
+        }
+    }
+    return total;
+}
+
 // TODO (UB): make this thread safe
 // Note: this counter starts at 1 as 0 is a reserved value,
 // which means 'not unique/no ID'
@@ -1635,7 +1648,7 @@ void type_app_subst(PiType* body, SymPtrAssoc subst, SymbolArray* shadowed, PiAl
         break;
     case TEnum:
         for (size_t i = 0; i < body->enumeration.variants.len; i++) {
-            PtrArray* variant = body->enumeration.variants.data[i].val;
+            AddrPiList* variant = body->enumeration.variants.data[i].val;
             for (size_t j = 0; j < variant->len; j++) {
                 type_app_subst(variant->data[j], subst, shadowed, pia, logger, a);
             }
@@ -2319,6 +2332,9 @@ bool is_variable_for_recur(PiType *ty, SymbolArray vars, SymbolArray shadowed) {
     }
     case TProc:
         return false;
+    case TArray:
+        // TODO: update me when dimension can vary 
+        return is_variable_for_recur(ty->array.element, vars, shadowed);
     case TStruct:
         for (size_t i = 0; i < ty->structure.fields.len; i++) {
             if (is_variable_for_recur(ty->structure.fields.data[i].val, vars, shadowed))
