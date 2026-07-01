@@ -682,19 +682,26 @@ void generate_poly_move(Location dest, Location src, Location size, Assembler* a
 
     // memcpy (dest = rdi, src = rsi, size = rdx)
     // copy size into RDX
-    build_binary_op(Mov, reg(RDI, sz_64), dest, ass, a, point);
-    build_binary_op(Mov, reg(RSI, sz_64), src, ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), size, ass, a, point);
+    if (!reg_conflict(dest, RDI))
+        build_binary_op(Mov, reg(RDI, sz_64), dest, ass, a, point);
+    if (!reg_conflict(src, RSI))
+        build_binary_op(Mov, reg(RSI, sz_64), src, ass, a, point);
+    if (!reg_conflict(size, RDX))
+        build_binary_op(Mov, reg(RDX, sz_64), size, ass, a, point);
 
 #elif ABI == WIN_64
-    if (reg_conflict(src, RCX) || reg_conflict(size, RDX) || reg_conflict(size, R8)) {
+    if (reg_conflict(src, RCX) || reg_conflict(size, RCX) || reg_conflict(size, RDX)) {
         panic(mv_string("In generate_poly_move: invalid regitser provided to generate_poly_move"));
     }
 
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_binary_op(Mov, reg(RCX, sz_64), dest, ass, a, point);
-    build_binary_op(Mov, reg(RDX, sz_64), src, ass, a, point);
-    build_binary_op(Mov, reg(R8, sz_64), size, ass, a, point);
+    if (!reg_conflict(dest, RCX))
+        build_binary_op(Mov, reg(RCX, sz_64), dest, ass, a, point);
+    if (!reg_conflict(src, RDX))
+        build_binary_op(Mov, reg(RDX, sz_64), src, ass, a, point);
+    if (!reg_conflict(size, R8))
+        build_binary_op(Mov, reg(R8, sz_64), size, ass, a, point);
+
 #else
 #error "Unknown calling convention"
 #endif
