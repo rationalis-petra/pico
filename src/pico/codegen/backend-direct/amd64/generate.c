@@ -1210,16 +1210,16 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             // [RSP]      : Array
             // .... <index>
             // ----------------------------------------
-            build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 40, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 40, sz_64), ass, a, point);
             // Src + 
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
             build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 8, sz_64), ass, a, point);
-            build_binary_op(Add, reg(RCX, sz_64), reg(R9, sz_64), ass, a, point);
+            build_binary_op(Add, reg(RDX, sz_64), reg(R9, sz_64), ass, a, point);
 
             // Size
             build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 16, sz_64), ass, a, point);
 
-            generate_poly_move(reg(RDX, sz_64), reg(RCX, sz_64), reg(R8, sz_64), ass, a, point);
+            generate_poly_move(reg(RCX, sz_64), reg(RDX, sz_64), reg(R8, sz_64), ass, a, point);
 
             // Pop unneded values from static stack
             build_binary_op(Add, reg(RSP, sz_64), imm32(40), ass, a, point);
