@@ -930,7 +930,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     push_ptr(mv_cstr_doc(
                         "Attempting to create a structure "
                         "based off of an opaque type. "
-                        "Note that instances of opaque types can only be "
+                        "Note that values of opaque types can only be "
                         "created in the module that the opaque type is defined."
                         , a), &nodes);
                     push_ptr(pretty_type(struct_type, default_ptp, a), &nodes);
