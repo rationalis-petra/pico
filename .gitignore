@@ -3,5 +3,6 @@ scratch/*
 gmon.out
 .idea/*
 *.~undo-tree~
+default.config
 compile_commands.json
 .cache
