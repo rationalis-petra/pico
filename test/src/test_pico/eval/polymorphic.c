@@ -95,7 +95,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     //
     // -------------------------------------------------------------------------
 
-    if (test_start(log, mv_string("poly-internal-return-large"))) {
+    if (test_start(log, mv_string("poly-trait"))) {
       RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
       RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
       RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"

@@ -694,7 +694,6 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SProcedure: {
         // Generate procedure value (push the address onto the stack)
         AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
-        backlink_code(target, out.backlink, links);
         ProcDefer to_generate = {
           .proc = ref,
           .backlink_from = target.target,
@@ -3450,6 +3449,11 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
     case SProcedure: {
         uint8_t* caller_loc = get_instructions(deferred.backlink_from).data + deferred.backlink; 
         set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
+
+        if (!deferred.in_poly_instance) {
+            // We link differently for polymorphic instances
+            backlink_code(target, deferred.backlink, links);
+        }
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
         ass = target.code_aux;
