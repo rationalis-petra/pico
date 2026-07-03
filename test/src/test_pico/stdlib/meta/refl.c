@@ -45,7 +45,8 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
                                         filename,
                                         mv_string("\" :none) :unit)"));
             const char* expected = "123456789";
-            TEST_STDOUT((char*)to_run.bytes);
+            const char* program = to_c_string(to_run, &ra);
+            TEST_STDOUT(program);
             set_std_current_allocator(current_old);
             reset_subregion(region);
         } else {
@@ -72,7 +73,8 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
                                         mv_string("(seq (refl.load-module ~\""),
                                         filename,
                                         mv_string("\" (:some (use refl.current-module))) :unit)"));
-            RUN((char*)to_run.bytes);
+            const char* program = to_c_string(to_run, &ra);
+            RUN(program);
             int64_t expected = 3;
             TEST_EQ("test.x");
             reset_subregion(region);
