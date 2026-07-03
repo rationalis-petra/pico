@@ -333,7 +333,7 @@ StreamResult next(IStream* stream, uint32_t* out) {
 StreamResult read_line(IStream* stream, String* out, Allocator* a) {
     size_t num_bytes = 0;
     size_t total_bytes = 128;
-    uint8_t* bytes = mem_alloc(num_bytes * sizeof(uint8_t), a);
+    uint8_t* bytes = mem_alloc(total_bytes * sizeof(uint8_t), a);
 
     uint32_t codepoint = 0;
     StreamResult res = next(stream, &codepoint);

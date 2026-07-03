@@ -38,11 +38,13 @@ typedef struct {
 } Imports;
 
 bool imclause_eq(ImportClause c1, ImportClause c2);
+ImportClause copy_import_clause(ImportClause clause, Allocator* a);
+void delete_import_clause(ImportClause clause);
 Document* pretty_import_clause(ImportClause clause, Allocator* a);
 
-//------------------------------------------------------------------------------
-// Export Clauses
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+//   Export Clauses
+// -----------------------------------------------------------------------------
 
 typedef enum {
     ExportAll,
