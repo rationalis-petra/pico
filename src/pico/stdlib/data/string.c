@@ -48,6 +48,11 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  (load {U8} (num-to-address (u64.+ idx (address-to-num string.bytes)))))";
     compile_toplevel(str_nth_byte, module, target, &point, &pi_point, region);
 
+    const char *str_slice =
+        "(def slice proc [(start U64) (end U64) (string String)] \n"
+        "  (struct String [.bytes (num-to-address (u64.+ start (address-to-num string.bytes)))] [.memsize (u64.- end start)]))";
+    compile_toplevel(str_slice, module, target, &point, &pi_point, region);
+
     const char *from_ascii =
         "(def from-ascii proc [(ascii (List U8))] seq\n"
         "  [let! new-bytes (memory.alloc (u64.+ ascii.len 1))]\n"

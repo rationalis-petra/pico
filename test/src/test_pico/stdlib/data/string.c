@@ -51,4 +51,19 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
         bool expected = true;
         TEST_EQ("(string.!= \"test\" \"lack\")");
     }
+
+    if (test_start(log, mv_string("substring-whole-string"))) {
+        bool expected = true;
+        TEST_EQ("(string.= (string.slice 0 4 \"test\") \"test\")");
+    }
+
+    if (test_start(log, mv_string("slice-first-2"))) {
+        bool expected = true;
+        TEST_EQ("(string.= (string.slice 0 2 \"test\") \"te\")");
+    }
+
+    if (test_start(log, mv_string("slice-last-2"))) {
+        bool expected = true;
+        TEST_EQ("(string.= (string.slice 2 4 \"test\") \"st\")");
+    }
 }
