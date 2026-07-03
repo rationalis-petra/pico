@@ -52,18 +52,18 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(string.!= \"test\" \"lack\")");
     }
 
-    if (test_start(log, mv_string("substring-whole-string"))) {
+    if (test_start(log, mv_string("subview-whole-string"))) {
         bool expected = true;
-        TEST_EQ("(string.= (string.slice 0 4 \"test\") \"test\")");
+        TEST_EQ("(string.= (string.subview 0 4 \"test\") \"test\")");
     }
 
-    if (test_start(log, mv_string("slice-first-2"))) {
+    if (test_start(log, mv_string("subview-first-2"))) {
         bool expected = true;
-        TEST_EQ("(string.= (string.slice 0 2 \"test\") \"te\")");
+        TEST_EQ("(string.= (string.subview 0 2 \"test\") \"te\")");
     }
 
-    if (test_start(log, mv_string("slice-last-2"))) {
+    if (test_start(log, mv_string("subview-last-2"))) {
         bool expected = true;
-        TEST_EQ("(string.= (string.slice 2 4 \"test\") \"st\")");
+        TEST_EQ("(string.= (string.subview 2 4 \"test\") \"st\")");
     }
 }
