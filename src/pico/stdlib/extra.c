@@ -78,6 +78,12 @@ typedef struct {
     RawTree to;
 } ForRange;
 
+/**
+ * Given a for loop driver, If the for loop has an associated
+ * termination condition, set *out to that condition, and return true.
+ * Otherwise, return false. Examples of for loop drivers that may not 
+ * have a termination condition are [for i = 0 then (+ i 1)].
+ */
 bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
     const char* comparator = NULL;
     if (range.type != Then) {
@@ -115,9 +121,80 @@ bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
     return false;
 }
 
+RawTree mk_loop_jump(RawTree loop_condition, RawTree unit_term, RawTree goto_exit, PiAllocator* pia) {
+    // TODO: Add if (condition) (go-to continue ...) (go-to exit ...) 
+    RawTreePiList if_nodes = mk_rawtree_list(4, pia);
+    push_rawtree(atom_symbol("if"), &if_nodes);
+    push_rawtree(loop_condition, &if_nodes);
+    push_rawtree(unit_term, &if_nodes);
+    push_rawtree(goto_exit, &if_nodes);
+
+    return (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = if_nodes,
+    };
+}
+
+bool build_loop_start_conditions(RawTree* out, AddrPiList loop_fors, AddrPiList loop_whiles, PiAllocator* pia) {
+    /* Constants used during generation
+     */
+    RawTreePiList unit_nodes = mk_rawtree_list(2, pia);
+    push_rawtree(atom_symbol(":"), &unit_nodes);
+    push_rawtree(atom_symbol("unit"), &unit_nodes);
+    RawTree unit_term = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = unit_nodes,
+    };
+
+    RawTreePiList goto_exit_nodes = mk_rawtree_list(2, pia);
+    push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
+    push_rawtree(atom_symbol("exit"), &goto_exit_nodes);
+    RawTree goto_exit = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = goto_exit_nodes,
+    };
+
+    /**
+     * Logic starts here
+     */
+
+    // Do nothing if no conditions
+    if (loop_fors.len + loop_whiles.len == 0) {
+        *out = unit_term;
+        return false;
+    }
+    RawTreePiList conditions = mk_rawtree_list(1 + loop_fors.len + loop_whiles.len, pia);
+    push_rawtree(atom_symbol("seq"), &conditions);
+
+    for (size_t i = 0; i < loop_fors.len; i++) {
+        RawTree new_condition;
+        if (mk_condition(*(ForRange*)loop_fors.data[i], &new_condition, pia)) {
+            RawTree if_branch = mk_loop_jump(new_condition, unit_term, goto_exit, pia);
+            push_rawtree(if_branch, &conditions);
+        }
+    }
+
+    for (size_t i = 0; i < loop_whiles.len; i++) {
+        RawTree new_condition = *(RawTree*)loop_whiles.data[i];
+        RawTree if_branch = mk_loop_jump(new_condition, unit_term, goto_exit, pia);
+        push_rawtree(if_branch, &conditions);
+    }
+    
+    *out = (RawTree) {
+        .type = RawBranch,
+        .branch.hint = HExpression,
+        .branch.nodes = conditions,
+    };
+    return true;
+}
+
 MacroResult loop_macro(RawTreePiList nodes) {
     // TODO (BUGS):
     //   non-hygenic: labels loop-exit and loop-continue
+    //   downto 0 doesn't work!
     //   
     // (loop 
     //   [for var from i upto j]
@@ -287,79 +364,6 @@ MacroResult loop_macro(RawTreePiList nodes) {
     push_rawtree(atom_symbol("go-to"), &continue_go_to_nodes);
     push_rawtree(atom_symbol("loop-continue"), &continue_go_to_nodes);
 
-    RawTree loop_condition;
-    if (loop_fors.len + loop_whiles.len == 0) {
-        loop_condition = (RawTree) { 
-            .type = RawAtom,
-            .atom.type = ABool,
-            .atom.boolean = true, // TODO should this be false? no condition =
-                                  // no loop?
-        };
-    }
-
-    bool cond_initialized = false;
-    if (loop_fors.len > 0) {
-        for (size_t i = 0; i < loop_fors.len; i++) {
-            RawTree new_condition;
-            if (mk_condition(*(ForRange*)loop_fors.data[i], &new_condition, pia)) {
-                if (!cond_initialized) {
-                    cond_initialized = true;
-                    loop_condition = new_condition;
-                    continue;
-                }
-            }
-            RawTreePiList and_fn_nodes = mk_rawtree_list(3, pia);
-            push_rawtree(atom_symbol("."), &and_fn_nodes);
-            push_rawtree(atom_symbol("and"), &and_fn_nodes);
-            push_rawtree(atom_symbol("bool"),&and_fn_nodes);
-            RawTree and = (RawTree) {
-                .type = RawBranch,
-                .branch.hint = HExpression,
-                .branch.nodes = and_fn_nodes,
-            };
-
-            RawTreePiList and_nodes = mk_rawtree_list(3, pia);
-            push_rawtree(and, &and_nodes);
-            push_rawtree(loop_condition, &and_nodes);
-            push_rawtree(new_condition, &and_nodes);
-            loop_condition = (RawTree) {
-                .type = RawBranch,
-                .branch.hint = HExpression,
-                .branch.nodes = and_nodes,
-            };
-        }
-    }
-
-    if (loop_whiles.len > 0) {
-        size_t start_idx = 0;
-        if (!cond_initialized) {
-            loop_condition = *(RawTree*)loop_whiles.data[0];
-            start_idx++;
-        }
-        for (size_t i = start_idx; i < loop_whiles.len; i++) {
-            RawTree new_condition = *(RawTree*)loop_whiles.data[i];
-            RawTreePiList and_fn_nodes = mk_rawtree_list(3, pia);
-            push_rawtree(atom_symbol("."), &and_fn_nodes);
-            push_rawtree(atom_symbol("and"), &and_fn_nodes);
-            push_rawtree(atom_symbol("bool"), &and_fn_nodes);
-            RawTree and = (RawTree) {
-                .type = RawBranch,
-                .branch.hint = HExpression,
-                .branch.nodes = and_fn_nodes,
-            };
-
-            RawTreePiList and_nodes = mk_rawtree_list(3, pia);
-
-            push_rawtree(and, &and_nodes);
-            push_rawtree(loop_condition, &and_nodes);
-            push_rawtree(new_condition, &and_nodes);
-            loop_condition = (RawTree) {
-                .type = RawBranch,
-                .branch.hint = HExpression,
-                .branch.nodes = and_nodes,
-            };
-        }
-    }
     RawTreePiList loop_body_arg_nodes = mk_rawtree_list(loop_fors.len, pia);
     
     for (size_t i = 0; i < loop_fors.len; i++) {
@@ -437,29 +441,19 @@ MacroResult loop_macro(RawTreePiList nodes) {
     };
     push_rawtree(start_go_to, &labels_nodes);
 
-    // TODO: Add if (condition) (go-to continue ...) (go-to exit ...) 
-    RawTreePiList if_nodes = mk_rawtree_list(4, pia);
-    push_rawtree(atom_symbol("if"), &if_nodes);
-    push_rawtree(loop_condition, &if_nodes);
-    push_rawtree(unit_term, &if_nodes);
-
-    RawTreePiList goto_exit_nodes = mk_rawtree_list(2, pia);
-    push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
-    push_rawtree(atom_symbol("exit"), &goto_exit_nodes);
-    RawTree goto_exit = (RawTree) {
-        .type = RawBranch,
-        .branch.hint = HExpression,
-        .branch.nodes = goto_exit_nodes,
-    };
-    push_rawtree(goto_exit, &if_nodes);
-
-    RawTree if_expr = (RawTree) {
-        .type = RawBranch,
-        .branch.hint = HExpression,
-        .branch.nodes = if_nodes,
-    };
     // This index was reserved earlier
-    loop_body_nodes.data[1] = if_expr;
+    RawTree loop_condition;
+    bool cond_initialized = build_loop_start_conditions(&loop_condition, loop_fors, loop_whiles, pia);
+
+    if (loop_fors.len + loop_whiles.len == 0) {
+        loop_condition = (RawTree) { 
+            .type = RawAtom,
+            .atom.type = ABool,
+            .atom.boolean = true,
+        };
+    }
+
+    loop_body_nodes.data[1] = loop_condition;
 
 
     // Loop end:
@@ -499,6 +493,14 @@ MacroResult loop_macro(RawTreePiList nodes) {
             };
         }
 
+        RawTreePiList goto_exit_nodes = mk_rawtree_list(2, pia);
+        push_rawtree(atom_symbol("go-to"), &goto_exit_nodes);
+        push_rawtree(atom_symbol("exit"), &goto_exit_nodes);
+        RawTree goto_exit = (RawTree) {
+            .type = RawBranch,
+            .branch.hint = HExpression,
+            .branch.nodes = goto_exit_nodes,
+        };
 
         RawTreePiList if_nodes = mk_rawtree_list(4, pia);
         push_rawtree(atom_symbol("if"), &if_nodes);

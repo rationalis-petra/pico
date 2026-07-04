@@ -99,6 +99,12 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
         "  [.!= u8.!=])\n";
     compile_toplevel(eq_u8_trait, module, target, &point, &pi_point, region);
 
+    const char* eq_bool_trait = 
+        "(def bool-eq instance (Eq Bool)"
+        "  [.= bool.=]"
+        "  [.!= bool.!=])\n";
+    compile_toplevel(eq_bool_trait, module, target, &point, &pi_point, region);
+
     const char* eq_string_trait = 
         "(def string-eq instance (Eq string.String)"
         "  [.= string.=]"

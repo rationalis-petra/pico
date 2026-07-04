@@ -221,7 +221,6 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
                     push_ptr(instance, arr);
                 }
             }
-            sdelete_symbol_array(syms);
 
             // Get all implicits
             PtrArray instances = get_defined_instances(importee, a);

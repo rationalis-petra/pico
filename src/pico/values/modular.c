@@ -147,7 +147,7 @@ void add_import_clause(ImportClause clause, Module *module) {
     for (size_t i = 0; i < module->header.imports.clauses.len; i++) {
         if (imclause_eq(clause, imclauses.data[i])) return;
     } 
-    clause.path = scopy_symbol_array(clause.path, &module->allocator);
+    clause = copy_import_clause(clause, &module->allocator);
     push_import_clause(clause, &module->header.imports.clauses);
 }
 

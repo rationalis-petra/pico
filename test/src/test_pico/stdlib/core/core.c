@@ -106,6 +106,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels 27)");
     }
 
+    if (test_start(log, mv_string("labels-no-jump"))) {
+        int64_t expected = 3;
+        TEST_EQ("(labels 3 [start -8])");
+    }
+
     if (test_start(log, mv_string("labels-single-goto"))) {
         int64_t expected = -8;
         TEST_EQ("(labels (go-to start) [start -8])");
@@ -688,6 +693,30 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         int64_t expected = 72;
         TEST_EQ("(poly-add (into (ID I64) 42) (into (ID I64) 30))");
     }
+
+    if (test_start(log, mv_string("multi-inline-proc-in-instance"))) {
+        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
+        RUN("(def eql-bool instance (Eql Bool)"
+            "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))]"
+            "  [.not-eql proc [a b] (bool.not (bool.or (bool.and a b) (bool.not (bool.or a b))))])");
+        RUN("(def poly-eq all [A] proc {(eql (Eql A))} [(x A) (y A)] (eql.eql x y))");
+
+        bool expected = false;
+        TEST_EQ("(poly-eq :false :true)");
+    }
+
+    /*
+    if (test_start(log, mv_string("instance-out-of-order"))) {
+        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
+        RUN("(def eql-bool instance (Eql Bool)"
+            "  [.not-eql proc [a b] (bool.not (bool.or (bool.and a b) (bool.not (bool.or a b))))]"
+            "  [.eql proc [a b] (bool.or (bool.and a b) (bool.not (bool.or a b)))])");
+        RUN("(def poly-eq all [A] proc {(eql (Eql A))} [(x A) (y A)] (eql.eql x y))");
+
+        bool expected = false;
+        TEST_EQ("(poly-eq :false :true)");
+    }
+    */
 
     // -----------------------------------------------------
     // 

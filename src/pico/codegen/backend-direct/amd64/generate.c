@@ -694,7 +694,6 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SProcedure: {
         // Generate procedure value (push the address onto the stack)
         AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
-        backlink_code(target, out.backlink, links);
         ProcDefer to_generate = {
           .proc = ref,
           .backlink_from = target.target,
@@ -2399,7 +2398,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         address_start_labels(labels, env);
 
+        // Generate the entry, together with a Jump to the end of the labels section
+        //  (to be backlinked later).
         generate_i(syn.labels.entry, env, ictx);
+        AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
+        size_t start_jump = out.backlink;
 
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
@@ -2444,6 +2447,18 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
 
         size_t label_end = get_pos(ass);
+
+        // Step 1: Set the start expression to jump to here
+        {
+            size_t backlink = start_jump;
+            size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
+            size_t dest = label_end;
+
+            int64_t amt = dest - origin;
+            if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
+                
+            set_i32_backlink(ass, backlink, amt);
+        }
 
         for (size_t i = 0; i < label_points.len; i++)  {
             Symbol sym = label_points.data[i].key;
@@ -3450,6 +3465,11 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
     case SProcedure: {
         uint8_t* caller_loc = get_instructions(deferred.backlink_from).data + deferred.backlink; 
         set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
+
+        if (!deferred.in_poly_instance) {
+            // We link differently for polymorphic instances
+            backlink_code(target, deferred.backlink, links);
+        }
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
         ass = target.code_aux;

@@ -692,10 +692,14 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
     }
     case SIf: {
         PtrArray nodes = mk_ptr_array(4, a);
+        PtrArray body_nodes = mk_ptr_array(3, a);
         push_ptr(mv_style_doc(former_style, mk_cstr_doc("if", a), a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax.if_expr.condition, tape, ctx, a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax.if_expr.true_branch, tape, ctx, a), &nodes);
-        push_ptr(pretty_syntax_internal(syntax.if_expr.false_branch, tape, ctx, a), &nodes);
+
+        push_ptr(pretty_syntax_internal(syntax.if_expr.condition, tape, ctx, a), &body_nodes);
+        push_ptr(pretty_syntax_internal(syntax.if_expr.true_branch, tape, ctx, a), &body_nodes);
+        push_ptr(pretty_syntax_internal(syntax.if_expr.false_branch, tape, ctx, a), &body_nodes);
+
+        push_ptr(mv_hook_doc(mv_sep_doc(body_nodes, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap )out = mk_paren_doc("(", ")", out, a);
         break;
@@ -885,8 +889,10 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
         break;
     }
     case SSequence: {
-        PtrArray nodes = mk_ptr_array(1 + syntax.sequence.elements.len, a);
+        PtrArray nodes = mk_ptr_array(2, a);
         push_ptr(mv_style_doc(former_style, mv_cstr_doc("seq", a), a), &nodes);
+
+        PtrArray seq_nodes = mk_ptr_array(syntax.sequence.elements.len, a);
         for (size_t i = 0; i < syntax.sequence.elements.len; i++) {
             SeqElt* elt = syntax.sequence.elements.data[i];
             if (elt->is_binding) {
@@ -895,12 +901,13 @@ Document* pretty_syntax_internal(SynRef ref, SynTape tape, PrettyContext ctx, Al
                 push_ptr(mv_style_doc(var_style, mk_str_doc(symbol_to_string(elt->symbol, a), a), a), &let_nodes);
                 push_ptr(pretty_syntax_internal(elt->expr, tape, ctx, a), &let_nodes);
 
-                push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), a), a), &nodes);
+                push_ptr(mv_group_doc(mk_paren_doc("[", "]", mv_nest_doc(2, mv_sep_doc(let_nodes, a), a), a), a), &seq_nodes);
             } else {
-                push_ptr(pretty_syntax_internal(elt->expr, tape, ctx, a), &nodes);
+                push_ptr(pretty_syntax_internal(elt->expr, tape, ctx, a), &seq_nodes);
             }
         }
-        out = mk_paren_doc("(", ")", mv_nest_doc(2, mv_sep_doc(nodes, a), a), a);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(seq_nodes, a), a), &nodes);
+        out = mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a);
         break;
     }
     case SProcType: {

@@ -409,6 +409,20 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
 
     typep = mk_binop_type(pia, Bool, Bool, Bool);
 
+    build_comp_fn(ass, SetE, sz_8, a, &point);
+    sym = string_to_symbol(mv_string("="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    build_comp_fn(ass, SetNE, sz_8, a, &point);
+    sym = string_to_symbol(mv_string("!="));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
     build_binary_fn(ass, And, sz_8, a, &point);
     sym = string_to_symbol(mv_string("and"));
     fn_segments.code = get_instructions(ass);

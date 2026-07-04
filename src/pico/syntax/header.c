@@ -49,6 +49,41 @@ bool imclause_eq(ImportClause c1, ImportClause c2) {
     panic(mv_string("bad caluse"));
 }
 
+ImportClause copy_import_clause(ImportClause clause, Allocator* a) {
+    switch (clause.type) {
+    case Import:
+        return (ImportClause) {
+            .type = Import,
+            .path = scopy_symbol_array(clause.path, a),
+            .member = clause.member
+        };
+    case ImportAs:
+        return (ImportClause) {
+            .type = ImportAs,
+            .path = scopy_symbol_array(clause.path, a),
+            .rename = clause.rename
+        };
+    case ImportMany:
+        return (ImportClause) {
+            .type = ImportMany,
+            .path = scopy_symbol_array(clause.path, a),
+            .members = scopy_symbol_array(clause.members, a),
+        };
+    case ImportAll:
+        return (ImportClause) {
+            .type = ImportAll,
+            .path = scopy_symbol_array(clause.path, a),
+        };
+    }
+    panic(mv_string("bad caluse"));
+}
+
+void delete_import_clause(ImportClause clause) {
+    sdelete_symbol_array(clause.path);
+    if (clause.type == ImportMany)
+        sdelete_symbol_array(clause.members);
+}
+
 Document* pretty_import_clause(ImportClause clause, Allocator* a) {
     PtrArray path_nodes = mk_ptr_array(clause.path.len * 2, a);
     for (size_t i = 0; i < clause.path.len; i++) {
@@ -78,12 +113,6 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
     panic(mv_string("bad import clause"));
 }
 
-ImportClause copy_import_clause(ImportClause clause, Allocator* a) {
-    ImportClause out = clause;
-    out.path = scopy_symbol_array(clause.path, a);
-    return out;
-}
-
 ModuleHeader copy_module_header(ModuleHeader h, Allocator* a) {
     return (ModuleHeader) {
         .name = h.name,
@@ -96,7 +125,7 @@ ModuleHeader copy_module_header(ModuleHeader h, Allocator* a) {
 
 void delete_module_header(ModuleHeader h) {
     for (size_t i = 0; i < h.imports.clauses.len; i++) {
-        sdelete_symbol_array(h.imports.clauses.data[i].path);
+        delete_import_clause(h.imports.clauses.data[i]);
     }
     sdelete_import_clause_array(h.imports.clauses);
     sdelete_export_clause_array(h.exports.clauses);

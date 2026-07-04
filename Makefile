@@ -309,6 +309,11 @@ prep-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
 install: prep-install
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
+.PHONY: suppress-config-changes
+suppress-config-changes: 
+	git update-index --skip-worktree default.config
+	echo "Git will no longer track changes to default.config"
+
 # use make <target> QUIET=1 to prevent make from printing! 
 # can be used in scripts, e.g. git pre-commit hooks
 ifeq ($(QUIET), YES)
@@ -319,3 +324,4 @@ endif
 # Makefiles. Initially, all the .d files will be missing, and we don't want those
 # errors to show up.
 -include $(MAKE_DEPS)
+
