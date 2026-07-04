@@ -2398,7 +2398,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         address_start_labels(labels, env);
 
+        // Generate the entry, together with a Jump to the end of the labels section
+        //  (to be backlinked later).
         generate_i(syn.labels.entry, env, ictx);
+        AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
+        size_t start_jump = out.backlink;
 
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
@@ -2443,6 +2447,18 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
 
         size_t label_end = get_pos(ass);
+
+        // Step 1: Set the start expression to jump to here
+        {
+            size_t backlink = start_jump;
+            size_t origin = backlink + 4; // the + 4 accounts for the 4-byte immediate
+            size_t dest = label_end;
+
+            int64_t amt = dest - origin;
+            if (amt < INT32_MIN || amt > INT32_MAX) panic(mv_string("Label jump too large!"));
+                
+            set_i32_backlink(ass, backlink, amt);
+        }
 
         for (size_t i = 0; i < label_points.len; i++)  {
             Symbol sym = label_points.data[i].key;

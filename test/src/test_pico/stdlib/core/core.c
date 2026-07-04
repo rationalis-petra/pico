@@ -106,6 +106,11 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels 27)");
     }
 
+    if (test_start(log, mv_string("labels-no-jump"))) {
+        int64_t expected = 3;
+        TEST_EQ("(labels 3 [start -8])");
+    }
+
     if (test_start(log, mv_string("labels-single-goto"))) {
         int64_t expected = -8;
         TEST_EQ("(labels (go-to start) [start -8])");
