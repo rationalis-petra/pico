@@ -3092,14 +3092,10 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             
             Symbol middle;
             if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-                err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_cstr_doc("Invalid import clause - expected :all", a);
-                throw_pi_error(point, err);
+                import_all_malformed(raw->branch.nodes.data[1], point, a);
             }
             if (!symbol_eq(middle, string_to_symbol(mv_string("all")))) {
-                err.range = raw->branch.nodes.data[1].range;
-                err.message = mv_cstr_doc("Invalid import clause - expected :all", a);
-                throw_pi_error(point, err);
+                import_all_malformed(raw->branch.nodes.data[1], point, a);
             }
 
             return (ImportClause) {
@@ -3117,17 +3113,13 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
             } else {
                 Symbol middle;
                 if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause - expected a keyword such as :as or :only", a);
-                    throw_pi_error(point, err);
+                    import_all_malformed(raw->branch.nodes.data[1], point, a);
                 }
                 if (symbol_eq(middle, string_to_symbol(mv_string("as")))) {
-                    Symbol rename;
-                    if(!get_fieldname(&raw->branch.nodes.data[2], &rename)) {
-                        err.range = raw->branch.nodes.data[0].range;
-                        err.message = mv_cstr_doc("Invalid import-as new name", a);
-                        throw_pi_error(point, err);
+                    if(!is_symbol(raw->branch.nodes.data[2])) {
+                        import_as_bad_symbol(raw->branch.nodes.data[2], point, a);
                     }
+                    Symbol rename = raw->branch.nodes.data[2].atom.symbol;
                     SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
                     return (ImportClause) {
                         .type = ImportAs,

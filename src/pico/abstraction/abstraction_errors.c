@@ -247,3 +247,27 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
     };
     throw_pi_error(ctx.point, err);
 }
+
+_Noreturn void import_all_malformed(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import clause - expected :all", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_middle_malformed(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import clause - expected a keyword such as :as or :only", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_as_bad_symbol(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import-as new name, it should be a single symbol", a),
+    };
+    throw_pi_error(point, err);
+}

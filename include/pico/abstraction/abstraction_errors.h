@@ -49,5 +49,11 @@ _Noreturn void trait_tyformer_incorrect_numterms(RawTree raw, AbstractionICtx ct
 _Noreturn void trait_tyformer_incorrect_name(RawTree raw, AbstractionICtx ctx);
 _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx ctx);
 
+// ------------------------------------------------------------
+//   Import Clauses
+// ------------------------------------------------------------
+_Noreturn void import_all_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_middle_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_as_bad_symbol(RawTree raw, PiErrorPoint* point, Allocator* a);
 
 #endif

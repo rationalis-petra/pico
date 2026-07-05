@@ -3,11 +3,12 @@
 #include "platform/signals.h"
 
 #include "pico/data/name_ptr_amap.h"
-#include "pico/data/name_ptr_amap.h"
+#include "pico/data/u64_name_amap.h"
 
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
     NamePtrAMap symbol_origins;
+    U64NameAMap symbol_renames;
 
     // Map ids to arrays of implementations - each element of the  
     //  'implementation set' points to the relevant module.
@@ -151,7 +152,8 @@ Module* env_module(Environment *env) {
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     *env = (Environment) {
-        .symbol_origins = mk_name_ptr_amap(128, a),
+        .symbol_origins = mk_name_ptr_amap(256, a),
+        .symbol_renames = mk_u64_name_amap(16, a),
         .instances = mk_name_ptr_amap(128, a),
         .base = module,
         .gpa = a,
@@ -174,9 +176,13 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
             name_ptr_insert(last_symbol.name, parent, &env->symbol_origins);
             break;
         }
-        case ImportAs:
-            panic(mv_string("Do not support renaming import yet!"));
+        case ImportAs: {
+            Symbol last_symbol = clause.path.data[clause.path.len - 1];
+            Module* parent = path_parent(clause.path, root_module, module, point, a);
+            u64_name_insert(env->symbol_origins.len, last_symbol.name, &env->symbol_renames);
+            name_ptr_insert(clause.rename.name, parent, &env->symbol_origins);
             break;
+        }
         case ImportMany: {
             // Find the package
             Module* importee = path_all(clause.path, root_module, module, point, a);
@@ -324,6 +330,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 
 void delete_env(Environment* env, Allocator* a) {
     sdelete_name_ptr_amap(env->symbol_origins);
+    sdelete_u64_name_amap(env->symbol_renames);
     for (size_t i = 0; i < env->instances.len; i++) {
         PtrArray arr = *(PtrArray*)env->instances.data[i].val;
         for (size_t j = 0; j < arr.len; j++) {
@@ -340,15 +347,21 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
     if (sym.did != 0) return (EnvEntry) {.success = Err, };
 
     EnvEntry result;
-    Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
-    if (module) {
-        ModuleEntry* mentry = get_def(sym, *module); 
+    size_t idx;
+    bool found = (Module**)name_ptr_find(&idx, sym.name, env->symbol_origins);
+    if (found) {
+        Name* rename = u64_name_lookup(idx, env->symbol_renames);
+        Module* module = env->symbol_origins.data[idx].val;
+        if (rename) {
+            sym.name = *rename;
+        };
+        ModuleEntry* mentry = get_def(sym, module); 
         if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
             result.value = mentry->value;
             result.type = mentry->is_module ? NULL : &mentry->type;
-            result.source = *module;
+            result.source = module;
         } else {
             result.success = Err;
         }
