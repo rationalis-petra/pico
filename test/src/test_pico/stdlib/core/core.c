@@ -6,10 +6,6 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env); clear_logger(log);
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
-#define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
-
 void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_allocator = convert_to_pallocator(&ra);

@@ -3,8 +3,6 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
-
 void run_pico_stdlib_num_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,

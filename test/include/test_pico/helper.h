@@ -33,4 +33,9 @@ void run_toplevel(const char *string, Module *module, TestContext context);
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...);
 
+#define RUN(str) run_toplevel(str, module, context); refresh_env(env); clear_logger(log);
+#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
+#define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
+#define TEST_MEM(str) test_toplevel_mem(str, &expected, start, sizeof(expected), module, context)
+
 #endif

@@ -3,10 +3,6 @@
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env, &region)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context)
-#define TEST_STDOUT(str) test_toplevel_stdout(str, expected, module, context)
-
 void run_pico_stdlib_extra_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
