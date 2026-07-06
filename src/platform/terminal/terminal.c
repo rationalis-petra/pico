@@ -536,7 +536,9 @@ void send_output_terminal_event(OutTermEvent event) {
 void terminal_write_string_unbuffered(String string) {
 #if OS_FAMILY == UNIX
     fflush(stdout);
-    write(STDOUT_FILENO, string.bytes, string.memsize);
+    size_t written = write(STDOUT_FILENO, string.bytes, string.memsize);
+    if (written != string.memsize)
+        panic(mv_string("failed to write some bytes. TODO: make this error a proper return value"));
 #elif OS_FAMILY == WINDOWS
     fflush(stdout);
     HANDLE std_cout = GetStdHandle(STD_OUTPUT_HANDLE);
