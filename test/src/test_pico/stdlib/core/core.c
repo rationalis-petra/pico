@@ -644,18 +644,29 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(get-value {I64} 5)");
     }
 
-    if (test_start(log, mv_string("instance-mval"))) {
+    if (test_start(log, mv_string("instance-multi-val"))) {
         int64_t expected = -77;
         RUN("(def MultiInhabited Trait MultiInhabited [A] [.val-1 A] [.val-2 A])");
         // TODO (BUG)
         // swapping the order of below statements gives an 'ambiguous instance' error?
         RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
-        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-1 77] [.val-2 -77])");
+        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-1 237] [.val-2 -77])");
 
         TEST_EQ("(get-second-value {I64} 5)");
     }
 
-    if (test_start(log, mv_string("instance-mval"))) {
+    if (test_start(log, mv_string("instance-out-of-order"))) {
+        int64_t expected = -77;
+        RUN("(def MultiInhabited Trait MultiInhabited [A] [.val-1 A] [.val-2 A])");
+        // TODO (BUG)
+        // swapping the order of below statements gives an 'ambiguous instance' error?
+        RUN("(def get-second-value all [A] proc {(in (MultiInhabited A))} [(x A)] in.val-2)");
+        RUN("(def i64-multi-inhabited instance (MultiInhabited I64) [.val-2 -77] [.val-1 237])");
+
+        TEST_EQ("(get-second-value {I64} 5)");
+    }
+
+    if (test_start(log, mv_string("instance-const-single"))) {
         uint64_t expected = 43;
         RUN("(def MultiConstInhabited Trait MultiConstInhabited [A] [.val-1 A] [.val-2 U64])");
         RUN("(def get-snd-const-value all [A] proc {(in (MultiConstInhabited A))} [(x A)] in.val-2)");
@@ -701,8 +712,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(poly-eq :false :true)");
     }
 
-    /*
-    if (test_start(log, mv_string("instance-out-of-order"))) {
+    if (test_start(log, mv_string("instance-inline-proc-out-of-order"))) {
         RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool] [.not-eql Proc [A A] Bool])");
         RUN("(def eql-bool instance (Eql Bool)"
             "  [.not-eql proc [a b] (bool.not (bool.or (bool.and a b) (bool.not (bool.or a b))))]"
@@ -712,7 +722,6 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         bool expected = false;
         TEST_EQ("(poly-eq :false :true)");
     }
-    */
 
     // -----------------------------------------------------
     // 

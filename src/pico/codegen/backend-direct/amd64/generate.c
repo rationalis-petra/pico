@@ -1539,10 +1539,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SInstance: {
-      /* From the perspective of a user, all instances are values where
+      /**
+       * From the perspective of a user, all instances are values where
        * (size-of i) == (size-of Address) for any instance i. From the
        * perspective of code-generation, however, there are two kinds of
-       *  instances:
+       * instances:
        *
        * Non-parametric instances
        * ------------------------
@@ -1564,7 +1565,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
        *  through their arguments while instantiating the type/instance
        *  arguments for the instance, i.e. they form a sort of closure.
        * 
-       *  Note: usage of local functions in this context won't work well? 
+       *  Note/TODO: usage of local functions in this context won't work well? 
        *   How to fix local functinos...
        *   - Make them local state and therad through
        *   - 
@@ -1599,59 +1600,61 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             }
             build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
             generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
             // Grow by address size to account for the fact that the for loop
             // keeps an address for the current field, which is updated each iteration.
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
-            // TODO (BUG): generate code that doesn't assume fields are in same order   
+            // To generate account for the fact that instance fields *may be*  out of order, 
+            // we first generate all fields (arbitrary order), THEN move the
+            // fields into the allocated memory
+            int64_t stack_head = get_stack_head(env);
+            for (size_t i = 0; i < syn.instance.fields.len; i++) {
+                SynRef val = syn.instance.fields.data[i].val;
+                generate_i(val, env, ictx);
+            }
+            size_t total_src_size = stack_head - get_stack_head(env);
 
             // Alignment
             size_t index_offset = 0;
             for (size_t i = 0; i < type->instance.fields.len; i++) {
-                // Generate field
-                SynRef val = syn.instance.fields.data[i].val;
-                generate_i(val, env, ictx);
+                Symbol field = type->instance.fields.data[i].key;
+                PiType* ty = type->instance.fields.data[i].val;
 
-                // The offset tells us how far up the stack we look to find the instance ptr
-                size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
-                size_t val_stack_sz = pi_stack_align(val_sz);
-
-                // Retrieve index (ptr) 
-                // TODO (BUG): Check offset is < int8_t max.
-                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
-
-                // Align RCX
-                size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
-                if (index_offset != aligned_offset) {
-                    size_t align = aligned_offset - index_offset;
-                    build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
+                size_t source_offset = 0;
+                for (size_t j = syn.instance.fields.len; j > 0; j--) {
+                    size_t idx = j - 1;
+                    if (symbol_eq(field, syn.instance.fields.data[idx].key)) { break; }
+                    PiType* field_ty = get_type(syn.instance.fields.data[idx].val, ictx.tape);
+                    source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
                 }
+                size_t val_size = pi_size_of(*ty);
+                size_t val_align = pi_align_of(*ty);
+
+
+                // Retrieve index (ptr) and align it
+                // TODO (BUG): Check offset is < int8_t max.
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, total_src_size, sz_64), ass, a, point);
+                size_t aligned_offset = pi_size_align(index_offset, val_align);
+                build_binary_op(Add, reg(RCX, sz_64), imm32(aligned_offset), ass, a, point);
+
+                // Retrieve Dest ptr
+                build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RDX, sz_64), imm32(source_offset), ass, a, point);
 
                 // TODO (check if should replace with stack copy/move)
-                generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
+                generate_monomorphic_copy(RCX, RDX, val_size, ass, a, point);
 
                 // We need to increment the current field index to be able to access
                 // the next
-                build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
-                index_offset += val_sz;
-
-                // Pop value from stack
-                build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
-                data_stack_shrink(env, val_stack_sz);
-
-                // Override index with new value
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+                index_offset += val_size;
             }
-
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
-
+            // Pop all values from stack
             // Note: we don't shrink as the final address (on stack) is accounted
             // for by the 'grow' prior to the above for-loop
+            build_binary_op(Add, reg(RSP, sz_64), imm32(total_src_size), ass, a, point);
+            data_stack_shrink(env, total_src_size);
         }
         break;
     }
