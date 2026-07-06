@@ -272,15 +272,18 @@ String get_current_directory(Allocator* a) {
 #if OS_FAMILY == WINDOWS
     size_t mem_required = GetCurrentDirectory(0, NULL);
     String out = {
-        .memsize = mem_required,
-        .bytes = mem_alloc(mem_required, a),
+      .memsize = mem_required,
+      .bytes = mem_alloc(mem_required, a),
     };
     // TODO: convert to valid path (consider encoding)
     GetCurrentDirectory(mem_required, (char*)out.bytes);
     return out;
 #else
     char cwd[PATH_MAX];
-    getcwd(cwd, PATH_MAX);
+    char* buf = getcwd(cwd, PATH_MAX);
+    if (buf == NULL) {
+      panic(mv_string("getcwd failed. TODO: add proper error return types to getcwd"));
+    }
     String dir = mv_string(cwd);
     return copy_string(dir, a);
 #endif
@@ -293,7 +296,9 @@ void set_current_directory(String path) {
 #if OS_FAMILY == WINDOWS
     SetCurrentDirectory(c_path);
 #else
-    chdir(c_path);
+    if (chdir(c_path)) {
+      panic(mv_string("chdir failed. TODO: add proper error return types to chdir"));
+    }
 #endif
     mem_free(c_path, get_std_allocator());
 }

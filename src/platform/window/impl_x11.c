@@ -7,10 +7,12 @@
 #include "platform/window/window.h"
 #include "platform/window/internal.h"
 #include "platform/signals.h"
+#include "platform/window/xkb_translate.h"
 
 #include "data/stringify.h"
 
 #include <X11/Xlib.h>
+#include <X11/XKBlib.h>
 #include <unistd.h>
 
 static Allocator* wsa;
@@ -103,6 +105,13 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
             }
             break;
         }
+        case KeyPress:
+        case KeyRelease:
+            if (event.type == KeyPress) {
+
+            } else {
+            }
+            break;
 
         // The following events are ones that we have determined can be safely
         // ignored, i.e. they do not need to be acted on AND are not exposed in
@@ -148,6 +157,39 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
         }
     }
     return out;
+}
+
+// Key handling: 
+struct KeyboardState {
+    uint8_t keys[256];
+};
+
+
+KeyboardState* create_keyboard_state(KeyMap *keymap) {
+    KeyboardState* keystate = mem_alloc(sizeof(KeyboardState), wsa);
+    for (size_t i = 0; i < 256; i++) {
+        keystate->keys[i] = 0;
+    }
+    return keystate;
+}
+
+void destroy_keyboard_state(KeyboardState* state) {
+    mem_free(state, wsa);
+}
+
+void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState *state) {
+    state->keys[raw] = is_pressed << 7;
+}
+void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState *state) {
+    // TODO: implement me!
+}
+
+Key get_key(RawKey raw, KeyboardState* state) {
+    //KeyboardState* kstate = (void*)state;
+    // TODO: get shift state from keyboard...
+    KeyCode keycode = raw;
+    KeySym keysym = XkbKeycodeToKeysym(x11_display, keycode, 0, 0);
+    return translate_xkb_keycode(keysym);
 }
 
 #endif
