@@ -267,7 +267,7 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
   ErrorPoint* point = NULL;
 
   for (size_t i = 0; i < links.len; i++) {
-    push_u64(get_instructions(target).len, &closure_starts);
+    push_u64(get_pos(target), &closure_starts);
     ClosureLink link = links.data[i];
 
     PiType* inner_type = link.inner_type;
@@ -1457,8 +1457,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Generate the instance object
             generate_i(syn.projector.val, env, ictx);
-            // Both instances (passed by reference) and structs (on variable
-            // stack) will occupy an address size on the stack.
+            // Both instances are passed by reference, and so occupy an addriss size
             size_t src_sz = ADDRESS_SIZE;
 
             // From this point, behaviour depends on whether we are projecting from

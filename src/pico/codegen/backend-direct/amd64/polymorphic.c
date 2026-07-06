@@ -198,22 +198,29 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
     data_stack_grow(env, 2 * REGISTER_SIZE);
 
+    // TODO: This currently assumes that instance fields are generated in order;
+    //       make this not the case (see current poly struct for inspiration)
     for (size_t i = 0; i < type->instance.fields.len; i++) {
         SynRef val = syn.instance.fields.data[i].val;
         // TODO: copy into instance memory
         generate_i(val, env, ictx);
         // Generate  
         PiType* member_type = strip_type(get_type(val, ictx.tape));
+
+        // TODO: this code does NOT account for alignemet...
         if (is_variable_in(member_type, env)) {
             size_t copy_sz = pi_stack_size_of(*type);
             build_binary_op(Add, reg(RSP, sz_64), imm32(copy_sz), ass, a, point);
+            // TODO: copy value into instance; move pointer forward...
             data_stack_grow(env, ADDRESS_SIZE);
         } else {
-            size_t copy_sz = pi_stack_size_of(*type);
+            size_t copy_sz = pi_size_of(*type);
+            size_t stack_val_sz = pi_stack_align(copy_sz);
             build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, copy_sz, sz_64), ass, a, point);
             generate_monomorphic_copy(R8, RSP, copy_sz, ass, a, point);
 
-            build_binary_op(Add, reg(RSP, sz_64), imm32(copy_sz), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imm32(stack_val_sz), ass, a, point);
+            build_binary_op(Add, rref8(RSP, 0, sz_64), imm32(copy_sz), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
         }
     }
