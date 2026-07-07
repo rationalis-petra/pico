@@ -153,6 +153,8 @@ typedef struct {
     SymPtrAMap args;
     SymPtrAMap implicits;
     SynRef body;
+    Symbol recursive_sym;
+    bool is_recursive;
     bool preserve_dyn_memory;
 } SynProcedure;
 

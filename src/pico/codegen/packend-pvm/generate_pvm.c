@@ -42,12 +42,8 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
 
     switch(top.type) {
     case TLDef: {
-        // Note: types can only be recursive via 'Name', so we do not recursively bind if
-        // generating a type.
-        Symbol* recsym = get_type(top.def.value, ctx.tape)->sort != TKind ? 
-            &top.def.bind : NULL;
         // TODO: no address env should be here... use a pvm environment instead...
-        AddressEnv* a_env = mk_address_env(env, recsym, a);
+        AddressEnv* a_env = mk_address_env(env, a);
         generate(top.def.value, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
@@ -61,7 +57,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
         break;
     }
     case TLExpr: {
-        AddressEnv* a_env = mk_address_env(env, NULL, a);
+        AddressEnv* a_env = mk_address_env(env, a);
         generate(top.expr, ctx.tape, a_env, ctx.target, &links, a, ctx.point);
         delete_address_env(a_env, a);
         break;
@@ -92,7 +88,7 @@ LinkData pvm_generate_toplevel(TopLevel top, Environment* env, CodegenContext ct
 
 LinkData pvm_generate_expr(SynRef ref, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
-    AddressEnv* a_env = mk_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_address_env(env, a);
     LinkData links = (LinkData) {
         .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(8, a),
@@ -128,7 +124,7 @@ LinkData pvm_generate_expr(SynRef ref, Environment* env, CodegenContext ctx) {
 
 void pvm_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
-    AddressEnv* a_env = mk_type_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_type_address_env(env, a);
     LinkData links = (LinkData) {
         .external_code_links = mk_sym_sarr_amap(8, a),
         .ec_links = mk_link_meta_array(8, a),

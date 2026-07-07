@@ -34,12 +34,10 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("(f1)");
     }
      
-    /* TODO: this test reflects a typechecking bug!
     if (test_start(log, mv_string("function-recursive"))) {
-        int64_t expected = 4;
-        RUN("(def recur proc [(n I64)] (if (i64.< n 1) n (i64.+ n (recur (i64.- n 1)))))");
+        int64_t expected = 55;
+        RUN("(def recur proc [(n I64)] \n"
+            "  (if (i64.< n 1) n (i64.+ n (recur (i64.- n 1)))))");
         TEST_EQ("(recur 10)");
     }
-    */
-
 }

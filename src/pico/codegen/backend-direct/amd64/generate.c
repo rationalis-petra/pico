@@ -61,9 +61,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     case TLDef: {
         // Note: types can only be recursive via 'Name', so we do not recursively bind if
         // generating a type.
-        Symbol* recsym = get_type(top.def.value, ctx.tape)->sort != TKind ? 
-            &top.def.bind : NULL;
-        AddressEnv* a_env = mk_address_env(env, recsym, a);
+        AddressEnv* a_env = mk_address_env(env, a);
         size_t out_sz = pi_size_of(*get_type(top.def.value, ctx.tape));
 
         ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
@@ -99,7 +97,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         break;
     }
     case TLExpr: {
-        AddressEnv* a_env = mk_address_env(env, NULL, a);
+        AddressEnv* a_env = mk_address_env(env, a);
 
         ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
         InternalContext ictx = {
@@ -153,7 +151,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     
-    AddressEnv* a_env = mk_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_address_env(env, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
@@ -215,7 +213,7 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
 
 void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
-    AddressEnv* a_env = mk_type_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_type_address_env(env, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
@@ -609,6 +607,19 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Finally, move the value from the source to the stack head
             generate_poly_move(reg(VSTACK_HEAD, sz_64), reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
+            break;
+        }
+        case ACodeOffset: {
+            void* fn_address = get_instructions(target.code_aux).data;
+            fn_address += e.code_offset;
+            AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)fn_address), ass, a, point);
+            LinkMetaData link = (LinkMetaData) {
+                .source_offset = out.backlink,
+                .dest_offset = e.code_offset,
+            };
+            push_link_meta(link, &links->links.cc_links);
+            build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
             break;
         }
         case ATypeVar: {
@@ -3518,6 +3529,8 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
                 .procedure.implicits = implicits,
                 .procedure.body = syn.procedure.body,
                 .procedure.preserve_dyn_memory = syn.procedure.preserve_dyn_memory,
+                .procedure.is_recursive = syn.procedure.is_recursive,
+                .procedure.recursive_sym = syn.procedure.recursive_sym,
             };
             SynRef new_ref = new_syntax(ictx.tape);
             set_syntax(new_ref, new_proc, ictx.tape);
@@ -3528,6 +3541,16 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
             return;
         }
 
+
+        RecBinding* rec = NULL; 
+        RecBinding rbind; 
+        if (syn.procedure.is_recursive) {
+            rec = &rbind; 
+            rbind = (RecBinding) {
+                .sym = syn.procedure.recursive_sym,
+                .offset = get_pos(ass),
+            };
+        }
         // Codegen function setup
         build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
         build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
@@ -3550,7 +3573,7 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
             sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
         }
 
-        address_start_proc(impl_sizes, arg_sizes, env, a);
+        address_start_proc(rec, impl_sizes, arg_sizes, env, a);
         generate_i(syn.procedure.body, env, ictx);
         address_end_proc(env, a);
 

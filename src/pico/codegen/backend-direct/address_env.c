@@ -6,35 +6,49 @@
 #include "pico/codegen/backend-direct/address_env.h"
 #include "pico/binding/type_env.h"
 
-// Address Environment: Implementation
-// -----------------------------------
-// There are several important types used in the implementation of the address
-// environment. These are: 
-// • Symbol Address (SAddr). This associates a symbol with a stack offset. This
-//   may be a direct offset (monomorphic functions) or indirect offset
-//   (polymorphic functions). A symbol address may also be a sentinel, which
-//   denotes the beginning of a group of variables  as bound by, e.g. a let
-//   expression, procedure or pattern match.
-//  
-// • Local Address Environment (LocalAddrs). This encapsulates the local namespace of
-//   one function. A local address environment will be either monomorphic or
-//   polymorphic.
+/**
+ * Address Environment: Implementation
+ * -----------------------------------
+ * There are several important types used in the implementation of the address
+ * environment. These are: 
+ * • Symbol Address (SAddr). This associates a symbol with a stack offset. This
+ *   may be a direct offset (monomorphic functions) or indirect offset
+ *   (polymorphic functions). A symbol address may also be a sentinel, which
+ *   denotes the beginning of a group of variables  as bound by, e.g. a let
+ *   expression, procedure or pattern match.
+ *  
+ * • Local Address Environment (LocalAddrs). This encapsulates the local namespace of
+ *   one function. A local address environment will be either monomorphic or
+ *   polymorphic.
+ */
 
 typedef enum {
-    // A direct variable is one whose value is stored as an offset RSP
+    /** A direct variable is one whose value is stored as an offset RSP */
     SADirect,
 
-    // An indexed variable is one which is stored on the data stack
-    // However, the offset is provided relative to $RSP, as the regular 
-    // stack stores an index into the variable stack. 
+    /**
+     * An indexed variable is one which is stored on the data stack
+     * However, the offset is provided relative to $RSP, as the regular 
+     * stack stores an index into the variable stack. 
+     */
     SAIndexed,
 
-    // This is a type variable - specifically, type a literal type variable
-    // for generating code to produce type literals, such as 'All [A] Proc [A] A'
+    /**
+     * Indicates that the value is a procedure that is currently being generated.
+     * The value should be stored/returned as an offset from the code segment.
+     */
+    SARecFn,
+
+    /**
+     * This is a type variable - specifically, type a literal type variable
+     * for generating code to produce type literals, such as 'All [A] Proc [A] A'
+     */
     SATypeVar,
 
-    // Inaccessible locals are used in type generation, in particular, if you
-    // are generating a type literal, it cannot reference run-time variables!
+    /**
+     * Inaccessible locals are used in type generation, in particular, if you
+     * are generating a type literal, it cannot reference run-time variables!
+     */
     SAInaccessibleLocal,
     SASentinel,
     SALabel,
@@ -43,7 +57,10 @@ typedef enum {
 typedef struct {
     SAddr_t type;
     Symbol symbol;
-    int64_t stack_offset;
+    union {
+        int64_t stack_offset;
+        uint64_t code_offset;
+    };
 } SAddr;
 
 int compare_saddr(SAddr lhs, SAddr rhs) {
@@ -79,20 +96,14 @@ typedef struct {
 struct AddressEnv {
     Environment* env;
 
-    // To handle recursive top level definitions.
-    bool rec;
-    Symbol recname;
-    
     PtrArray local_envs;
     PtrArray instance_types;
     PtrArray instance_implicits;
 };
 
-AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
+AddressEnv* mk_address_env(Environment* env, Allocator* a) {
     AddressEnv* a_env = (AddressEnv*)mem_alloc(sizeof(AddressEnv), a);
     *a_env = (AddressEnv) {
-      .rec = sym != NULL,
-      .recname = sym ? *sym: (Symbol){},
       .local_envs = mk_ptr_array(32, a),
       .instance_types = mk_ptr_array(8, a),
       .instance_implicits = mk_ptr_array(8, a),
@@ -110,11 +121,8 @@ AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a) {
     return a_env; 
 }
 
-AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a) {
+AddressEnv* mk_type_address_env(TypeEnv* env, Allocator* a) {
     AddressEnv* a_env = (AddressEnv*)mem_alloc(sizeof(AddressEnv), a);
-    a_env->rec = sym != NULL;
-    if (a_env->rec)
-        a_env->recname = *sym;
     a_env->local_envs = mk_ptr_array(32, a);
     a_env->env = get_base(env);
     
@@ -201,18 +209,16 @@ AddressEntry address_env_lookup(Symbol s, AddressEnv* env) {
                 };
             }
         };
+        if (maddr.type == SARecFn && symbol_eq(maddr.symbol, s)) {
+            return (AddressEntry) {
+                .type = ACodeOffset,
+                .code_offset = maddr.code_offset,
+            };
+        }
 
         if (maddr.type == SATypeVar) {
             return (AddressEntry) {.type = ATypeVar};
         }
-    }
-
-    // Now search the recsym
-    if (env->rec && symbol_eq(env->recname, s)) {
-        return (AddressEntry) {
-            .type = AGlobal,
-            .value = NULL,
-        };
     }
 
     // TODO (BUG) this seemed to be returning ALocalIndirect 
@@ -288,7 +294,7 @@ LabelEntry label_env_lookup(Symbol s, AddressEnv* env) {
 
 /* void address_vars (sym_size_assoc vars, address_env* env, allocator a); */
 /* void pop_fn_vars(address_env* env); */
-void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
+void address_start_proc(RecBinding* rec, SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a) {
     LocalAddrs* new_local = mem_alloc(sizeof(LocalAddrs), a);
     new_local->vars = mk_saddr_array(32, a);
     size_t stack_offset = 0;
@@ -301,6 +307,14 @@ void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* e
     padding.stack_offset = stack_offset;
     push_saddr(padding, &new_local->vars);
 
+    if (rec) {
+        SAddr rec_saddr = {
+            .type = SARecFn,
+            .symbol = rec->sym,
+            .code_offset = rec->offset, 
+        };
+        push_saddr(rec_saddr, &new_local->vars);
+    }
     // Variables are in reverse order!
     // due to how the stack pushes/pops args.
     for (size_t i = vars.len; i > 0; i--) {

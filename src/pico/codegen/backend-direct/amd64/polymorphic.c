@@ -280,6 +280,9 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             case ALocalIndexed:
                 panic(mv_string("Cannot generate code for size of local indexed."));
                 break;
+            case ACodeOffset:
+                panic(mv_string("Unexpected type variable sort: Recursive Function Binding."));
+                break;
             case AGlobal:
                 panic(mv_string("Unexpected type variable sort: Global."));
                 break;
@@ -390,6 +393,9 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
                 break;
             case ALocalIndexed:
                 panic(mv_string("cannot generate align-of code for local indexed variable."));
+                break;
+            case ACodeOffset:
+                panic(mv_string("Unexpected type variable sort: Recursive Function Binding."));
                 break;
             case AGlobal:
                 panic(mv_string("Unexpected type variable sort: Global."));
@@ -551,6 +557,9 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
                 break;
             case ALocalIndexed:
                 panic(mv_string("cannot generate code for local indexed."));
+                break;
+            case ACodeOffset:
+                panic(mv_string("Unexpected type variable sort: Recursive Function Binding."));
                 break;
             case AGlobal:
                 panic(mv_string("Unexpected type variable sort: Global."));
