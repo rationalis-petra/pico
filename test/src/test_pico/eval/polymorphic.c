@@ -95,37 +95,29 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     // -------------------------------------------------------------------------
 
     if (test_start(log, mv_string("poly-trait"))) {
-      RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
-      RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
-      RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
-          "  [.eql proc [l r]\n"
-          "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
-          "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
-      RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
-      bool expected = true;
-      TEST_EQ("(eql (array [1 2]) (array [1 2]))");
+        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
+        RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
+        RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
+            "  [.eql proc [l r]\n"
+            "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
+            "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
+        RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
+        bool expected = true;
+        TEST_EQ("(eql (array [1 2]) (array [1 2]))");
     }
 
     /*
     if (test_start(log, mv_string("poly-trait-multi-inline-proc"))) {
-      RUN("(def Eql Trait Eql [A] [.= Proc [A A] Bool] [.!= Proc [A A] Bool])\n");
-      RUN("(def eql-i64 instance (Eql I64) [.= proc [l r] (i64.= l r)] [.!= proc [l r] (i64.= l r)])\n");
-      RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [4] A))"
-          "  [.= proc [l r]"
-          "    (->    (eq.= (aelt 0 l) (aelt 0 r))"
-          "      (bool.and (eq.= (aelt 1 l) (aelt 1 r)))"
-          "      (bool.and (eq.= (aelt 2 l) (aelt 2 r)))"
-          "      (bool.and (eq.= (aelt 3 l) (aelt 3 r))))]"
-          "  [.!= proc [l r] seq"
-          "    (->    (eq.!= (aelt 0 l) (aelt 0 r))"
-          "     (bool.or  (eq.!= (aelt 1 l) (aelt 1 r)))"
-          "     (bool.or  (eq.!= (aelt 2 l) (aelt 2 r)))"
-          "     (bool.or  (eq.!= (aelt 3 l) (aelt 3 r))))])");
-     RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
-     RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
+        RUN("(def Eql Trait Eql [A] [.= Proc [A A] Bool] [.!= Proc [A A] Bool])\n");
+        RUN("(def eql-i64 instance (Eql I64) [.= proc [l r] (i64.= l r)] [.!= proc [l r] (i64.= l r)])\n");
+        RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [1] A))"
+            "  [.= proc [l r] (eq.= (aelt 0 l) (aelt 0 r))]"
+            "  [.!= proc [l r] (eq.!= (aelt 0 l) (aelt 0 r))])");
+        RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
+        RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
 
-     bool expected = false;
-     TEST_EQ("(!= (array [#q #o #i #f]) (array [#q #o #i #f]))");
+        bool expected = false;
+        TEST_EQ("(!= (array [#q]) (array [#q]))");
     }
     */
 

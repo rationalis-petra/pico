@@ -1,9 +1,6 @@
 #include "test_pico/eval/components.h"
 #include "test_pico/helper.h"
 
-#define RUN(str) run_toplevel(str, module, context); refresh_env(env)
-#define TEST_EQ(str) test_toplevel_eq(str, &expected, module, context); reset_subregion(region)
-
 void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env, Target target, RegionAllocator* region) {
     TestContext context = (TestContext) {
         .env = env,
@@ -36,11 +33,13 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         RUN("(def f1 proc [] -78)");
         TEST_EQ("(f1)");
     }
-    // TODO: re-enable this test once typechecking bug fixed
-    /* if (test_start(log, mv_string("function-recursive"))) { */
-    /*     int64_t expected = 4; */
-    /*     RUN("(def recur proc [(n I64)] (if (i64.< n 1) n (i64.+ n (recur (i64.- n 1)))))"); */
-    /*     TEST_EQ("(recur 10)"); */
-    /* } */
+     
+    /* TODO: this test reflects a typechecking bug!
+    if (test_start(log, mv_string("function-recursive"))) {
+        int64_t expected = 4;
+        RUN("(def recur proc [(n I64)] (if (i64.< n 1) n (i64.+ n (recur (i64.- n 1)))))");
+        TEST_EQ("(recur 10)");
+    }
+    */
 
 }
