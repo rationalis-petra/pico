@@ -29,7 +29,6 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     TypeEnv *t_env = mk_type_env(env, ctx.a);
     switch (top->type) {
     case TLDef: {
-        PiType* check_against;
         PiType* ty = env_lookup_tydecl(top->def.bind, env);
         SynRef term = top->def.value;
 
@@ -42,15 +41,13 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
         }
 
-        if (ty != NULL) {
-            check_against = ty;
-        } else {
-            check_against = mk_uvar(ctx.pia);
-        }
-        // TODO (BUG): only bind self if procedure/all etc.
-        //type_var(top->def.bind, check_against, t_env);
         mark_recur(term, top->def.bind, ctx);
-        type_check_expr(term, *check_against, t_env, ctx);
+        if (ty) {
+            type_check_expr(term, *ty, t_env, ctx);
+        } else {
+            type_infer_expr(term, t_env, ctx);
+        }
+
         post_unify(term, t_env, ctx);
         pop_type(t_env);
         break;

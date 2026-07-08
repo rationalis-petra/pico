@@ -218,21 +218,21 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})");
     }
 
-    // TODO: fix the typechecking error here!
-    /* if (test_start(log, mv_string("apply-label-seq"))) { */
-    /*     int64_t expected = -510; */
-    /*     RUN("(def label-seq all [A] proc [x I64] (labels (go-to call-1) [call-1 (go-to call-2)] [call-2 x]))"); */
-    /*     TEST_EQ("(label-seq {Unit} -510)"); */
-    /* } */
+    if (test_start(log, mv_string("apply-label-seq"))) {
+        int64_t expected = -510;
+        RUN("(def label-seq all [A] proc [(x I64)] (labels (go-to call-1) [call-1 (go-to call-2)] [call-2 x]))");
+        TEST_EQ("(label-seq {Unit} -510)");
+    }
 
-    /* if (test_start(log, mv_string("apply-label-seq"))) { */
-    /*     char* expected = "510"; */
+    if (test_start(log, mv_string("apply-label-seq"))) {
+        char* expected = "510";
 
-    /*     /\* was accessing function 'fn' as -0x18(rbp) then as -0x10(rbp) *\/ */
-    /*     /\* when stepping through code, fn seems to be 40 0x28(rbp) ?? *\/ */
-    /*     RUN("(def label-seq-2 all [A] proc [(fn (Proc [A] Unit)) (x A) (y A)] (labels (go-to call-1) [call-1 (seq (fn x) (go-to call-2))] [call-2 (fn y)]))"); */
-    /*     TEST_STDOUT("(label-seq-2 (proc [x] terminal.write-string (i64.to-string x)) 5 10)"); */
-    /* } */
+        RUN("(def label-seq-2 all [A] proc [(fn (Proc [A] Unit)) (x A) (y A)] (labels (go-to call-1) [call-1 (seq (fn x) (go-to call-2))] [call-2 (fn y)]))");
+        PiAllocator pia = convert_to_pallocator(&ra);
+        PiAllocator old = set_std_current_allocator(pia);
+        TEST_STDOUT("(label-seq-2 (proc [x] terminal.write-string (i64.to-string x)) 5 10)");
+        set_std_current_allocator(old);
+    }
 
 
     /* if (test_start(log, mv_string("apply-label"))) { */
