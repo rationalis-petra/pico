@@ -1326,8 +1326,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     aty = eval_type(*(SynRef*)arg.val, env, ctx);
                 } else  {
                     aty = mk_uvar(ctx.pia);
-                    branch->args.data[i].val = aty;
                 }
+                branch->args.data[i].val = aty;
                 push_ptr(aty, arr);
             }
             sym_ptr_bind(untyped.labels.terms.data[i].key, arr, &labels);

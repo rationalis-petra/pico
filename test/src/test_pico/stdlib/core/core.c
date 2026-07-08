@@ -127,15 +127,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels (go-to start) [start (labels (go-to end) [end 4])] [end 3])");
     }
 
-    /*
-    if (test_start(log, mv_string("nested-labels-with-bind"))) {
+    if (test_start(log, mv_string("nested-labels-with-let"))) {
         int64_t expected = 4;
-        TEST_EQ(""
-                "(labels (go-to start 3) "
+        TEST_EQ("(labels (go-to start 3) "
                 "  [start [(y I64)] (seq [let! x 4] (labels (go-to end) [end x]))]"
                 "  [end 3])");
     }
-    */
 
     // -------------------------------------------------------------------------
     //
