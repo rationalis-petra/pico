@@ -165,6 +165,8 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Package* package = get_package(module);
     Module* root_module = package_root_module(package);
 
+    // TODO: importing a specific sympol allows you to bypass which symbols
+    // are/aren't exported.
     for (size_t i = 0; i < imports.clauses.len; i++) {
         // TODO (BUG): currently, we only search in the package, not the parent
         // module's submodules!
@@ -258,7 +260,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         case ImportAll: {
             // Find the package
             Module* importee = path_all(clause.path, root_module, module, point, a);
-            SymbolArray syms = get_defined_symbols(importee, a);
+            SymbolArray syms = get_exported_symbols(importee, a);
             for (size_t j = 0; j < syms.len; j++ ) {
                 name_ptr_insert(syms.data[j].name, importee, &env->symbol_origins);
             }

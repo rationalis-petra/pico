@@ -599,6 +599,26 @@ SymbolArray get_defined_symbols(Module* module, Allocator* a) {
     return symbols;
 }
 
+SymbolArray get_exported_symbols(Module* module, Allocator* a) {
+    SymbolArray symbols; 
+    if (module->header.exports.export_all) {
+        symbols = mk_symbol_array(module->entries.len, a);
+        for (size_t i = 0; i < module->entries.len; i++) {
+            push_symbol(module->entries.data[i].key, &symbols);
+        };
+    } else {
+        ExportClauseArray clauses = module->header.exports.clauses;
+        symbols = mk_symbol_array(clauses.len, a);
+        for (size_t i = 0; i < clauses.len; i++) {
+            ExportClause clause = clauses.data[i]; 
+            if (clause.type == ExportName && get_def(clause.name, module)) {
+                push_symbol(clause.name, &symbols);
+            }
+        }
+    }
+    return symbols;
+}
+
 PtrArray get_defined_instances(Module* module, Allocator* a) {
     PtrArray instances = mk_ptr_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
