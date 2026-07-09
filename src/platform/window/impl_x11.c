@@ -19,6 +19,8 @@ static Allocator* wsa;
 
 static Display* x11_display = NULL;
 
+static bool initialized = false;
+
 Atom WM_DELETE_WINDOW;
 
 // Internal
@@ -86,6 +88,31 @@ bool pl_window_should_close(PlWindow *window) {
 WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
     WinMessageArray out = mk_wm_array(8, a);
     XEvent event;
+    if (!initialized) {
+        initialized = true;
+        // 1. Initialize the XKB extension
+        int xkb_major = XkbMajorVersion;
+        int xkb_minor = XkbMinorVersion;
+        int xkb_opcode, xkb_event, xkb_error;
+
+        if (XkbQueryExtension(x11_display, &xkb_opcode, &xkb_event, &xkb_error, &xkb_major, &xkb_minor)) {
+            // 2. Fetch the initial keymap description
+            XkbDescPtr xkb_desc = XkbGetMap(x11_display, XkbAllMapComponentsMask, XkbUseCoreKbd);
+    
+            if (xkb_desc) {
+                // 3. Manually trigger your internal event so it matches Wayland's startup behavior
+                WinMessage message = (WinMessage) {
+                    .type = KeymapChanged,
+                    .keymap = (KeyMap*)xkb_desc,
+                };
+                push_wm(message, &out);
+        
+                // Clean up description if your internal event copies what it needs
+                XkbFreeKeyboard(xkb_desc, XkbAllComponentsMask, True);
+            }
+        }
+    }
+    
     while (XCheckWindowEvent(x11_display, window->x11_window, ButtonPressMask | StructureNotifyMask, &event)) {
         switch (event.type) {
         case DestroyNotify:
@@ -105,13 +132,6 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
             }
             break;
         }
-        case KeyPress:
-        case KeyRelease:
-            if (event.type == KeyPress) {
-
-            } else {
-            }
-            break;
 
         // The following events are ones that we have determined can be safely
         // ignored, i.e. they do not need to be acted on AND are not exposed in
@@ -139,12 +159,23 @@ WinMessageArray pl_poll_events(PlWindow* window, Allocator* a) {
                          event.xany.window,
                          x11.context,
                          (XPointer*) &pl_window) != 0) {
-        // This is an event for a window that has already been destroyed
             return;
         }
         */
-
         switch (event.type) {
+        case KeyPress:
+        case KeyRelease: {
+            WinMessage message = {
+                .type = KeyEvent,
+                .key_event.key_id = scancode_to_rawkey(event.xkey.keycode - 8),
+                .key_event.modifier_key_mask = 0,
+                .key_event.key_pressed = event.type == KeyPress,
+            };
+            push_wm(message, &out);
+            break;
+        }
+
+        // This is an event for a window that has already been destroyed
         case ClientMessage: {
             if ((Atom)event.xclient.data.l[0] == WM_DELETE_WINDOW) {
                 window->should_close = 1;
@@ -178,7 +209,7 @@ void destroy_keyboard_state(KeyboardState* state) {
 }
 
 void update_keystate_key(RawKey raw, uint32_t modifier_mask, bool is_pressed, KeyboardState *state) {
-    state->keys[raw] = is_pressed << 7;
+    state->keys[raw] = is_pressed;
 }
 void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t locked, uint32_t group, KeyboardState *state) {
     // TODO: implement me!
@@ -187,7 +218,7 @@ void update_keystate_modifiers(uint32_t depressed, uint32_t latched, uint32_t lo
 Key get_key(RawKey raw, KeyboardState* state) {
     //KeyboardState* kstate = (void*)state;
     // TODO: get shift state from keyboard...
-    KeyCode keycode = raw;
+    KeyCode keycode = rawkey_to_scancode(raw) + 8;
     KeySym keysym = XkbKeycodeToKeysym(x11_display, keycode, 0, 0);
     return translate_xkb_keycode(keysym);
 }
