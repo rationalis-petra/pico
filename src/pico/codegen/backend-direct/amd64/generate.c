@@ -712,6 +712,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SProcedure: {
         // Generate procedure value (push the address onto the stack)
         AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
         ProcDefer to_generate = {
           .proc = ref,
           .backlink_from = target.target,
@@ -723,8 +725,6 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             to_generate.instance_args = get_instance_implicits(env);
         }
         push_proc_defer(to_generate, ictx.procs_to_generate);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SAll: {
@@ -737,13 +737,17 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
-        // Now, change the target and the assembler, such that code is now
-        // generated in the 'code segment'. Then, generate the function body
-        ass = target.code_aux;
-        target.target = target.code_aux;
-        ictx.target = target;
-
-        generate_polymorphic(syn.all.args, syn.all.body, env, ictx);
+        ProcDefer to_generate = {
+          .proc = ref,
+          .backlink_from = target.target,
+          .backlink = out.backlink,
+          .in_poly_instance = false
+        };
+        if (in_poly_instance(env)) {
+            to_generate.in_poly_instance = true;
+            to_generate.instance_args = get_instance_implicits(env);
+        }
+        push_proc_defer(to_generate, ictx.procs_to_generate);
         break;
     }
     case SMacro:
@@ -3617,15 +3621,13 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
         break;
     }
     case SAll: {
-        void* all_address = get_instructions(target.code_aux).data;
-        all_address += get_instructions(target.code_aux).len;
+        uint8_t* caller_loc = get_instructions(deferred.backlink_from).data + deferred.backlink; 
+        set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
 
-        // Generate procedure value (push the address onto the stack)
-        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), ass, a, point);
-        backlink_code(target, out.backlink, links);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, ADDRESS_SIZE);
-
+        if (!deferred.in_poly_instance) {
+            // We link differently for polymorphic instances
+            backlink_code(target, deferred.backlink, links);
+        }
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
         ass = target.code_aux;
