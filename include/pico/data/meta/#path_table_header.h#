@@ -1,0 +1,40 @@
+#ifndef __PICO_DATA_META_PATH_TABLE_HEADER_H
+#define __PICO_DATA_META_PATH_TABLE_HEADER_H
+
+/**
+ * The path table is a specific type of hashtable mapping paths to values of
+ * some type A.
+ * 
+ */
+
+#include "platform/memory/allocator.h"
+#include "pico/values/values.h"
+#include "pico/data/path.h"
+
+#define PATH_TABLE_HEADER(type, fprefix, tprefix)                       \
+    typedef struct Path##tprefix##Cell Path##tprefix##Cell;             \
+    struct Path##tprefix##Cell {                                        \
+        Path path;                                                      \
+        type value;                                                     \
+        Path##tprefix##Cell* next_node;                                 \
+    };                                                                  \
+                                                                        \
+    typedef struct {                                                    \
+        uint64_t capacity;                                              \
+        Path##tprefix##Cell* cells;                                     \
+        Allocator gpa;                                                  \
+    } Path##tprefix##Table;                                             \
+                                                                        \
+    Path##tprefix##Table mk_##fprefix##_path_table(size_t capacity, Allocator* a); \
+                                                                        \
+    type* lookup_##fprefix##_path_table(Path key, Path##tprefix##Table table); \
+                                                                        \
+    void insert_##fprefix##_path_table_entry(Path key, type value, Path##tprefix##Table* table); \
+                                                                        \
+    void delete_##fprefix##_path_table_entry(Path key, Path##tprefix##Table* table); \
+                                                                        \
+    void delete_##fprefix##_path_table(Path##tprefix##Table table);     \
+
+
+
+#endif

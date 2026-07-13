@@ -38,7 +38,13 @@ typedef struct {
 
 ARRAY_HEADER(InstanceSrc, inst_src, InstSrc)
 
-/* Declarations and Modules
+typedef struct {
+    U8Array data;
+    U8Array code;
+} Segments;
+
+/**
+ * Declarations and Modules
  * ------------------------
  * A declaration is simply some kind of data we want to attach to a symbol
  * in a module. At the moment, the only supported declaration is a 'type'
@@ -65,53 +71,6 @@ typedef struct {
     };
 } ModuleDecl;
 
-/* Definitions and codegen 
- * ------------------------
- * Codegen is relatively simple: given an expression e.g. (+ 2 3) and an
- * assembler, generate use the assembler to generate the code that corresponds
- * to the expression, e.g. "mov 2, rax; add rax, 3; push rax". Complexity is introduced because:
- * • Expressions may contain data such as strings. If the result is defined,
- *   these may need to be copied into the defining module. 
- * • Expressions may contain (or be) procedures, again, meaning that if defined
- *   then the procedure code needs to be copied by the defining module.
- * • Finally, an expression may define a trait instance that has implicit parameters.
- *   This is the most complex, as future type-generation phases may generate
- *   new values (a new instance/closure?). 
- * 
- * To accommodate this, code generation has two copyable targets as follows: 
- * • There is a 'eval segment' assembler, which is the entry-point to the experssion.
- * • There is a 'code-segment' assembler, where output of procedure code within the
- *   expression is put.
- * 
- * In order to facilitate copying of both code and data to new addresses,
- * internal (absolute) pointers must be updated, and so link information has to
- * be maintained.
- * 
- * As both the code and data are effectively byte-arrays, there are 4 pieces of
- * link data: 
- * | Matches chunks (addresses) in the | To indices in the | Name     |
- * |-----------------------------------|-------------------|----------|
- * | Eval Segment                      | Code Segment      | ec_links |
- * | Eval Segment                      | Data Segment      | ed_links |
- * | Code Segment                      | Code Segment      | cc_links |
- * | Code Segment                      | Data Segment      | cd_links |
- * | Data Segment                      | Code Segment      | N/A      |
- * | Data Segment                      | Data Segment      | N/A      |
- * 
- * Note that the data segment is only for strings, so cannot have any links to
- * other segments.
- * 
- * Finally, there are the 'external links', which are used to indicate locations
- * in the code segment which are addresses of specific symbols (values). These
- * locations need updating if the symbol is redefined.
- * 
- */
-
-typedef struct {
-    U8Array data;
-    U8Array code;
-} Segments;
-
 //     Package Interface
 // -----------------------------------------------------------------------------
 Package* mk_package(Name name, PiAllocator pico_allocator);
@@ -128,13 +87,6 @@ Module* get_module(Symbol symbol, Package* package);
 // -----------------------------------------------------------------------------
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent);
 void delete_module(Module* module);
-
-/**
- * If we are going to define the result of evaluating (target), then it must be prepped
- * so that the code and data segments are owned by the module.
- * This needs to be done BEFORE evaluation
- */
-Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
 
 /**
  * Add a value definition in to the module's namespace. Must be prepped (see above)
@@ -178,5 +130,64 @@ Package* get_package(Module* module);
 Module* get_parent(Module* module);
 Imports get_imports(Module* module);
 Exports get_exports(Module* module);
+
+/**
+ * Compiler Interface 
+ * ==============================
+ *
+ * The following functions provide limited access to the internals of a module
+ * for compilation/evaluation purposes. 
+ *
+ */
+
+/**
+ * Definitions and codegen 
+ * ========================
+ * Codegen is relatively simple: given an expression e.g. (+ 2 3) and an
+ * assembler, generate use the assembler to generate the code that corresponds
+ * to the expression, e.g. "mov 2, rax; add rax, 3; push rax". Complexity is introduced because:
+ * • Expressions may contain data such as strings. If the result is defined,
+ *   these may need to be copied into the defining module. 
+ * • Expressions may contain (or be) procedures, again, meaning that if defined
+ *   then the procedure code needs to be copied by the defining module.
+ * • Finally, an expression may define a trait instance that has implicit parameters.
+ *   This is the most complex, as future type-generation phases may generate
+ *   new values (a new instance/closure?). 
+ * 
+ * To accommodate this, code generation has two copyable targets as follows: 
+ * • There is a 'eval segment' assembler, which is the entry-point to the experssion.
+ * • There is a 'code-segment' assembler, where output of procedure code within the
+ *   expression is put.
+ * 
+ * In order to facilitate copying of both code and data to new addresses,
+ * internal (absolute) pointers must be updated, and so link information has to
+ * be maintained.
+ * 
+ * As both the code and data are effectively byte-arrays, there are 4 pieces of
+ * link data: 
+ * | Matches chunks (addresses) in the | To indices in the | Name     |
+ * |-----------------------------------|-------------------|----------|
+ * | Eval Segment                      | Code Segment      | ec_links |
+ * | Eval Segment                      | Data Segment      | ed_links |
+ * | Code Segment                      | Code Segment      | cc_links |
+ * | Code Segment                      | Data Segment      | cd_links |
+ * | Data Segment                      | Code Segment      | N/A      |
+ * | Data Segment                      | Data Segment      | N/A      |
+ * 
+ * Note that the data segment is only for strings, so cannot have any links to
+ * other segments.
+ * 
+ * Finally, there are the 'external links', which are used to indicate locations
+ * in the code segment which are addresses of specific symbols (values). These
+ * locations need updating if the symbol is redefined.
+ * 
+ */
+
+/**
+ * If we are going to define the result of evaluating (target), then it must be prepped
+ * so that the code and data segments are owned by the module.
+ * This needs to be done BEFORE evaluation
+ */
+Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
 
 #endif

@@ -28,7 +28,6 @@ typedef struct {
     };
 } ComptimeHead;
 
-
 // Internal functions declarations needed forthe  interface implementation 
 TopLevel abstract_i(RawTree raw, AbstractionICtx ctx);
 SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx);

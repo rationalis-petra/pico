@@ -47,11 +47,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
-            .ec_links = mk_link_meta_array(32, a),
+            .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
-            .cc_links = mk_link_meta_array(32, a),
+            .code_starts = mk_u64_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
-            .dd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a), .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
         .gotolinks = mk_sym_sarr_assoc(8, a),
@@ -157,8 +158,10 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
             .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
+            .code_starts = mk_u64_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
@@ -184,6 +187,7 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
 
     while (procs_to_generate.len != 0) {
         ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+        push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
         generate_deferred_proc(deferred, a_env, ictx);
     }
 
@@ -219,8 +223,10 @@ void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
             .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
+            .code_starts = mk_u64_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
@@ -565,6 +571,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
+        push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -3349,6 +3356,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
+        push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);

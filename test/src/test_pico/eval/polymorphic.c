@@ -458,5 +458,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
     }
 
+    /*
+    if (test_start(log, mv_string("poly-proc-in-proc"))) {
+        int64_t expected = 72;
+        TEST_EQ("((proc [x] (let [id (all [A] proc [(y A)] y)] (id {I64} x))) 72)");
+    }
+    */
+
     set_std_current_allocator(old);
 }

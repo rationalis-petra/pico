@@ -1,7 +1,9 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+
 #include "platform/machine_info.h"
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 
 #include "data/num.h"
@@ -13,6 +15,7 @@
 #include "pico/codegen/codegen.h"
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
+#include "pico/values/modular_build.h"
 #include "pico/syntax/header.h"
 #include "pico/data/sym_sarr_amap.h"
 #include "pico/data/sym_ptr_amap.h"
@@ -33,7 +36,10 @@ typedef struct {
   PiType type;
   PtrArray* declarations;
 
+  U64Array code_starts;
   U8Array* code_segment;
+
+  U64Array data_starts;
   U8Array* data_segment;
 
   // For parametric instances, need to keep track of specific instantiations. 
@@ -248,6 +254,8 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
         delete_sym_sarr_amap(*entry.backlinks,
                              delete_symbol,
                              sdelete_size_array);
+        sdelete_u64_array(entry.code_starts);
+        sdelete_u64_array(entry.data_starts);
         call_free(entry.backlinks, &module->pico_allocator);
     }
     if (entry.code_segment) {
@@ -396,6 +404,8 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
                                                 scopy_size_array,
                                                 &module->allocator);
 
+        entry.code_starts = scopy_u64_array(links->code_starts, &module->allocator);
+        entry.data_starts = scopy_u64_array(links->data_starts, &module->allocator);
         if (segments.code.len != 0) {
             // Move this to the code segment bit?
             // swap out self-references
@@ -678,3 +688,103 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
         }
     }
 }
+
+/**
+ * Implementation of the 'Modular Build' interface/header, see 
+ * pico/values/modular_build.h for full specification/intended behaviour.
+ */
+
+ModuleIndex start_iterating(Module* module) {
+  return (ModuleIndex) {
+      .entry = 0,
+      .component = 0,
+      .value = 0,
+  };
+}
+
+typedef enum {
+  CodeComponent,
+  DataComponent,
+  InstanceComponent,
+} ComponentIndex;
+
+bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module) {
+    size_t entry_index = index->entry;
+    ComponentIndex component_index = index->component;
+    size_t value_index = index->value;
+    if (entry_index == module->entries.len) {
+        return false;
+    }
+
+    ModuleEntryInternal entry = module->entries.data[entry_index].val;
+    if (component_index == CodeComponent) {
+    } else if (component_index == DataComponent) {
+
+    } else  {
+
+    }
+
+    /**
+     * Index Increment logic
+     */
+    switch (component_index) {
+    case CodeComponent:
+      goto inc_code;
+    case DataComponent:
+      goto inc_data;
+    case InstanceComponent:
+      goto inc_instance;
+    default:
+      panic(mv_string("Invalid Module Index"));
+    }
+
+ inc_code:
+    value_index++;
+    goto cascade_code;
+ cascade_code:
+    if (value_index == entry.code_starts.len) {
+      value_index = 0;
+      component_index = DataComponent;
+      goto cascade_data;
+    }
+    goto write_index;
+
+ inc_data:
+    value_index++;
+    goto cascade_data;
+ cascade_data:
+    if (value_index == entry.data_starts.len) {
+      value_index = 0;
+      component_index = InstanceComponent;
+      goto cascade_instance;
+    }
+    goto write_index;
+
+ inc_instance:
+    value_index++;
+    goto cascade_instance;
+ cascade_instance:
+    if (entry.instances) {
+      if (entry.instances->instantiations.len == value_index) {
+        entry_index++;
+        value_index = 0;
+        component_index = CodeComponent;
+      } 
+    } else {
+      entry_index++;
+      value_index = 0;
+      component_index = CodeComponent;
+    }
+    goto write_index;
+
+ write_index:
+    *index = (ModuleIndex) {
+      .entry = entry_index,
+      .component = component_index,
+      .value = value_index,
+    };
+
+    return true;
+}
+    
+    

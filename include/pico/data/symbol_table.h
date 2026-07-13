@@ -1,10 +1,12 @@
 #ifndef __PICO_DATA_SYMBOL_TABLE_H
 #define __PICO_DATA_SYMBOL_TABLE_H
 
-/* The symbol table is a global data-structure used by pico to map 
+/**
+ * The symbol table is a global data-structure used by pico to map 
  * strings (slow to compare) to symbols (fast to compare). 
  * 
- * The table is string-specfic, so takes advantage of foreknowledge of string layout 
+ * The table is string-specfic, so takes advantage of foreknowledge of string
+ * layout to compactly and efficintly store backing strings.
  */
 
 #include <string.h>

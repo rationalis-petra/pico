@@ -1,0 +1,127 @@
+#ifndef __PICO_DATA_META_PATH_TABLE_IMPL_H
+#define __PICO_DATA_META_PATH_TABLE_IMPL_H
+
+#include <string.h>
+
+#include "platform/signals.h"
+#include "platform/memory/allocator.h"
+
+#include "pico/data/meta/path_table_header.h"
+
+bool path_eq(Path lhs, Path rhs);
+uint64_t hash_path(Path path);
+
+#define PATH_TABLE_IMPL(type, fprefix, tprefix)                         \
+                                                                        \
+    Path##tprefix##Table mk_##fprefix##_path_table(size_t capacity, Allocator* a) { \
+        Path##tprefix##Cell* memory = mem_alloc(sizeof(Path##tprefix##Cell) * capacity, a); \
+        memset(memory, 0, sizeof(Path##tprefix##Cell) * capacity);      \
+        return (Path##tprefix##Table) {                                 \
+            .capacity = capacity,                                       \
+            .cells = memory,                                            \
+            .gpa = *a,                                                  \
+        };                                                              \
+    }                                                                   \
+                                                                        \
+    type* lookup_##fprefix##_path_table(Path key, Path##tprefix##Table table) { \
+        uint64_t hash_val = hash_path(key);                             \
+        size_t index = hash_val % table.capacity;                       \
+        Path##tprefix##Cell* cell = &table.cells[index];                \
+                                                                        \
+        /* TODO: encode this assumption more properly somewhere */      \
+        if (cell->path.data == NULL) {                                  \
+            return NULL;                                                \
+        } else {                                                        \
+            do {                                                        \
+                if (path_eq(cell->path, key))                           \
+                    return &cell->value;                                \
+                if (cell->next_node) {                                  \
+                    cell = cell->next_node;                             \
+                }                                                       \
+            } while (cell->next_node);                                  \
+        }                                                               \
+                                                                        \
+        return NULL;                                                    \
+    }                                                                   \
+                                                                        \
+    void insert_##fprefix##_path_table_entry(Path key, type value, Path##tprefix##Table* table) { \
+        /* TODO add ability for path table to grow! */                  \
+                                                                        \
+        uint64_t hash_val = hash_path(key);                             \
+        size_t index = hash_val % table->capacity;                      \
+        Path##tprefix##Cell* cell = &table->cells[index];               \
+        Path##tprefix##Cell new_cell = {                                \
+            .path = key,                                                \
+            .value = value,                                             \
+            .next_node = NULL,                                          \
+        };                                                              \
+                                                                        \
+        if (cell->path.data == NULL) {                                  \
+            *cell = new_cell;                                           \
+        } else {                                                        \
+            while (cell->next_node && !path_eq(key, cell->path)) {      \
+                cell = cell->next_node;                                 \
+            }                                                           \
+            if (cell->next_node) {                                      \
+                /** Replacing existing cell */                          \
+                new_cell.next_node = cell->next_node;                   \
+                *cell = new_cell;                                       \
+            } else {                                                    \
+                /** Inserting new cell */                               \
+                cell->next_node = mem_alloc(sizeof(Path##tprefix##Cell), &table->gpa); \
+                *cell->next_node = new_cell;                            \
+            }                                                           \
+        }                                                               \
+    }                                                                   \
+                                                                        \
+    void delete_##fprefix##_path_table_entry(Path key, Path##tprefix##Table* table) { \
+        uint64_t hash_val = hash_path(key);                             \
+        size_t index = hash_val % table->capacity;                      \
+        Path##tprefix##Cell* cell = &table->cells[index];               \
+                                                                        \
+        if (cell->path.data == NULL) {                                  \
+            /* Deleting a value that isn't in the map */                \
+            panic(mv_string("TODO: determine contract when deleting nonexistant entry from path_table")); \
+        } else if (path_eq(key, cell->path)) {                          \
+            /* ripple delete*/                                          \
+            bool ripple = false;                                        \
+            while (cell->next_node) {                                   \
+                Path##tprefix##Cell* next = cell->next_node;            \
+                *cell = *next;                                          \
+                cell = next;                                            \
+                ripple = true;                                          \
+            }                                                           \
+            if (ripple) {                                               \
+                mem_free(cell, &table->gpa);                            \
+            }                                                           \
+        } else {                                                        \
+            while (cell->next_node && !path_eq(key, cell->path)) {      \
+                cell = cell->next_node;                                 \
+            }                                                           \
+            if (!path_eq(key, cell->path)) {                            \
+                panic(mv_string("TODO: determine contract when deleting nonexistant entry from path_table")); \
+            }                                                           \
+            /* Ripple delete */                                         \
+            while (cell->next_node) {                                   \
+                Path##tprefix##Cell* next = cell->next_node;            \
+                *cell = *next;                                          \
+                cell = next;                                            \
+            }                                                           \
+            mem_free(cell, &table->gpa);                                \
+        }                                                               \
+    }                                                                   \
+                                                                        \
+    void delete_##fprefix##_path_table(Path##tprefix##Table table) {    \
+        for (size_t i = 0; i < table.capacity; i++) {                   \
+            Path##tprefix##Cell cell = table.cells[i];                  \
+            Path##tprefix##Cell* next = cell.next_node;                 \
+            while (next) {                                              \
+                Path##tprefix##Cell* next_next = next->next_node;       \
+                mem_free(next, &table.gpa);                             \
+                next = next_next;                                       \
+            }                                                           \
+        }                                                               \
+        mem_free(table.cells, &table.gpa);                              \
+    }                                                                   \
+
+#endif
