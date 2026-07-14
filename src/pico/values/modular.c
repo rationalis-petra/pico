@@ -696,6 +696,7 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
 
 
 typedef enum {
+  ValueComponent,
   CodeComponent,
   DataComponent,
   InstanceComponent,
@@ -719,6 +720,8 @@ void cascade_iterator(ModuleIndex* index, Module* module) {
     ModuleEntryInternal entry = module->entries.data[entry_index].val;
 
     switch (component_index) {
+    case ValueComponent:
+      goto cascade_val;
     case CodeComponent:
       goto cascade_code;
     case DataComponent:
@@ -727,6 +730,13 @@ void cascade_iterator(ModuleIndex* index, Module* module) {
       goto cascade_instance;
     default:
       panic(mv_string("Invalid Module Index"));
+    }
+
+  cascade_val:
+    if (value_index >= 1) {
+      value_index = 0;
+      component_index = CodeComponent;
+      goto cascade_data;
     }
 
   cascade_code:
@@ -749,7 +759,7 @@ void cascade_iterator(ModuleIndex* index, Module* module) {
     if (!entry.instances || (entry.instances->instantiations.len == value_index)) {
       entry_index++;
       value_index = 0;
-      component_index = CodeComponent;
+      component_index = ValueComponent;
       goto continue_loop;
     } 
     goto end_loop;
@@ -786,7 +796,65 @@ bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module)
         return false;
     }
 
-    //ModuleEntryInternal entry = module->entries.data[entry_index].val;
+    ModuleEntryInternal entry = module->entries.data[entry_index].val;
+    ComponentIndex component_index = index->component;
+
+    /**
+     * TODO: add component for the value itself...
+     */
+
+    switch (component_index) {
+    case ValueComponent: {
+        size_t size = pi_size_of(entry.type);
+        U8Array frag_data = {
+            .data = entry.value,
+            .len = size,
+            .size = size,
+        };
+        *fragment = (ModuleFragment) {
+            .type = DataFragment_t,
+            .data = frag_data,
+        };
+        break;
+    }
+    case CodeComponent: {
+        size_t fn_start = entry.code_starts.data[index->value];
+        size_t fn_end = (entry.code_starts.len == index->value + 1)
+            ? (entry.code_starts.data[index->value + 1])
+            : entry.code_segment->len;
+        U8Array frag_data = {
+            .data = entry.code_segment->data + fn_start,
+            .len = fn_end - fn_start,
+            .size = fn_end - fn_start,
+        };
+        *fragment = (ModuleFragment) {
+            .type = CodeFragment_t,
+            .data = frag_data,
+        };
+        break;
+    }
+    case DataComponent: {
+        size_t data_start = entry.data_starts.data[index->value];
+        size_t data_end = (entry.data_starts.len == index->value + 1)
+            ? (entry.data_starts.data[index->value + 1])
+            : entry.data_segment->len;
+        U8Array frag_data = {
+            .data = entry.data_segment->data + data_start,
+            .len = data_end - data_start,
+            .size = data_end - data_start,
+        };
+        *fragment = (ModuleFragment) {
+            .type = DataFragment_t,
+            .data = frag_data,
+        };
+        break;
+    }
+    case InstanceComponent:
+        // TODO: setup instance...
+        break;
+    default:
+      panic(mv_string("Invalid Module Index"));
+    }
 
     index->value++;
     cascade_iterator(index, module);

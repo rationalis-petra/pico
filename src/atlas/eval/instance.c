@@ -283,8 +283,14 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         if (pi_type_eql(check_ty, &e->type, &ra)) {
             // TODO: replace with proper allocator??
             RelicProgram* program = build_program(module, entry.value, &ra);
-            write_program(program, path_cat(mv_string("build"), target_name, &ra), &ra);
+            String image = path_cat(mv_string("build"), target_name, &ra);
+            write_program(program, image, &ra);
             //link_program(String program, String lib, String out_name);
+
+            FormattedOStream* fout = get_formatted_stdout();
+            write_fstring(mv_string("Wrote image to "), fout);
+            write_fstring(image, fout);
+            write_fstring(mv_string("\n"), fout);
         } else {
             PtrArray nodes = mk_ptr_array(5, &ra);
             {

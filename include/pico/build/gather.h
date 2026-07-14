@@ -43,6 +43,8 @@ ARRAY_HEADER(DataFragment, df, DataFragment);
 typedef struct {
     CodeFragmentArray code_frags;
     DataFragmentArray data_frags;
+    size_t code_size;
+    size_t data_size;
 } ProgramFragments;
 
 ProgramFragments gather_fragments(Symbol entry_point, Module* module, Allocator* allocator);

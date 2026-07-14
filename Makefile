@@ -127,6 +127,11 @@ MAIN_RELEASE_OBJ := $(MAIN_SRC:%=$(RELEASE_DIR)/%.o)
 MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
 UNLINKED_IMAGE_OBJ := $(IMAGE_SRC:%=$(RELEASE_DIR)/%.o)
 
+GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
+GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
+GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
+
 # String substitution (suffix version without %).
 # As an example, ./build/hello.c turns into ./build/hello.c.d
 MAKE_DEPS := $(SRCS:%=$(BUILD_DIR)/%.d) $(MAIN_SRC:%=$(BUILD_DIR)/%.d)
@@ -166,7 +171,7 @@ $(DEBUG_DIR)/%.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(DEBUG_FLAGS)
 
 
-# Test stuff
+# Tett stuff
 # ---------------------------------------------
 ## Same process as above but for tests
 
@@ -221,12 +226,6 @@ $(KEEPER_DIR)/%.c.o: %.c
 # ---------------------------------------------
 # Objects from the 'platform' and 'components' diretories
 # that may be useful regardless of application...
-GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
-GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
-GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
-GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
-
-
 INSTALLER_DIR := $(BUILD_DIR)/installer
 INSTALLER_BUILD_DIR := $(BUILD_DIR)/installer_build
 INSTALLER_INC_DIR := ./installer/include
@@ -297,7 +296,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: all
-all: debug release test keeper installer installer
+all: debug release test keeper installer installer image
 
 # TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode

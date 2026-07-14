@@ -57,7 +57,7 @@ ASSOC_HEADER(uint64_t, Path, u64_path, U64Path);
 
 typedef struct {
   FragmentType type;
-  U8Array fragment;
+  U8Array data;
 } ModuleFragment;
 
 

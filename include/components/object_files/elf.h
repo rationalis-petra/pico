@@ -96,7 +96,7 @@ typedef struct __attribute__((packed)) {
     uint16_t header_size;
 
     // 
-    uint16_t program_hedaer_entry_size;
+    uint16_t program_header_entry_size;
     uint16_t num_program_header_entries;
 
     uint16_t section_hedaer_entry_size;
@@ -106,8 +106,32 @@ typedef struct __attribute__((packed)) {
     uint16_t section_names;
 } Elf64_Header;
 
+typedef enum : uint32_t {
+    PTNull    = 0x0,
+    PTLoad    = 0x1,
+    PTDynamic = 0x2,
+    PTInterp  = 0x3,
+    PTNote    = 0x4,
+    PTSHLIB   = 0x5,
+    PTPHDR    = 0x6,
+    PTTLS     = 0x7,
+} ProgHeaderType;
+
+typedef enum : uint32_t {
+    PFExecutable = 0x1,
+    PFWritable   = 0x2,
+    PFReadable   = 0x4,
+} ProgHeaderFlags;
+
 typedef struct {
-    
+    ProgHeaderType type; 
+    ProgHeaderFlags flags;
+    uint64_t offset;
+    uint64_t virtual_address;
+    uint64_t physical_address;
+    uint64_t file_size;
+    uint64_t memory_size;
+    uint64_t alignment;
 } Elf64ProgramHeader;
 
 
