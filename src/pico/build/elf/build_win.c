@@ -1,5 +1,5 @@
 #include "platform/machine_info.h"
-#if OS_FAMILY == UNIX
+#if OS_FAMILY == WINDOWS
 
 #include "platform/filesystem/filesystem.h"
 #include "platform/signals.h"
@@ -7,33 +7,24 @@
 #include "pico/build/build.h"
 #include "pico/build/gather.h"
 #include "pico/build/serialize.h"
-#include "components/object_files/elf.h"
+#include "components/object_files/coff_pe.h"
 
 struct RelicProgram {
-    Elf64_Header elf_header;
+    Coff_Header coff_header;
     U8Array segments;
 };
 
 RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a) {
     RelicProgram* program = mem_alloc(sizeof(RelicProgram), a);
-    program->elf_header = (Elf64_Header) {
-        .magic = {0x7f, 'E', 'L', 'F'},
-        .class = Elf_64bit,
-        .endianness = Elf_Little_Endian,
-        .version = 1, // There is only one version of elf
-        // TODO: determine ABI based on machine_info
-        .osabi = SystemV,
-        .osabi_extra = 0,
-        .padding = {0, 0, 0, 0, 0, 0, 0},
-
-        // Object file that can be linked with others
-        .type = Elf_Relocatable,
-        // TODO: update based on machine_info!
-        .architecture = AMD64,
-        .version_2 = 1, // There is only one version of elf
-
-        // Skip a bunch of fields that we fill in later...
-        .header_size = sizeof(Elf64_Header),
+    program->coff_header = (Elf64_Header) {
+        // TODO: also allow AARCH64
+        .machine = COFF_AMD64
+        .num_sections = 0,
+        .timestamp = 0, // TODO: populate with current time as time_t
+        .symtable_offset = 0,
+        .num_symbols = 0,
+        .optional_header_size = 0,
+        .characteristics = LargeAddressAware | NoDebugInfo,
     };
 
     /**
@@ -80,9 +71,9 @@ void write_program(RelicProgram* program, String filename, Allocator* a) {
     File* file = result.file;
 
     U8Array header_bytes = {
-        .data = (void*)&program->elf_header,
-        .len = sizeof(Elf64_Header),
-        .size = sizeof(Elf64_Header),
+        .data = (void*)&program->coff_header,
+        .len = sizeof(Coff_Header),
+        .size = sizeof(Coff_Header),
     };
 
     write_chunk(file, header_bytes);

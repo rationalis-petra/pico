@@ -19,7 +19,7 @@
 typedef struct RelicProgram RelicProgram;
 
 RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a);
-void write_program(RelicProgram* program, String filename);
+void write_program(RelicProgram* program, String filename, Allocator* a);
 void link_program(String program, String lib, String out_name);
 
 #endif

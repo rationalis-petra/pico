@@ -694,13 +694,6 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
  * pico/values/modular_build.h for full specification/intended behaviour.
  */
 
-ModuleIndex start_iterating(Module* module) {
-  return (ModuleIndex) {
-      .entry = 0,
-      .component = 0,
-      .value = 0,
-  };
-}
 
 typedef enum {
   CodeComponent,
@@ -708,83 +701,95 @@ typedef enum {
   InstanceComponent,
 } ComponentIndex;
 
-bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module) {
-    size_t entry_index = index->entry;
-    ComponentIndex component_index = index->component;
-    size_t value_index = index->value;
+/**
+ * cascade_iterator is, in a sense, the bulk of the index increment logic. The
+ * goal of 'cascade' is to advande the iterator until the next valid entry (or
+ * to the end of the module, whichever comes first.
+ */
+void cascade_iterator(ModuleIndex* index, Module* module) {
+  bool running = true;
+  size_t entry_index = index->entry;
+  ComponentIndex component_index = index->component;
+  size_t value_index = index->value;
+
+  while (running) {
     if (entry_index == module->entries.len) {
-        return false;
+      goto end_loop;
     }
-
     ModuleEntryInternal entry = module->entries.data[entry_index].val;
-    if (component_index == CodeComponent) {
-    } else if (component_index == DataComponent) {
 
-    } else  {
-
-    }
-
-    /**
-     * Index Increment logic
-     */
     switch (component_index) {
     case CodeComponent:
-      goto inc_code;
+      goto cascade_code;
     case DataComponent:
-      goto inc_data;
+      goto cascade_data;
     case InstanceComponent:
-      goto inc_instance;
+      goto cascade_instance;
     default:
       panic(mv_string("Invalid Module Index"));
     }
 
- inc_code:
-    value_index++;
-    goto cascade_code;
- cascade_code:
-    if (value_index == entry.code_starts.len) {
+  cascade_code:
+    if (value_index >= entry.code_starts.len) {
       value_index = 0;
       component_index = DataComponent;
       goto cascade_data;
     }
-    goto write_index;
+    goto end_loop;
 
- inc_data:
-    value_index++;
-    goto cascade_data;
- cascade_data:
-    if (value_index == entry.data_starts.len) {
+  cascade_data:
+    if (value_index >= entry.data_starts.len) {
       value_index = 0;
       component_index = InstanceComponent;
       goto cascade_instance;
     }
-    goto write_index;
+    goto end_loop;
 
- inc_instance:
-    value_index++;
-    goto cascade_instance;
- cascade_instance:
-    if (entry.instances) {
-      if (entry.instances->instantiations.len == value_index) {
-        entry_index++;
-        value_index = 0;
-        component_index = CodeComponent;
-      } 
-    } else {
+  cascade_instance:
+    if (!entry.instances || (entry.instances->instantiations.len == value_index)) {
       entry_index++;
       value_index = 0;
       component_index = CodeComponent;
+      goto continue_loop;
+    } 
+    goto end_loop;
+
+  end_loop:
+    running = false;
+
+  continue_loop:
+    continue;
+  }
+
+  *index = (ModuleIndex) {
+    .entry = entry_index,
+    .component = component_index,
+    .value = value_index,
+  };
+}
+
+ModuleIndex start_iterating(Module* module) {
+  ModuleIndex start = {
+    .entry = 0,
+    .component = 0,
+    .value = 0,
+  };
+  cascade_iterator(&start, module);
+  return start;
+}
+
+bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module) {
+    size_t entry_index = index->entry;
+    //ComponentIndex component_index = index->component;
+    //size_t value_index = index->value;
+    if (entry_index == module->entries.len) {
+        return false;
     }
-    goto write_index;
 
- write_index:
-    *index = (ModuleIndex) {
-      .entry = entry_index,
-      .component = component_index,
-      .value = value_index,
-    };
+    //ModuleEntryInternal entry = module->entries.data[entry_index].val;
 
+    index->value++;
+    cascade_iterator(index, module);
     return true;
 }
-    
     

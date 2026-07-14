@@ -3,12 +3,13 @@
 
 #include "data/string.h"
 #include "pico/data/string_array.h"
-#include "pico/codegen/codegen.h"
 #include <stdbool.h>
 
 typedef enum {
     CInit,
+    CBuild,
     CRun,
+    CTest,
     CHelp,
     CVersion,
     CInvalid,
@@ -17,6 +18,10 @@ typedef enum {
 typedef struct {
     String name;
 } InitOpts;
+
+typedef struct {
+    String target;
+} BuildOpts;
 
 typedef struct {
     String target;
@@ -31,6 +36,7 @@ typedef struct {
     SubCommand_t type;
     union {
         InitOpts init;
+        BuildOpts build;
         RunOpts run;
         HelpOpts help;
         String error_message;

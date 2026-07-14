@@ -37,12 +37,24 @@ static AtlasCommand internal_parse_command(StringArray args, ArenaAllocator* a) 
         if (args.len != 2) {
             return (AtlasCommand) {
                 .type = CInvalid,
-                .error_message = mv_string("'atlas run' must take exactly 1 argument."),
+                .error_message = mv_string("'atlas run' must take exactly 1 argument, the name of the target to run."),
             };
         } else {
             return (AtlasCommand) {
                 .type = CRun,
                 .run.target = args.data[1],
+            };
+        }
+    } else if (string_cmp(subcommand, mv_string("build")) == 0) {
+        if (args.len != 2) {
+            return (AtlasCommand) {
+                .type = CInvalid,
+                .error_message = mv_string("'atlas build' must take exactly 1 argument, the name of the target to build."),
+            };
+        } else {
+            return (AtlasCommand) {
+                .type = CBuild,
+                .build.target = args.data[1],
             };
         }
     } else if (string_cmp(subcommand, mv_string("help")) == 0) {

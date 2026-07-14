@@ -183,36 +183,7 @@ $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(TEST_FLAGS) 
 
-# Installer
-# ---------------------------------------------
-# Objects from the 'platform' and 'components' diretories
-# that may be useful regardless of application...
-GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
-GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
-GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
-GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
-
-
-INSTALLER_DIR := $(BUILD_DIR)/installer
-INSTALLER_INC_DIR := ./installer/include
-INSTALLER_SRC_DIRS := ./installer/src
-TARGET_INSTALLER := pico_installer
-
-INSTALLER_FLAGS := $(RELEASE_FLAGS)
-
-INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
-INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_DIR)/%.o) $(GENERIC_OBJS)
-
-# Final build step for installer 
-$(INSTALLER_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
-	$(CC) $(INSTALLER_OBJS) -I $(INSTALLER_INC_DIR) -o $@ $(LINK_FLAGS) $(INSTALLER_FLAGS) 
-
-# Build step for C tests
-$(INSTALLER_DIR)/%.c.o: %.c
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -I $(INSTALLER_INC_DIR) -c $< -o $@ $(INSTALLER_FLAGS) 
-
-# Installer
+# Keeper
 # ---------------------------------------------
 ## Same process as above but for tests
 
@@ -240,6 +211,38 @@ $(KEEPER_DIR)/%.c.o: %.c
 	$(CC) $(CFLAGS) -I $(KEEPER_INC_DIR) -c $< -o $@ $(KEEPER_FLAGS) 
 
 
+# Installer
+# ---------------------------------------------
+# Objects from the 'platform' and 'components' diretories
+# that may be useful regardless of application...
+GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
+GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
+GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
+
+
+INSTALLER_DIR := $(BUILD_DIR)/installer
+INSTALLER_BUILD_DIR := $(BUILD_DIR)/installer_build
+INSTALLER_INC_DIR := ./installer/include
+INSTALLER_SRC_DIRS := ./installer/src
+TARGET_INSTALLER := pico_installer
+
+INSTALLER_FLAGS := $(RELEASE_FLAGS)
+
+INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
+INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_BUILD_DIR)/%.o) $(GENERIC_OBJS)
+
+# Final build step for installer 
+$(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
+	$(CC) $(INSTALLER_OBJS) -I $(INSTALLER_INC_DIR) -o $@ $(LINK_FLAGS) $(INSTALLER_FLAGS) 
+
+# Build step for C tests
+$(INSTALLER_BUILD_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I $(INSTALLER_INC_DIR) -c $< -o $@ $(INSTALLER_FLAGS) 
+
+
+
 #  Phony targets
 # ---------------
 
@@ -259,8 +262,8 @@ debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
-.PHONY: installer
-installer: $(INSTALLER_DIR)/$(TARGET_INSTALLER)
+.PHONY: build_installer
+build_installer: $(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER)
 
 .PHONY: keeper
 keeper: $(KEEPER_DIR)/$(TARGET_KEEPER)
@@ -296,13 +299,16 @@ debug_mode:
 ASSET_DIR := $(INSTALLER_DIR)/assets
 
 # 
-.PHONY: prep-install
-prep-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
+.PHONY: installer
+installer: build_installer release keeper
+	mkdir -p $(INSTALLER_DIR)
+	cp $(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER) $(INSTALLER_DIR)/$(TARGET_INSTALLER) 
 	mkdir -p $(ASSET_DIR)
 	cp -r installer/scripts $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
-	cp -r archive $(ASSET_DIR)
+# TODO: ensure that rsync is supported in w64 devkit.
+	rsync -lr --exclude=*.~undo-tree~ archive $(ASSET_DIR)
 
 # Installation
 .PHONY: install

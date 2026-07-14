@@ -9,10 +9,10 @@
  * with unix systems producing ELF files and windows systems producing COFF/PE
  * files.
  *
- * However, the process of 'flattening' the existing module structure into flat
- * arrays of both data and code fragments with linking information is necessary
- * for both. As such, the relevant types + functions are stored in a shared impl
- * unit.
+ * However, the process of 'flattening' gathered fragments about  the existing
+ * module structure into flat arrays of both data and code fragments with
+ * linking information is necessary for both. As such, the relevant types +
+ * functions are stored in a shared impl unit.
  */
 
 typedef enum {
@@ -43,8 +43,8 @@ ARRAY_HEADER(DataFragment, df, DataFragment);
 typedef struct {
     CodeFragmentArray code_frags;
     DataFragmentArray data_frags;
-} GatherFragmentResult;
+} ProgramFragments;
 
-GatherFragmentResult gather_fragments(Symbol entry_point, Module* module, Allocator* allocator);
+ProgramFragments gather_fragments(Symbol entry_point, Module* module, Allocator* allocator);
 
 #endif
