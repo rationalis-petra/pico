@@ -9,8 +9,10 @@ TARGET_EXEC := pico
 else
 TARGET_EXEC := pico.exe
 endif
+TARGET_IMAGE := pico_image_template
 
 MAIN_SRC := ./src/main.c
+IMAGE_SRC := ./image/unlinked_image.c
 BUILD_DIR := ./build
 RELEASE_DIR := $(BUILD_DIR)/release
 DEBUG_DIR := $(BUILD_DIR)/debug
@@ -123,6 +125,7 @@ RELEASE_OBJS := $(SRCS:%=$(RELEASE_DIR)/%.o)
 DEBUG_OBJS := $(SRCS:%=$(DEBUG_DIR)/%.o)
 MAIN_RELEASE_OBJ := $(MAIN_SRC:%=$(RELEASE_DIR)/%.o)
 MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
+UNLINKED_IMAGE_OBJ := $(IMAGE_SRC:%=$(RELEASE_DIR)/%.o)
 
 # String substitution (suffix version without %).
 # As an example, ./build/hello.c turns into ./build/hello.c.d
@@ -143,6 +146,9 @@ CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereferen
 CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
 # The final build step.
+$(RELEASE_DIR)/$(TARGET_IMAGE): $(RELEASE_OBJS) $(IMAGE_OBJ)
+	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
+
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)
 	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
 
@@ -256,6 +262,9 @@ release: $(RELEASE_DIR)/$(TARGET_EXEC)
 .PHONY: debug
 debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 
+.PHONY: image
+release: $(RELEASE_DIR)/$(TARGET_IMAGE)
+
 
 # Run tests with make test
 .PHONY: test
@@ -288,7 +297,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: all
-all: debug release test keeper installer prep-install
+all: debug release test keeper installer installer
 
 # TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode
@@ -300,19 +309,20 @@ ASSET_DIR := $(INSTALLER_DIR)/assets
 
 # 
 .PHONY: installer
-installer: build_installer release keeper
+installer: build_installer release keeper image
 	mkdir -p $(INSTALLER_DIR)
 	cp $(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER) $(INSTALLER_DIR)/$(TARGET_INSTALLER) 
 	mkdir -p $(ASSET_DIR)
 	cp -r installer/scripts $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
+	cp $(RELEASE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
 # TODO: ensure that rsync is supported in w64 devkit.
 	rsync -lr --exclude=*.~undo-tree~ archive $(ASSET_DIR)
 
 # Installation
 .PHONY: install
-install: prep-install
+install: installer
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 .PHONY: suppress-config-changes
