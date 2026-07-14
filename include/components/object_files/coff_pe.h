@@ -22,8 +22,8 @@
 
 typedef enum : uint16_t {
     Unknown = 0,
-    Coff_AMD64 = 0x8664,
-    Coff_AARCH64 = 0xaa64,
+    CoffAMD64 = 0x8664,
+    CoffAARCH64 = 0xaa64,
 } CoffMachine;
 
 typedef enum : uint16_t {
@@ -53,11 +53,11 @@ typedef struct __attribute__((packed)) {
     uint32_t num_symbols;
     uint16_t optional_header_size;
     Characteristics characteristics;
-} COFF_Header;
+} CoffHeader;
 
 typedef struct __attribute__((packed)) {
 
-} PE_Header;
+} PeHeader;
 
 typedef struct __attribute__((packed)) {
   /**

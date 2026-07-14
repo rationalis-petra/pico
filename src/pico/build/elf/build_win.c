@@ -10,15 +10,15 @@
 #include "components/object_files/coff_pe.h"
 
 struct RelicProgram {
-    Coff_Header coff_header;
+    CoffHeader coff_header;
     U8Array segments;
 };
 
 RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a) {
     RelicProgram* program = mem_alloc(sizeof(RelicProgram), a);
-    program->coff_header = (Elf64_Header) {
+    program->coff_header = (CoffHeader) {
         // TODO: also allow AARCH64
-        .machine = COFF_AMD64
+        .machine = CoffAMD64,
         .num_sections = 0,
         .timestamp = 0, // TODO: populate with current time as time_t
         .symtable_offset = 0,
@@ -72,8 +72,8 @@ void write_program(RelicProgram* program, String filename, Allocator* a) {
 
     U8Array header_bytes = {
         .data = (void*)&program->coff_header,
-        .len = sizeof(Coff_Header),
-        .size = sizeof(Coff_Header),
+        .len = sizeof(CoffHeader),
+        .size = sizeof(CoffHeader),
     };
 
     write_chunk(file, header_bytes);

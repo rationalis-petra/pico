@@ -15,6 +15,7 @@ MAIN_SRC := ./src/main.c
 IMAGE_SRC := ./image/unlinked_image.c
 BUILD_DIR := ./build
 RELEASE_DIR := $(BUILD_DIR)/release
+IMAGE_DIR := $(BUILD_DIR)/image
 DEBUG_DIR := $(BUILD_DIR)/debug
 SRC_DIRS := ./src
 LINK_FLAGS :=
@@ -125,7 +126,7 @@ RELEASE_OBJS := $(SRCS:%=$(RELEASE_DIR)/%.o)
 DEBUG_OBJS := $(SRCS:%=$(DEBUG_DIR)/%.o)
 MAIN_RELEASE_OBJ := $(MAIN_SRC:%=$(RELEASE_DIR)/%.o)
 MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
-UNLINKED_IMAGE_OBJ := $(IMAGE_SRC:%=$(RELEASE_DIR)/%.o)
+MAIN_IMAGE_OBJ := $(IMAGE_SRC:%=$(IMAGE_DIR)/%.o)
 
 GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
 GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
@@ -150,10 +151,13 @@ CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereferen
 # these warnings are a bit pedantic, so are turned off for now
 CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
-# The final build step.
-$(RELEASE_DIR)/$(TARGET_IMAGE): $(RELEASE_OBJS) $(IMAGE_OBJ)
-	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
+# Build step for image + dependency
 
+
+$(IMAGE_DIR)/$(TARGET_IMAGE): $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ)
+	ld $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ) -relocatable -o $@ $(LINK_FLAGS)
+
+# The final build step. for debug + release
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)
 	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
 
@@ -161,6 +165,10 @@ $(DEBUG_DIR)/$(TARGET_EXEC): $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ)
 	$(CC) $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ) -o $@ $(CFLAGS) $(DEBUG_FLAGS) $(LINK_FLAGS)
 
 # Build step for C source (release)
+$(IMAGE_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
+
 $(RELEASE_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
@@ -230,7 +238,12 @@ INSTALLER_DIR := $(BUILD_DIR)/installer
 INSTALLER_BUILD_DIR := $(BUILD_DIR)/installer_build
 INSTALLER_INC_DIR := ./installer/include
 INSTALLER_SRC_DIRS := ./installer/src
+
+ifneq ($(OS), Windows_NT)
 TARGET_INSTALLER := pico_installer
+else
+TARGET_INSTALLER := pico_installer.exe
+endif
 
 INSTALLER_FLAGS := $(RELEASE_FLAGS)
 
@@ -262,7 +275,7 @@ release: $(RELEASE_DIR)/$(TARGET_EXEC)
 debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: image
-release: $(RELEASE_DIR)/$(TARGET_IMAGE)
+image: $(IMAGE_DIR)/$(TARGET_IMAGE)
 
 
 # Run tests with make test
@@ -314,7 +327,7 @@ installer: build_installer release keeper image
 	mkdir -p $(ASSET_DIR)
 	cp -r installer/scripts $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
-	cp $(RELEASE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
+	cp $(IMAGE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
 # TODO: ensure that rsync is supported in w64 devkit.
 	rsync -lr --exclude=*.~undo-tree~ archive $(ASSET_DIR)
