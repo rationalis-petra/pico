@@ -3,6 +3,7 @@
 
 #include "data/meta/array_header.h"
 #include "pico/values/modular.h"
+#include "pico/data/build_error.h"
 
 /**
  * Generally, the output of a build is highly platform dependent,
@@ -47,6 +48,6 @@ typedef struct {
     size_t data_size;
 } ProgramFragments;
 
-ProgramFragments gather_fragments(Symbol entry_point, Module* module, Allocator* allocator);
+ProgramFragments gather_fragments(Symbol entry_point, Module* module, BuildErrorPoint* point, Allocator* allocator);
 
 #endif

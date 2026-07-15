@@ -330,7 +330,7 @@ installer: build_installer release keeper image
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
 	cp $(IMAGE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
-	cd archive && find . -type f -not -name "*.~undo-tree~" -exec cp --parents -t ../$(ASSET_DIR) {} +
+	find archive -type f -not -name "*.~undo-tree~" -exec cp --parents -t $(ASSET_DIR) {} +
 
 # Installation
 .PHONY: install

@@ -281,8 +281,32 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         PiAllocator pia = convert_to_pallocator(&ra);
         PiType* check_ty = mk_proc_type(&pia, 0, mk_prim_type(&pia, Unit));
         if (pi_type_eql(check_ty, &e->type, &ra)) {
+            BuildErrorPoint build_point;
+            if (catch_error(build_point)) {
+                if (build_point.multi.has_many) {
+                    PtrArray out = mk_ptr_array(build_point.multi.errors.len, &ra);
+                    for (size_t i = 0; i < build_point.multi.errors.len; i++) {
+                        BuildError* berr = build_point.multi.errors.data[i];
+                        AtlasError* err = mem_alloc(sizeof(AtlasError), &ra);
+                        *err = (AtlasError) {
+                            .message = berr->message,
+                        };
+                    }
+                    AtlasMultiError err = {
+                        .error.has_many = true,
+                        .error.errors = out,
+                    };
+                    throw_at_multi_error(point, err);
+                } else {
+                    AtlasError err = {
+                        .message = build_point.multi.error.message,
+                    };
+                    throw_at_error(point, err);
+                }
+            }
+
             // TODO: replace with proper allocator??
-            RelicProgram* program = build_program(module, entry.value, &ra);
+            RelicProgram* program = build_program(module, entry.value, &build_point, &ra);
             String image = path_cat(mv_string("build"), target_name, &ra);
             write_program(program, image, &ra);
             //link_program(String program, String lib, String out_name);

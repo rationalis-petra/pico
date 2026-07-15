@@ -22,16 +22,14 @@ typedef struct {
 
   PathPtrTable terms_to_link;
   PathU64Table built_fragments;
+  BuildErrorPoint* point;
   Allocator* a;
 } GatherState;
 
-void gather_package(Package* package, GatherState* state) {
-}
-
-void gather_module(Module* module, GatherState* state) {
+void gather_module(Module* module, GatherState* state, PtrArray* modules_to_process) {
   ModuleIndex index = start_iterating(module);
   ModuleFragment fragment;
-  while (next_iterator(&index, &fragment, module)) {
+  while (next_iterator(&index, &fragment, module, state->point, state->a)) {
       /** TODO: use module fragment to 
        */
       switch (fragment.type) {
@@ -54,6 +52,10 @@ void gather_module(Module* module, GatherState* state) {
           push_df(frag, &state->data_frags);
           break;
       }
+      case ModuleFragment_t: {
+          push_ptr(fragment.module, modules_to_process);
+          break;
+      }
       default:
           panic(mv_string("Invalid module fragment generated during build gather process"));
           break;
@@ -61,7 +63,17 @@ void gather_module(Module* module, GatherState* state) {
   }
 }
 
-ProgramFragments gather_fragments(Symbol entry_point, Module* module, Allocator* a) {
+void gather_package(Package* package, GatherState* state) {
+    Module* root = package_root_module(package);
+    PtrArray modules_to_process = mk_ptr_array(32, state->a);
+    gather_module(root, state, &modules_to_process);
+    while (modules_to_process.len != 0) {
+        Module* module = pop_ptr(&modules_to_process);
+        gather_module(module, state, &modules_to_process);
+    }
+}
+
+ProgramFragments gather_fragments(Symbol entry_point, Module* module, BuildErrorPoint* point, Allocator* a) {
 
   /**
    * General overview of the gathering algorithm
@@ -89,10 +101,12 @@ ProgramFragments gather_fragments(Symbol entry_point, Module* module, Allocator*
     .data_size = 0,
     .terms_to_link = mk_ptr_path_table(4096, a),
     .built_fragments = mk_u64_path_table(4096, a),
+    .point = point,
     .a = a,
   };
 
-  gather_module(module, &state);
+  Package* package = get_package(module);
+  gather_package(package, &state);
 
   return (ProgramFragments) {
     .code_frags = state.code_frags,

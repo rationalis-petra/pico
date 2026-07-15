@@ -2,7 +2,6 @@
 #define __PICO_DATA_ERROR_H
 
 #include "platform/jump.h"
-#include "data/stream.h"
 #include "components/pretty/document.h"
 
 #include "pico/data/range.h"

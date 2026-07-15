@@ -736,8 +736,9 @@ void cascade_iterator(ModuleIndex* index, Module* module) {
     if (value_index >= 1) {
       value_index = 0;
       component_index = CodeComponent;
-      goto cascade_data;
+      goto cascade_code;
     }
+    goto end_loop;
 
   cascade_code:
     if (value_index >= entry.code_starts.len) {
@@ -788,7 +789,7 @@ ModuleIndex start_iterating(Module* module) {
   return start;
 }
 
-bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module) {
+bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module, BuildErrorPoint* point, Allocator* a) {
     size_t entry_index = index->entry;
     //ComponentIndex component_index = index->component;
     //size_t value_index = index->value;
@@ -805,23 +806,48 @@ bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module)
 
     switch (component_index) {
     case ValueComponent: {
-        size_t size = pi_size_of(entry.type);
-        U8Array frag_data = {
-            .data = entry.value,
-            .len = size,
-            .size = size,
-        };
-        *fragment = (ModuleFragment) {
-            .type = DataFragment_t,
-            .data = frag_data,
-        };
+        if (entry.value == NULL) {
+            Symbol name = module->entries.data[entry_index].key;
+            PtrArray nodes = mk_ptr_array(3, a);
+
+            push_ptr(mv_cstr_doc("Symbol", a), &nodes);
+            push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(name), a), a), &nodes);
+            push_ptr(mv_cstr_doc("is declared in module", a), &nodes);
+            push_ptr(mv_cstr_doc("<TODO: add module name>", a), &nodes);
+            push_ptr(mv_cstr_doc("but is lacking definition", a), &nodes);
+
+            BuildError err = {
+                .message = mv_hsep_doc(nodes, a),
+                .module = module,
+                .definition = name,
+            };
+            throw_build_error(point, err);
+        }
+
+        if (entry.is_module) {
+            *fragment = (ModuleFragment) {
+                .type = ModuleFragment_t,
+                .module = entry.value,
+            };
+        } else {
+            size_t size = pi_size_of(entry.type);
+            U8Array frag_data = {
+                .data = entry.value,
+                .len = size,
+                .size = size,
+            };
+            *fragment = (ModuleFragment) {
+                .type = DataFragment_t,
+                .data = frag_data,
+            };
+        }
         break;
     }
     case CodeComponent: {
         size_t fn_start = entry.code_starts.data[index->value];
         size_t fn_end = (entry.code_starts.len == index->value + 1)
-            ? (entry.code_starts.data[index->value + 1])
-            : entry.code_segment->len;
+            ? entry.code_segment->len
+            : (entry.code_starts.data[index->value + 1]);
         U8Array frag_data = {
             .data = entry.code_segment->data + fn_start,
             .len = fn_end - fn_start,
@@ -836,8 +862,8 @@ bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module)
     case DataComponent: {
         size_t data_start = entry.data_starts.data[index->value];
         size_t data_end = (entry.data_starts.len == index->value + 1)
-            ? (entry.data_starts.data[index->value + 1])
-            : entry.data_segment->len;
+            ? entry.data_segment->len
+            : (entry.data_starts.data[index->value + 1]);
         U8Array frag_data = {
             .data = entry.data_segment->data + data_start,
             .len = data_end - data_start,
@@ -860,4 +886,3 @@ bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module)
     cascade_iterator(index, module);
     return true;
 }
-    

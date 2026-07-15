@@ -2,6 +2,7 @@
 #define __PICO_BUILD_BUILD_H
 
 #include "pico/values/modular.h"
+#include "pico/data/build_error.h"
 
 /**
  * The build interface for relic (currently) is very simple:
@@ -18,7 +19,7 @@
 
 typedef struct RelicProgram RelicProgram;
 
-RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a);
+RelicProgram* build_program(Module* module, Symbol entry_point, BuildErrorPoint* point, Allocator* a);
 void write_program(RelicProgram* program, String filename, Allocator* a);
 void link_program(String program, String lib, String out_name);
 

@@ -14,7 +14,7 @@ struct RelicProgram {
     U8Array segments;
 };
 
-RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a) {
+RelicProgram* build_program(Module* module, Symbol entry_point, BuildErrorPoint* point, Allocator* a) {
     RelicProgram* program = mem_alloc(sizeof(RelicProgram), a);
     program->coff_header = (CoffHeader) {
         // TODO: also allow AARCH64

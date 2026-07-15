@@ -4,6 +4,7 @@
 #include "data/meta/assoc_header.h"
 
 #include "pico/values/modular.h"
+#include "pico/data/build_error.h"
 #include "pico/data/path.h"
 
 /**
@@ -51,13 +52,17 @@ typedef struct {
 typedef enum : uint8_t {
   CodeFragment_t,
   DataFragment_t,
+  ModuleFragment_t,
 } FragmentType;
 
 ASSOC_HEADER(uint64_t, Path, u64_path, U64Path);
 
 typedef struct {
   FragmentType type;
-  U8Array data;
+  union {
+    U8Array data;
+    Module* module;
+  };
 } ModuleFragment;
 
 
@@ -77,6 +82,6 @@ typedef struct {
  * ------------------------------------------------
  */
 ModuleIndex start_iterating(Module* module);
-bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module);
+bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module, BuildErrorPoint* point, Allocator* a);
 
 #endif

@@ -83,6 +83,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 
         while (procs_to_generate.len != 0) {
             ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
             generate_deferred_proc(deferred, a_env, ictx);
         }
 
@@ -119,6 +120,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 
         while (procs_to_generate.len != 0) {
             ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
             generate_deferred_proc(deferred, a_env, ictx);
         }
 

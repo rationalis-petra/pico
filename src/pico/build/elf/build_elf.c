@@ -16,7 +16,7 @@ struct RelicProgram {
     U8Array segments;
 };
 
-RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a) {
+RelicProgram* build_program(Module* module, Symbol entry_point, BuildErrorPoint* point, Allocator* a) {
     RelicProgram* program = mem_alloc(sizeof(RelicProgram), a);
     /**
      * Two *segment* entries
@@ -41,7 +41,7 @@ RelicProgram* build_program(Module* module, Symbol entry_point, Allocator* a) {
      * Each of these entries stores link data with them
      */
 
-    ProgramFragments fragments = gather_fragments(entry_point, module, a);
+    ProgramFragments fragments = gather_fragments(entry_point, module, point, a);
 
     /** Step 2: Compress fragments
      *  Not that we have decomposed the program into fragments with link data,
