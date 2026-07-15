@@ -153,9 +153,10 @@ CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
 # Build step for image + dependency
 
-
+#$(LINK_FLAGS)
 $(IMAGE_DIR)/$(TARGET_IMAGE): $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ)
-	ld $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ) -relocatable -o $@ $(LINK_FLAGS)
+	ld $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ) -relocatable -o $@ 
+
 
 # The final build step. for debug + release
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)
@@ -329,8 +330,7 @@ installer: build_installer release keeper image
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
 	cp $(IMAGE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
-# TODO: ensure that rsync is supported in w64 devkit.
-	rsync -lr --exclude=*.~undo-tree~ archive $(ASSET_DIR)
+	cd archive && find . -type f -not -name "*.~undo-tree~" -exec cp --parents -t ../$(ASSET_DIR) {} +
 
 # Installation
 .PHONY: install
