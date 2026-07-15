@@ -576,8 +576,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
         data_stack_grow(env, pi_stack_size_of(*type));
         break;

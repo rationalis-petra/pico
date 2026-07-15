@@ -11,7 +11,7 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
 
     if (test_start(log, mv_string("str-memsize"))) {
         uint64_t expected = 4;
-        TEST_EQ("\"test\".memsize");
+        TEST_EQ("\"test\".len");
     }
 
     if (test_start(log, mv_string("pair-fn"))) {

@@ -1654,9 +1654,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FName: {
-        if (raw.branch.nodes.len != 3) {
+        if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'name' expects precisely 2 arguments!", a);
+            err.message = mv_cstr_doc("Term former 'name' expects at least 2 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
 
@@ -1682,6 +1682,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 push_syn(abstract_expr_i(name_list.data[i], ctx), &args);
             }
         }
+
         else if (!is_symbol(raw.branch.nodes.data[1])) {
             err.range = raw.range;
             err.message = mv_cstr_doc("Term former 'name' expects the first argument to be a symbol or symbol + type list!", a);
@@ -1690,7 +1691,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         else {
             name = raw.branch.nodes.data[1].atom.symbol;
         }
-        SynRef body = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+
+        RawTree* raw_body = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
+        SynRef body = abstract_expr_i(*raw_body, ctx);
         
         Syntax syn = {
             .type = SName,

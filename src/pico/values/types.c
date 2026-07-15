@@ -2750,10 +2750,17 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
     return out;
 }
 
+PiType* mk_slice_type(PiAllocator* pia) {
+    SymbolPiList vars = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &vars);
+    return mk_named_type(pia, "Slice",
+                         mk_type_family(pia, vars,
+                                        mk_struct_type(pia, 2,
+                                                       "addr", mk_prim_type(pia, Address),
+                                                       "len", mk_prim_type(pia, UInt_64))));
+}
+
 PiType* mk_string_type(PiAllocator* pia) {
-    // Named String Struct [.memsize U64] [.bytes Address]
     return mk_named_type(pia, "String",
-                         mk_struct_type(pia, 2,
-                                        "memsize", mk_prim_type(pia, UInt_64),
-                                        "bytes", mk_prim_type(pia, Address)));
+                         mk_app_type(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
 }
