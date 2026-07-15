@@ -50,7 +50,7 @@ RelicProgram* build_program(Module* module, Symbol entry_point, BuildErrorPoint*
      * Each of these entries stores link data with them
      */
 
-    ProgramFragments fragments = gather_fragments(entry_point, module, a);
+    ProgramFragments fragments = gather_fragments(entry_point, module, point, a);
 
     /** Step 2: Compress fragments
      *  Not that we have decomposed the program into fragments with link data,
