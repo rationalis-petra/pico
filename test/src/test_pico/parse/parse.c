@@ -8,7 +8,7 @@
 #include "test_pico/parse/parse_helper.h"
 
 
-//void test_parse_eq(const char *string, RawTree expected, Environment* env, TestContext context);
+#undef TEST_EQ
 #define TEST_EQ(str) test_parse_eq(str, expected, context)
 
 void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {

@@ -37,9 +37,11 @@ typedef struct {
     LinkMetaArray ec_links;
     LinkMetaArray ed_links;
 
+    U64Array code_starts;
     LinkMetaArray cc_links;
     LinkMetaArray cd_links;
 
+    U64Array data_starts;
     LinkMetaArray dd_links;
 
     // Instance Information

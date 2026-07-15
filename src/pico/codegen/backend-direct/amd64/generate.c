@@ -47,11 +47,12 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
-            .ec_links = mk_link_meta_array(32, a),
+            .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
-            .cc_links = mk_link_meta_array(32, a),
+            .code_starts = mk_u64_array(8, a),
+            .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
-            .dd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a), .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
         .gotolinks = mk_sym_sarr_assoc(8, a),
@@ -61,9 +62,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
     case TLDef: {
         // Note: types can only be recursive via 'Name', so we do not recursively bind if
         // generating a type.
-        Symbol* recsym = get_type(top.def.value, ctx.tape)->sort != TKind ? 
-            &top.def.bind : NULL;
-        AddressEnv* a_env = mk_address_env(env, recsym, a);
+        AddressEnv* a_env = mk_address_env(env, a);
         size_t out_sz = pi_size_of(*get_type(top.def.value, ctx.tape));
 
         ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
@@ -84,6 +83,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 
         while (procs_to_generate.len != 0) {
             ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
             generate_deferred_proc(deferred, a_env, ictx);
         }
 
@@ -99,7 +99,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
         break;
     }
     case TLExpr: {
-        AddressEnv* a_env = mk_address_env(env, NULL, a);
+        AddressEnv* a_env = mk_address_env(env, a);
 
         ProcDeferArray procs_to_generate = mk_proc_defer_array(4, a);
         InternalContext ictx = {
@@ -120,6 +120,7 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 
         while (procs_to_generate.len != 0) {
             ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+            push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
             generate_deferred_proc(deferred, a_env, ictx);
         }
 
@@ -153,14 +154,16 @@ LinkData bd_generate_toplevel(TopLevel top, Environment* env, CodegenContext ctx
 LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
     
-    AddressEnv* a_env = mk_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_address_env(env, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
+            .code_starts = mk_u64_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
@@ -186,6 +189,7 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
 
     while (procs_to_generate.len != 0) {
         ProcDefer deferred = pop_proc_defer(&procs_to_generate);
+        push_u64(get_pos(ctx.target.code_aux), &links.links.code_starts);
         generate_deferred_proc(deferred, a_env, ictx);
     }
 
@@ -215,14 +219,16 @@ LinkData bd_generate_expr(SynRef syn, Environment* env, CodegenContext ctx) {
 
 void bd_generate_type_expr(SynRef syn, TypeEnv* env, CodegenContext ctx) {
     Allocator* a = ctx.a;
-    AddressEnv* a_env = mk_type_address_env(env, NULL, a);
+    AddressEnv* a_env = mk_type_address_env(env, a);
     InternalLinkData links = (InternalLinkData) {
         .links = (LinkData) {
             .external_code_links = mk_sym_sarr_amap(8, a),
             .ec_links = mk_link_meta_array(8, a),
             .ed_links = mk_link_meta_array(8, a),
+            .code_starts = mk_u64_array(8, a),
             .cc_links = mk_link_meta_array(8, a),
             .cd_links = mk_link_meta_array(8, a),
+            .data_starts = mk_u64_array(8, a),
             .dd_links = mk_link_meta_array(8, a),
             .closure_links = mk_closure_link_array(8, a),
         },
@@ -567,6 +573,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
+        push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -609,6 +616,19 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Finally, move the value from the source to the stack head
             generate_poly_move(reg(VSTACK_HEAD, sz_64), reg(R8, sz_64), reg(R9, sz_64), ass, a, point);
+            break;
+        }
+        case ACodeOffset: {
+            void* fn_address = get_instructions(target.code_aux).data;
+            fn_address += e.code_offset;
+            AsmResult out = build_binary_op(Mov, reg(R9, sz_64), imm64((uint64_t)fn_address), ass, a, point);
+            LinkMetaData link = (LinkMetaData) {
+                .source_offset = out.backlink,
+                .dest_offset = e.code_offset,
+            };
+            push_link_meta(link, &links->links.cc_links);
+            build_unary_op(Push, reg(R9, sz_64), ass, a, point);
+            data_stack_grow(env, ADDRESS_SIZE);
             break;
         }
         case ATypeVar: {
@@ -694,6 +714,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
     case SProcedure: {
         // Generate procedure value (push the address onto the stack)
         AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64(0), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
         ProcDefer to_generate = {
           .proc = ref,
           .backlink_from = target.target,
@@ -705,8 +727,6 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             to_generate.instance_args = get_instance_implicits(env);
         }
         push_proc_defer(to_generate, ictx.procs_to_generate);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, ADDRESS_SIZE);
         break;
     }
     case SAll: {
@@ -719,13 +739,17 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
-        // Now, change the target and the assembler, such that code is now
-        // generated in the 'code segment'. Then, generate the function body
-        ass = target.code_aux;
-        target.target = target.code_aux;
-        ictx.target = target;
-
-        generate_polymorphic(syn.all.args, syn.all.body, env, ictx);
+        ProcDefer to_generate = {
+          .proc = ref,
+          .backlink_from = target.target,
+          .backlink = out.backlink,
+          .in_poly_instance = false
+        };
+        if (in_poly_instance(env)) {
+            to_generate.in_poly_instance = true;
+            to_generate.instance_args = get_instance_implicits(env);
+        }
+        push_proc_defer(to_generate, ictx.procs_to_generate);
         break;
     }
     case SMacro:
@@ -1539,10 +1563,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         break;
     }
     case SInstance: {
-      /* From the perspective of a user, all instances are values where
+      /**
+       * From the perspective of a user, all instances are values where
        * (size-of i) == (size-of Address) for any instance i. From the
        * perspective of code-generation, however, there are two kinds of
-       *  instances:
+       * instances:
        *
        * Non-parametric instances
        * ------------------------
@@ -1564,7 +1589,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
        *  through their arguments while instantiating the type/instance
        *  arguments for the instance, i.e. they form a sort of closure.
        * 
-       *  Note: usage of local functions in this context won't work well? 
+       *  Note/TODO: usage of local functions in this context won't work well? 
        *   How to fix local functinos...
        *   - Make them local state and therad through
        *   - 
@@ -1599,59 +1624,61 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             }
             build_binary_op(Mov, reg(RSI, sz_64), imm32(immediate_sz), ass, a, point);
             generate_tmp_malloc(reg(RAX, sz_64), reg(RSI, sz_64), ass, a, point);
-            build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
             // Grow by address size to account for the fact that the for loop
             // keeps an address for the current field, which is updated each iteration.
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
-            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
 
-            // TODO (BUG): generate code that doesn't assume fields are in same order   
+            // To generate account for the fact that instance fields *may be*  out of order, 
+            // we first generate all fields (arbitrary order), THEN move the
+            // fields into the allocated memory
+            int64_t stack_head = get_stack_head(env);
+            for (size_t i = 0; i < syn.instance.fields.len; i++) {
+                SynRef val = syn.instance.fields.data[i].val;
+                generate_i(val, env, ictx);
+            }
+            size_t total_src_size = stack_head - get_stack_head(env);
 
             // Alignment
             size_t index_offset = 0;
             for (size_t i = 0; i < type->instance.fields.len; i++) {
-                // Generate field
-                SynRef val = syn.instance.fields.data[i].val;
-                generate_i(val, env, ictx);
+                Symbol field = type->instance.fields.data[i].key;
+                PiType* ty = type->instance.fields.data[i].val;
 
-                // The offset tells us how far up the stack we look to find the instance ptr
-                size_t val_sz = pi_size_of(*get_type(val, ictx.tape));
-                size_t val_stack_sz = pi_stack_align(val_sz);
-
-                // Retrieve index (ptr) 
-                // TODO (BUG): Check offset is < int8_t max.
-                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, pi_stack_align(val_stack_sz), sz_64), ass, a, point);
-
-                // Align RCX
-                size_t aligned_offset = pi_size_align(index_offset, pi_align_of(*get_type(val, ictx.tape)));
-                if (index_offset != aligned_offset) {
-                    size_t align = aligned_offset - index_offset;
-                    build_binary_op(Add, reg(RCX, sz_64), imm32(align), ass, a, point);
+                size_t source_offset = 0;
+                for (size_t j = syn.instance.fields.len; j > 0; j--) {
+                    size_t idx = j - 1;
+                    if (symbol_eq(field, syn.instance.fields.data[idx].key)) { break; }
+                    PiType* field_ty = get_type(syn.instance.fields.data[idx].val, ictx.tape);
+                    source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
                 }
+                size_t val_size = pi_size_of(*ty);
+                size_t val_align = pi_align_of(*ty);
+
+
+                // Retrieve index (ptr) and align it
+                // TODO (BUG): Check offset is < int8_t max.
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, total_src_size, sz_64), ass, a, point);
+                size_t aligned_offset = pi_size_align(index_offset, val_align);
+                build_binary_op(Add, reg(RCX, sz_64), imm32(aligned_offset), ass, a, point);
+
+                // Retrieve Dest ptr
+                build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RDX, sz_64), imm32(source_offset), ass, a, point);
 
                 // TODO (check if should replace with stack copy/move)
-                generate_monomorphic_copy(RCX, RSP, val_sz, ass, a, point);
+                generate_monomorphic_copy(RCX, RDX, val_size, ass, a, point);
 
                 // We need to increment the current field index to be able to access
                 // the next
-                build_binary_op(Add, reg(RCX, sz_64), imm32(val_sz), ass, a, point);
-                index_offset += val_sz;
-
-                // Pop value from stack
-                build_binary_op(Add, reg(RSP, sz_64), imm32(pi_stack_align(val_stack_sz)), ass, a, point);
-                data_stack_shrink(env, val_stack_sz);
-
-                // Override index with new value
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
+                index_offset += val_size;
             }
-
-            build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
-            build_binary_op(Sub, reg(RCX, sz_64), imm32(immediate_sz), ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(RCX, sz_64), ass, a, point);
-
+            // Pop all values from stack
             // Note: we don't shrink as the final address (on stack) is accounted
             // for by the 'grow' prior to the above for-loop
+            build_binary_op(Add, reg(RSP, sz_64), imm32(total_src_size), ass, a, point);
+            data_stack_shrink(env, total_src_size);
         }
         break;
     }
@@ -3335,6 +3362,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         // Backlink the data & copy the bytes into the data-segment.
         backlink_data(target, out.backlink, links);
+        push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -3515,6 +3543,8 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
                 .procedure.implicits = implicits,
                 .procedure.body = syn.procedure.body,
                 .procedure.preserve_dyn_memory = syn.procedure.preserve_dyn_memory,
+                .procedure.is_recursive = syn.procedure.is_recursive,
+                .procedure.recursive_sym = syn.procedure.recursive_sym,
             };
             SynRef new_ref = new_syntax(ictx.tape);
             set_syntax(new_ref, new_proc, ictx.tape);
@@ -3525,6 +3555,16 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
             return;
         }
 
+
+        RecBinding* rec = NULL; 
+        RecBinding rbind; 
+        if (syn.procedure.is_recursive) {
+            rec = &rbind; 
+            rbind = (RecBinding) {
+                .sym = syn.procedure.recursive_sym,
+                .offset = get_pos(ass),
+            };
+        }
         // Codegen function setup
         build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
         build_unary_op(Push, reg(DMEM_REGISTER, sz_64), ass, a, point);
@@ -3547,7 +3587,7 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
             sym_size_bind(syn.procedure.args.data[i].key , arg_size , &arg_sizes);
         }
 
-        address_start_proc(impl_sizes, arg_sizes, env, a);
+        address_start_proc(rec, impl_sizes, arg_sizes, env, a);
         generate_i(syn.procedure.body, env, ictx);
         address_end_proc(env, a);
 
@@ -3583,15 +3623,13 @@ void generate_deferred_proc(ProcDefer deferred, AddressEnv* env, InternalContext
         break;
     }
     case SAll: {
-        void* all_address = get_instructions(target.code_aux).data;
-        all_address += get_instructions(target.code_aux).len;
+        uint8_t* caller_loc = get_instructions(deferred.backlink_from).data + deferred.backlink; 
+        set_unaligned_ptr(caller_loc, get_instructions(target.code_aux).data + get_pos(target.code_aux));
 
-        // Generate procedure value (push the address onto the stack)
-        AsmResult out = build_binary_op(Mov, reg(RAX, sz_64), imm64((uint64_t)all_address), ass, a, point);
-        backlink_code(target, out.backlink, links);
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-        data_stack_grow(env, ADDRESS_SIZE);
-
+        if (!deferred.in_poly_instance) {
+            // We link differently for polymorphic instances
+            backlink_code(target, deferred.backlink, links);
+        }
         // Now, change the target and the assembler, such that code is now
         // generated in the 'code segment'. Then, generate the function body
         ass = target.code_aux;

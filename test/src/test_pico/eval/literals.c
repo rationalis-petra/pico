@@ -60,4 +60,9 @@ void run_pico_eval_literals_tests(TestLog *log, Module* module, Environment* env
         int64_t expected = 520;
         TEST_EQ("#o_1010");
     }
+
+    if (test_start(log, mv_string("character literal"))) {
+        int64_t expected = 'q';
+        TEST_EQ("#q");
+    }
 }

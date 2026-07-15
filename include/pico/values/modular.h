@@ -38,7 +38,13 @@ typedef struct {
 
 ARRAY_HEADER(InstanceSrc, inst_src, InstSrc)
 
-/* Declarations and Modules
+typedef struct {
+    U8Array data;
+    U8Array code;
+} Segments;
+
+/**
+ * Declarations and Modules
  * ------------------------
  * A declaration is simply some kind of data we want to attach to a symbol
  * in a module. At the moment, the only supported declaration is a 'type'
@@ -65,8 +71,78 @@ typedef struct {
     };
 } ModuleDecl;
 
-/* Definitions and codegen 
- * ------------------------
+//     Package Interface
+// -----------------------------------------------------------------------------
+Package* mk_package(Name name, PiAllocator pico_allocator);
+void delete_package(Package* package);
+
+void add_dependency(Package* package, Package* dep);
+Result add_module(Symbol symbol, Module* module, Package* package);
+
+Name package_name(Package* package);
+Module* package_root_module(Package* package);
+Module* get_module(Symbol symbol, Package* package);
+
+// Module Interface
+// -----------------------------------------------------------------------------
+Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent);
+void delete_module(Module* module);
+
+/**
+ * Add a value definition in to the module's namespace. Must be prepped (see above)
+ */
+Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
+
+/**
+ * Add a module definition in to the module's namespace. 
+ */
+Result add_module_def(Module* module, Symbol symbol, Module* child);
+
+/**
+ *  Get the instantiation of an instance, given a set of types, and a set of
+ *  dependent instances. May create a new instance, or return a cached instance,
+ *  if one already exists.  
+ *  If there is a significant error (e.g. the symbol does not exist), then the
+ *  function will return NULL.
+ */
+void* get_instantiation(Module* module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray instances); 
+
+/**
+ * Add a declaration into the module's namespace. New declarations will override
+ * old ones.
+ */
+Result add_decl(Module* module, Symbol symbol, ModuleDecl decl); 
+
+/**
+ * Add an import clause into a module's namespace
+ * Note: The import clause will be copied, so the caller is still responsible
+ *       for cleaning up its copy of the clause.
+ */
+void add_import_clause(ImportClause clause, Module* module);
+
+ModuleEntry* get_def(Symbol symbol, Module* module);
+SymbolArray get_exported_symbols(Module* module, Allocator* a);
+SymbolArray get_defined_symbols(Module* module, Allocator* a);
+PtrArray get_defined_instances(Module* module, Allocator* a);
+
+Symbol module_name(Module* module);
+Package* get_package(Module* module);
+Module* get_parent(Module* module);
+Imports get_imports(Module* module);
+Exports get_exports(Module* module);
+
+/**
+ * Compiler Interface 
+ * ==============================
+ *
+ * The following functions provide limited access to the internals of a module
+ * for compilation/evaluation purposes. 
+ *
+ */
+
+/**
+ * Definitions and codegen 
+ * ========================
  * Codegen is relatively simple: given an expression e.g. (+ 2 3) and an
  * assembler, generate use the assembler to generate the code that corresponds
  * to the expression, e.g. "mov 2, rax; add rax, 3; push rax". Complexity is introduced because:
@@ -107,75 +183,11 @@ typedef struct {
  * 
  */
 
-typedef struct {
-    U8Array data;
-    U8Array code;
-} Segments;
-
-//     Package Interface
-// -----------------------------------------------------------------------------
-Package* mk_package(Name name, PiAllocator pico_allocator);
-void delete_package(Package* package);
-
-void add_dependency(Package* package, Package* dep);
-Result add_module(Symbol symbol, Module* module, Package* package);
-
-Name package_name(Package* package);
-Module* package_root_module(Package* package);
-Module* get_module(Symbol symbol, Package* package);
-
-// Module Interface
-// -----------------------------------------------------------------------------
-Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent);
-void delete_module(Module* module);
-
 /**
  * If we are going to define the result of evaluating (target), then it must be prepped
  * so that the code and data segments are owned by the module.
  * This needs to be done BEFORE evaluation
  */
 Segments prep_target(Module* module, Segments in_segments, Assembler* target, LinkData* links);
-
-/**
- * Add a value definition in to the module's namespace. Must be prepped (see above)
- */
-Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links); 
-
-/**
- * Add a module definition in to the module's namespace. 
- */
-Result add_module_def(Module* module, Symbol symbol, Module* child);
-
-/**
- *  Get the instantiation of an instance, given a set of types, and a set of
- *  dependent instances. May create a new instance, or return a cached instance,
- *  if one already exists.  
- *  If there is a significant error (e.g. the symbol does not exist), then the
- *  function will return NULL.
- */
-void* get_instantiation(Module* module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray instances); 
-
-/**
- * Add a declaration into the module's namespace. New declarations will override
- * old ones.
- */
-Result add_decl(Module* module, Symbol symbol, ModuleDecl decl); 
-
-/**
- * Add an import clause into a module's namespace
- * Note: The import clause will be copied, so the caller is still responsible
- *       for cleaning up its copy of the clause.
- */
-void add_import_clause(ImportClause clause, Module* module);
-
-ModuleEntry* get_def(Symbol symbol, Module* module);
-SymbolArray get_defined_symbols(Module* module, Allocator* a);
-PtrArray get_defined_instances(Module* module, Allocator* a);
-
-Symbol module_name(Module* module);
-Package* get_package(Module* module);
-Module* get_parent(Module* module);
-Imports get_imports(Module* module);
-Exports get_exports(Module* module);
 
 #endif

@@ -28,6 +28,7 @@ typedef struct AddressEnv AddressEnv;
 typedef enum {
     ALocalDirect,
     ALocalIndexed,
+    ACodeOffset,
     AGlobal,
     ATypeVar,
     ANotFound,
@@ -39,6 +40,7 @@ typedef struct {
     union {
         void* value;
         int32_t stack_offset;
+        uint32_t code_offset;
     };
 } AddressEntry;
 
@@ -49,6 +51,11 @@ typedef struct {
 
 typedef struct {
     Symbol sym;
+    uint64_t offset;
+} RecBinding;
+
+typedef struct {
+    Symbol sym;
     uint32_t size;
     uint32_t align;
     bool is_variable;
@@ -56,8 +63,8 @@ typedef struct {
 
 ARRAY_HEADER(Binding, binding, Binding)
 
-AddressEnv* mk_address_env(Environment* env, Symbol* sym, Allocator* a);
-AddressEnv* mk_type_address_env(TypeEnv* env, Symbol* sym, Allocator* a);
+AddressEnv* mk_address_env(Environment* env, Allocator* a);
+AddressEnv* mk_type_address_env(TypeEnv* env, Allocator* a);
 
 void delete_address_env(AddressEnv* env, Allocator* a);
 
@@ -66,7 +73,8 @@ void delete_address_env(AddressEnv* env, Allocator* a);
 // relative to the stack base ($RBP).
 int64_t get_stack_head(AddressEnv* env);
 
-/* Address environment interface
+/**
+ * Address environment interface
  * Lookups return either:
  * • An error
  * • A local variable (returned as an offset from RBP)
@@ -85,7 +93,7 @@ AddressEntry address_abs_lookup(AbsVariable s, AddressEnv* env);
 LabelEntry label_env_lookup(Symbol s, AddressEnv* env);
 
 // Push and pop a new local environment to deal with procedure
-void address_start_proc(SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
+void address_start_proc(RecBinding* rec, SymSizeAssoc implicits, SymSizeAssoc vars, AddressEnv* env, Allocator* a);
 void address_end_proc(AddressEnv* env, Allocator* a);
 
 void address_start_poly(SymbolArray types, BindingArray args, AddressEnv* env, Allocator* a);

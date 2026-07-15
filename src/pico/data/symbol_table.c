@@ -1,3 +1,4 @@
+#include <string.h>
 #include "platform/signals.h"
 
 #include "pico/data/symbol_table.h"
@@ -10,7 +11,7 @@ void init_symbol_table(SymbolTable* table, Allocator* a) {
         // Start with 1MB memory for strings
         .string_memory = mem_alloc(STR_CAPACITY, a),
         .string_len = 8, // 8, so we can use 0 as a null value :)
-        .string_capacity = 1048576,
+        .string_capacity = STR_CAPACITY,
 
         .capacity = CELL_CAPACITY,
         .cells = mem_alloc(sizeof(Cell) * CELL_CAPACITY, a),

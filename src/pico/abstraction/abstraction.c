@@ -28,7 +28,6 @@ typedef struct {
     };
 } ComptimeHead;
 
-
 // Internal functions declarations needed forthe  interface implementation 
 TopLevel abstract_i(RawTree raw, AbstractionICtx ctx);
 SynRef abstract_expr_i(RawTree raw, AbstractionICtx ctx);
@@ -195,7 +194,11 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         } else if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
             for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
                 ExportClause clause = abstract_export_clause(&clauses.branch.nodes.data[i], point, a);
-                push_export_clause(clause, &exports.clauses);
+                if (clause.type == ExportAll) {
+                    exports.export_all = true;
+                } else {
+                   push_export_clause(clause, &exports.clauses);
+                }
             }
         } else {
             err.range = clauses.range;

@@ -160,6 +160,32 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         write_fstring(command.init.name, out);
         write_fstring(mv_string("\n"), out);
         break;
+    case CBuild: {
+        write_fstring(mv_string("WARNING: Atlas build is currently under development, and is unlikely to produce\n"), out);
+        write_fstring(mv_string("         a functioning executable file.\n"), out);
+        write_fstring(mv_string("\n"), out);
+        Allocator* stda = get_std_allocator();
+        AtlasInstance* instance = make_atlas_instance(stda);
+        register_package(instance, package);
+
+        RegionAllocator* region = make_region_allocator(4096, true, stda);
+        String cwd = get_current_directory(stda);
+        bool fail = load_atlas_files(cwd, out, instance, region);
+        mem_free(cwd.bytes, stda);
+        AtErrorPoint point;
+        if (catch_error(point)) {
+            Allocator ra = ra_to_gpa(region);
+            display_error(point.error.error, point.error.captured_file, out, point.error.filename, &ra);
+        } else {
+            if (!fail) {
+                atlas_build(instance, command.build.target, region, &point);
+            }
+        }
+        delete_region_allocator(region);
+        delete_atlas_instance(instance);
+
+        break;
+    }
     case CRun: {
         Allocator* stda = get_std_allocator();
         AtlasInstance* instance = make_atlas_instance(stda);

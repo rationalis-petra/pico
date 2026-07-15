@@ -17,6 +17,7 @@
 #include "pico/stdlib/foreign.h"
 
 // forward declarations
+void mark_recur(SynRef syn, Symbol self, TypeCheckContext ctx);
 void type_check_expr(SynRef untyped, PiType type, TypeEnv* env, TypeCheckContext ctx);
 void type_infer_expr(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
 void post_unify(SynRef untyped, TypeEnv* env, TypeCheckContext ctx);
@@ -28,7 +29,6 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     TypeEnv *t_env = mk_type_env(env, ctx.a);
     switch (top->type) {
     case TLDef: {
-        PiType* check_against;
         PiType* ty = env_lookup_tydecl(top->def.bind, env);
         SynRef term = top->def.value;
 
@@ -41,14 +41,13 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
         }
 
-        if (ty != NULL) {
-            check_against = ty;
+        mark_recur(term, top->def.bind, ctx);
+        if (ty) {
+            type_check_expr(term, *ty, t_env, ctx);
         } else {
-            check_against = mk_uvar(ctx.pia);
+            type_infer_expr(term, t_env, ctx);
         }
-        // TODO (BUG): only bind self if procedure/all etc.
-        type_var(top->def.bind, check_against, t_env);
-        type_check_expr(term, *check_against, t_env, ctx);
+
         post_unify(term, t_env, ctx);
         pop_type(t_env);
         break;
@@ -76,7 +75,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
             ImportClauseStatus status = import_clause_valid(env, clause);
-            if (!status.type == ICValid) {
+            if (status.type != ICValid) {
                 type_error_invalid_import(clause, status.bad_symbol, status.type != ICNotExists, top->import.range, ctx);
             }
         }
@@ -358,9 +357,33 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             push_addr(aty, &proc_ty->proc.args);
         }
 
+        if (untyped.procedure.is_recursive) {
+            proc_ty->proc.ret = mk_uvar(ctx.pia);
+            type_var(untyped.procedure.recursive_sym, proc_ty, env);
+        }
         type_infer_i(untyped.procedure.body, env, ctx); 
         pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
-        proc_ty->proc.ret = get_type(untyped.procedure.body, ctx.tape);
+
+        if (untyped.procedure.is_recursive) {
+            pop_type(env);
+            UnifyContext uctx = (UnifyContext) {
+                .a = ctx.a,
+                .pia = ctx.pia,
+                .current_module = type_env_module(env),
+                .logger = ctx.logger,
+            };
+            PiType* expected = get_type(untyped.procedure.body, ctx.tape);
+            UnifyResult out = unify(expected, proc_ty->proc.ret, uctx);
+            UnifyReason reason = {
+                .type = URCheck,
+                .check.range = get_range(ref, ctx.tape).term,
+                .check.expected = expected,
+                .check.actual = proc_ty->proc.ret,
+            };
+            check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
+        } else {
+            proc_ty->proc.ret = get_type(untyped.procedure.body, ctx.tape);
+        }
         break;
     }
     case SAll: {
@@ -1303,8 +1326,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
                     aty = eval_type(*(SynRef*)arg.val, env, ctx);
                 } else  {
                     aty = mk_uvar(ctx.pia);
-                    branch->args.data[i].val = aty;
                 }
+                branch->args.data[i].val = aty;
                 push_ptr(aty, arr);
             }
             sym_ptr_bind(untyped.labels.terms.data[i].key, arr, &labels);
@@ -2811,5 +2834,21 @@ PiType* eval_type(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
     set_syntax(ref, syn, ctx.tape);
 
     return *result;
+}
+
+/**
+ * Mark a syntactic term as potentialy recursive
+ */
+void mark_recur(SynRef ref, Symbol self, TypeCheckContext ctx) {
+    Syntax syn = get_syntax(ref, ctx.tape);
+    switch (syn.type) {
+    case SProcedure:
+        syn.procedure.is_recursive = true;
+        syn.procedure.recursive_sym = self;
+        set_syntax(ref, syn, ctx.tape);
+        break;
+    default:
+        break;
+    }
 }
 

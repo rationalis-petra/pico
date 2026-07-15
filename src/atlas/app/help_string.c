@@ -19,7 +19,7 @@ void write_atlas_help_string(FormattedOStream *os) {
     write_fstring(mv_string("\n"), os);
     write_fstring(mv_string(" The Atlas build system is provided as part of the pico relic compiler. It works \n"), os);
     write_fstring(mv_string(" based an 'atlas_project' file in the root directory of your project, and with \n"), os);
-    write_fstring(mv_string(" 'atlas' files describing differrent build targets, scripts and so on."), os);
+    write_fstring(mv_string(" 'atlas' files describing differrent build targets, scripts and so on.\n"), os);
     write_fstring(mv_string("\n"), os);
 
     start_boldness(Bold, os);
@@ -37,6 +37,27 @@ void write_atlas_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" The init command will create a new Relic project using Atlas, with a basic\n"), os);
     write_fstring(mv_string(" project structure including an executable and test-suite.\n"), os);
     write_fstring(mv_string("\n\n"), os);
+
+    start_boldness(Bold, os);
+    write_fstring(mv_string("\n                                      Build                                     "), os);
+    write_fstring(mv_string("\n           ──────────────────────────────────────────────────────────           "), os);
+    end_boldness(os);
+
+    write_fstring(mv_string("\n"), os);
+    write_fstring(mv_string("\n"), os);
+
+    write_fstring(mv_string(" Usage: "), os);
+    start_boldness(Dim, os);
+    write_fstring(mv_string("pico atlas build <target-name>\n"), os);
+    end_boldness(os);
+
+    write_fstring(mv_string("\n"), os);
+  
+    write_fstring(mv_string(" If there is an 'executable' target defined somewhere in the atlas project, then \n"), os);
+    write_fstring(mv_string(" this will produce an executable file which, when run, will start execution at\n"), os);
+    write_fstring(mv_string(" the designated 'entry-point' function..\n"), os);
+    write_fstring(mv_string("\n"), os);
+
     
 
     start_boldness(Bold, os);
@@ -58,7 +79,7 @@ void write_atlas_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" atlas project, then this will build (if needed) and run the target. If the\n"), os);
     write_fstring(mv_string(" target is a script, then no executable will be produced.\n"), os);
     write_fstring(mv_string("\n"), os);
-    write_fstring(mv_string(" Any additional arguments are passed directly to the test suite, and are not \n"), os);
+    write_fstring(mv_string(" Any additional arguments are passed directly to the executable/script, and are not \n"), os);
     write_fstring(mv_string(" processed by Atlas.\n"), os);
 
     write_fstring(mv_string("\n"), os);
@@ -79,6 +100,9 @@ void write_atlas_help_string(FormattedOStream *os) {
     write_fstring(mv_string(" If there is a test target defined somewhere in the atlas project, then this\n"), os);
     write_fstring(mv_string(" command will run the matching test suite. Any additional arguments are passed\n"), os);
     write_fstring(mv_string(" directly to the test suite, and are not processed by Atlas.\n"), os);
+    write_fstring(mv_string("\n"), os);
+    write_fstring(mv_string(" Any additional arguments are passed directly to the test suite, and are not \n"), os);
+    write_fstring(mv_string(" processed by Atlas.\n"), os);
 
     write_fstring(mv_string("\n"), os);
 }

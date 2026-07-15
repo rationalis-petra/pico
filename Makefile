@@ -9,10 +9,13 @@ TARGET_EXEC := pico
 else
 TARGET_EXEC := pico.exe
 endif
+TARGET_IMAGE := pico_image_template
 
 MAIN_SRC := ./src/main.c
+IMAGE_SRC := ./image/unlinked_image.c
 BUILD_DIR := ./build
 RELEASE_DIR := $(BUILD_DIR)/release
+IMAGE_DIR := $(BUILD_DIR)/image
 DEBUG_DIR := $(BUILD_DIR)/debug
 SRC_DIRS := ./src
 LINK_FLAGS :=
@@ -123,6 +126,12 @@ RELEASE_OBJS := $(SRCS:%=$(RELEASE_DIR)/%.o)
 DEBUG_OBJS := $(SRCS:%=$(DEBUG_DIR)/%.o)
 MAIN_RELEASE_OBJ := $(MAIN_SRC:%=$(RELEASE_DIR)/%.o)
 MAIN_DEBUG_OBJ := $(MAIN_SRC:%=$(DEBUG_DIR)/%.o)
+MAIN_IMAGE_OBJ := $(IMAGE_SRC:%=$(IMAGE_DIR)/%.o)
+
+GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
+GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
+GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
+GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
 
 # String substitution (suffix version without %).
 # As an example, ./build/hello.c turns into ./build/hello.c.d
@@ -142,7 +151,14 @@ CFLAGS := $(CFLAGS) -Wall -Wextra -Wundef -Wno-unused-parameter -Wnull-dereferen
 # these warnings are a bit pedantic, so are turned off for now
 CFLAGS := $(CFLAGS) # -Wconversion -Wsign-conversion
 
-# The final build step.
+# Build step for image + dependency
+
+#$(LINK_FLAGS)
+$(IMAGE_DIR)/$(TARGET_IMAGE): $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ)
+	ld $(RELEASE_OBJS) $(MAIN_IMAGE_OBJ) -relocatable -o $@ 
+
+
+# The final build step. for debug + release
 $(RELEASE_DIR)/$(TARGET_EXEC): $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ)
 	$(CC) $(RELEASE_OBJS) $(MAIN_RELEASE_OBJ) -o $@ $(CFLAGS) $(RELEASE_FLAGS) $(LINK_FLAGS)
 
@@ -150,6 +166,10 @@ $(DEBUG_DIR)/$(TARGET_EXEC): $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ)
 	$(CC) $(DEBUG_OBJS) $(MAIN_DEBUG_OBJ) -o $@ $(CFLAGS) $(DEBUG_FLAGS) $(LINK_FLAGS)
 
 # Build step for C source (release)
+$(IMAGE_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
+
 $(RELEASE_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@ $(RELEASE_FLAGS)
@@ -160,7 +180,7 @@ $(DEBUG_DIR)/%.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(DEBUG_FLAGS)
 
 
-# Test stuff
+# Tett stuff
 # ---------------------------------------------
 ## Same process as above but for tests
 
@@ -183,36 +203,7 @@ $(TEST_DIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -I $(TEST_INC_DIR) -c $< -o $@ $(TEST_FLAGS) 
 
-# Installer
-# ---------------------------------------------
-# Objects from the 'platform' and 'components' diretories
-# that may be useful regardless of application...
-GENERIC_SRC_DIRS := ./src/data ./src/components ./src/platform/filesystem ./src/platform/memory ./src/platform/terminal
-GENERIC_SRCS := $(shell find $(GENERIC_SRC_DIRS) -name '*.c' | grep -v $(MAIN_SRC)) 
-GENERIC_SRCS := $(GENERIC_SRCS) ./src/platform/signals.c ./src/platform/thread.c ./src/platform/error.c ./src/platform/jump.c ./src/platform/environment.c
-GENERIC_OBJS := $(GENERIC_SRCS:%=$(RELEASE_DIR)/%.o)
-
-
-INSTALLER_DIR := $(BUILD_DIR)/installer
-INSTALLER_INC_DIR := ./installer/include
-INSTALLER_SRC_DIRS := ./installer/src
-TARGET_INSTALLER := pico_installer
-
-INSTALLER_FLAGS := $(RELEASE_FLAGS)
-
-INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
-INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_DIR)/%.o) $(GENERIC_OBJS)
-
-# Final build step for installer 
-$(INSTALLER_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
-	$(CC) $(INSTALLER_OBJS) -I $(INSTALLER_INC_DIR) -o $@ $(LINK_FLAGS) $(INSTALLER_FLAGS) 
-
-# Build step for C tests
-$(INSTALLER_DIR)/%.c.o: %.c
-	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -I $(INSTALLER_INC_DIR) -c $< -o $@ $(INSTALLER_FLAGS) 
-
-# Installer
+# Keeper
 # ---------------------------------------------
 ## Same process as above but for tests
 
@@ -240,6 +231,37 @@ $(KEEPER_DIR)/%.c.o: %.c
 	$(CC) $(CFLAGS) -I $(KEEPER_INC_DIR) -c $< -o $@ $(KEEPER_FLAGS) 
 
 
+# Installer
+# ---------------------------------------------
+# Objects from the 'platform' and 'components' diretories
+# that may be useful regardless of application...
+INSTALLER_DIR := $(BUILD_DIR)/installer
+INSTALLER_BUILD_DIR := $(BUILD_DIR)/installer_build
+INSTALLER_INC_DIR := ./installer/include
+INSTALLER_SRC_DIRS := ./installer/src
+
+ifneq ($(OS), Windows_NT)
+TARGET_INSTALLER := pico_installer
+else
+TARGET_INSTALLER := pico_installer.exe
+endif
+
+INSTALLER_FLAGS := $(RELEASE_FLAGS)
+
+INSTALLER_SRCS := $(shell find $(INSTALLER_SRC_DIRS) -name '*.c')
+INSTALLER_OBJS := $(INSTALLER_SRCS:%=$(INSTALLER_BUILD_DIR)/%.o) $(GENERIC_OBJS)
+
+# Final build step for installer 
+$(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER): $(INSTALLER_OBJS)
+	$(CC) $(INSTALLER_OBJS) -I $(INSTALLER_INC_DIR) -o $@ $(LINK_FLAGS) $(INSTALLER_FLAGS) 
+
+# Build step for C tests
+$(INSTALLER_BUILD_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -I $(INSTALLER_INC_DIR) -c $< -o $@ $(INSTALLER_FLAGS) 
+
+
+
 #  Phony targets
 # ---------------
 
@@ -253,14 +275,17 @@ release: $(RELEASE_DIR)/$(TARGET_EXEC)
 .PHONY: debug
 debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 
+.PHONY: image
+image: $(IMAGE_DIR)/$(TARGET_IMAGE)
+
 
 # Run tests with make test
 .PHONY: test
 test: $(TEST_DIR)/$(TARGET_TEST)
 	$(TEST_DIR)/$(TARGET_TEST)
 
-.PHONY: installer
-installer: $(INSTALLER_DIR)/$(TARGET_INSTALLER)
+.PHONY: build_installer
+build_installer: $(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER)
 
 .PHONY: keeper
 keeper: $(KEEPER_DIR)/$(TARGET_KEEPER)
@@ -285,7 +310,7 @@ run-debug: $(DEBUG_DIR)/$(TARGET_EXEC)
 	$(DEBUG_DIR)/$(TARGET_EXEC)
 
 .PHONY: all
-all: debug release test keeper installer prep-install
+all: debug release test keeper installer installer image
 
 # TODO: (FEAT) check shell; set appropriately
 .PHONY: debug_mode
@@ -296,17 +321,20 @@ debug_mode:
 ASSET_DIR := $(INSTALLER_DIR)/assets
 
 # 
-.PHONY: prep-install
-prep-install: $(INSTALLER_DIR)/$(TARGET_INSTALLER) release keeper
+.PHONY: installer
+installer: build_installer release keeper image
+	mkdir -p $(INSTALLER_DIR)
+	cp $(INSTALLER_BUILD_DIR)/$(TARGET_INSTALLER) $(INSTALLER_DIR)/$(TARGET_INSTALLER) 
 	mkdir -p $(ASSET_DIR)
 	cp -r installer/scripts $(ASSET_DIR)
 	cp $(RELEASE_DIR)/$(TARGET_EXEC) $(ASSET_DIR)
+	cp $(IMAGE_DIR)/$(TARGET_IMAGE) $(ASSET_DIR)
 	cp $(KEEPER_DIR)/$(TARGET_KEEPER) $(ASSET_DIR)/$(TARGET_KEEPER)
-	cp -r archive $(ASSET_DIR)
+	find archive -type f -not -name "*.~undo-tree~" -exec cp --parents -t $(ASSET_DIR) {} +
 
 # Installation
 .PHONY: install
-install: prep-install
+install: installer
 	cd $(INSTALLER_DIR); ./$(TARGET_INSTALLER)
 
 .PHONY: suppress-config-changes

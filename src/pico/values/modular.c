@@ -1,7 +1,9 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+
 #include "platform/machine_info.h"
+#include "platform/signals.h"
 #include "platform/memory/executable.h"
 
 #include "data/num.h"
@@ -13,6 +15,7 @@
 #include "pico/codegen/codegen.h"
 #include "pico/values/values.h"
 #include "pico/values/modular.h"
+#include "pico/values/modular_build.h"
 #include "pico/syntax/header.h"
 #include "pico/data/sym_sarr_amap.h"
 #include "pico/data/sym_ptr_amap.h"
@@ -33,7 +36,10 @@ typedef struct {
   PiType type;
   PtrArray* declarations;
 
+  U64Array code_starts;
   U8Array* code_segment;
+
+  U64Array data_starts;
   U8Array* data_segment;
 
   // For parametric instances, need to keep track of specific instantiations. 
@@ -248,6 +254,8 @@ void delete_module_entry(ModuleEntryInternal entry, Module* module) {
         delete_sym_sarr_amap(*entry.backlinks,
                              delete_symbol,
                              sdelete_size_array);
+        sdelete_u64_array(entry.code_starts);
+        sdelete_u64_array(entry.data_starts);
         call_free(entry.backlinks, &module->pico_allocator);
     }
     if (entry.code_segment) {
@@ -396,6 +404,8 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
                                                 scopy_size_array,
                                                 &module->allocator);
 
+        entry.code_starts = scopy_u64_array(links->code_starts, &module->allocator);
+        entry.data_starts = scopy_u64_array(links->data_starts, &module->allocator);
         if (segments.code.len != 0) {
             // Move this to the code segment bit?
             // swap out self-references
@@ -599,6 +609,26 @@ SymbolArray get_defined_symbols(Module* module, Allocator* a) {
     return symbols;
 }
 
+SymbolArray get_exported_symbols(Module* module, Allocator* a) {
+    SymbolArray symbols; 
+    if (module->header.exports.export_all) {
+        symbols = mk_symbol_array(module->entries.len, a);
+        for (size_t i = 0; i < module->entries.len; i++) {
+            push_symbol(module->entries.data[i].key, &symbols);
+        };
+    } else {
+        ExportClauseArray clauses = module->header.exports.clauses;
+        symbols = mk_symbol_array(clauses.len, a);
+        for (size_t i = 0; i < clauses.len; i++) {
+            ExportClause clause = clauses.data[i]; 
+            if (clause.type == ExportName && get_def(clause.name, module)) {
+                push_symbol(clause.name, &symbols);
+            }
+        }
+    }
+    return symbols;
+}
+
 PtrArray get_defined_instances(Module* module, Allocator* a) {
     PtrArray instances = mk_ptr_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
@@ -657,4 +687,202 @@ void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
             }
         }
     }
+}
+
+/**
+ * Implementation of the 'Modular Build' interface/header, see 
+ * pico/values/modular_build.h for full specification/intended behaviour.
+ */
+
+
+typedef enum {
+  ValueComponent,
+  CodeComponent,
+  DataComponent,
+  InstanceComponent,
+} ComponentIndex;
+
+/**
+ * cascade_iterator is, in a sense, the bulk of the index increment logic. The
+ * goal of 'cascade' is to advande the iterator until the next valid entry (or
+ * to the end of the module, whichever comes first.
+ */
+void cascade_iterator(ModuleIndex* index, Module* module) {
+  bool running = true;
+  size_t entry_index = index->entry;
+  ComponentIndex component_index = index->component;
+  size_t value_index = index->value;
+
+  while (running) {
+    if (entry_index == module->entries.len) {
+      goto end_loop;
+    }
+    ModuleEntryInternal entry = module->entries.data[entry_index].val;
+
+    switch (component_index) {
+    case ValueComponent:
+      goto cascade_val;
+    case CodeComponent:
+      goto cascade_code;
+    case DataComponent:
+      goto cascade_data;
+    case InstanceComponent:
+      goto cascade_instance;
+    default:
+      panic(mv_string("Invalid Module Index"));
+    }
+
+  cascade_val:
+    if (value_index >= 1) {
+      value_index = 0;
+      component_index = CodeComponent;
+      goto cascade_code;
+    }
+    goto end_loop;
+
+  cascade_code:
+    if (value_index >= entry.code_starts.len) {
+      value_index = 0;
+      component_index = DataComponent;
+      goto cascade_data;
+    }
+    goto end_loop;
+
+  cascade_data:
+    if (value_index >= entry.data_starts.len) {
+      value_index = 0;
+      component_index = InstanceComponent;
+      goto cascade_instance;
+    }
+    goto end_loop;
+
+  cascade_instance:
+    if (!entry.instances || (entry.instances->instantiations.len == value_index)) {
+      entry_index++;
+      value_index = 0;
+      component_index = ValueComponent;
+      goto continue_loop;
+    } 
+    goto end_loop;
+
+  end_loop:
+    running = false;
+
+  continue_loop:
+    continue;
+  }
+
+  *index = (ModuleIndex) {
+    .entry = entry_index,
+    .component = component_index,
+    .value = value_index,
+  };
+}
+
+ModuleIndex start_iterating(Module* module) {
+  ModuleIndex start = {
+    .entry = 0,
+    .component = 0,
+    .value = 0,
+  };
+  cascade_iterator(&start, module);
+  return start;
+}
+
+bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module, BuildErrorPoint* point, Allocator* a) {
+    size_t entry_index = index->entry;
+    //ComponentIndex component_index = index->component;
+    //size_t value_index = index->value;
+    if (entry_index == module->entries.len) {
+        return false;
+    }
+
+    ModuleEntryInternal entry = module->entries.data[entry_index].val;
+    ComponentIndex component_index = index->component;
+
+    /**
+     * TODO: add component for the value itself...
+     */
+
+    switch (component_index) {
+    case ValueComponent: {
+        if (entry.value == NULL) {
+            Symbol name = module->entries.data[entry_index].key;
+            PtrArray nodes = mk_ptr_array(3, a);
+
+            push_ptr(mv_cstr_doc("Symbol", a), &nodes);
+            push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(name), a), a), &nodes);
+            push_ptr(mv_cstr_doc("is declared in module", a), &nodes);
+            push_ptr(mv_cstr_doc("<TODO: add module name>", a), &nodes);
+            push_ptr(mv_cstr_doc("but is lacking definition", a), &nodes);
+
+            BuildError err = {
+                .message = mv_hsep_doc(nodes, a),
+                .module = module,
+                .definition = name,
+            };
+            throw_build_error(point, err);
+        }
+
+        if (entry.is_module) {
+            *fragment = (ModuleFragment) {
+                .type = ModuleFragment_t,
+                .module = entry.value,
+            };
+        } else {
+            size_t size = pi_size_of(entry.type);
+            U8Array frag_data = {
+                .data = entry.value,
+                .len = size,
+                .size = size,
+            };
+            *fragment = (ModuleFragment) {
+                .type = DataFragment_t,
+                .data = frag_data,
+            };
+        }
+        break;
+    }
+    case CodeComponent: {
+        size_t fn_start = entry.code_starts.data[index->value];
+        size_t fn_end = (entry.code_starts.len == index->value + 1)
+            ? entry.code_segment->len
+            : (entry.code_starts.data[index->value + 1]);
+        U8Array frag_data = {
+            .data = entry.code_segment->data + fn_start,
+            .len = fn_end - fn_start,
+            .size = fn_end - fn_start,
+        };
+        *fragment = (ModuleFragment) {
+            .type = CodeFragment_t,
+            .data = frag_data,
+        };
+        break;
+    }
+    case DataComponent: {
+        size_t data_start = entry.data_starts.data[index->value];
+        size_t data_end = (entry.data_starts.len == index->value + 1)
+            ? entry.data_segment->len
+            : (entry.data_starts.data[index->value + 1]);
+        U8Array frag_data = {
+            .data = entry.data_segment->data + data_start,
+            .len = data_end - data_start,
+            .size = data_end - data_start,
+        };
+        *fragment = (ModuleFragment) {
+            .type = DataFragment_t,
+            .data = frag_data,
+        };
+        break;
+    }
+    case InstanceComponent:
+        // TODO: setup instance...
+        break;
+    default:
+      panic(mv_string("Invalid Module Index"));
+    }
+
+    index->value++;
+    cascade_iterator(index, module);
+    return true;
 }

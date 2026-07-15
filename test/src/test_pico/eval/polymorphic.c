@@ -95,39 +95,29 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     // -------------------------------------------------------------------------
 
     if (test_start(log, mv_string("poly-trait"))) {
-      RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
-      RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
-      RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
-          "  [.eql proc [l r]\n"
-          "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
-          "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
-      RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
-      bool expected = true;
-      TEST_EQ("(eql (array [1 2]) (array [1 2]))");
+        RUN("(def Eql Trait Eql [A] [.eql Proc [A A] Bool])\n");
+        RUN("(def eql-i64 instance (Eql I64) [.eql proc [l r] (i64.= l r)])\n");
+        RUN("(def eql-arr2 instance [A] {(eq (Eql A))} (Eql (Array [2] A))\n"
+            "  [.eql proc [l r]\n"
+            "      (bool.and (eq.eql (aelt 0 l) (aelt 0 r))\n"
+            "           (eq.eql (aelt 1 l) (aelt 1 r)))])\n");
+        RUN("(def eql all [A] proc {(eql (Eql A))} [(l A) (r A)] (eql.eql l r))\n");
+        bool expected = true;
+        TEST_EQ("(eql (array [1 2]) (array [1 2]))");
     }
 
-    /*
     if (test_start(log, mv_string("poly-trait-multi-inline-proc"))) {
-      RUN("(def Eql Trait Eql [A] [.= Proc [A A] Bool] [.!= Proc [A A] Bool])\n");
-      RUN("(def eql-i64 instance (Eql I64) [.= proc [l r] (i64.= l r)] [.!= proc [l r] (i64.= l r)])\n");
-      RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [4] A))"
-          "  [.= proc [l r]"
-          "    (->    (eq.= (aelt 0 l) (aelt 0 r))"
-          "      (bool.and (eq.= (aelt 1 l) (aelt 1 r)))"
-          "      (bool.and (eq.= (aelt 2 l) (aelt 2 r)))"
-          "      (bool.and (eq.= (aelt 3 l) (aelt 3 r))))]"
-          "  [.!= proc [l r] seq"
-          "    (->    (eq.!= (aelt 0 l) (aelt 0 r))"
-          "     (bool.or  (eq.!= (aelt 1 l) (aelt 1 r)))"
-          "     (bool.or  (eq.!= (aelt 2 l) (aelt 2 r)))"
-          "     (bool.or  (eq.!= (aelt 3 l) (aelt 3 r))))])");
-     RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
-     RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
+        RUN("(def Eql Trait Eql [A] [.= Proc [A A] Bool] [.!= Proc [A A] Bool])\n");
+        RUN("(def eql-i64 instance (Eql I64) [.= proc [l r] (i64.= l r)] [.!= proc [l r] (i64.!= l r)])\n");
+        RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [1] A))"
+            "  [.= proc [l r] (eq.= (aelt 0 l) (aelt 0 r))]"
+            "  [.!= proc [l r] (eq.!= (aelt 0 l) (aelt 0 r))])");
+        RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
+        RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
 
-     bool expected = false;
-     TEST_EQ("(!= (array [#q #o #i #f]) (array [#q #o #i #f]))");
+        bool expected = false;
+        TEST_EQ("(!= (array [#q]) (array [#q]))");
     }
-    */
 
     // -------------------------------------------------------------------------
     //
@@ -228,21 +218,21 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)]) {Unit})");
     }
 
-    // TODO: fix the typechecking error here!
-    /* if (test_start(log, mv_string("apply-label-seq"))) { */
-    /*     int64_t expected = -510; */
-    /*     RUN("(def label-seq all [A] proc [x I64] (labels (go-to call-1) [call-1 (go-to call-2)] [call-2 x]))"); */
-    /*     TEST_EQ("(label-seq {Unit} -510)"); */
-    /* } */
+    if (test_start(log, mv_string("apply-label-seq"))) {
+        int64_t expected = -510;
+        RUN("(def label-seq all [A] proc [(x I64)] (labels (go-to call-1) [call-1 (go-to call-2)] [call-2 x]))");
+        TEST_EQ("(label-seq {Unit} -510)");
+    }
 
-    /* if (test_start(log, mv_string("apply-label-seq"))) { */
-    /*     char* expected = "510"; */
+    if (test_start(log, mv_string("apply-label-seq"))) {
+        char* expected = "510";
 
-    /*     /\* was accessing function 'fn' as -0x18(rbp) then as -0x10(rbp) *\/ */
-    /*     /\* when stepping through code, fn seems to be 40 0x28(rbp) ?? *\/ */
-    /*     RUN("(def label-seq-2 all [A] proc [(fn (Proc [A] Unit)) (x A) (y A)] (labels (go-to call-1) [call-1 (seq (fn x) (go-to call-2))] [call-2 (fn y)]))"); */
-    /*     TEST_STDOUT("(label-seq-2 (proc [x] terminal.write-string (i64.to-string x)) 5 10)"); */
-    /* } */
+        RUN("(def label-seq-2 all [A] proc [(fn (Proc [A] Unit)) (x A) (y A)] (labels (go-to call-1) [call-1 (seq (fn x) (go-to call-2))] [call-2 (fn y)]))");
+        PiAllocator pia = convert_to_pallocator(&ra);
+        PiAllocator old = set_std_current_allocator(pia);
+        TEST_STDOUT("(label-seq-2 (proc [x] terminal.write-string (i64.to-string x)) 5 10)");
+        set_std_current_allocator(old);
+    }
 
 
     /* if (test_start(log, mv_string("apply-label"))) { */
@@ -466,6 +456,11 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         set_std_current_allocator(psta);
         RUN("(def str all [A] proc [(x A) (i U64) (addr Address)] (store {A} addr x))");
         TEST_MEM("(seq [let! addr (alloc (size-of I64))] (str 12 0 addr) (str -67 0 addr))");
+    }
+
+    if (test_start(log, mv_string("poly-proc-in-proc"))) {
+        int64_t expected = 72;
+        TEST_EQ("((proc [x] (let [id (all [A] proc [(y A)] y)] (id {I64} x))) 72)");
     }
 
     set_std_current_allocator(old);
