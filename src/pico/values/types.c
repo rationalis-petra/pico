@@ -833,7 +833,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             if (ty_nodes.len != 0) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
-                var_doc = mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
+                var_doc = mv_group_doc(mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a), a);
             } else {
                 var_doc = mv_sep_doc(var_nodes, a);
             }

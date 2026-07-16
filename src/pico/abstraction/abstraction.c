@@ -1597,14 +1597,17 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         err.message = mk_cstr_doc("'Module' not supported as inner-expression term former.", a);
         throw_pi_error(ctx.point, err);
     case FIs: {
-        if (raw.branch.nodes.len != 3) {
+        if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'is' expects precisely 2 arguments!", a);
+            err.message = mv_cstr_doc("Term former 'is' expects at least 2 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
 
-        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
-        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        RawTree* raw_term = raw.branch.nodes.len == 3
+            ? &raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, ctx.pia);
+        SynRef term = abstract_expr_i(*raw_term, ctx);
         
         Syntax syn = {
             .type = SIs,
@@ -1723,14 +1726,17 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         return res;
     }
     case FWiden: {
-        if (raw.branch.nodes.len != 3) {
+        if (raw.branch.nodes.len < 3) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'widen' expects precisely 2 arguments!", a);
+            err.message = mv_cstr_doc("Term former 'widen' expects at least 2 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
 
-        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        RawTree *raw_term = raw.branch.nodes.len == 3
+            ? &raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, ctx.pia);
+        SynRef term = abstract_expr_i(*raw_term, ctx);
         
         Syntax syn = {
             .type = SWiden,
@@ -1744,12 +1750,15 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
     case FNarrow: {
         if (raw.branch.nodes.len != 3) {
             err.range = raw.range;
-            err.message = mv_cstr_doc("Term former 'narrow' expects precisely 2 arguments!", a);
+            err.message = mv_cstr_doc("Term former 'narrow' expects at least 2 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
 
-        SynRef type = abstract_expr_i(raw.branch.nodes.data[2], ctx);
-        SynRef term = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        SynRef type = abstract_expr_i(raw.branch.nodes.data[1], ctx);
+        RawTree *raw_term = raw.branch.nodes.len == 3
+            ? &raw.branch.nodes.data[2]
+            : raw_slice(&raw, 2, ctx.pia);
+        SynRef term = abstract_expr_i(*raw_term, ctx);
         
         Syntax syn = {
             .type = SNarrow,

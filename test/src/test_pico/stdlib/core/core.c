@@ -26,12 +26,12 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("widen-u32->u64"))) {
         int64_t expected = 678;
-        TEST_EQ("(widen (is 678 U32) U64)");
+        TEST_EQ("(widen U64 (is U32 678))");
     }
 
     if (test_start(log, mv_string("widen-dirty-u32->u64"))) {
         int64_t expected = 567;
-        TEST_EQ("(widen (is (struct [.x 678] [.y 567] [.z 456]) (Struct [.x U32] [.y U32] [.z U32])).y U64)");
+        TEST_EQ("(widen U64 (is (Struct [.x U32] [.y U32] [.z U32]) (struct [.x 678] [.y 567] [.z 456])).y)");
     }
 
     /*
@@ -43,7 +43,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("narrow-f64->f32"))) {
         float32_t expected = 1.0;
-        TEST_EQ("(narrow (is 1.0 F64) F32)");
+        TEST_EQ("(narrow F32 (is F64 1.0))");
     }
 
     // -------------------------------------------------------------------------
@@ -59,7 +59,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
-        TEST_EQ("(let [x (is -3 I32)] x)");
+        TEST_EQ("(let [x (is I32 -3)] x)");
     }
 
     if (test_start(log, mv_string("let-large-value"))) {
@@ -502,7 +502,7 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
 
     if (test_start(log, mv_string("match-struct-inner"))) {
         int32_t expected = 900;
-        TEST_EQ("(match (:some (struct [.x (is 1100 I32)] [.y (is -200 I32)]))\n"
+        TEST_EQ("(match (:some (struct [.x (is I32 1100)] [.y (is I32 -200)]))\n"
                  "  [[:some pr] (i32.+ pr.x pr.y)])");
     }
 

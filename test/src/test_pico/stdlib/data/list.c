@@ -41,7 +41,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         char* expected = "01234";
-        RUN("(loop [for i from 0 below 5] (list.eset i (narrow i I64) list-1))");
+        RUN("(loop [for i from 0 below 5] (list.eset i (narrow I64 i) list-1))");
         TEST_STDOUT("(list.each (proc [x] terminal.write-string (i64.to-string x)) list-1)");
         set_std_current_allocator(current_old);
     }

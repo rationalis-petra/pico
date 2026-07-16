@@ -49,6 +49,56 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  slice.elt idx (unname string))";
     compile_toplevel(str_nth_byte, module, target, &point, &pi_point, region);
 
+    const char *num_uft8_bytes =
+        "(def num-utf8-bytes proc [(byte U8)] \n"
+        "  cond \n"
+        "    [(u8.= #b_11000000 (u8.and byte #b_11100000)) 2] \n"
+        "    [(u8.= #b_11100000 (u8.and byte #b_11110000)) 3] \n"
+        "    [(u8.= #b_11110000 (u8.and byte #b_11111000)) 4] \n"
+        "    [:true (is U8 1)])";
+    compile_toplevel(num_uft8_bytes, module, target, &point, &pi_point, region);
+
+    const char *decode_uft8_bytes =
+        "(def decode-utf8-point proc [(s (slice.Slice U8))] seq\n"
+        "  [let! num-bytes (num-utf8-bytes (slice.elt 0 s))]"
+        "  (cond \n"
+        "    [(u8.= num-bytes 1)"
+        "     (widen U32 (slice.elt 0 s))] \n"
+        "    [(u8.= num-bytes 2)\n"
+        "     (->> (widen U32 u8.and (slice.elt 0 s) #x_1f)\n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 1 s) #x_1f)))]\n"
+        "    [(u8.= num-bytes 3) \n"
+        "     (->> (widen U32 u8.and (slice.elt 0 s) #x_f)\n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 1 s) #x_1f)) \n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 2 s) #x_1f)))] \n"
+        "    [:true\n"
+        "     (->> (widen U32 u8.and (slice.elt 0 s) #x_7)\n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 1 s) #x_1f)) \n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 2 s) #x_1f)) \n"
+        "          (u32.shl 6)\n"
+        "          (u32.or (widen U32 u8.and (slice.elt 3 s) #x_1f)))]))";
+    compile_toplevel(decode_uft8_bytes, module, target, &point, &pi_point, region);
+
+    const char *str_elt =
+        "(def elt proc [(idx U64) (string String)] seq\n"
+        "  [let! offset (local 0)]\n"
+        "  [let! index (local 0)]\n"
+        "  (loop [while (u64.< (get offset) string.len)] \n"
+        "        [while (u64.< (get index) idx)]\n"
+        "    [let! byte (slice.elt (get offset) (unname string))]\n"
+        "    [let! len (widen U64 (num-utf8-bytes byte))]"
+        "    (set index  (u64.+ 1 (get index)))\n"
+        "    (set offset (u64.+ len (get offset))))\n"
+        "  \n"
+        "  (when (u64.!= idx (get index)) (panic \"string.elt: index out of range\")) \n"
+        "  (decode-utf8-point (slice.subview (get offset) string.len (unname string))))";
+    compile_toplevel(str_elt, module, target, &point, &pi_point, region);
+
     const char *str_subview =
         "(def subview proc [(start U64) (end U64) (string String)] \n"
         "  (struct String [.addr (num-to-address (u64.+ start (address-to-num string.addr)))] [.len (u64.- end start)]))";

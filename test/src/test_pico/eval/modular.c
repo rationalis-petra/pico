@@ -17,7 +17,7 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
 
     if (test_start(log, mv_string("small-def"))) {
         int8_t expected = 67;
-        RUN("(def t2 (is 67 I8))");
+        RUN("(def t2 (is I8 67))");
         TEST_EQ("t2");
     }
 

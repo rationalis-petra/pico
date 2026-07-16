@@ -31,8 +31,9 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
+        // TODO: better error reporting here and in adjacent files!
         //panic(doc_to_str(pi_point.error.message, 120, a));
-        panic(mv_string("pico error in pair.c"));
+        panic(mv_string("pico error in slice.c"));
     }
 
     ErrorPoint point;
@@ -64,6 +65,11 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
                                "  [let! elt-idx (u64.+ sl-num (u64.* i (size-of A)))]"
                                "  (store {A} (num-to-address elt-idx) val))";
     compile_toplevel(slice_eset_fn, module, target, &point, &pi_point, region);
+
+    const char *slice_subview =
+        "(def subview all [A] proc [(start U64) (end U64) (slice (Slice A))] \n"
+        "  (struct (Slice A) [.addr (num-to-address (u64.+ (u64.* (size-of A) start) (address-to-num slice.addr)))] [.len (u64.- end start)]))";
+    compile_toplevel(slice_subview, module, target, &point, &pi_point, region);
 
     const char *slice_copy_fn =
         "(def copy all [A] proc [(slice (Slice A))] seq\n"

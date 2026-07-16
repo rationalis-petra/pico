@@ -61,9 +61,24 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("-1080");
   }
 
-  if (test_start(log, mv_string("parse-i64"))) {
-    RawTree expected = int_atom(-1080);
-    TEST_EQ("-1080");
+  if (test_start(log, mv_string("parse-binary-num"))) {
+    RawTree expected = int_atom(6);
+    TEST_EQ("#b_110");
+  }
+
+  if (test_start(log, mv_string("parse-octal-num"))) {
+    RawTree expected = int_atom(97);
+    TEST_EQ("#o_141");
+  }
+
+  if (test_start(log, mv_string("parse-hex-simple"))) {
+    RawTree expected = int_atom(10);
+    TEST_EQ("#x_a");
+  }
+
+  if (test_start(log, mv_string("parse-hex-num"))) {
+    RawTree expected = int_atom(31);
+    TEST_EQ("#x_1f");
   }
 
   if (test_start(log, mv_string("parse-symbol"))) {

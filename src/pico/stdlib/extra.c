@@ -772,6 +772,60 @@ void build_thread_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocat
     convert_c_fn(thread_macro, &fn_ctype, type, ass, a, point); 
 }
 
+MacroResult thread_end_macro(RawTreePiList nodes) {
+    if (nodes.len < 2) {
+        return (MacroResult) {
+            .result_type = Left,
+            .err.message = mv_string("Malformed threading macro (->>): expected at least one term!"),
+            .err.range = nodes.data[0].range,
+        };
+    }
+
+    PiAllocator pia = get_std_current_allocator();
+    RawTree current_node = nodes.data[1];
+    for (size_t i = 2; i < nodes.len; i++) {
+        RawTree current = nodes.data[i];
+        if (current.type != RawBranch) {
+            return (MacroResult) {
+                .result_type = Left,
+                .err.message = mv_string("All terms in a thread after the first should be a composite term."),
+                .err.range = nodes.data[0].range,
+            };
+        }
+        if (current.branch.nodes.len < 1) {
+            return (MacroResult) {
+                .result_type = Left,
+                .err.message = mv_string("All terms in a thread after the first should be a composite term with at least one component."),
+                .err.range = nodes.data[0].range,
+            };
+        }
+        RawTreePiList new_nodes = mk_rawtree_list(current.branch.nodes.len + 1, &pia);
+        push_rawtree(current.branch.nodes.data[0], &new_nodes);
+        for (size_t j = 1; j < current.branch.nodes.len; j++) {
+            push_rawtree(current.branch.nodes.data[j], &new_nodes);
+        }
+        push_rawtree(current_node, &new_nodes);
+        current_node = (RawTree) {
+            .type = RawBranch,
+            .range.start = current.range.start,
+            .range.end = current.range.end,
+            .branch.hint = current.branch.hint,
+            .branch.nodes = new_nodes,
+        };
+    }
+
+    return (MacroResult) {
+        .result_type = Right,
+        .term = current_node,
+    };
+}
+
+void build_thread_end_macro(PiType* type, Assembler* ass, PiAllocator* pia,  Allocator* a, ErrorPoint* point) {
+    CType fn_ctype = mk_fn_ctype(pia, 1, "nodes", mk_list_ctype(pia), mk_macro_result_ctype(pia));
+
+    convert_c_fn(thread_end_macro, &fn_ctype, type, ass, a, point); 
+}
+
 void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
@@ -851,6 +905,14 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     typep = mk_prim_type(pia, TMacro);
     build_thread_macro(macro_proc, ass, pia, &ra, &point);
     sym = string_to_symbol(mv_string("->"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_prim_type(pia, TMacro);
+    build_thread_end_macro(macro_proc, ass, pia, &ra, &point);
+    sym = string_to_symbol(mv_string("->>"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
