@@ -44,7 +44,7 @@ typedef struct {
     ImportClauseStatusType type;
     Symbol bad_symbol;
 } ImportClauseStatus;
-ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause);
+ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Allocator* a);
 
 EnvEntry env_lookup(Symbol sym, Environment* env);
 PiType* env_lookup_tydecl(Symbol sym, Environment* env);

@@ -104,27 +104,35 @@ void compile_toplevel(const char *string, Module *module, Target target, ErrorPo
 }
 
 void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
-    SymbolArray path = mk_symbol_array(len, a);
+    PathSegmentArray path = mk_path_segment_array(len, a);
     va_list args;
     va_start(args, len);
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
-        push_symbol(string_to_symbol(mv_string(name)), &path);
+        PathSegment segment = {
+            .type = SegSymbol,
+            .symbol = string_to_symbol(mv_string(name)),
+        };
+        push_path_segment(segment, &path);
     }
     push_import_clause((ImportClause) {
-            .type = Import,
+            .type = ImportSimple,
             .path = path,
         },
         arr);
 }
 
 void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
-    SymbolArray path = mk_symbol_array(len, a);
+    PathSegmentArray path = mk_path_segment_array(len, a);
     va_list args;
     va_start(args, len);
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
-        push_symbol(string_to_symbol(mv_string(name)), &path);
+        PathSegment segment = {
+            .type = SegSymbol,
+            .symbol = string_to_symbol(mv_string(name)),
+        };
+        push_path_segment(segment, &path);
     }
     va_end(args);
     push_import_clause((ImportClause) {

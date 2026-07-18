@@ -40,6 +40,7 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
 SymbolArray* try_get_path(SynRef syn, AbstractionICtx ctx);
 DevFlag check_dev_flags(RawTree curr, AbstractionICtx ctx);
 bool is_special(RawTree curr);
+bool is_key_symbol(RawTree raw, Symbol symbol);
 
 // Array-specific helpers
 void deduce_dimension(U64Array* dims, RawTree nodes, AbstractionICtx ctx);
@@ -48,8 +49,12 @@ RawTreePiList next_node_arr(U64Array* index, U64Array dims, RawTree nodes, Abstr
 // Module header helpers
 Imports abstract_imports(RawTree* raw, Allocator* a, PiErrorPoint* point);
 Exports abstract_exports(RawTree* raw, Allocator* a, PiErrorPoint* point);
+
 ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point);
+ImportValueArray abstract_import_values(RawTree* raw, PiErrorPoint* point, Allocator* a);
 ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator* a);
+
+PathSegmentArray get_path(RawTree raw, PiErrorPoint* point, Allocator* a);
 
 //------------------------------------------------------------------------------
 // Interface Implementation
@@ -114,25 +119,27 @@ TopLevel abstract(RawTree raw, AbstractionCtx ctx) {
 }
 
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
-    // Expected format:
-    // Note: postfix ?  = expression is optional
-    //       postfix *  = zero or more required
-    //       infix |    = choice
-    //       between <> = class
-    //       between ⦇⦈ = grouped, the ⦇⦈ are not literal
-    // 
-    // ( module <modulename>
-    //   ⦇ ( import <import-clause>* ) | ( export ⦇:all | <export-clause>*⦈ ) ⦈* )
-    // 
-    // Where
-    //  <modulename> is a symbol
-    // 
-    // <import-clause> has the format
-    //  ( <path> ⦇:all | :except <symbol-list> | :only <symbol-list>⦈? ) 
-    // 
-    // <export-clause> has the format
-    //  <symbol>
-    //
+    /**
+     * Expected format:
+     * Note: postfix ?  = expression is optional
+     *       postfix *  = zero or more required
+     *       infix |    = choice
+     *       between <> = class
+     *       between ⦇⦈ = grouped, the ⦇⦈ are not literal
+     * 
+     * ( module <modulename>
+     *   ⦇ ( import <import-clause>* ) | ( export ⦇:all | <export-clause>*⦈ ) ⦈* )
+     * 
+     * Where
+     *  <modulename> is a symbol
+     * 
+     * <import-clause> has the format
+     *  ( <path> ⦇:all | :except <target-list> | :only <target-list>⦈? ) 
+     * 
+     * <export-clause> has the format
+     *  <symbol>
+     *
+     */
 
     // Prep an error that can then be filled out and thrown.
     PicoError err;
@@ -287,8 +294,10 @@ bool get_label(RawTree* raw, Symbol* fieldname) {
     }
 }
 
-// Helper function for retrieving a symbol list
-// returns true on success, false on failure
+/**
+ * Helper function for retrieving a symbol list
+ * returns true on success, false on failure
+ */
 bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
     if (nodes.type != RawBranch) { return false; }
 
@@ -3033,156 +3042,219 @@ SymbolArray get_module_path(RawTree raw, Allocator* a, PiErrorPoint* point) {
     return syms;
 }
 
-SymbolArray get_path(RawTree raw, Allocator *a, PiErrorPoint *point) {
+ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
     PicoError err;
-    err.range = raw.range;
+    if (is_symbol(*raw)) {
+        PathSegmentArray path = mk_path_segment_array(1,a);
+        PathSegment segment = {.type = SegSymbol, .symbol = raw->atom.symbol};
+        push_path_segment(segment, &path);
+        return (ImportClause) {
+            .type = ImportSimple,
+            .path = path,
+        };
+    } else if (raw->type == RawBranch) {
+        // Possibilities:
+        if (raw->branch.nodes.len == 1) {
+            /**
+             * There is a singular symbol, e.g. 'data'. In this case, it is just
+             * a regular import.
+             */
+            PathSegmentArray path = get_path(raw->branch.nodes.data[0], point, a);
+            return (ImportClause) {
+                .type = ImportSimple,
+                .path = path,
+            };
+        } 
 
-    SymbolArray path = mk_symbol_array(4, a);
+        /**
+         * There is more than one element. This could be either because:
+         * • It is a path, e.g. data.string (becomes (. data string))
+         * • It is a complex imoprt, e.g. (data.string :types :values (nth-byte decode-utf8-point))
+         * 
+         * The two can be differentiated via by checking if the first symbol
+         * is a '.' or not. 
+         */
+        if (eq_symbol(&raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
+            PathSegmentArray path = get_path(*raw, point, a);
+            return (ImportClause) {
+                .type = ImportSimple,
+                .path = path,
+            };
+        }
+        /**
+         * We now know that this is truly a more complex path/import. Loop
+         * through each possibility.
+         */
+        PathSegmentArray path = get_path(raw->branch.nodes.data[0], point, a);
+        size_t index = 1;
+        ImportClause out_clause = {
+            .path = path,
+        };
+        while (index < raw->branch.nodes.len) {
+            RawTree header = raw->branch.nodes.data[index];
+            if (is_key_symbol(header, string_to_symbol(mv_string("all")))) {
+                // TODO: add error checking so that :all cannot be mixed with
+                // other terms?
+                out_clause.type = ImportAll;
+            } else if (is_key_symbol(header, string_to_symbol(mv_string("types")))) {
+                // TODO: add check to ensuer is unique (i.e. :types occurs only once)
+                out_clause.import_types = true;
+            } else if (is_key_symbol(header, string_to_symbol(mv_string("instances")))) {
+                // TODO: add check to ensuer is unique (i.e. :instances occurs only once)
+                out_clause.import_instances = true;
+            } else if (is_key_symbol(header, string_to_symbol(mv_string("values")))) {
+                // TODO: add check to ensuer is unique (i.e. :values occurs only once)
+                index++;
+                if (index >= raw->branch.nodes.len)
+                    import_missing_targets(*raw, index-1, point, a);
+
+                out_clause.import_values = true;
+                out_clause.values = abstract_import_values(&raw->branch.nodes.data[index], point, a);
+            } else if (is_key_symbol(header, string_to_symbol(mv_string("as")))) {
+                // TODO: add check to ensure is unique (i.e. :values occurs only once)
+                // TODO: add check to ensure that the path segment is simple,
+                //       i.g. no SegWildcard/SegSymbols
+                index++;
+                if (index >= raw->branch.nodes.len)
+                    import_missing_as(*raw, index-1, point, a);
+
+                if (!is_simple_path(out_clause.path))
+                    import_as_bad_symbol(*raw, index, point, a);
+
+                RawTree raw_to = raw->branch.nodes.data[index];
+                if (!is_symbol(raw_to))
+                    import_as_bad_symbol(*raw, index, point, a);
+
+                out_clause.import_as = true;
+                out_clause.to = raw_to.atom.symbol;
+
+            } else {
+                import_key_malformed(raw->branch.nodes.data[1], point, a);
+            }
+            index++;
+        }
+        return out_clause;
+    } else {
+        err.range = raw->range;
+        err.message = mv_cstr_doc("Invalid import clause - is non-symbolic atom!", a);
+        throw_pi_error(point, err);
+    }
+}
+
+ImportValueArray abstract_import_values(RawTree* raw, PiErrorPoint* point, Allocator* a) {
+    if (raw->type != RawBranch)
+        import_bad_value_list(*raw, point, a);
+
+    ImportValueArray values = mk_import_value_array(raw->branch.nodes.len, a);
+    for (size_t i = 0; i < raw->branch.nodes.len; i++) {
+        RawTree target = raw->branch.nodes.data[i];
+        if (is_symbol(target)) {
+            ImportValue out = {
+                .from = target.atom.symbol
+            };
+            push_import_value(out, &values);
+        } else if (target.type == RawBranch) {
+            if (target.branch.nodes.len != 3) {
+                import_bad_target(target, point, a);
+            }
+            if (!is_symbol(target.branch.nodes.data[0])) {
+                import_bad_target(target, point, a);
+            }
+            if (!is_symbol(target.branch.nodes.data[2])) {
+                import_bad_target(target, point, a);
+            }
+            if (!is_key_symbol(target.branch.nodes.data[1], string_to_symbol(mv_string("as")))) {
+                import_bad_target(target, point, a);
+            }
+
+            ImportValue out = {
+                .should_rename = true,
+                .from = target.branch.nodes.data[0].atom.symbol,
+                .to = target.branch.nodes.data[2].atom.symbol,
+            };
+            push_import_value(out, &values);
+        } else {
+            import_bad_target(target, point, a);
+        }
+    }
+    return values;
+}
+
+PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
+    PathSegmentArray path = mk_path_segment_array(4, a);
     bool running = true;
+    RawTree cont = raw;
     while (running) {
-        if (raw.type == RawBranch) {
-            if (raw.branch.nodes.len == 3) {
-                RawTree rhead = raw.branch.nodes.data[0];
+        if (cont.type == RawBranch) {
+            if (cont.branch.nodes.len == 3) {
+                RawTree rhead = cont.branch.nodes.data[0];
                 if (!(rhead.type == RawAtom && rhead.atom.type == ASymbol) ||
                     !symbol_eq(rhead.atom.symbol, string_to_symbol(mv_string(".")))) {
-                    err.range = rhead.range;
-                    err.message = mv_cstr_doc("Invalid path separator: expected '.'", a);
-                    throw_pi_error(point, err);
+                    import_bad_path(raw, point, a);
                 }
 
-                RawTree path_part = raw.branch.nodes.data[1];
-                if (!(path_part.type == RawAtom && path_part.atom.type == ASymbol)) {
-                    err.range = path_part.range;
-                    err.message = mv_cstr_doc("Invalid path part: expecting a symbol here.", a);
-                    throw_pi_error(point, err);
+
+                RawTree segment_part = cont.branch.nodes.data[1];
+                if (segment_part.type == RawBranch) {
+                    /**
+                     * This segment is a branch, so we expect either a symbol
+                     * list (e.g. foo.(bar bax).qux OR a wildcard, i.e. foo.(:all))
+                     */
+                    if (segment_part.branch.nodes.len == 1 && segment_part.branch.nodes.data[0].type == RawBranch) {
+                        RawTree maybe_wildcard = segment_part.branch.nodes.data[0];
+                        if (is_key_symbol(maybe_wildcard, string_to_symbol(mv_string("all")))) {
+                            PathSegment segment = {
+                                .type = SegWildcard,
+                            };
+                            push_path_segment(segment, &path);
+                        } else {
+                            import_bad_path(raw, point, a);
+                        }
+                    } else {
+                        SymbolArray symlist;
+                        if (!get_symbol_list(&symlist, segment_part)) {
+                            import_bad_path(raw, point, a);
+                        }
+
+                        PathSegment segment = {
+                            .type = SegSymbols,
+                            .symbols = symlist,
+                        };
+                        push_path_segment(segment, &path);
+                    }
+                } else if (segment_part.type == RawAtom && segment_part.atom.type == ASymbol) {
+                    PathSegment segment = {
+                        .type = SegSymbol,
+                        .symbol = segment_part.atom.symbol,
+                    };
+                    push_path_segment(segment, &path);
+                } else {
+                    import_bad_path(raw, point, a);
                 }
             
-                push_symbol(path_part.atom.symbol, &path);
-                raw = raw.branch.nodes.data[2];
+                cont = cont.branch.nodes.data[2];
             } else {
-                err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
-                throw_pi_error(point, err);
+                import_bad_path(raw, point, a);
             }
-        } else if (raw.type == RawAtom && raw.atom.type == ASymbol) {
-            push_symbol(raw.atom.symbol, &path);
+        } else if (cont.type == RawAtom && cont.atom.type == ASymbol) {
+            PathSegment segment = {.type = SegSymbol, .symbol = raw.atom.symbol};
+            push_path_segment(segment, &path);
             running = false;
         } else {
-            err.message = mv_cstr_doc("Invalid module path: expect foo.bar, (. foo bar) or foo.", a);
-            throw_pi_error(point, err);
+            import_bad_path(raw, point, a);
         }
     }
 
     // Reverse path:
     for (size_t i = 0; i < path.len / 2; i++) {
-        Symbol s1 = path.data[i];
-        Symbol s2 = path.data[path.len - (i + 1)];
+        PathSegment s1 = path.data[i];
+        PathSegment s2 = path.data[path.len - (i + 1)];
         path.data[i] = s2;
         path.data[path.len - (i + 1)] = s1;
     }
     return path;
 }
 
-ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* point) {
-    PicoError err;
-    if (is_symbol(*raw)) {
-        SymbolArray path = mk_symbol_array(1,a);
-        push_symbol(raw->atom.symbol, &path);
-        return (ImportClause) {
-            .type = Import,
-            .path = path,
-        };
-    } else if (raw->type == RawBranch) {
-        // Possibilities:
-        // field
-        // (. field parent)
-        if (raw->branch.nodes.len == 1) {
-            SymbolArray path = get_path(*raw, a, point);
-            push_symbol(raw->atom.symbol, &path);
-            return (ImportClause) {
-                .type = Import,
-                .path = path,
-            };
-        } else if (raw->branch.nodes.len == 2) {
-            SymbolArray path = get_module_path(raw->branch.nodes.data[0], a, point);
-            
-            Symbol middle;
-            if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-                import_all_malformed(raw->branch.nodes.data[1], point, a);
-            }
-            if (!symbol_eq(middle, string_to_symbol(mv_string("all")))) {
-                import_all_malformed(raw->branch.nodes.data[1], point, a);
-            }
-
-            return (ImportClause) {
-                .type = ImportAll,
-                .path = path,
-            };
-        } else if (raw->branch.nodes.len == 3) {
-            // Check for '.'
-            if (eq_symbol(&raw->branch.nodes.data[0], string_to_symbol(mv_string(".")))) {
-                SymbolArray path = get_module_path(*raw, a, point);
-                return (ImportClause) {
-                    .type = Import,
-                    .path = path,
-                };
-            } else {
-                Symbol middle;
-                if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
-                    import_all_malformed(raw->branch.nodes.data[1], point, a);
-                }
-                if (symbol_eq(middle, string_to_symbol(mv_string("as")))) {
-                    if(!is_symbol(raw->branch.nodes.data[2])) {
-                        import_as_bad_symbol(raw->branch.nodes.data[2], point, a);
-                    }
-                    Symbol rename = raw->branch.nodes.data[2].atom.symbol;
-                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
-                    return (ImportClause) {
-                        .type = ImportAs,
-                        .path = path,
-                        .rename = rename,
-                    };
-                } else if (symbol_eq(middle, string_to_symbol(mv_string("only")))) {
-                    RawTree symlist = raw->branch.nodes.data[2]; 
-                    if (symlist.type != RawBranch) {
-                        err.range = raw->branch.nodes.data[2].range;
-                        err.message = mv_cstr_doc("When importing with ':only', exepect a symbol-list here.", a);
-                        throw_pi_error(point, err);
-                    }
-
-                    SymbolArray members = mk_symbol_array(symlist.branch.nodes.len, a);
-                    for (size_t i = 0; i < symlist.branch.nodes.len; i++) {
-                        RawTree rsymbol = symlist.branch.nodes.data[i];
-                        if (rsymbol.type == RawAtom && rsymbol.atom.type == ASymbol) {
-                          push_symbol(rsymbol.atom.symbol, &members);
-                        } else {
-                          err.range = rsymbol.range;
-                          err.message = mv_cstr_doc("Expecting a symbol here.", a);
-                          throw_pi_error(point, err);
-                        }
-                    }
-                    SymbolArray path = get_path(raw->branch.nodes.data[0], a, point);
-                    return (ImportClause) {
-                        .type = ImportMany,
-                        .path = path,
-                        .members = members,
-                    };
-                } else {
-                    err.range = raw->branch.nodes.data[1].range;
-                    err.message = mv_cstr_doc("Invalid import clause: expecting the keyword :as or :only", a);
-                    throw_pi_error(point, err);
-                }
-            }
-        } else {
-            err.range = raw->range;
-            err.message = mv_cstr_doc("Invalid import clause - incorrect number of items", a);
-            throw_pi_error(point, err);
-        }
-    } else {
-        err.range = raw->range;
-        err.message = mv_cstr_doc("Invalid import clause - is atom!", a);
-        throw_pi_error(point, err);
-    }
-}
 
 ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator* a) {
     PicoError err;
@@ -3478,5 +3550,27 @@ RawTreePiList next_node_arr(U64Array *index, U64Array dims, RawTree nodes, Abstr
             layer++;
         }
         return nodes.branch.nodes;
+    }
+}
+
+/**
+ * Return true if the provided rawtree matches the provided symbol, e.g.
+ * i.e. is_key_symbol(raw, symbol("all"));
+ */
+bool is_key_symbol(RawTree raw, Symbol symbol) {
+    if (raw.type == RawBranch && raw.branch.nodes.len == 2) {
+        RawTree head = raw.branch.nodes.data[0];
+        if (!is_symbol(head) || !symbol_eq(string_to_symbol(mv_string(":")), head.atom.symbol)) {
+            return false;
+        }
+
+        raw = raw.branch.nodes.data[1];
+        if (is_symbol(raw)) {
+            return symbol_eq(symbol, raw.atom.symbol);
+        } else {
+            return false;
+        }
+    } else {
+        return false;
     }
 }

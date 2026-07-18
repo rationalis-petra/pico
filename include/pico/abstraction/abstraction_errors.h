@@ -52,8 +52,14 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
 // ------------------------------------------------------------
 //   Import Clauses
 // ------------------------------------------------------------
-_Noreturn void import_all_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
-_Noreturn void import_middle_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
-_Noreturn void import_as_bad_symbol(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_key_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_missing_targets(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_missing_as(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_as_bad_symbol(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_as_bad_path(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+
+_Noreturn void import_bad_value_list(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_bad_target(RawTree raw, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_bad_path(RawTree raw, PiErrorPoint* point, Allocator* a);
 
 #endif

@@ -248,10 +248,26 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void import_all_malformed(RawTree raw, PiErrorPoint* point, Allocator* a) {
+_Noreturn void import_key_malformed(RawTree raw, PiErrorPoint* point, Allocator* a) {
     PicoError err = {
         .range = raw.range,
-        .message = mv_cstr_doc("Invalid import clause - expected :all", a),
+        .message = mv_cstr_doc("Invalid import clause - expected one of :all, :instances, :values or :types", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_missing_targets(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import clause - used import :values but no values list was provided", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_missing_as(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import clause - used import :as but no symbol to rename to", a),
     };
     throw_pi_error(point, err);
 }
@@ -264,10 +280,42 @@ _Noreturn void import_middle_malformed(RawTree raw, PiErrorPoint* point, Allocat
     throw_pi_error(point, err);
 }
 
-_Noreturn void import_as_bad_symbol(RawTree raw, PiErrorPoint* point, Allocator* a) {
+_Noreturn void import_as_bad_symbol(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a) {
     PicoError err = {
         .range = raw.range,
         .message = mv_cstr_doc("Invalid import-as new name, it should be a single symbol", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_bad_value_list(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import :values value list. Term immediadely after :values should be a list\n"
+                               "of imports e.g. (data.list :values (each mk-list (elt :as element)))", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_bad_target(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import :values value list. The value list should consist of symbols\n"
+                               "or nodes with the form (<symbol> :as <symbol>), e.g. (data.list :values (each mk-list (elt :as element)))", a),
+    };
+    throw_pi_error(point, err);
+}
+
+_Noreturn void import_bad_path(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PicoError err = {
+        .range = raw.range,
+        .message = mv_cstr_doc("Invalid import path. The path should consist of '.' separated terms, where the\n"
+                               "terms are either:\n"
+                               "• A symbol\n"
+                               "• A list of symbols\n"
+                               "• A list containing the wildcard :all\n"
+                               "\n"
+                               "For example: data.(list slice).(:all)", a),
     };
     throw_pi_error(point, err);
 }
