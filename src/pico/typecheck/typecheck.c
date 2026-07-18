@@ -74,7 +74,7 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     case TLImport: {
         for (size_t i = 0; i < top->import.clauses.len; i++) {
             ImportClause clause = top->import.clauses.data[i];
-            ImportClauseStatus status = import_clause_valid(env, clause);
+            ImportClauseStatus status = import_clause_valid(env, clause, ctx.a);
             if (status.type != ICValid) {
                 type_error_invalid_import(clause, status.bad_symbol, status.type != ICNotExists, top->import.range, ctx);
             }
