@@ -57,8 +57,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             Module* module = working_set.data[j];
             switch (segment.type) {
             case SegSymbol: {
-                // TODO: make sure is exported
-                ModuleEntry* entry = get_def(segment.symbol, module);
+                ModuleEntry* entry = get_def_external(segment.symbol, module);
                 check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
                 all_modules &= entry->is_module;
                 if (last_iteration && gather_names) {
@@ -71,8 +70,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             }
             case SegSymbols: {
                 for (size_t k = 0; k < segment.symbols.len; k++) {
-                    // TODO: make sure is exported
-                    ModuleEntry* entry = get_def(segment.symbols.data[k], module);
+                    ModuleEntry* entry = get_def_external(segment.symbols.data[k], module);
                     check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
                     if (last_iteration && gather_names) {
@@ -87,8 +85,7 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             case SegWildcard: {
                 SymbolArray symbols = get_exported_symbols(module, a);
                 for (size_t k = 0; k < symbols.len; k++) {
-                    // TODO: make sure is exported
-                    ModuleEntry* entry = get_def(symbols.data[k], module);
+                    ModuleEntry* entry = get_def_external(symbols.data[k], module);
                     check_entry(entry, !last_iteration, symbols.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
                     if (last_iteration && gather_names) {
@@ -260,7 +257,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
                     // TODO: lookup here is probably n^2. Can we just...
                     // generate a list of exports instead?
                     for (size_t j = 0; j < syms.len; j++) {
-                        ModuleEntry* entry = get_def(syms.data[j], target);
+                        ModuleEntry* entry = get_def_external(syms.data[j], target);
                         if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
                             name_ptr_insert(syms.data[j].name, target, &env->symbol_origins);
                         }
@@ -277,7 +274,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
                     for (size_t j = 0; j < clause.values.len; j++) {
                         // TODO: make sure is exported
                         Symbol sym = clause.values.data[j].from;
-                        ModuleEntry* entry = get_def(sym, target);
+                        ModuleEntry* entry = get_def_external(sym, target);
                         check_entry(entry, false, sym, module, point, a);
                         if (clause.values.data[j].should_rename) {
                             u64_name_insert(env->symbol_origins.len, sym.name, &env->symbol_renames);
@@ -362,7 +359,7 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             switch (segment.type) {
             case SegSymbol: {
                 // TODO: make sure is exported
-                ModuleEntry* entry = get_def(segment.symbol, module);
+                ModuleEntry* entry = get_def_external(segment.symbol, module);
                 if (entry == NULL) {
                     return (ImportClauseStatus) {
                         .type = ICNotExists,
@@ -381,7 +378,7 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             case SegSymbols: {
                 for (size_t k = 0; k < segment.symbols.len; k++) {
                     // TODO: make sure is exported
-                    ModuleEntry* entry = get_def(segment.symbols.data[k], module);
+                    ModuleEntry* entry = get_def_external(segment.symbols.data[k], module);
                     if (entry == NULL) {
                         return (ImportClauseStatus) {
                             .type = ICNotExists,
@@ -402,7 +399,7 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
                 SymbolArray symbols = get_exported_symbols(module, a);
                 for (size_t k = 0; k < symbols.len; k++) {
                     // TODO: make sure is exported
-                    ModuleEntry* entry = get_def(symbols.data[k], module);
+                    ModuleEntry* entry = get_def_external(symbols.data[k], module);
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
                         return (ImportClauseStatus) {
                             .type = ICNotModule,
@@ -425,7 +422,7 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             Module* target = working_set.data[i];
             for (size_t j = 0; j < clause.values.len; j++) {
                 ImportValue value = clause.values.data[j];
-                ModuleEntry* entry = get_def(value.from, target);
+                ModuleEntry* entry = get_def_external(value.from, target);
                 if (!entry) {
                     return (ImportClauseStatus) {
                         .type = ICNotExists,
@@ -466,7 +463,9 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
         if (rename) {
             sym.name = *rename;
         };
-        ModuleEntry* mentry = get_def(sym, module); 
+        ModuleEntry *mentry = module == env->base
+            ? get_def_internal(sym, module)
+            : get_def_external(sym, module); 
         if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
@@ -487,7 +486,7 @@ PiType* env_lookup_tydecl(Symbol sym, Environment* env) {
 
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
-        ModuleEntry* mentry = get_def(sym, *module); 
+        ModuleEntry* mentry = get_def_internal(sym, *module); 
         if (mentry != NULL) {
             if (mentry->declarations) {
                 PtrArray decls = *mentry->declarations;

@@ -1839,7 +1839,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def(untyped.to_describe.data[i], entry.module);
+                ModuleEntry* mentry = get_def_external(untyped.to_describe.data[i], entry.module);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.module = mentry->value;

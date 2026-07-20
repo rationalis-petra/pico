@@ -1,4 +1,5 @@
 #include <math.h>
+#include "platform/signals.h"
 #include "pico/parse/parse.h"
 
 #include "components/pretty/standard_types.h"
@@ -395,6 +396,8 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 };
                 caret_next = false;
                 push_rawtree(val, &terms);
+            } else {
+                panic(mv_string("TODO: implement foo.(bar baz)"));
             }
             // TODO: panic/report debug error if we get to an 'else' clause
 

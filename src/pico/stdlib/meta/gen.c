@@ -213,7 +213,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         add_def(module, sym, type, &typep, null_segments, NULL);
         delete_pi_type_p(typep, &pia);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         symbol_type = e->value;
 
         PiType* atom_type = mk_enum_type(&pia, 6,
@@ -237,7 +237,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Range"));
         add_def(module, sym, type, &typep, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(&pia, "Syntax");
@@ -251,7 +251,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
 
         sym = string_to_symbol(mv_string("Syntax"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         syntax_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -259,7 +259,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         typep = mk_struct_type(&pia, 2, "message", mk_string_type(&pia), "range", copy_pi_type_p(range_type, &pia));
         sym = string_to_symbol(mv_string("MacroError"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         macro_error_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -267,7 +267,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         typep = mk_app_type(&pia, get_either_type(), copy_pi_type_p(macro_error_type, &pia), copy_pi_type_p(syntax_type, &pia));
         sym = string_to_symbol(mv_string("MacroResult"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         macro_result_type = e->value;
 
         delete_pi_type_p(typep, &pia);

@@ -216,7 +216,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        ModuleEntry* e = get_def(sym, module);
+        ModuleEntry* e = get_def_internal(sym, module);
         exported_c_type = e->value;
     }
 

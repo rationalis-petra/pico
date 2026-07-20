@@ -139,7 +139,7 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
     sym = string_to_symbol(mv_string("Arena"));
     add_def(module, sym, type, &typep, null_segments, NULL);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     arena_ty = e->value;
 
     typep = mk_proc_type(pia, 2, get_allocator_type(), mk_prim_type(pia, UInt_64), arena_ty);

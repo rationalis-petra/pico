@@ -9,8 +9,6 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
-#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
-#define TEST_TYPE_FAIL(str) test_typecheck_fail(str, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup

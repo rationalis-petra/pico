@@ -172,7 +172,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     sym = string_to_symbol(mv_string("File"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     file_ty = e->value;
 
     typep =
@@ -184,7 +184,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     sym = string_to_symbol(mv_string("FileError"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     file_err_ty = e->value;
 
     typep = mk_named_type(pia, "Mode", mk_enum_type(pia, 3, "read", 0, "write", 0, "read-write", 0, "append", 0, "read-append", 0));
@@ -192,7 +192,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     sym = string_to_symbol(mv_string("Mode"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     file_mode_ty = e->value;
 
     typep = mk_proc_type(pia, 0, mk_string_type(pia));

@@ -72,7 +72,7 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
     sym = string_to_symbol(mv_string("Timer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     PiType* timer_ty = e->value;
 
     typep = mk_distinct_type(pia, "Seconds", mk_prim_type(pia, Float_64));
@@ -80,7 +80,7 @@ void add_time_module(Assembler *ass, Module *platform, RegionAllocator* region) 
     sym = string_to_symbol(mv_string("Seconds"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     PiType* seconds_ty = e->value;
 
     typep = mk_proc_type(pia, 0, copy_pi_type_p(timer_ty, pia));

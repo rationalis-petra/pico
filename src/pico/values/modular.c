@@ -4,6 +4,7 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
+#include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 
 #include "data/num.h"
@@ -101,15 +102,19 @@ struct Module {
 };
 
 // -----------------------------------------------------------------------------
-// Package Implementation
+//   Package Implementation
 // -----------------------------------------------------------------------------
 Package* mk_package(Name name, PiAllocator pico_allocator) {
     Package* package = call_alloc(sizeof(Package), &pico_allocator);
     Allocator a = convert_to_callocator(&pico_allocator);
 
+    String root_name = string_cat(mv_string("root-for-"), view_name_string(name), &a);
+    Symbol root_sym = string_to_symbol(root_name);
+    mem_free(root_name.bytes, &a);
+
     // Setup for root module;
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("root-for-?")),
+        .name = root_sym,
         .imports = (Imports) {.clauses = mk_import_clause_array(8, &a),},
         .exports = (Exports) {
             .export_all = true,
@@ -157,8 +162,9 @@ void add_import_clause(ImportClause clause, Module *module) {
     push_import_clause(clause, &module->header.imports.clauses);
 }
 
+/** TODO: Update with internal/external variants */
 Module* get_module(Symbol symbol, Package* package) {
-    ModuleEntry* entry = get_def(symbol, package->root_module);
+    ModuleEntry* entry = get_def_internal(symbol, package->root_module);
     if (entry && entry->is_module) {
         return entry->value;
     } else {
@@ -577,10 +583,43 @@ void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U
     return instance;
 }
 
-ModuleEntry* get_def(Symbol symbol, Module* module) {
+ModuleEntry* get_def_internal(Symbol symbol, Module* module) {
     Module* root = module->lexical_parent_package->root_module;
     if (module != root) {
         return (ModuleEntry*)entry_lookup(symbol, module->entries);
+    } else {
+        ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        if (e) return e;
+
+        // Root module should also return definitions available in 
+        //   imported packages...
+        Package* package = module->lexical_parent_package;
+        for (size_t i = 0; i < package->dependencies.len; i++) {
+            Package* dep = package->dependencies.data[i];
+            ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, dep->root_module->entries);
+            if (e) return e;
+        }
+        return NULL;
+    }
+}
+
+ModuleEntry* get_def_external(Symbol symbol, Module* module) {
+    if (module->header.exports.export_all) {
+        return get_def_internal(symbol, module);
+    }
+    Module* root = module->lexical_parent_package->root_module;
+    if (module != root) {
+        ModuleEntry* entry = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        if (entry == NULL) return NULL;
+        /** TODO (performance): should cache if definition is exported in the module def? */
+        ExportClauseArray clauses = module->header.exports.clauses;
+        for (size_t i = 0; i < clauses.len; i++) {
+            ExportClause clause = clauses.data[i]; 
+            if (clause.type == ExportName && symbol_eq(symbol, clause.name)) {
+                return entry;
+            }
+        }
+        return NULL;
     } else {
         ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
         if (e) return e;
@@ -621,7 +660,7 @@ SymbolArray get_exported_symbols(Module* module, Allocator* a) {
         symbols = mk_symbol_array(clauses.len, a);
         for (size_t i = 0; i < clauses.len; i++) {
             ExportClause clause = clauses.data[i]; 
-            if (clause.type == ExportName && get_def(clause.name, module)) {
+            if (clause.type == ExportName && get_def_internal(clause.name, module)) {
                 push_symbol(clause.name, &symbols);
             }
         }

@@ -58,7 +58,7 @@ void add_thread_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Seconds"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     PiType* seconds_ty = e->value;
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(seconds_ty, pia), mk_prim_type(pia, Unit));

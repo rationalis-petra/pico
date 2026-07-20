@@ -65,11 +65,14 @@ SynRef abstract_expr(RawTree raw, AbstractionCtx ctx) {
     PiAllocator pi_alloc = convert_to_pallocator(ctx.a);
 
     PiAllocator tmp_alloc = convert_to_pallocator(ctx.a);
-    PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
-    PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
+    volatile PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
+    volatile PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
 
-    void* vstack_memory_space = mem_alloc(4096, ctx.a);
-    void* dynamic_memory_space = mem_alloc(4096, ctx.a);
+    void* volatile vstack_memory_space = mem_alloc(4096, ctx.a);
+    void* volatile dynamic_memory_space = mem_alloc(4096, ctx.a);
+
+    PiErrorPoint point;
+    if (catch_error(point)) goto on_error;
 
     AbstractionICtx ictx = {
         .gpa = ctx.a,
@@ -88,23 +91,37 @@ SynRef abstract_expr(RawTree raw, AbstractionCtx ctx) {
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
     return out;
+
+ on_error:
+    mem_free(dynamic_memory_space, ctx.a);
+    mem_free(vstack_memory_space, ctx.a);
+    set_std_temp_allocator(old_temp_alloc);
+    set_std_current_allocator(old_current_alloc);
+    if (point.multi.has_many) {
+        throw_pi_errors(ctx.point, point.multi.errors);
+    } else {
+        throw_pi_errors(ctx.point, point.multi.errors);
+    }
 }
 
 TopLevel abstract(RawTree raw, AbstractionCtx ctx) {
     ShadowEnv* s_env = mk_shadow_env(ctx.a, ctx.env);
-    void* vstack_memory_space = mem_alloc(4096, ctx.a);
-    void* dynamic_memory_space = mem_alloc(4096, ctx.a);
+    void* volatile vstack_memory_space = mem_alloc(4096, ctx.a);
+    void* volatile dynamic_memory_space = mem_alloc(4096, ctx.a);
     PiAllocator pi_alloc = convert_to_pallocator(ctx.a);
     PiAllocator tmp_alloc = convert_to_pallocator(ctx.a);
-    PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
-    PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
+    volatile PiAllocator old_temp_alloc = set_std_temp_allocator(tmp_alloc);
+    volatile PiAllocator old_current_alloc = set_std_current_allocator(tmp_alloc);
+
+    PiErrorPoint point;
+    if (catch_error(point)) goto on_error;
 
     AbstractionICtx ictx = {
         .gpa = ctx.a,
         .tape = ctx.tape,
         .pia = &pi_alloc,
         .env = s_env,
-        .point = ctx.point,
+        .point = &point,
         .vstack_memory_ptr = vstack_memory_space + 4095,
         .dynamic_memory_ptr = dynamic_memory_space,
     };
@@ -116,6 +133,17 @@ TopLevel abstract(RawTree raw, AbstractionCtx ctx) {
     set_std_temp_allocator(old_temp_alloc);
     set_std_current_allocator(old_current_alloc);
     return out;
+
+ on_error:
+    mem_free(dynamic_memory_space, ctx.a);
+    mem_free(vstack_memory_space, ctx.a);
+    set_std_temp_allocator(old_temp_alloc);
+    set_std_current_allocator(old_current_alloc);
+    if (point.multi.has_many) {
+        throw_pi_errors(ctx.point, point.multi.errors);
+    } else {
+        throw_pi_errors(ctx.point, point.multi.errors);
+    }
 }
 
 ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
@@ -3237,7 +3265,7 @@ PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
                 import_bad_path(raw, point, a);
             }
         } else if (cont.type == RawAtom && cont.atom.type == ASymbol) {
-            PathSegment segment = {.type = SegSymbol, .symbol = raw.atom.symbol};
+            PathSegment segment = {.type = SegSymbol, .symbol = cont.atom.symbol};
             push_path_segment(segment, &path);
             running = false;
         } else {
@@ -3375,7 +3403,7 @@ Module* try_get_module(SynRef ref, AbstractionICtx ctx) {
         Syntax syn = get_syntax(ref, ctx.tape);
         Module *module = try_get_module(syn.projector.val, ctx);
         if (module) {
-            ModuleEntry* entry = get_def(syn.projector.field, module);
+            ModuleEntry* entry = get_def_external(syn.projector.field, module);
             if (entry->is_module) { return entry->value; }
             else { return NULL; }
         } else {
@@ -3450,10 +3478,12 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
     Allocator *a = ctx.gpa;
     Module* m = try_get_module(source, ctx);
     if (m) {
-        // TODO (INVESTIGATION): do we have a better way to manage lookup
-        // Note: seems like having to check for the special case of
-        // Kind/Constraint is causing issues. 
-        ModuleEntry* e = get_def(msym->atom.symbol, m);
+        /**
+         * TODO (INVESTIGATION): do we have a better way to manage lookup
+         * Note: seems like having to check for the special case of
+         * Kind/Constraint is causing issues. 
+         */
+        ModuleEntry* e = get_def_external(msym->atom.symbol, m);
         if (e) {
             if (e->is_module) {
                 Syntax syn = {

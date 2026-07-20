@@ -40,4 +40,37 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
             "  (if (i64.< n 1) n (i64.+ n (recur (i64.- n 1)))))");
         TEST_EQ("(recur 10)");
     }
+
+    if (test_start(log, mv_string("module-header"))) {
+        int64_t expected = 1;
+        MODULE("(module test-module (import (core :all)) (export :all)) \n"
+            "  (def val1 1) (def val2 2) (def val3 3)");
+        TEST_EQ("test-module.val1");
+    }
+
+    if (test_start(log, mv_string("modlue-non-export"))) {
+        MODULE("(module test-module (import (core :all)) (export val1 val2)) \n"
+            "  (def val1 1) (def val2 2) (def val3 3)");
+        TEST_ABSTRACT_FAIL("test-module.val3");
+    }
+    
+    if (test_start(log, mv_string("modlue-import-path-all"))) {
+        MODULE("(module test-module (import (core :all) (num.i64 :all)) (export val)) \n"
+            "  (def val (+ 1 3))");
+        int64_t expected = 4;
+        TEST_EQ("test-module.val");
+    }
+
+    /*
+    if (test_start(log, mv_string("modlue-import-path-split"))) {
+        MODULE("(module sub1 (import (core :all) (num.i64 :all)) (export val1)) \n"
+               "(def val1 1)");
+        MODULE("(module sub2 (import (core :all) (num.i64 :all)) (export val2)) \n"
+               "(def val2 2)");
+        MODULE("(module test-module (import (user.(sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+            "  (def val (+ val1 val2))");
+        int64_t expected = 3;
+        TEST_EQ("test-module.val");
+    }
+    */
 }

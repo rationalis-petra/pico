@@ -3259,7 +3259,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         EnvEntry entry = env_lookup(syn.to_describe.data[0], base);
         for (size_t i = 1; i < syn.to_describe.len; i++) {
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def(syn.to_describe.data[i], entry.value);
+                ModuleEntry* mentry = get_def_external(syn.to_describe.data[i], entry.value);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.value = mentry->value;
@@ -3288,7 +3288,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
               for (size_t i = 0; i < syms.len; i++) {
                   Symbol symbol = syms.data[i];
-                  ModuleEntry* mentry = get_def(symbol, entry.value);
+                  ModuleEntry* mentry = get_def_external(symbol, entry.value);
                   if (mentry) {
                       PtrArray desc = mk_ptr_array(3, a);
                       if (mentry->is_module) {

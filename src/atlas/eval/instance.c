@@ -148,7 +148,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
@@ -263,7 +263,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
