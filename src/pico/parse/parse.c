@@ -339,43 +339,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
             caret_next = true;
             next(is, &codepoint);
             caret_range = (Range) { start, bytecount(is) };
-        } else if (codepoint == '.' || codepoint == ':') {
-            size_t op_start = bytecount(is);
-            next(is, &codepoint);
-            size_t op_end = bytecount(is);
-
-            RawTree op = (RawTree) {
-                .type = RawAtom,
-                .range.start = op_start,
-                .range.end = op_end,
-                .atom.type = ASymbol,
-                .atom.symbol = codepoint == '.'
-                  ? string_to_symbol(mv_string("."))
-                  : string_to_symbol(mv_string(":")),
-            };
-
-            // Store symbol
-            String str = string_from_UTF_32(symchars, a);
-            RawTree val = (RawTree) {
-                .type = RawAtom,
-                .range.start = start,
-                .range.end = op_start,
-                .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(str),
-            };
-            if (caret_next) {
-                val = wrap_caret(val, caret_range, pia);
-                caret_next = false;
-            }
-
-            // new start bytecount(is)
-            start = op_end;
-
-            push_rawtree(val, &terms);
-            symchars.len = 0; // reset array
-
-            push_rawtree(op, &terms);
-        } else {
+        } else { 
             // Empty symchars *should* only occur when parsing the '^' symbol
             if (symchars.len != 0) {
                 String str = string_from_UTF_32(symchars, a);
@@ -397,9 +361,8 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 caret_next = false;
                 push_rawtree(val, &terms);
             } else {
-                panic(mv_string("TODO: implement foo.(bar baz)"));
+                panic(mv_string("Unexpected Case encountered while parsing"));
             }
-            // TODO: panic/report debug error if we get to an 'else' clause
 
             // We are done; break out of loop
             break;
