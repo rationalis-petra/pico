@@ -76,8 +76,5 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, target.target, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(target.target);
-
-    Result r = add_module(string_to_symbol(mv_string("debug")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }
 

@@ -24,8 +24,5 @@ void add_meta_module(Assembler* ass, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_refl_module(ass, module, subregion);
     release_subregion(subregion);
-
-    add_module(string_to_symbol(mv_string("meta")), module, base);
-
 }
 

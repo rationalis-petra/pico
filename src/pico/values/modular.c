@@ -4,7 +4,6 @@
 
 #include "platform/machine_info.h"
 #include "platform/signals.h"
-#include "platform/memory/std_allocator.h"
 #include "platform/memory/executable.h"
 
 #include "data/num.h"
@@ -101,6 +100,10 @@ struct Module {
     Allocator executable_allocator; 
 };
 
+// Helper forward declarations
+void delete_module_entry(ModuleEntryInternal entry, Module* module);
+
+
 // -----------------------------------------------------------------------------
 //   Package Implementation
 // -----------------------------------------------------------------------------
@@ -126,9 +129,17 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
         .name = name,
         .gpa = pico_allocator,
     };
-    package->root_module = mk_module(header, package, NULL),
+
+    Module* root = call_alloc(sizeof(Module), &pico_allocator);
+    *root = (Module) {.pico_allocator = pico_allocator};
+    root->allocator = convert_to_callocator(&root->pico_allocator);
+    root->entries = mk_entry_amap(32, &root->allocator);
+    root->header = header,
+    root->lexical_parent_package = package;
+    root->executable_allocator = mk_executable_allocator(&root->allocator);
+
+    package->root_module = root;
     package->dependencies = mk_addr_list(4, &package->gpa);
-    delete_module_header(header);
     return package;
 }
 
@@ -145,6 +156,13 @@ void add_dependency(Package *package, Package *dep) {
 
 Result add_module(Symbol symbol, Module* module, Package* package) {
     return add_module_def(package->root_module, symbol, module); 
+}
+
+Result remove_module(Package* package, Symbol symbol) {
+    Module* root = package->root_module;
+    typedef void(*Deleter)(ModuleEntryInternal, void*);
+    entry_remove(symbol, (Deleter)delete_module_entry, root, &root->entries);
+    return (Result) {.type = Ok};
 }
 
 Name package_name(Package *package) {
@@ -192,8 +210,14 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent) {
     module->entries = mk_entry_amap(32, &module->allocator);
     module->header = copy_module_header(header, &module->allocator);
     module->lexical_parent_package = pkg_parent;
-    module->lexical_parent_module = parent;
+    module->lexical_parent_module = parent ? parent : package_root_module(pkg_parent);
     module->executable_allocator = mk_executable_allocator(&module->allocator);
+
+    if (parent) {
+        add_module_def(parent, header.name, module);
+    } else {
+        add_module(header.name, module, pkg_parent);
+    }
     return module;
 }
 

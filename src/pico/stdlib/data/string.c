@@ -28,7 +28,7 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -143,7 +143,4 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "(def != proc [(lhs String) (rhs String)] \n"
         "  bool.not (= lhs rhs))";
     compile_toplevel(str_not_eql, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("string")), module);
-    if (r.type == Err) panic(r.error_message);
 }

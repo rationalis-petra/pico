@@ -40,6 +40,4 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
     add_hedron_module(ass, module, subregion); // Dependencies: window
     release_subregion(subregion);
 #endif
-
-    add_module(string_to_symbol(mv_string("platform")), module, base);
 }

@@ -61,16 +61,21 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
-    /*
-    if (test_start(log, mv_string("modlue-import-path-split"))) {
+    if (test_start(log, mv_string("modlue-import-path-visible-private-siblings"))) {
+        MODULE("(module test-module (import (core :all) (num.i64 :all)) (export val)) \n"
+            "  (def val (+ 1 3))");
+        int64_t expected = 4;
+        TEST_EQ("test-module.val");
+    }
+
+    if (test_start(log, mv_string("module-import-path-split"))) {
         MODULE("(module sub1 (import (core :all) (num.i64 :all)) (export val1)) \n"
                "(def val1 1)");
         MODULE("(module sub2 (import (core :all) (num.i64 :all)) (export val2)) \n"
                "(def val2 2)");
-        MODULE("(module test-module (import (user.(sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core :all) (eval-test-module.(sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
             "  (def val (+ val1 val2))");
         int64_t expected = 3;
         TEST_EQ("test-module.val");
     }
-    */
 }

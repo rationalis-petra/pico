@@ -26,7 +26,7 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -55,7 +55,4 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
     type.kind.nargs = 0;
     sym = string_to_symbol(mv_string("Allocator"));
     add_def(module, sym, type, get_allocator_type(), null_segments, NULL);
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("memory")), module);
-    if (r.type == Err) panic(r.error_message);
 }

@@ -19,14 +19,11 @@ void add_maybe_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     ErrorPoint point;
     if (catch_error(point)) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("maybe")), module);
-    if (r.type == Err) panic(r.error_message);
 }

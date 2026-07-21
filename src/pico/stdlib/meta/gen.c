@@ -141,7 +141,7 @@ void build_get_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocato
     convert_c_fn(get_raw_range, &fn_ctype, type, ass, a, point); 
 }
 
-void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
+void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -155,7 +155,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL);
+    Module* module = mk_module(header, get_package(meta), meta);
     delete_module_header(header);
     Symbol sym;
 
@@ -332,8 +332,6 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    add_module_def(base, string_to_symbol(mv_string("gen")), module);
 
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);

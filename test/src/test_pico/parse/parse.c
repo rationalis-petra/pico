@@ -157,5 +157,5 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(foo #,)");
   }
 
-  delete_module(module);
+  remove_module(base, string_to_symbol(mv_string("pipeline-test-module")));
 }

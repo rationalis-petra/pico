@@ -77,11 +77,11 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_symbol(name),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL);
+    Module* module = mk_module(header, get_package(num), num);
     Symbol sym;
 
     PiType* typep;
@@ -151,7 +151,4 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(num, string_to_symbol(name), module);
-    if (r.type == Err) panic(r.error_message);
 }

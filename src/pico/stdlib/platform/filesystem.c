@@ -149,7 +149,7 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     Symbol sym;
 
     ModuleEntry* e;
@@ -275,7 +275,4 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("filesystem")), module);
-    if (r.type == Err) panic(r.error_message);
 }

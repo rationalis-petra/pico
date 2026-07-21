@@ -122,7 +122,6 @@ bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
 }
 
 RawTree mk_loop_jump(RawTree loop_condition, RawTree unit_term, RawTree goto_exit, PiAllocator* pia) {
-    // TODO: Add if (condition) (go-to continue ...) (go-to exit ...) 
     RawTreePiList if_nodes = mk_rawtree_list(4, pia);
     push_rawtree(atom_symbol("if"), &if_nodes);
     push_rawtree(loop_condition, &if_nodes);
@@ -137,7 +136,8 @@ RawTree mk_loop_jump(RawTree loop_condition, RawTree unit_term, RawTree goto_exi
 }
 
 bool build_loop_start_conditions(RawTree* out, AddrPiList loop_fors, AddrPiList loop_whiles, PiAllocator* pia) {
-    /* Constants used during generation
+    /**
+     * Constants used during generation
      */
     RawTreePiList unit_nodes = mk_rawtree_list(2, pia);
     push_rawtree(atom_symbol(":"), &unit_nodes);
@@ -917,7 +917,4 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r =add_module(string_to_symbol(mv_string("extra")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }

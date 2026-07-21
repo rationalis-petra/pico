@@ -35,7 +35,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_symbol(mv_string("typecheck-test-module")),
         .imports = imports,
         .exports = exports,
     };
@@ -176,7 +176,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     delete_env(env, a);
-    delete_module(module);
+    remove_module(base, string_to_symbol(mv_string("typecheck-test-module")));
     delete_assembler(ass);
     release_executable_allocator(exalloc);
 }

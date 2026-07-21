@@ -22,7 +22,7 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -160,7 +160,4 @@ void add_numeric_module(Target target, Module *abs, RegionAllocator* region) {
         "  [.zero 0.0]"
         "  [.one 1.0])\n";
     compile_toplevel(num_f32_trait, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(abs, string_to_symbol(mv_string("numeric")), module);
-    if (r.type == Err) panic(r.error_message);
 }

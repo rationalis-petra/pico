@@ -178,6 +178,4 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
     /* add_region_allocator_module(target, module, subregion); */
     /* reset_subregion(subregion); */
     /* add_perm_allocator_module(target, module, subregion); */
-
-    add_module_def(data, string_to_symbol(mv_string("allocators")), module);
 }

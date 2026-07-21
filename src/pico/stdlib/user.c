@@ -34,7 +34,4 @@ void add_user_module(Package* base, RegionAllocator* region) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
-
-    Result r = add_module(string_to_symbol(mv_string("user")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }

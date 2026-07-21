@@ -16,7 +16,6 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
-    add_module(string_to_symbol(mv_string("data")), module, base);
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);

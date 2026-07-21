@@ -23,7 +23,7 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -62,7 +62,4 @@ void add_order_module(Target target, Module *abs, RegionAllocator* region) {
     const char* geq_fn =
         "(def >= all [A] proc {(ord (Ord A))} [(x A) (y A)] ord.>= x y)";
     compile_toplevel(geq_fn, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(abs, string_to_symbol(mv_string("order")), module);
-    if (r.type == Err) panic(r.error_message);
 }

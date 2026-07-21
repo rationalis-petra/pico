@@ -149,7 +149,7 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     delete_module_header(header);
     Symbol sym;
 
@@ -223,7 +223,4 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("terminal")), module);
-    if (r.type == Err) panic(r.error_message);
 }

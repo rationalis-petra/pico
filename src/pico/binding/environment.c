@@ -42,14 +42,109 @@ typedef struct {
     U64Array names;
 } Origins; 
 
-Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
-    PtrArray working_set = mk_ptr_array(1, a);
-    PtrArray next_set = mk_ptr_array(1, a);
+Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    PtrArray values = mk_ptr_array(1, a);
     U64Array out_names = mk_u64_array(1, a);
-    push_ptr(root, &working_set);
-
+    Module* parent = get_parent(mfor);
     bool all_modules = true;
-    for (size_t i = 0; i < path.len; i++) {
+    /**
+     * The very first section of an import is important for two reasons:
+     * 1. The head cannot be a wildcard, e.g. (:all).foo is invalid, but
+     *    foo.(:all) is valid.
+     * 2. The head symbol may refer to a value either in the parent module
+     *    (preferred) or the root module, rather than just the prior value(s) in
+     *    the path.
+     * 3. The module importer can access non-exported definitions at ONLY this
+     *    (the top) level, i.e. all modlues in the root (package) and all
+     *    modules in the parent.
+     */
+
+#ifdef DEBUG_ASSERT
+    if (path.len < 1)
+        panic(mv_string("Expected import path to have len > 1. The abstract phase should prevent any import from reaching this point."));
+#endif
+    PathSegment segment = path.data[0];
+    if (segment.type == SegWildcard) {
+        PtrArray nodes = mk_ptr_array(4, a);
+        push_ptr(mk_str_doc(mv_string("Import path cannot start with a wildcart (:all) path segment."), a), &nodes);
+        push_ptr(mk_str_doc(mv_string("Error encountered while constructing environment for module"), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_symbol_string(module_name(mfor)), a), a), &nodes);
+        throw_error(point, mv_sep_doc(nodes, a));
+    }
+
+    bool last_iteration = path.len == 1;
+    switch (segment.type) {
+    case SegSymbol: {
+        ModuleEntry* entry = get_def_internal(segment.symbol, mfor);
+        if (!entry) goto symbol_root_check;
+        check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
+        all_modules &= entry->is_module;
+        if (last_iteration && gather_names) {
+            push_ptr(parent, &values);
+            push_u64(segment.symbol.name, &out_names);
+        } else {
+            push_ptr(entry->value, &values);
+        }
+        break;
+
+        symbol_root_check:
+        entry = get_def_internal(segment.symbol, root);
+        check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
+        all_modules &= entry->is_module;
+        if (last_iteration && gather_names) {
+            push_ptr(root, &values);
+            push_u64(segment.symbol.name, &out_names);
+        } else {
+            push_ptr(entry->value, &values);
+        }
+        break;
+    }
+    case SegSymbols: {
+        for (size_t k = 0; k < segment.symbols.len; k++) {
+            ModuleEntry* entry = get_def_internal(segment.symbols.data[k], parent);
+            if (!entry) goto symbols_root_check;
+            check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
+            all_modules &= entry->is_module;
+            if (last_iteration && gather_names) {
+                push_ptr(parent, &values);
+                push_u64(segment.symbols.data[k].name, &out_names);
+            } else {
+                push_ptr(entry->value, &values);
+            }
+            break;
+
+        symbols_root_check:
+            entry = get_def_internal(segment.symbols.data[k], root);
+            check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
+            all_modules &= entry->is_module;
+            if (last_iteration && gather_names) {
+                push_ptr(root, &values);
+                push_u64(segment.symbols.data[k].name, &out_names);
+            } else {
+                push_ptr(entry->value, &values);
+            }
+        }
+        break;
+    }
+    default:
+        panic(mv_string("Should not "));
+    }
+
+    return (Origins) {
+        .all_modules = all_modules,
+        .values = values,
+        .names = out_names,
+    };
+}
+
+Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* root, Module* mfor, ErrorPoint* point, Allocator* a) {
+    Origins initial = initialise_path_trace(path, gather_names, root, mfor, point, a);
+    PtrArray working_set = initial.values;
+    PtrArray next_set = mk_ptr_array(1, a);
+    U64Array out_names = initial.names;
+
+    bool all_modules = initial.all_modules;
+    for (size_t i = 1; i < path.len; i++) {
         next_set.len = 0;
         PathSegment segment = path.data[i];
         bool last_iteration = i + 1 == path.len;
@@ -231,8 +326,6 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Package* package = get_package(module);
     Module* root_module = package_root_module(package);
 
-    // TODO: importing a specific sympol allows you to bypass which symbols
-    // are/aren't exported.
     for (size_t i = 0; i < imports.clauses.len; i++) {
         // TODO (BUG): currently, we only search in the package, not the parent
         // module's submodules!
@@ -358,7 +451,6 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             Module* module = working_set.data[j];
             switch (segment.type) {
             case SegSymbol: {
-                // TODO: make sure is exported
                 ModuleEntry* entry = get_def_external(segment.symbol, module);
                 if (entry == NULL) {
                     return (ImportClauseStatus) {
@@ -377,7 +469,6 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             }
             case SegSymbols: {
                 for (size_t k = 0; k < segment.symbols.len; k++) {
-                    // TODO: make sure is exported
                     ModuleEntry* entry = get_def_external(segment.symbols.data[k], module);
                     if (entry == NULL) {
                         return (ImportClauseStatus) {
@@ -398,7 +489,6 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             case SegWildcard: {
                 SymbolArray symbols = get_exported_symbols(module, a);
                 for (size_t k = 0; k < symbols.len; k++) {
-                    // TODO: make sure is exported
                     ModuleEntry* entry = get_def_external(symbols.data[k], module);
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
                         return (ImportClauseStatus) {

@@ -78,6 +78,7 @@ void delete_package(Package* package);
 
 void add_dependency(Package* package, Package* dep);
 Result add_module(Symbol symbol, Module* module, Package* package);
+Result remove_module(Package* package, Symbol symbol); 
 
 Name package_name(Package* package);
 Module* package_root_module(Package* package);
@@ -97,6 +98,11 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
  * Add a module definition in to the module's namespace. 
  */
 Result add_module_def(Module* module, Symbol symbol, Module* child);
+
+/**
+ * Remove a (module or value) definition from the module's namespace. 
+ */
+Result remove_def(Module* module, Symbol symbol); 
 
 /**
  *  Get the instantiation of an instance, given a set of types, and a set of

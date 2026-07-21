@@ -699,8 +699,5 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module(string_to_symbol(mv_string("core")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }
 

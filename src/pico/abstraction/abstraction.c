@@ -142,7 +142,7 @@ TopLevel abstract(RawTree raw, AbstractionCtx ctx) {
     if (point.multi.has_many) {
         throw_pi_errors(ctx.point, point.multi.errors);
     } else {
-        throw_pi_errors(ctx.point, point.multi.errors);
+        throw_pi_error(ctx.point, point.multi.error);
     }
 }
 
@@ -326,8 +326,9 @@ bool get_label(RawTree* raw, Symbol* fieldname) {
  * Helper function for retrieving a symbol list
  * returns true on success, false on failure
  */
-bool get_symbol_list(SymbolArray* arr, RawTree nodes) {
+bool get_symbol_list(SymbolArray* arr, RawTree nodes, Allocator* a) {
     if (nodes.type != RawBranch) { return false; }
+    *arr = mk_symbol_array(nodes.branch.nodes.len, a);
 
     for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
         RawTree node = nodes.branch.nodes.data[i];
@@ -531,8 +532,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray arguments = mk_symbol_array(2, a);
-        if (!get_symbol_list(&arguments, raw.branch.nodes.data[1])) {
+        SymbolArray arguments;
+        if (!get_symbol_list(&arguments, raw.branch.nodes.data[1], a)) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mv_cstr_doc("all term former requires first arguments to be a symbol-list!", a);
             throw_pi_error(ctx.point, err);
@@ -659,10 +660,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             sealed = abstract_expr_i(raw_binder.branch.nodes.data[1], ctx);
         }
 
-        SymbolArray types = mk_symbol_array(8, a);
+        SymbolArray types;
         {
             RawTree raw_types = raw.branch.nodes.data[2];
-            if (!is_special(raw_types) || !get_symbol_list(&types, raw_types)) {
+            if (!is_special(raw_types) || !get_symbol_list(&types, raw_types, a)) {
                 err.range = raw_types.range;
                 err.message = mv_cstr_doc("Invalid type binding provided to unseal", a);
                 throw_pi_error(ctx.point, err);
@@ -670,12 +671,12 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         }
 
         size_t body_idx = 3;
-        SymbolArray implicits = mk_symbol_array(8, a);
+        SymbolArray implicits = mk_symbol_array(0, a);
         {
             RawTree raw_implicits = raw.branch.nodes.data[3];
             if (raw_implicits.type == RawBranch && raw_implicits.branch.hint == HImplicit) {
                 body_idx++;
-                if (!get_symbol_list(&types, raw_implicits)) {
+                if (!get_symbol_list(&types, raw_implicits, a)) {
                     err.range = raw_implicits.range;
                     err.message = mv_cstr_doc("Malformed implicit list in unseal", a);
                     throw_pi_error(ctx.point, err);
@@ -1081,7 +1082,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         // There are 2 optional nodes, we may skip them
         parse_params:
 
-        if (!get_symbol_list(&params, current)) {
+        if (!get_symbol_list(&params, current, a)) {
             err.range = current.range;
             err.message = mv_cstr_doc("Instance parameter list malformed.", a);
             throw_pi_error(ctx.point, err);
@@ -1513,10 +1514,10 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             err.message = mv_cstr_doc("Term former 'with-reset' expects exactly 5 arguments!", a);
             throw_pi_error(ctx.point, err);
         }
-        SymbolArray reset_binds = mk_symbol_array(1, a);
-        SymbolArray handle_binds = mk_symbol_array(2, a);
+        SymbolArray reset_binds;
+        SymbolArray handle_binds;
 
-        if (!get_symbol_list(&reset_binds, raw.branch.nodes.data[1]) || reset_binds.len != 1) {
+        if (!get_symbol_list(&reset_binds, raw.branch.nodes.data[1], a) || reset_binds.len != 1) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mv_cstr_doc("Term former 'with-reset' 1st argument list malformed.", a);
             throw_pi_error(ctx.point, err);
@@ -1531,7 +1532,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         SynRef expr = abstract_expr_i(raw.branch.nodes.data[2], ctx);
 
-        if (!get_symbol_list(&handle_binds, raw.branch.nodes.data[3]) || handle_binds.len != 3) {
+        if (!get_symbol_list(&handle_binds, raw.branch.nodes.data[3], a) || handle_binds.len != 3) {
             err.range = raw.branch.nodes.data[3].range;
             err.message = mv_cstr_doc("Handler list malformed!", a);
             throw_pi_error(ctx.point, err);
@@ -2235,9 +2236,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         Symbol name = rname->atom.symbol;
         
         RawTree raw_vars = raw.branch.nodes.data[2];
-        SymbolArray vars = mk_symbol_array(raw_vars.branch.nodes.len, a);
+        SymbolArray vars;
 
-        if (!get_symbol_list(&vars, raw_vars)) {
+        if (!get_symbol_list(&vars, raw_vars, a)) {
             err.range = raw_vars.range;
             err.message = mv_cstr_doc("Malformed Trait parameter list.", a);
             throw_pi_error(ctx.point, err);
@@ -2293,8 +2294,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray vars = mk_symbol_array(8, a);
-        if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
+        SymbolArray vars;
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mk_cstr_doc("All argument list malformed", a);
             throw_pi_error(ctx.point, err);
@@ -2328,8 +2329,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray vars = mk_symbol_array(8, a);
-        if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
+        SymbolArray vars;
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
             err.range = raw.branch.nodes.data[1].range;
             err.message = mk_cstr_doc("Sealed argument list malformed", a);
             throw_pi_error(ctx.point, err);
@@ -2376,8 +2377,8 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        SymbolArray vars = mk_symbol_array(8, a);
-        if (!get_symbol_list(&vars, raw.branch.nodes.data[1])) {
+        SymbolArray vars;
+        if (!get_symbol_list(&vars, raw.branch.nodes.data[1], a)) {
             err.range = raw.range;
             err.message = mk_cstr_doc("All argument list malformed", a);
             throw_pi_error(ctx.point, err);
@@ -3240,7 +3241,7 @@ PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
                         }
                     } else {
                         SymbolArray symlist;
-                        if (!get_symbol_list(&symlist, segment_part)) {
+                        if (!get_symbol_list(&symlist, segment_part, a)) {
                             import_bad_path(raw, point, a);
                         }
 
