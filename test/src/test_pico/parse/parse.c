@@ -61,6 +61,16 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("-1080");
   }
 
+  if (test_start(log, mv_string("parse-char"))) {
+    RawTree expected = int_atom('x');
+    TEST_EQ("#x");
+  }
+
+  if (test_start(log, mv_string("parse-char-unicode"))) {
+    RawTree expected = int_atom(8592);
+    TEST_EQ("#←");
+  }
+
   if (test_start(log, mv_string("parse-binary-num"))) {
     RawTree expected = int_atom(6);
     TEST_EQ("#b_110");
