@@ -134,9 +134,10 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
     *root = (Module) {.pico_allocator = pico_allocator};
     root->allocator = convert_to_callocator(&root->pico_allocator);
     root->entries = mk_entry_amap(32, &root->allocator);
-    root->header = header,
+    root->header = copy_module_header(header, &root->allocator),
     root->lexical_parent_package = package;
     root->executable_allocator = mk_executable_allocator(&root->allocator);
+    delete_module_header(header);
 
     package->root_module = root;
     package->dependencies = mk_addr_list(4, &package->gpa);

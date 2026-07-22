@@ -78,4 +78,17 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         int64_t expected = 3;
         TEST_EQ("test-module.val");
     }
+
+    /*
+    if (test_start(log, mv_string("module-import-path-split-head"))) {
+        MODULE("(module sub1 (import (core :all) (num.i64 :all)) (export val1)) \n"
+               "(def val1 1)");
+        MODULE("(module sub2 (import (core :all) (num.i64 :all)) (export val2)) \n"
+               "(def val2 2)");
+        MODULE("(module test-module (import (core :all) ((sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+            "  (def val (+ val1 val2))");
+        int64_t expected = 3;
+        TEST_EQ("test-module.val");
+    }
+    */
 }

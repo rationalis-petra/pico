@@ -96,6 +96,11 @@ bool process_atlas_project(AtlasInstance* instance, IStream* in, FormattedOStrea
     return true;
 }
 
+/**
+ * Search through the project for all files named 'atlas', and load their
+ * contents into the instance. This does not actually do any building; it just
+ * loads the bulid recipes into the image.
+ */
 bool load_atlas_files(String path, FormattedOStream* out, AtlasInstance* instance, RegionAllocator* region) {
     Allocator* stda = get_std_allocator();
     DirectoryResult dir_res = open_directory(path, stda);
@@ -166,6 +171,8 @@ void run_atlas(Package* package, StringArray args, FormattedOStream* out) {
         write_fstring(mv_string("\n"), out);
         Allocator* stda = get_std_allocator();
         AtlasInstance* instance = make_atlas_instance(stda);
+
+        // TODO: register package ONLY if the atlas project lists 'base' as a dependency 
         register_package(instance, package);
 
         RegionAllocator* region = make_region_allocator(4096, true, stda);

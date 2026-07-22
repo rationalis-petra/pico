@@ -622,7 +622,6 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
             },
         };
         out = mk_module(header, package, NULL);
-        add_module(target->name, out, package);
         for (size_t i = 0; i < target->file_dependencies.len; i++) {
             atlas_load_file(target->file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
         }

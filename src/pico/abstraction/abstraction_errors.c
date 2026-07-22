@@ -289,33 +289,40 @@ _Noreturn void import_as_bad_symbol(RawTree raw, size_t index, PiErrorPoint* poi
 }
 
 _Noreturn void import_bad_value_list(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Invalid import :values value list. Term immediadely after :values should be a list", a), &nodes);
+    push_ptr(mv_cstr_doc("of imports e.g. (data.list :values (each mk-list (elt :as element)))", a), &nodes);
+
     PicoError err = {
         .range = raw.range,
-        .message = mv_cstr_doc("Invalid import :values value list. Term immediadely after :values should be a list\n"
-                               "of imports e.g. (data.list :values (each mk-list (elt :as element)))", a),
+        .message = mv_sep_doc(nodes, a),
     };
     throw_pi_error(point, err);
 }
 
 _Noreturn void import_bad_target(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Invalid import :values value list. The value list should consist of symbols", a), &nodes);
+    push_ptr(mv_cstr_doc("or nodes with the form (<symbol> :as <symbol>), e.g. (data.list :values (each mk-list (elt :as element)))", a), &nodes);
     PicoError err = {
         .range = raw.range,
-        .message = mv_cstr_doc("Invalid import :values value list. The value list should consist of symbols\n"
-                               "or nodes with the form (<symbol> :as <symbol>), e.g. (data.list :values (each mk-list (elt :as element)))", a),
+        .message = mv_sep_doc(nodes, a),
     };
     throw_pi_error(point, err);
 }
 
 _Noreturn void import_bad_path(RawTree raw, PiErrorPoint* point, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(6, a);
+    push_ptr(mv_cstr_doc("Invalid import path. The path should consist of '.' separated terms, where the", a), &nodes);
+    push_ptr(mv_cstr_doc("terms are either:", a), &nodes);
+    push_ptr(mv_cstr_doc("• A symbol", a), &nodes);
+    push_ptr(mv_cstr_doc("• A list of symbols", a), &nodes);
+    push_ptr(mv_cstr_doc("• A list containing the wildcard :all", a), &nodes);
+    push_ptr(mv_cstr_doc("For example: data.(list slice).(:all)", a), &nodes);
+                               
     PicoError err = {
         .range = raw.range,
-        .message = mv_cstr_doc("Invalid import path. The path should consist of '.' separated terms, where the\n"
-                               "terms are either:\n"
-                               "• A symbol\n"
-                               "• A list of symbols\n"
-                               "• A list containing the wildcard :all\n"
-                               "\n"
-                               "For example: data.(list slice).(:all)", a),
+        .message = mv_vsep_doc(nodes, a),
     };
     throw_pi_error(point, err);
 }

@@ -126,6 +126,22 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ(".ref");
   }
 
+  if (test_start(log, mv_string("parse-.-infix-complex-rhs"))) {
+    RawTree rhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), rhs, symbol_atom("foo"));
+    TEST_EQ("foo.(bar baz)");
+  }
+
+  if (test_start(log, mv_string("parse-.-infix-complex-lhs"))) {
+    RawTree lhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), symbol_atom("foo"), lhs);
+    TEST_EQ("(bar baz).foo");
+  }
+
   if (test_start(log, mv_string("parse-:-prefix"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom(":"), symbol_atom("ref"));
     TEST_EQ(":ref");
@@ -135,14 +151,6 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     RawTree expected =
       expr_branch(&pia, 3, symbol_atom("."), symbol_atom("ref"), symbol_atom("foo"));
     TEST_EQ("foo.ref");
-  }
-
-  if (test_start(log, mv_string("parse-.-infix-complex-rhs"))) {
-    RawTree rhs =
-      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
-    RawTree expected =
-      expr_branch(&pia, 3, symbol_atom("."), rhs, symbol_atom("foo"));
-    TEST_EQ("foo.(bar baz)");
   }
 
   if (test_start(log, mv_string("parse-:-infix"))) {

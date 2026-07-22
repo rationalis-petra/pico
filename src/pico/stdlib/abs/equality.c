@@ -23,7 +23,7 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {

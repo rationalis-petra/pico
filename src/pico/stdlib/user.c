@@ -33,5 +33,5 @@ void add_user_module(Package* base, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
+    mk_module(header, base, NULL);
 }
