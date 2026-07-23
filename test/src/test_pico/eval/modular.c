@@ -41,7 +41,7 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("(recur 10)");
     }
 
-    if (test_start(log, mv_string("module-header"))) {
+    if (test_start(log, mv_string("module-header-import-all-export-all"))) {
         int64_t expected = 1;
         MODULE("(module test-module (import (core :all)) (export :all)) \n"
             "  (def val1 1) (def val2 2) (def val3 3)");
@@ -92,14 +92,13 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
-    if (test_start(log, mv_string("module-import-values"))) {
-      MODULE(
-          "(module sub1 (import (core :all) (num.i64 :all)) (export val1 val2)) \n"
-          "(def val1 1)\n"
-          "(def val2 2)\n");
-        MODULE("(module test-module (import (core :all) (sub1 :values (val1 val2)) (num.i64 :all)) (export val)) \n"
-            "  (def val (+ val1 val2))");
-        int64_t expected = 3;
+    if (test_start(log, mv_string("module-import-types"))) {
+        MODULE(
+          "(module sub1 (import (core :all) (num.i64 :all)) (export TestStruct)) \n"
+          "(def TestStruct Struct [.x I64] [.y I64])\n");
+        MODULE("(module test-module (import (core :all) (sub1 :types)) (export val)) \n"
+            "  (def val struct TestStruct [.x 3] [.y 4])");
+        int64_t expected[2] = {3, 4};
         TEST_EQ("test-module.val");
     }
 }

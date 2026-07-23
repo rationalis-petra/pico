@@ -116,7 +116,7 @@ ImportClause copy_import_clause(ImportClause clause, Allocator* a) {
             .import_types = clause.import_types,
             .import_values = clause.import_values,
             .import_as = clause.import_as,
-            .values = scopy_import_value_array(clause.values, a),
+            .values = clause.import_values ? scopy_import_value_array(clause.values, a) : (ImportValueArray){},
             .to = clause.to,
         };
     case ImportAll:
