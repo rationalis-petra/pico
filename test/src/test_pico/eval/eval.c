@@ -22,7 +22,6 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
-
     add_import_all(&imports.clauses, a, 2, "abs", "numeric");
 
     Exports exports = (Exports) {
@@ -30,7 +29,7 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_symbol(mv_string("eval-test-module")),
         .imports = imports,
         .exports = exports,
     };

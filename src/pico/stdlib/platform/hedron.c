@@ -534,7 +534,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     Symbol sym;
 
     ModuleEntry* e;
@@ -557,7 +557,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Surface"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     surface_ty = e->value;
 
     typep = mk_opaque_type(pia,"ShaderModule", module, mk_prim_type(pia, Address));
@@ -565,7 +565,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ShaderModule"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     shader_module_ty = e->value;
 
     typep = mk_opaque_type(pia, "Pipeline", module, mk_prim_type(pia, Address));
@@ -573,7 +573,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Pipeline"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     pipeline_ty = e->value;
 
     typep = mk_enum_type(pia, 2, "vertex", 0, "instance", 0);
@@ -581,7 +581,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("InputRate"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     input_rate_ty = e->value;
 
     typep = mk_opaque_type(pia, "Buffer",  module, mk_prim_type(pia, Address));
@@ -589,7 +589,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Buffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     buffer_ty = e->value;
 
     typep = mk_opaque_type(pia, "Image", module, mk_prim_type(pia, Address));
@@ -597,7 +597,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Image"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     image_ty = e->value;
 
     typep = mk_opaque_type(pia, "ImageView", module, mk_prim_type(pia, Address));
@@ -605,7 +605,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ImageView"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     image_view_ty = e->value;
 
     typep = mk_enum_type(pia, 1, "r8-g8-b8-a8-srgb", 0);
@@ -613,7 +613,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ImageFormat"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     image_format_ty = e->value;
 
     typep = mk_enum_type(pia, 3, "undefined", 0, "transfer-dest-optimal", 0, "shader-read-optimal", 0);
@@ -621,7 +621,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ImageLayout"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     image_layout_ty = e->value;
 
     typep = mk_opaque_type(pia, "Sampler", module, mk_prim_type(pia, Address));
@@ -629,7 +629,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Sampler"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     sampler_ty = e->value;
 
     typep = mk_named_type(pia, "Filter", mk_enum_type(pia, 2, "nearest", 0, "linear", 0));
@@ -637,7 +637,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Filter"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     sampler_filter_ty = e->value;
 
     typep = mk_opaque_type(pia, "CommandPool", module, mk_prim_type(pia, Address));
@@ -645,7 +645,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("CommandPool"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     command_pool_ty = e->value;
 
     typep = mk_opaque_type(pia, "CommandBuffer", module, mk_prim_type(pia, Address));
@@ -653,7 +653,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("CommandBuffer"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     command_buffer_ty = e->value;
 
     typep = mk_named_type(pia, "AccessFlag", mk_enum_type(pia, 5, 
@@ -666,7 +666,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("AccessFlag"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     access_flag_ty = e->value;
 
     typep = mk_named_type(pia, "PipelineStage", mk_enum_type(pia, 4, 
@@ -678,7 +678,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("PipelineStage"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     pipeline_stage_ty = e->value;
 
     typep = mk_named_type(pia, "CommandBufferUsage", 
@@ -687,7 +687,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("CommandBufferUsage"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     command_buffer_usage_ty = e->value;
 
     typep = mk_named_type(pia, "MemoryBarrier", mk_struct_type(pia, 0));
@@ -695,7 +695,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("MemoryBarrier"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     memory_barrier_ty = e->value;
 
     typep = mk_named_type(pia, "BufferMemoryBarrier", mk_struct_type(pia, 0));
@@ -703,7 +703,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("BufferMemoryBarrier"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     buffer_memory_barrier_ty = e->value;
 
     typep = mk_named_type(pia, "ImageMemoryBarrier",
@@ -717,7 +717,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ImageMemoryBarrier"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     image_memory_barrier_ty = e->value;
 
     typep = mk_struct_type(pia, 3,
@@ -728,7 +728,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("BindingDescription"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     binder_desc_ty = e->value;
 
     typep = mk_enum_type(pia, 3, "combined-image-sampler", 0, "uniform-buffer", 0, "storage-buffer", 0);
@@ -736,7 +736,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DecriptorType"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_type_ty = e->value;
 
     typep = mk_struct_type(pia, 2,
@@ -746,7 +746,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorPoolSize"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_pool_size_ty = e->value;
 
     typep = mk_opaque_type(pia, "DescriptorPool", module, mk_prim_type(pia, Address));
@@ -754,7 +754,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorPool"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_pool_ty = e->value;
 
     typep = mk_opaque_type(pia, "DescriptorSetLayout", module, mk_prim_type(pia, Address));
@@ -762,7 +762,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorSetLayout"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_set_layout_ty = e->value;
     
     typep = mk_opaque_type(pia, "DescriptorSet", module, mk_prim_type(pia, Address));
@@ -770,7 +770,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorSet"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_set_ty = e->value;
 
     typep = mk_struct_type(pia, 3,
@@ -781,7 +781,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorBufferInfo"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_buffer_info_ty = e->value;
 
     typep = mk_struct_type(pia, 3,
@@ -792,7 +792,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorImageInfo"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_image_info_ty = e->value;
 
     typep = mk_struct_type(pia, 3,
@@ -805,7 +805,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorWrite"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_write_ty = e->value;
 
     typep = mk_struct_type(pia, 1,
@@ -814,7 +814,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorCopy"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_copy_ty = e->value;
 
     typep = mk_enum_type(pia, 2,
@@ -824,7 +824,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("IndexFormat"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     index_format_ty = e->value;
 
     typep = mk_enum_type(pia, 3,
@@ -835,7 +835,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("InputFormat"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     input_format_ty = e->value;
 
     typep = mk_enum_type(pia, 2, "vertex-shader", 0, "fragment-shader", 0);
@@ -843,7 +843,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("ShaderStage"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     shader_stage_ty = e->value;
 
     typep = mk_struct_type(pia, 2,
@@ -853,7 +853,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("DescriptorBinding"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     descriptor_binding_ty = e->value;
 
     typep = mk_struct_type(pia, 4,
@@ -865,7 +865,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("AttributeDescription"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     attribute_desc_ty = e->value;
 
     typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "storage", 0, "transfer-source", 0, "transfer-destination", 0);
@@ -873,7 +873,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("BufferSort"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     buffer_sort_ty = e->value;
 
 
@@ -882,7 +882,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Semaphore"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     semaphore_ty = e->value;
 
     typep = mk_opaque_type(pia, "Fence", module, mk_prim_type(pia, Address));
@@ -890,7 +890,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Fence"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     fence_ty = e->value;
 
 #ifdef WINDOW_SYSTEM
@@ -1388,9 +1388,6 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("hedron")), module);
-    if (r.type == Err) panic(r.error_message);
 }
 
 #endif

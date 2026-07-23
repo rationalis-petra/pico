@@ -1,4 +1,5 @@
 #include <math.h>
+#include "platform/signals.h"
 #include "pico/parse/parse.h"
 
 #include "components/pretty/standard_types.h"
@@ -24,7 +25,7 @@ static ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a);
 // Helper functions
 StreamResult consume_until(uint32_t stop, IStream* is);
 StreamResult consume_whitespace(IStream* is);
-bool is_numchar(uint32_t codepoint);
+bool is_numchar(uint32_t codepoint, uint8_t base);
 bool is_whitespace(uint32_t codepoint);
 bool is_comment_start(uint32_t codepoint);
 bool is_symchar(uint32_t codepoint);
@@ -107,7 +108,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
             else if (point == '#') {
                 out = parse_hash(is, pia, a);
             }
-            else if (is_numchar(point) || point == '-') {
+            else if (is_numchar(point, 10) || point == '-') {
                 out = parse_number(10, is, pia, a);
             }
             else if (is_whitespace(point) || is_comment_start(point)) {
@@ -338,43 +339,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
             caret_next = true;
             next(is, &codepoint);
             caret_range = (Range) { start, bytecount(is) };
-        } else if (codepoint == '.' || codepoint == ':') {
-            size_t op_start = bytecount(is);
-            next(is, &codepoint);
-            size_t op_end = bytecount(is);
-
-            RawTree op = (RawTree) {
-                .type = RawAtom,
-                .range.start = op_start,
-                .range.end = op_end,
-                .atom.type = ASymbol,
-                .atom.symbol = codepoint == '.'
-                  ? string_to_symbol(mv_string("."))
-                  : string_to_symbol(mv_string(":")),
-            };
-
-            // Store symbol
-            String str = string_from_UTF_32(symchars, a);
-            RawTree val = (RawTree) {
-                .type = RawAtom,
-                .range.start = start,
-                .range.end = op_start,
-                .atom.type = ASymbol,
-                .atom.symbol = string_to_symbol(str),
-            };
-            if (caret_next) {
-                val = wrap_caret(val, caret_range, pia);
-                caret_next = false;
-            }
-
-            // new start bytecount(is)
-            start = op_end;
-
-            push_rawtree(val, &terms);
-            symchars.len = 0; // reset array
-
-            push_rawtree(op, &terms);
-        } else {
+        } else { 
             // Empty symchars *should* only occur when parsing the '^' symbol
             if (symchars.len != 0) {
                 String str = string_from_UTF_32(symchars, a);
@@ -395,8 +360,9 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 };
                 caret_next = false;
                 push_rawtree(val, &terms);
+            } else {
+                panic(mv_string("Unexpected Case encountered while parsing"));
             }
-            // TODO: panic/report debug error if we get to an 'else' clause
 
             // We are done; break out of loop
             break;
@@ -481,12 +447,20 @@ ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator*
         is_positive = false;
     }
 
-    while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
+    while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint, base) || codepoint == '_')) {
         just_negation = false;
         next(is, &codepoint);
         if (codepoint != '_') {
             // The cast is safe as is-numchar ensures codepoint < 256
-            uint8_t val = (uint8_t) codepoint - 48;
+            uint8_t val = is_numchar(codepoint, 10)
+                ? (uint8_t) codepoint - 48
+                /**
+                 * e.g. B = 11
+                 * B | 32 = b (converts to lowercase)
+                 * b - 97 = 1 (97 = a), so b is one above a
+                 * 1 + 10 = 11, the correct value for B as a number
+                 */
+                : (uint8_t) ((codepoint | 32) - 97) + 10; 
             push_u8(val, &lhs);
         }
     }
@@ -495,7 +469,7 @@ ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator*
         floating = true;
         just_negation = false;
         next(is, &codepoint);
-        while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint) || codepoint == '_')) {
+        while (((result = peek(is, &codepoint)) == StreamSuccess) && (is_numchar(codepoint, base) || codepoint == '_')) {
             next(is, &codepoint);
             if (codepoint != '_') {
                 // The cast is safe as is-numchar ensures codepoint < 256
@@ -806,16 +780,18 @@ ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a) {
         };
         return build_char_lit(char_lit, range);
     } else if (codepoint == '_') {
+        next(is, &codepoint); // Consume '_'
         switch (char_lit) {
         case 'b':
-            next(is, &codepoint);
             return parse_number(2, is, pia, a);
         case 'o':
             return parse_number(8, is, pia, a);
+        case 'x':
+            return parse_number(16, is, pia, a);
         default:
             return (ParseResult) {
                 .type = ParseFail,
-                .error.message = mv_cstr_doc("Invalid base indicator: please use one of (b)inary or (o)ctal", a),
+                .error.message = mv_cstr_doc("Invalid base indicator: please use one of (b)inary, (o)ctal or he(x)adecimal", a),
                 .error.range.start = bytecount(is),
                 .error.range.end = bytecount(is),
             };
@@ -894,8 +870,11 @@ StreamResult consume_whitespace(IStream* is) {
     return result;
 }
 
-bool is_numchar(uint32_t codepoint) {
-    return (48 <= codepoint && codepoint <= 57);
+bool is_numchar(uint32_t codepoint, uint8_t base) {
+    uint32_t lower = codepoint | 32;
+    return (base <= 10)
+        ? ((48 <= codepoint) & (codepoint < (48u + base)))
+        : ((48 <= codepoint) & (codepoint < 58)) | ((97u <= lower) & (lower < 97u + (base - 10)));
 }
 
 bool is_whitespace(uint32_t codepoint) {

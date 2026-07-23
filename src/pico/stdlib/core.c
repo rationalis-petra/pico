@@ -523,7 +523,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Ptr"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         ptr_type = e->value;
 
         // Allocator Type
@@ -553,7 +553,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         type_data = type_val;
         sym = string_to_symbol(mv_string("AllocVTable"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         allocator_vtable_type = e->value;
 
         // Allocator Type
@@ -568,7 +568,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Allocator"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         allocator_type = e->value;
 
         // List Type 
@@ -589,7 +589,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("List"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         list_type = e->value;
         
         // Maybe Type 
@@ -605,7 +605,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Maybe"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         maybe_type = e->value;
 
         // Either Type 
@@ -623,7 +623,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Either"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         either_type = e->value;
 
         // Result Type 
@@ -641,7 +641,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Result"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         result_type = e->value;
 
         // Pair Type 
@@ -659,7 +659,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Pair"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         pair_type = e->value;
     }
 
@@ -699,8 +699,5 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module(string_to_symbol(mv_string("core")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }
 

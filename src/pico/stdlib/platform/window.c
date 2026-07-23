@@ -146,7 +146,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     delete_module_header(header);
     Symbol sym;
 
@@ -171,7 +171,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Window"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     window_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyMap", module, mk_prim_type(pia, Address));
@@ -179,7 +179,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("KeyMap"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     keymap_ty = e->value;
 
     typep = mk_opaque_type(pia, "KeyState", module, mk_prim_type(pia, Address));
@@ -187,7 +187,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("KeyState"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     keystate_ty = e->value;
 
     // Message Type
@@ -212,7 +212,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("RawKey"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     raw_key_ty = e->value;
 
 
@@ -240,7 +240,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Key"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     key_ty = e->value;
 
 
@@ -255,7 +255,7 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sym = string_to_symbol(mv_string("Message"));
     add_def(module, sym, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def(sym, module);
+    e = get_def_internal(sym, module);
     window_message_ty = e->value;
 
     typep = mk_proc_type(pia, 3, mk_string_type(pia), mk_prim_type(pia, Int_32), mk_prim_type(pia, Int_32), copy_pi_type_p(window_ty, pia));
@@ -344,9 +344,6 @@ void add_window_module(Assembler *ass, Module *platform, RegionAllocator* region
     sdelete_u8_array(fn_segments.data);
     sdelete_u8_array(null_segments.data);
     sdelete_u8_array(null_segments.code);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("window")), module);
-    if (r.type == Err) panic(r.error_message);
 }
 
 #endif

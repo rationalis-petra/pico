@@ -24,7 +24,7 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -95,7 +95,4 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
         "(def f32-show instance (Show F32)"
         "  [.to-string f32.to-string])\n";
     compile_toplevel(show_f32_instnace, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(abs, string_to_symbol(mv_string("show")), module);
-    if (r.type == Err) panic(r.error_message);
 }

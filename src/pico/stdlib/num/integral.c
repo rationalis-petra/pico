@@ -219,11 +219,11 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_symbol(name),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL);
+    Module* module = mk_module(header, get_package(num), num);
     Symbol sym;
 
     PiType* typep;
@@ -374,9 +374,6 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(num, string_to_symbol(name), module);
-    if (r.type == Err) panic(r.error_message);
 }
 
 void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
@@ -391,11 +388,11 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_symbol(mv_string("bool")),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(num), NULL);
+    Module* module = mk_module(header, get_package(num), num);
     Symbol sym;
 
     PiType* typep;
@@ -452,8 +449,5 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(num, string_to_symbol(mv_string("bool")), module);
-    if (r.type == Err) panic(r.error_message);
 }
 

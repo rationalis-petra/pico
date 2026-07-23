@@ -24,7 +24,7 @@ void add_result_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -45,7 +45,4 @@ void add_result_module(Target target, Module *data, RegionAllocator* region) {
     // 
     /* const char* null_fn = "(def String Named String Struct [.memsize U64] [.bytes Address])"; */
     /* compile_toplevel(null_fn, module, target, &point, &pi_point, a); */
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("result")), module);
-    if (r.type == Err) panic(r.error_message);
 }

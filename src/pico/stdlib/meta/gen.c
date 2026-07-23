@@ -141,7 +141,7 @@ void build_get_range_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocato
     convert_c_fn(get_raw_range, &fn_ctype, type, ass, a, point); 
 }
 
-void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
+void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -155,7 +155,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(base), NULL);
+    Module* module = mk_module(header, get_package(meta), meta);
     delete_module_header(header);
     Symbol sym;
 
@@ -213,7 +213,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         add_def(module, sym, type, &typep, null_segments, NULL);
         delete_pi_type_p(typep, &pia);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         symbol_type = e->value;
 
         PiType* atom_type = mk_enum_type(&pia, 6,
@@ -237,7 +237,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         sym = string_to_symbol(mv_string("Range"));
         add_def(module, sym, type, &typep, null_segments, NULL);
 
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(&pia, "Syntax");
@@ -251,7 +251,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
 
         sym = string_to_symbol(mv_string("Syntax"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         syntax_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -259,7 +259,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         typep = mk_struct_type(&pia, 2, "message", mk_string_type(&pia), "range", copy_pi_type_p(range_type, &pia));
         sym = string_to_symbol(mv_string("MacroError"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         macro_error_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -267,7 +267,7 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
         typep = mk_app_type(&pia, get_either_type(), copy_pi_type_p(macro_error_type, &pia), copy_pi_type_p(syntax_type, &pia));
         sym = string_to_symbol(mv_string("MacroResult"));
         add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def(sym, module);
+        e = get_def_internal(sym, module);
         macro_result_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -332,8 +332,6 @@ void add_gen_module(Assembler* ass, Module* base, RegionAllocator* region) {
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    add_module_def(base, string_to_symbol(mv_string("gen")), module);
 
     sdelete_u8_array(null_segments.code);
     sdelete_u8_array(null_segments.data);

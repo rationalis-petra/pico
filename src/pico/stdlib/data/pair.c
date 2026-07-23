@@ -25,7 +25,7 @@ void add_pair_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -42,7 +42,4 @@ void add_pair_module(Target target, Module *data, RegionAllocator* region) {
     const char *mk_pair_fn =
         "(def pair all [A B] proc [x y] struct (Pair A B) [._1 x] [._2 y])";
     compile_toplevel(mk_pair_fn, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("pair")), module);
-    if (r.type == Err) panic(r.error_message);
 }

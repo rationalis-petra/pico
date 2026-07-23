@@ -61,9 +61,34 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("-1080");
   }
 
-  if (test_start(log, mv_string("parse-i64"))) {
-    RawTree expected = int_atom(-1080);
-    TEST_EQ("-1080");
+  if (test_start(log, mv_string("parse-char"))) {
+    RawTree expected = int_atom('x');
+    TEST_EQ("#x");
+  }
+
+  if (test_start(log, mv_string("parse-char-unicode"))) {
+    RawTree expected = int_atom(8592);
+    TEST_EQ("#←");
+  }
+
+  if (test_start(log, mv_string("parse-binary-num"))) {
+    RawTree expected = int_atom(6);
+    TEST_EQ("#b_110");
+  }
+
+  if (test_start(log, mv_string("parse-octal-num"))) {
+    RawTree expected = int_atom(97);
+    TEST_EQ("#o_141");
+  }
+
+  if (test_start(log, mv_string("parse-hex-simple"))) {
+    RawTree expected = int_atom(10);
+    TEST_EQ("#x_a");
+  }
+
+  if (test_start(log, mv_string("parse-hex-num"))) {
+    RawTree expected = int_atom(31);
+    TEST_EQ("#x_1f");
   }
 
   if (test_start(log, mv_string("parse-symbol"))) {
@@ -101,6 +126,22 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ(".ref");
   }
 
+  if (test_start(log, mv_string("parse-.-infix-complex-rhs"))) {
+    RawTree rhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), rhs, symbol_atom("foo"));
+    TEST_EQ("foo.(bar baz)");
+  }
+
+  if (test_start(log, mv_string("parse-.-infix-complex-lhs"))) {
+    RawTree lhs =
+      expr_branch(&pia, 2, symbol_atom("bar"), symbol_atom("baz"));
+    RawTree expected =
+      expr_branch(&pia, 3, symbol_atom("."), symbol_atom("foo"), lhs);
+    TEST_EQ("(bar baz).foo");
+  }
+
   if (test_start(log, mv_string("parse-:-prefix"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom(":"), symbol_atom("ref"));
     TEST_EQ(":ref");
@@ -124,5 +165,5 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(foo #,)");
   }
 
-  delete_module(module);
+  remove_module(base, string_to_symbol(mv_string("pipeline-test-module")));
 }

@@ -19,11 +19,11 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("order")),
+        .name = string_to_symbol(mv_string("equality")),
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(abs), NULL);
+    Module* module = mk_module(header, get_package(abs), abs);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -110,7 +110,4 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
         "  [.= string.=]"
         "  [.!= string.!=])\n";
     compile_toplevel(eq_string_trait, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(abs, string_to_symbol(mv_string("equality")), module);
-    if (r.type == Err) panic(r.error_message);
 }

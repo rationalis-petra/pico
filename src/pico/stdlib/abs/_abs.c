@@ -13,7 +13,7 @@ void add_abs_module(Target target, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("numeric")),
+        .name = string_to_symbol(mv_string("abs")),
         .imports = imports,
         .exports = exports,
     };
@@ -29,6 +29,4 @@ void add_abs_module(Target target, Package* base, RegionAllocator* region) {
     reset_subregion(subregion);
     add_show_module(target, module, subregion);
     release_subregion(subregion);
-
-    add_module(string_to_symbol(mv_string("abs")), module, base);
 }

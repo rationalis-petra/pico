@@ -148,7 +148,7 @@ void atlas_run(AtlasInstance* instance, String target_name, RegionAllocator* reg
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
@@ -263,7 +263,7 @@ void atlas_build(AtlasInstance* instance, String target_name, RegionAllocator* r
         }
 
         Module* module = atlas_load_target(instance, package, target, region, point);
-        ModuleEntry* e = get_def(entry.value, module);
+        ModuleEntry* e = get_def_external(entry.value, module);
         if (!e) {
             PtrArray nodes = mk_ptr_array(5, &ra);
             push_ptr(mk_str_doc(mv_string("Entry Point '"), &ra), &nodes);
@@ -412,12 +412,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
-    module = mk_module(*header, package, NULL);
-    if (parent) {
-        add_module_def(parent, header->name, module);
-    } else {
-        add_module(header->name, module, package);
-    }
+    module = mk_module(*header, package, parent);
 
     old_module = get_std_current_module();
     set_std_current_module(module);
@@ -627,7 +622,6 @@ Module* atlas_load_target(AtlasInstance* instance, Package* package, AtlasTarget
             },
         };
         out = mk_module(header, package, NULL);
-        add_module(target->name, out, package);
         for (size_t i = 0; i < target->file_dependencies.len; i++) {
             atlas_load_file(target->file_dependencies.data[i], package, out, mk_string_array(0, &ra), region, point);
         }

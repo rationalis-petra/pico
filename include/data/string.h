@@ -7,8 +7,8 @@
 // A UFT-8 Encoded String
 //  • NO NULL termination
 typedef struct String {
-    size_t memsize;
     uint8_t* bytes;
+    size_t memsize;
 } String;
 
 String mk_string(const char* str, Allocator* a);

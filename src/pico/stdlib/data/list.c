@@ -27,7 +27,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -118,8 +118,8 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "\n"
         "\n"
         "  (eset 0 (capture mk-list) arr-terms)\n"
-        "  (eset 1 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
-        "  (eset 2 (Syntax:atom ar (:integral (narrow (u64.- terms.len 1) I64))) arr-terms)\n"
+        "  (eset 1 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
+        "  (eset 2 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
         "\n"
         "  (eset 0 (Syntax:atom ar (:symbol (mk-symbol \"let!\"))) let-terms)\n"
         "  (eset 1 local-sym let-terms)\n"
@@ -132,7 +132,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "    [loop [i] seq\n"
         "      [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
         "      [let! elt-range get-range (elt i terms)]\n"
-        "      [let! idx-node Syntax:atom elt-range (:integral (narrow (u64.- i 1) I64))]\n"
+        "      [let! idx-node Syntax:atom elt-range (:integral (narrow I64 (u64.- i 1)))]\n"
         "      (eset 0 eset-sym eset-elt-terms)\n"
         "      (eset 1 idx-node eset-elt-terms)\n"
         "      (eset 2 (elt i terms) eset-elt-terms)\n"
@@ -168,7 +168,4 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "(def clear all [A] proc [(l (Ptr (List A)))] \n"
         "  (set l (struct (get l) [.len 0])))";
     compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("list")), module);
-    if (r.type == Err) panic(r.error_message);
 }

@@ -8,27 +8,55 @@
 #include "pico/data/range.h"
 #include "pico/data/symbol_array.h"
 
-//------------------------------------------------------------------------------
-// Import Clauses
-//------------------------------------------------------------------------------
+/**
+ * ------------------------------------------------------------------------------
+ *
+ *     Import Clauses
+ *
+ * ------------------------------------------------------------------------------
+*/
 
-typedef enum {
-    Import,       // basic import, e.g. (import num.i32) imports the module
-                  // i32. Only the name is available (in this case, i32), the
-                  // module is not opened. Can also import values (import num.i32.+)
-    ImportAs,     // import and rename, e.g. (import num.i32 as int-32) 
-    ImportMany,   // Import many values from a module, e.g. (import num.i32.(+ - * /))
-    ImportAll,    // Import all values from a module, e.g. (import num.i32 :all) 
+typedef enum : uint8_t {
+  ImportSimple,  /** A regular import, covers most types of import clause */
+  ImportComplex, /** A regular import, covers most types of import clause */
+  ImportAll,     /** Import all values from a module, e.g. (import (num.i32 :all)) */
 } ImportClause_t;
 
 typedef struct {
-    ImportClause_t type;
-    SymbolArray path;
+    bool should_rename;
+    Symbol from;
+    Symbol to;
+} ImportValue;
+
+ARRAY_HEADER(ImportValue, import_value, ImportValue)
+
+typedef enum : uint8_t {
+  SegSymbol,
+  SegSymbols,
+  SegWildcard,
+} PathSegment_t;
+
+typedef struct {
+    PathSegment_t type;
     union {
-        Symbol rename;
-        Symbol member;
-        SymbolArray members;
+        Symbol symbol;
+        SymbolArray symbols;
     };
+} PathSegment;
+
+ARRAY_HEADER(PathSegment, path_segment, PathSegment)
+
+typedef struct {
+    ImportClause_t type;
+    PathSegmentArray path;
+
+    // Target Details
+    bool import_instances;
+    bool import_types;
+    bool import_as;
+    bool import_values;
+    ImportValueArray values;
+    Symbol to;
 } ImportClause;
 
 ARRAY_HEADER(ImportClause, import_clause, ImportClause)
@@ -37,14 +65,23 @@ typedef struct {
     ImportClauseArray clauses;
 } Imports;
 
+typedef struct {
+    ImportClauseArray clauses;
+} ReExports;
+
 bool imclause_eq(ImportClause c1, ImportClause c2);
+bool is_simple_path(PathSegmentArray path);
 ImportClause copy_import_clause(ImportClause clause, Allocator* a);
 void delete_import_clause(ImportClause clause);
 Document* pretty_import_clause(ImportClause clause, Allocator* a);
 
-// -----------------------------------------------------------------------------
-//   Export Clauses
-// -----------------------------------------------------------------------------
+/**
+ * ------------------------------------------------------------------------------
+ *
+ *     Export Clauses
+ *
+ * ------------------------------------------------------------------------------
+*/
 
 typedef enum {
     ExportAll,
@@ -65,13 +102,27 @@ typedef struct {
     ExportClauseArray clauses;
 } Exports;
 
-//------------------------------------------------------------------------------
-// Module Header
-//------------------------------------------------------------------------------
+/**
+ * ------------------------------------------------------------------------------
+ *
+ *     Re-Export Clauses
+ *
+ * TODO: implement me!
+ * ------------------------------------------------------------------------------
+ */
+
+/**
+ * ------------------------------------------------------------------------------
+ *
+ *     Moudule Header
+ *
+ * ------------------------------------------------------------------------------
+ */
 
 typedef struct {
     Symbol name;
     Imports imports;
+    ReExports re_exports;
     Exports exports;
     Range range;
 } ModuleHeader;

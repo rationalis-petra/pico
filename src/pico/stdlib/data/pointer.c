@@ -25,7 +25,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
 
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
@@ -69,8 +69,4 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         "(def delete all [A] proc [(ptr (Ptr A))] \n"
         "  (memory.free (unname ptr)))";
     compile_toplevel(delete_fn, module,target,  &point, &pi_point, region);
-
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("pointer")), module);
-    if (r.type == Err) panic(r.error_message);
 }

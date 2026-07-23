@@ -576,8 +576,8 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         push_u64(target.data_aux->len, &links->links.data_starts);
         add_u8_chunk(immediate.bytes, immediate.memsize, target.data_aux);
 
-        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         build_unary_op(Push, imm32(immediate.memsize), ass, a, point);
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
         data_stack_grow(env, pi_stack_size_of(*type));
         break;
@@ -3259,7 +3259,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         EnvEntry entry = env_lookup(syn.to_describe.data[0], base);
         for (size_t i = 1; i < syn.to_describe.len; i++) {
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def(syn.to_describe.data[i], entry.value);
+                ModuleEntry* mentry = get_def_external(syn.to_describe.data[i], entry.value);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.value = mentry->value;
@@ -3288,7 +3288,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
               for (size_t i = 0; i < syms.len; i++) {
                   Symbol symbol = syms.data[i];
-                  ModuleEntry* mentry = get_def(symbol, entry.value);
+                  ModuleEntry* mentry = get_def_external(symbol, entry.value);
                   if (mentry) {
                       PtrArray desc = mk_ptr_array(3, a);
                       if (mentry->is_module) {

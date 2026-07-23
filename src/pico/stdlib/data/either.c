@@ -25,7 +25,7 @@ void add_either_module(Target target, Module *data, RegionAllocator* region) {
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(data), NULL);
+    Module* module = mk_module(header, get_package(data), data);
     delete_module_header(header);
 
     PiErrorPoint pi_point;
@@ -54,7 +54,4 @@ void add_either_module(Target target, Module *data, RegionAllocator* region) {
     /* const char *mk_either_fn = */
     /*     "(def either all [A B] proc [(e (Either A B)) (f Proc [A] B) (g Proc [A] B)] (match e [:left x] (f x) [:right x] (g x)))"; */
     /* compile_toplevel(mk_either_fn, module, target, &point, &pi_point, a); */
-
-    Result r = add_module_def(data, string_to_symbol(mv_string("either")), module);
-    if (r.type == Err) panic(r.error_message);
 }

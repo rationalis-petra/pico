@@ -14,7 +14,7 @@ void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_symbol(mv_string("num")),
         .imports = imports,
         .exports = exports,
     };
@@ -34,7 +34,4 @@ void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
     add_float_module(mv_string("f32"), Float_32, ass, module, &ra);
     add_float_module(mv_string("f64"), Float_64, ass, module, &ra);
-
-    Result r =add_module(string_to_symbol(mv_string("num")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }

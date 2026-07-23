@@ -16,7 +16,7 @@ void run_pico_stdlib_abs_numeric_tests(TestLog *log, Module* module, Environment
 
     if (test_start(log, mv_string("numeric-add-instance-f32"))) {
         float expected = 3.4 + 678.0;
-        TEST_EQ("(is (+ 3.4 678.0) F32)");
+        TEST_EQ("(is F32 (+ 3.4 678.0))");
     }
 
     if (test_start(log, mv_string("numeric-div-instance-f64"))) {
@@ -26,7 +26,7 @@ void run_pico_stdlib_abs_numeric_tests(TestLog *log, Module* module, Environment
 
     if (test_start(log, mv_string("numeric-div-instance-f32"))) {
         float expected = 3.0 / 4.5;
-        TEST_EQ("(is (/ 3.0 4.5) F32)");
+        TEST_EQ("(is F32 (/ 3.0 4.5))");
     }
 
     if (test_start(log, mv_string("numeric-mul"))) {

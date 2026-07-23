@@ -9,8 +9,6 @@
 #include "test_pico/helper.h"
 #include "test_pico/typecheck.h"
 
-#define TEST_TYPE(str) test_typecheck_eq(str, expected, env, context)
-#define TEST_TYPE_FAIL(str) test_typecheck_fail(str, env, context)
 
 void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* region) {
     // Setup
@@ -37,7 +35,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_symbol(mv_string("typecheck-test-module")),
         .imports = imports,
         .exports = exports,
     };
@@ -178,7 +176,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     }
 
     delete_env(env, a);
-    delete_module(module);
+    remove_module(base, string_to_symbol(mv_string("typecheck-test-module")));
     delete_assembler(ass);
     release_executable_allocator(exalloc);
 }

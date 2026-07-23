@@ -125,7 +125,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("extra")),
+        .name = string_to_symbol(mv_string("foreign")),
         .imports = imports,
         .exports = exports,
     };
@@ -216,7 +216,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
         sym = string_to_symbol(mv_string("CType"));
         add_def(module, sym, type, &type_data, null_segments, NULL);
 
-        ModuleEntry* e = get_def(sym, module);
+        ModuleEntry* e = get_def_internal(sym, module);
         exported_c_type = e->value;
     }
 
@@ -337,7 +337,4 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
     sym = string_to_symbol(mv_string("c-unsigned-char"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
     add_def(module, sym, *typep, cdata, null_segments, NULL);
-
-    Result r = add_module(string_to_symbol(mv_string("foreign")), module, base);
-    if (r.type == Err) panic(r.error_message);
 }

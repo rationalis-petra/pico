@@ -233,7 +233,7 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
         .imports = imports,
         .exports = exports,
     };
-    Module* module = mk_module(header, get_package(platform), NULL);
+    Module* module = mk_module(header, get_package(platform), platform);
     Symbol sym;
 
     PiType kind;
@@ -356,7 +356,4 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
-
-    Result r = add_module_def(platform, string_to_symbol(mv_string("memory")), module);
-    if (r.type == Err) panic(r.error_message);
 }

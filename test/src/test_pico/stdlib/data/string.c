@@ -11,12 +11,32 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
 
     if (test_start(log, mv_string("str-memsize"))) {
         uint64_t expected = 4;
-        TEST_EQ("\"test\".memsize");
+        TEST_EQ("\"test\".len");
     }
 
-    if (test_start(log, mv_string("pair-fn"))) {
+    if (test_start(log, mv_string("nth-byte"))) {
         uint8_t expected = 'c';
         TEST_EQ("(string.nth-byte 2 \"lack\")");
+    }
+
+    if (test_start(log, mv_string("elt-ascii-0"))) {
+        uint32_t expected = 'l';
+        TEST_EQ("(string.elt 0 \"lack\")");
+    }
+
+    if (test_start(log, mv_string("elt-ascii-n"))) {
+        uint32_t expected = 'c';
+        TEST_EQ("(string.elt 2 \"lack\")");
+    }
+
+    if (test_start(log, mv_string("elt-utf-3-0"))) {
+        uint32_t expected = 8592;
+        TEST_EQ("(string.elt 0 \"←lack\")");
+    }
+
+    if (test_start(log, mv_string("elt-utf-3-n"))) {
+        uint32_t expected = 'l';
+        TEST_EQ("(string.elt 1 \"←lack\")");
     }
 
     if (test_start(log, mv_string("eql-null"))) {

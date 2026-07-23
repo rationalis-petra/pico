@@ -127,7 +127,7 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("seq-simple"))) {
         int64_t expected = 17;
-        TEST_EQ("((all [A] (is (seq 3 4 10 17) I64)) {Unit})");
+        TEST_EQ("((all [A] (is I64 (seq 3 4 10 17))) {Unit})");
     }
 
     if (test_start(log, mv_string("seq-fvar"))) {
@@ -137,12 +137,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("seq-bind-lit"))) {
         int64_t expected = 6;
-        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] 10 y) I64)) -10)");
+        TEST_EQ("((all [A] proc [(x A)] (is I64 (seq [let! y 6] 10 y))) -10)");
     }
 
     if (test_start(log, mv_string("seq-bind-lit-multi"))) {
         int64_t expected = 6;
-        TEST_EQ("((all [A] proc [(x A)] (is (seq [let! y 6] [let! z 3] [let! p 2] 10 y) I64)) -10)");
+        TEST_EQ("((all [A] proc [(x A)] (is I64 (seq [let! y 6] [let! z 3] [let! p 2] 10 y))) -10)");
     }
 
     if (test_start(log, mv_string("seq-bind-fvar"))) {
@@ -159,12 +159,12 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
 
     if (test_start(log, mv_string("simple-let"))) {
         int32_t expected = -3;
-        TEST_EQ("((all [A] (let [x (is -3 I32)] x)) {Unit})");
+        TEST_EQ("((all [A] (let [x (is I32 -3)] x)) {Unit})");
     }
 
     if (test_start(log, mv_string("simple-let-multi"))) {
         int32_t expected = -3;
-        TEST_EQ("((all [A] (let [x (is -3 I32)] [y (is 2 I32)] x)) {Unit})");
+        TEST_EQ("((all [A] (let [x (is I32 -3)] [y (is I32 2)] x)) {Unit})");
     }
 
     // TODO: polymorphic let of large values
@@ -313,13 +313,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     }
 
     if (test_start(log, mv_string("array-polymorphic-element-small"))) {
-        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 3;
         TEST_EQ("((all [A] proc [(a (Array [4] A))] aelt 2 a) my-array)");
     }
 
     if (test_start(log, mv_string("array-polymorphic-multi-element-access"))) {
-        RUN("(def my-array array [(is 1 U8) (is 2 U8) (is 3 U8) (is 4 U8)])");
+        RUN("(def my-array array [(is U8 1) (is U8 2) (is U8 3) (is U8 4)])");
         uint8_t expected = 5;
         TEST_EQ("((all [A] proc {(n (Num A))} [(a (Array [4] A))] (n.+ (aelt 2 a) (aelt 1 a))) my-array)");
     }

@@ -78,6 +78,7 @@ void delete_package(Package* package);
 
 void add_dependency(Package* package, Package* dep);
 Result add_module(Symbol symbol, Module* module, Package* package);
+Result remove_module(Package* package, Symbol symbol); 
 
 Name package_name(Package* package);
 Module* package_root_module(Package* package);
@@ -97,6 +98,11 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
  * Add a module definition in to the module's namespace. 
  */
 Result add_module_def(Module* module, Symbol symbol, Module* child);
+
+/**
+ * Remove a (module or value) definition from the module's namespace. 
+ */
+Result remove_def(Module* module, Symbol symbol); 
 
 /**
  *  Get the instantiation of an instance, given a set of types, and a set of
@@ -120,9 +126,18 @@ Result add_decl(Module* module, Symbol symbol, ModuleDecl decl);
  */
 void add_import_clause(ImportClause clause, Module* module);
 
-ModuleEntry* get_def(Symbol symbol, Module* module);
 SymbolArray get_exported_symbols(Module* module, Allocator* a);
 SymbolArray get_defined_symbols(Module* module, Allocator* a);
+
+/** Get a definition as an external module, i.e. 'getting' a non-exported
+    symbol will result in failure */
+ModuleEntry* get_def_external(Symbol symbol, Module* module);
+
+/** Get a definition as an internal module, i.e. 'getting' a non-exported
+    symbol will be ok */
+ModuleEntry* get_def_internal(Symbol symbol, Module* module);
+
+// TODO: update with exteranal/internal variants
 PtrArray get_defined_instances(Module* module, Allocator* a);
 
 Symbol module_name(Module* module);

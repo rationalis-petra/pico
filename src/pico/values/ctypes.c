@@ -600,8 +600,8 @@ CType mk_union_ctype(PiAllocator* pia, size_t nfields, ...) {
 
 CType mk_string_ctype(PiAllocator* pia) {
     return mk_struct_ctype(pia, 2,
-                    "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}),
-                    "bytes", mk_voidptr_ctype(pia));
+                           "bytes", mk_voidptr_ctype(pia),
+                           "memsize", mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned}));
 }
 
 CType mk_allocator_vtable_ctype(PiAllocator* pia) {

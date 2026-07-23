@@ -833,7 +833,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             if (ty_nodes.len != 0) {
                 Document* ptypes = mv_sep_doc(ty_nodes, a);
                 push_ptr(ptypes, &var_nodes);
-                var_doc = mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a);
+                var_doc = mv_group_doc(mk_paren_doc("[", "]",mv_nest_doc(2, mv_sep_doc(var_nodes, a), a), a), a);
             } else {
                 var_doc = mv_sep_doc(var_nodes, a);
             }
@@ -2750,10 +2750,17 @@ PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...) {
     return out;
 }
 
+PiType* mk_slice_type(PiAllocator* pia) {
+    SymbolPiList vars = mk_sym_list(1, pia);
+    push_sym(string_to_symbol(mv_string("A")), &vars);
+    return mk_named_type(pia, "Slice",
+                         mk_type_family(pia, vars,
+                                        mk_struct_type(pia, 2,
+                                                       "addr", mk_prim_type(pia, Address),
+                                                       "len", mk_prim_type(pia, UInt_64))));
+}
+
 PiType* mk_string_type(PiAllocator* pia) {
-    // Named String Struct [.memsize U64] [.bytes Address]
     return mk_named_type(pia, "String",
-                         mk_struct_type(pia, 2,
-                                        "memsize", mk_prim_type(pia, UInt_64),
-                                        "bytes", mk_prim_type(pia, Address)));
+                         mk_app_type(pia, mk_slice_type(pia), mk_prim_type(pia, UInt_8)));
 }

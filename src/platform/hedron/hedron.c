@@ -447,12 +447,9 @@ VkResult create_logical_device(Allocator* a) {
     create_info.enabledExtensionCount = num_required_device_extensions;
     create_info.ppEnabledExtensionNames = required_device_extensions;
 
-    if (enable_validation) {
-        create_info.enabledLayerCount = num_required_validation_layers;
-        create_info.ppEnabledLayerNames = required_validation_layers;
-    } else {
-        create_info.enabledLayerCount = 0;
-    }
+    // Device layers are generally considered legacy and should be set to 0 in
+    // modern vulkan.
+    create_info.enabledLayerCount = 0;
 
     return vkCreateDevice(physical_device, &create_info, NULL, &logical_device);
 }

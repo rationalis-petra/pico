@@ -347,7 +347,9 @@ PiType* mk_type_family(PiAllocator* pia, SymbolPiList vars, PiType* body);
 PiType* mk_app_type(PiAllocator* pia, PiType* fam, ...);
 
 // Types from the standard library
-// Struct [.len U64] [.capacity U64] [.bytes Address]
+// Named Slice Family [A] [.addr Address] [.len U64]
+PiType* mk_slice_type(PiAllocator* pia);
+// Named String (Slice U8)
 PiType* mk_string_type(PiAllocator* pia);
 
 #endif
