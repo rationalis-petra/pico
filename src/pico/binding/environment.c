@@ -111,7 +111,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
             } else {
                 push_ptr(entry->value, &values);
             }
-            break;
+            continue;
 
         symbols_root_check:
             entry = get_def_internal(segment.symbols.data[k], root);

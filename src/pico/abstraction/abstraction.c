@@ -3110,6 +3110,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 .path = path,
             };
         }
+
         /**
          * We now know that this is truly a more complex path/import. Loop
          * through each possibility.
@@ -3263,7 +3264,17 @@ PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
             
                 cont = cont.branch.nodes.data[2];
             } else {
-                import_bad_path(raw, point, a);
+                SymbolArray symlist;
+                if (!get_symbol_list(&symlist, cont, a)) {
+                    import_bad_path(raw, point, a);
+                }
+
+                PathSegment segment = {
+                    .type = SegSymbols,
+                    .symbols = symlist,
+                };
+                push_path_segment(segment, &path);
+                running = false;
             }
         } else if (cont.type == RawAtom && cont.atom.type == ASymbol) {
             PathSegment segment = {.type = SegSymbol, .symbol = cont.atom.symbol};
