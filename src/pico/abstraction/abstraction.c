@@ -203,11 +203,13 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
 
     // Now, imports/exports
     Imports imports;
+    ReExports re_exports;
     Exports exports;
     exports.export_all = false;
 
-    imports.clauses = mk_import_clause_array(8, a);
-    exports.clauses = mk_export_clause_array(8, a);
+    imports.clauses = mk_import_clause_array(4, a);
+    exports.clauses = mk_export_clause_array(4, a);
+    re_exports.clauses = mk_import_clause_array(0, a);
     for (size_t i = 2; i < raw.branch.nodes.len; i++) {
         RawTree clauses = raw.branch.nodes.data[i];
         if (clauses.type != RawBranch) {
@@ -225,6 +227,11 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
             for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
                 ImportClause clause = abstract_import_clause(&clauses.branch.nodes.data[i], a, point);
                 push_import_clause(clause, &imports.clauses);
+            }
+        } else if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("re-export")))) {
+            for (size_t i = 1; i < clauses.branch.nodes.len; i++) {
+                ImportClause clause = abstract_import_clause(&clauses.branch.nodes.data[i], a, point);
+                push_import_clause(clause, &re_exports.clauses);
             }
         } else if (eq_symbol(&clauses.branch.nodes.data[0], string_to_symbol(mv_string("export")))) {
             for (size_t i = 1; i < clauses.branch.nodes.len; i++) {

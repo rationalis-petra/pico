@@ -65,6 +65,10 @@ typedef struct {
     ImportClauseArray clauses;
 } Imports;
 
+typedef struct {
+    ImportClauseArray clauses;
+} ReExports;
+
 bool imclause_eq(ImportClause c1, ImportClause c2);
 bool is_simple_path(PathSegmentArray path);
 ImportClause copy_import_clause(ImportClause clause, Allocator* a);
@@ -118,6 +122,7 @@ typedef struct {
 typedef struct {
     Symbol name;
     Imports imports;
+    ReExports re_exports;
     Exports exports;
     Range range;
 } ModuleHeader;

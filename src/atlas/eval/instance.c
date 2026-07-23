@@ -412,7 +412,7 @@ Module* atlas_load_file(String filename, Package* package, Module* parent, Strin
     //  • Create new module
     //  • Update module based on imports
     // Note: volatile is to protect from clobbering by longjmp
-    module = mk_module(*header, package, NULL);
+    module = mk_module(*header, package, parent);
 
     old_module = get_std_current_module();
     set_std_current_module(module);
