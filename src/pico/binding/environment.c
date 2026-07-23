@@ -75,7 +75,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
     bool last_iteration = path.len == 1;
     switch (segment.type) {
     case SegSymbol: {
-        ModuleEntry* entry = get_def_internal(segment.symbol, mfor);
+        ModuleEntry* entry = get_def_internal(segment.symbol, parent);
         if (!entry) goto symbol_root_check;
         check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
         all_modules &= entry->is_module;
@@ -127,7 +127,7 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
         break;
     }
     default:
-        panic(mv_string("Should not "));
+        panic(mv_string("Invalid Path Segment encountered in  initialise_path_trace"));
     }
 
     return (Origins) {

@@ -62,9 +62,11 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
     }
 
     if (test_start(log, mv_string("modlue-import-path-visible-private-siblings"))) {
-        MODULE("(module test-module (import (core :all) (num.i64 :all)) (export val)) \n"
-            "  (def val (+ 1 3))");
-        int64_t expected = 4;
+        MODULE("(module test-sub (import (core :all) (num.i64 :all)) (export sub-val)) \n"
+            "(def sub-val (+ 1 3))");
+        MODULE("(module test-module (import (core :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
+            "(def val (+ 1 sub-val))");
+        int64_t expected = 5;
         TEST_EQ("test-module.val");
     }
 
@@ -85,6 +87,17 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         MODULE("(module sub2 (import (core :all) (num.i64 :all)) (export val2)) \n"
                "(def val2 2)");
         MODULE("(module test-module (import (core :all) ((sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+            "  (def val (+ val1 val2))");
+        int64_t expected = 3;
+        TEST_EQ("test-module.val");
+    }
+
+    if (test_start(log, mv_string("module-import-values"))) {
+      MODULE(
+          "(module sub1 (import (core :all) (num.i64 :all)) (export val1 val2)) \n"
+          "(def val1 1)\n"
+          "(def val2 2)\n");
+        MODULE("(module test-module (import (core :all) (sub1 :values (val1 val2)) (num.i64 :all)) (export val)) \n"
             "  (def val (+ val1 val2))");
         int64_t expected = 3;
         TEST_EQ("test-module.val");

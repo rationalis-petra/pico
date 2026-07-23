@@ -3118,6 +3118,7 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
         PathSegmentArray path = get_path(raw->branch.nodes.data[0], point, a);
         size_t index = 1;
         ImportClause out_clause = {
+            .type = ImportComplex,
             .path = path,
         };
         while (index < raw->branch.nodes.len) {
