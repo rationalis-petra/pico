@@ -14,7 +14,7 @@ void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("num")),
+        .name = string_to_name(mv_string("num")),
         .imports = imports,
         .exports = exports,
     };

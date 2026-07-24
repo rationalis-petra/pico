@@ -22,7 +22,7 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("memory")),
+        .name = string_to_name(mv_string("memory")),
         .imports = imports,
         .exports = exports,
     };
@@ -41,7 +41,7 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
     }
 
     PiType type;
-    Symbol sym;
+    Name name;
 
     Segments null_segments = (Segments) {
         .code = mk_u8_array(0, &ra),
@@ -49,10 +49,10 @@ void add_memory_module(Target target, Module *data, RegionAllocator* region) {
     };
 
     type.kind.nargs = 1;
-    sym = string_to_symbol(mv_string("AllocVTable"));
-    add_def(module, sym, type, get_allocator_vtable_type(), null_segments, NULL);
+    name = string_to_name(mv_string("AllocVTable"));
+    add_def(module, name, type, get_allocator_vtable_type(), null_segments, NULL);
 
     type.kind.nargs = 0;
-    sym = string_to_symbol(mv_string("Allocator"));
-    add_def(module, sym, type, get_allocator_type(), null_segments, NULL);
+    name = string_to_name(mv_string("Allocator"));
+    add_def(module, name, type, get_allocator_type(), null_segments, NULL);
 }

@@ -18,20 +18,20 @@ struct Environment {
 };
 
 // Helper function:
-void check_entry(ModuleEntry* entry, bool expect_module, Symbol name, Module* mfor, ErrorPoint* point, Allocator* a) {
+void check_entry(ModuleEntry* entry, bool expect_module, Name name, Module* mfor, ErrorPoint* point, Allocator* a) {
     if (!entry) {
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Module not found:"), a), &nodes);
-        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_symbol_string(name), a), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(name), a), a), &nodes);
         push_ptr(mk_str_doc(mv_string("while constructing environment for module"), a), &nodes);
-        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_symbol_string(module_name(mfor)), a), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(mfor)), a), a), &nodes);
         throw_error(point, mv_sep_doc(nodes, a));
     }
     if (!entry->is_module && expect_module) {
         String message = string_ncat(a, 4, mv_string("Symbol does not refer to a module: "),
-                                     symbol_to_string(name, a),
+                                     name_to_string(name, a),
                                      mv_string(" while constructing environment for module "),
-                                     symbol_to_string(module_name(mfor), a));
+                                     name_to_string(module_name(mfor), a));
         throw_error(point, mv_str_doc(message, a));
     }
 }
@@ -68,58 +68,58 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
         PtrArray nodes = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Import path cannot start with a wildcart (:all) path segment."), a), &nodes);
         push_ptr(mk_str_doc(mv_string("Error encountered while constructing environment for module"), a), &nodes);
-        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_symbol_string(module_name(mfor)), a), a), &nodes);
+        push_ptr(mk_paren_doc("'", "'", mk_str_doc(view_name_string(module_name(mfor)), a), a), &nodes);
         throw_error(point, mv_sep_doc(nodes, a));
     }
 
     bool last_iteration = path.len == 1;
     switch (segment.type) {
-    case SegSymbol: {
-        ModuleEntry* entry = get_def_internal(segment.symbol, parent);
+    case SegName: {
+        ModuleEntry* entry = get_def_internal(segment.name, parent);
         if (!entry) goto symbol_root_check;
-        check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
+        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
         all_modules &= entry->is_module;
         if (last_iteration && gather_names) {
             push_ptr(parent, &values);
-            push_u64(segment.symbol.name, &out_names);
+            push_name(segment.name, &out_names);
         } else {
             push_ptr(entry->value, &values);
         }
         break;
 
         symbol_root_check:
-        entry = get_def_internal(segment.symbol, root);
-        check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
+        entry = get_def_internal(segment.name, root);
+        check_entry(entry, !last_iteration, segment.name, mfor, point, a);
         all_modules &= entry->is_module;
         if (last_iteration && gather_names) {
             push_ptr(root, &values);
-            push_u64(segment.symbol.name, &out_names);
+            push_u64(segment.name, &out_names);
         } else {
             push_ptr(entry->value, &values);
         }
         break;
     }
-    case SegSymbols: {
-        for (size_t k = 0; k < segment.symbols.len; k++) {
-            ModuleEntry* entry = get_def_internal(segment.symbols.data[k], parent);
+    case SegNames: {
+        for (size_t k = 0; k < segment.names.len; k++) {
+            ModuleEntry* entry = get_def_internal(segment.names.data[k], parent);
             if (!entry) goto symbols_root_check;
-            check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
             all_modules &= entry->is_module;
             if (last_iteration && gather_names) {
                 push_ptr(parent, &values);
-                push_u64(segment.symbols.data[k].name, &out_names);
+                push_u64(segment.names.data[k], &out_names);
             } else {
                 push_ptr(entry->value, &values);
             }
             continue;
 
         symbols_root_check:
-            entry = get_def_internal(segment.symbols.data[k], root);
-            check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
+            entry = get_def_internal(segment.names.data[k], root);
+            check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
             all_modules &= entry->is_module;
             if (last_iteration && gather_names) {
                 push_ptr(root, &values);
-                push_u64(segment.symbols.data[k].name, &out_names);
+                push_u64(segment.names.data[k], &out_names);
             } else {
                 push_ptr(entry->value, &values);
             }
@@ -151,26 +151,26 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
         for (size_t j = 0; j < working_set.len; j++) {
             Module* module = working_set.data[j];
             switch (segment.type) {
-            case SegSymbol: {
-                ModuleEntry* entry = get_def_external(segment.symbol, module);
-                check_entry(entry, !last_iteration, segment.symbol, mfor, point, a);
+            case SegName: {
+                ModuleEntry* entry = get_def_external(segment.name, module);
+                check_entry(entry, !last_iteration, segment.name, mfor, point, a);
                 all_modules &= entry->is_module;
                 if (last_iteration && gather_names) {
                     push_ptr(module, &next_set);
-                    push_u64(segment.symbol.name, &out_names);
+                    push_name(segment.name, &out_names);
                 } else {
                     push_ptr(entry->value, &next_set);
                 }
                 break;
             }
-            case SegSymbols: {
-                for (size_t k = 0; k < segment.symbols.len; k++) {
-                    ModuleEntry* entry = get_def_external(segment.symbols.data[k], module);
-                    check_entry(entry, !last_iteration, segment.symbols.data[k], mfor, point, a);
+            case SegNames: {
+                for (size_t k = 0; k < segment.names.len; k++) {
+                    ModuleEntry* entry = get_def_external(segment.names.data[k], module);
+                    check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
                     if (last_iteration && gather_names) {
                         push_ptr(module, &next_set);
-                        push_u64(segment.symbols.data[k].name, &out_names);
+                        push_name(segment.names.data[k], &out_names);
                     } else {
                         push_ptr(entry->value, &next_set);
                     }
@@ -178,14 +178,14 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
                 break;
             }
             case SegWildcard: {
-                SymbolArray symbols = get_exported_symbols(module, a);
-                for (size_t k = 0; k < symbols.len; k++) {
-                    ModuleEntry* entry = get_def_external(symbols.data[k], module);
-                    check_entry(entry, !last_iteration, symbols.data[k], mfor, point, a);
+                NameArray names = get_exported_symbols(module, a);
+                for (size_t k = 0; k < names.len; k++) {
+                    ModuleEntry* entry = get_def_external(names.data[k], module);
+                    check_entry(entry, !last_iteration, names.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
                     if (last_iteration && gather_names) {
                         push_ptr(module, &next_set);
-                        push_u64(symbols.data[k].name, &out_names);
+                        push_name(names.data[k], &out_names);
                     } else {
                         push_ptr(entry->value, &next_set);
                     }
@@ -236,11 +236,11 @@ void refresh_env(Environment* env) {
     Module* module = env->base;
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_defined_symbols(module, env->gpa);
+    NameArray arr = get_defined_symbols(module, env->gpa);
     for (size_t i = 0; i < arr.len; i++ ) {
-        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+        name_ptr_insert(arr.data[i], module, &(env->symbol_origins));
     }
-    sdelete_symbol_array(arr);
+    sdelete_name_array(arr);
 
     // Get all implicits
     // TODO: We should flush old instances from the current module?
@@ -263,7 +263,7 @@ void refresh_env(Environment* env) {
         size_t replaces = p->len;
         for (size_t i = 0; i < p->len; i++) {
             InstanceSrc* other = p->data[i];
-            if (other->src == instance->src && symbol_eq(other->src_sym, instance->src_sym)) {
+            if (other->src == instance->src && other->src_sym == instance->src_sym) {
                 replaces = i;
             }
         }
@@ -346,34 +346,34 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
             for (size_t i = 0; i < targets.values.len; i++ ) {
                 Module* target = targets.values.data[i];
                 if (clause.import_instances | clause.import_types) {
-                    SymbolArray syms = get_exported_symbols(target, a);
+                    NameArray syms = get_exported_symbols(target, a);
                     // TODO: lookup here is probably n^2. Can we just...
                     // generate a list of exports instead?
                     for (size_t j = 0; j < syms.len; j++) {
                         ModuleEntry* entry = get_def_external(syms.data[j], target);
                         if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
-                            name_ptr_insert(syms.data[j].name, target, &env->symbol_origins);
+                            name_ptr_insert(syms.data[j], target, &env->symbol_origins);
                         }
                         if (clause.import_types & (entry->type.sort == TKind)) {
-                            name_ptr_insert(syms.data[j].name, target, &env->symbol_origins);
+                            name_ptr_insert(syms.data[j], target, &env->symbol_origins);
                         }
                     }
                     if (clause.import_instances) {
                         add_instances_from(target, env, a);
                     }
-                    sdelete_symbol_array(syms);
+                    sdelete_name_array(syms);
                 }
                 if (clause.import_values) {
                     for (size_t j = 0; j < clause.values.len; j++) {
                         // TODO: make sure is exported
-                        Symbol sym = clause.values.data[j].from;
-                        ModuleEntry* entry = get_def_external(sym, target);
-                        check_entry(entry, false, sym, module, point, a);
+                        Name name = clause.values.data[j].from;
+                        ModuleEntry* entry = get_def_external(name, target);
+                        check_entry(entry, false, name, module, point, a);
                         if (clause.values.data[j].should_rename) {
-                            u64_name_insert(env->symbol_origins.len, sym.name, &env->symbol_renames);
-                            name_ptr_insert(clause.values.data[j].to.name, target, &env->symbol_origins);
+                            u64_name_insert(env->symbol_origins.len, name, &env->symbol_renames);
+                            name_ptr_insert(clause.values.data[j].to, target, &env->symbol_origins);
                         } else {
-                            name_ptr_insert(sym.name, target, &env->symbol_origins);
+                            name_ptr_insert(name, target, &env->symbol_origins);
                         }
                     }
                 }
@@ -387,11 +387,11 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 
             for (size_t i = 0; i < targets.values.len; i++ ) {
                 Module* target = targets.values.data[i];
-                SymbolArray syms = get_exported_symbols(target, a);
-                for (size_t j = 0; j < syms.len; j++ ) {
-                    name_ptr_insert(syms.data[j].name, target, &env->symbol_origins);
+                NameArray names = get_exported_symbols(target, a);
+                for (size_t j = 0; j < names.len; j++ ) {
+                    name_ptr_insert(names.data[j], target, &env->symbol_origins);
                 }
-                sdelete_symbol_array(syms);
+                sdelete_name_array(names);
                 add_instances_from(target, env, a);
             }
             sdelete_ptr_array(targets.values);
@@ -404,11 +404,11 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 
     // The local (module) definitions have the highest priority, so they  
     // get loaded first
-    SymbolArray arr = get_defined_symbols(module, a);
+    NameArray arr = get_defined_symbols(module, a);
     for (size_t i = 0; i < arr.len; i++ ) {
-        name_ptr_insert(arr.data[i].name, module, &(env->symbol_origins));
+        name_ptr_insert(arr.data[i], module, &(env->symbol_origins));
     }
-    sdelete_symbol_array(arr);
+    sdelete_name_array(arr);
 
     // Get all implicits
     PtrArray instances = get_defined_instances(module, a);
@@ -450,36 +450,36 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
         for (size_t j = 0; j < working_set.len; j++) {
             Module* module = working_set.data[j];
             switch (segment.type) {
-            case SegSymbol: {
-                ModuleEntry* entry = get_def_external(segment.symbol, module);
+            case SegName: {
+                ModuleEntry* entry = get_def_external(segment.name, module);
                 if (entry == NULL) {
                     return (ImportClauseStatus) {
                         .type = ICNotExists,
-                        .bad_symbol = segment.symbol,
+                        .bad_symbol = segment.name,
                     };
                 }
                 if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
                     return (ImportClauseStatus) {
                         .type = ICNotModule,
-                        .bad_symbol = segment.symbol,
+                        .bad_symbol = segment.name,
                     };
                 }
                 push_ptr(entry->value, &next_set);
                 break;
             }
-            case SegSymbols: {
-                for (size_t k = 0; k < segment.symbols.len; k++) {
-                    ModuleEntry* entry = get_def_external(segment.symbols.data[k], module);
+            case SegNames: {
+                for (size_t k = 0; k < segment.names.len; k++) {
+                    ModuleEntry* entry = get_def_external(segment.names.data[k], module);
                     if (entry == NULL) {
                         return (ImportClauseStatus) {
                             .type = ICNotExists,
-                            .bad_symbol = segment.symbols.data[k],
+                            .bad_symbol = segment.names.data[k],
                         };
                     }
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
                         return (ImportClauseStatus) {
                             .type = ICNotModule,
-                            .bad_symbol = segment.symbols.data[k],
+                            .bad_symbol = segment.names.data[k],
                         };
                     }
                     push_ptr(entry->value, &next_set);
@@ -487,13 +487,13 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
                 break;
             }
             case SegWildcard: {
-                SymbolArray symbols = get_exported_symbols(module, a);
-                for (size_t k = 0; k < symbols.len; k++) {
-                    ModuleEntry* entry = get_def_external(symbols.data[k], module);
+                NameArray names = get_exported_symbols(module, a);
+                for (size_t k = 0; k < names.len; k++) {
+                    ModuleEntry* entry = get_def_external(names.data[k], module);
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {
                         return (ImportClauseStatus) {
                             .type = ICNotModule,
-                            .bad_symbol = symbols.data[k],
+                            .bad_symbol = names.data[k],
                         };
                     }
                     push_ptr(entry->value, &next_set);
@@ -553,9 +553,11 @@ EnvEntry env_lookup(Symbol sym, Environment* env) {
         if (rename) {
             sym.name = *rename;
         };
-        ModuleEntry *mentry = module == env->base
-            ? get_def_internal(sym, module)
-            : get_def_external(sym, module); 
+        ModuleEntry *mentry = sym.did == 0
+            ? (module == env->base ? get_def_internal(sym.name, module)
+                                   : get_def_external(sym.name, module))
+            // only did == 0 cound as package names/symbols
+            : NULL; 
         if (mentry != NULL && mentry->value) {
             result.success = Ok;
             result.is_module = mentry->is_module;
@@ -576,7 +578,7 @@ PiType* env_lookup_tydecl(Symbol sym, Environment* env) {
 
     Module** module = (Module**)name_ptr_lookup(sym.name, env->symbol_origins);
     if (module) {
-        ModuleEntry* mentry = get_def_internal(sym, *module); 
+        ModuleEntry* mentry = sym.did == 0 ? get_def_internal(sym.name, *module) : NULL; 
         if (mentry != NULL) {
             if (mentry->declarations) {
                 PtrArray decls = *mentry->declarations;

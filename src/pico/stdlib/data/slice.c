@@ -22,7 +22,7 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("slice")),
+        .name = string_to_name(mv_string("slice")),
         .imports = imports,
         .exports = exports,
     };

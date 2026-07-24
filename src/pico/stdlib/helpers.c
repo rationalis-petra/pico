@@ -110,8 +110,8 @@ void add_import(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
         PathSegment segment = {
-            .type = SegSymbol,
-            .symbol = string_to_symbol(mv_string(name)),
+            .type = SegName,
+            .name = string_to_name(mv_string(name)),
         };
         push_path_segment(segment, &path);
     }
@@ -129,8 +129,8 @@ void add_import_all(ImportClauseArray* arr, Allocator* a, size_t len, ...) {
     for (size_t i = 0; i < len; i++) {
         const char* name = va_arg(args, const char*);
         PathSegment segment = {
-            .type = SegSymbol,
-            .symbol = string_to_symbol(mv_string(name)),
+            .type = SegName,
+            .name = string_to_name(mv_string(name)),
         };
         push_path_segment(segment, &path);
     }

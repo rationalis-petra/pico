@@ -199,7 +199,8 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
         err.message = mv_cstr_doc("Expecting parameter 'modulename' in module header.", a);
         throw_pi_error(point, err);
     }
-    Symbol module_name = raw.branch.nodes.data[1].atom.symbol;
+    // TODO: check did == 0 and raise error message if not!
+    Name module_name = raw.branch.nodes.data[1].atom.symbol.name;
 
     // Now, imports/exports
     Imports imports;
@@ -341,6 +342,19 @@ bool get_symbol_list(SymbolArray* arr, RawTree nodes, Allocator* a) {
         RawTree node = nodes.branch.nodes.data[i];
         if (node.type != RawAtom || node.atom.type != ASymbol) { return false; }
         push_symbol(node.atom.symbol, arr);
+    }
+    return true;
+}
+
+bool get_name_list(NameArray* arr, RawTree nodes, Allocator* a) {
+    if (nodes.type != RawBranch) { return false; }
+    *arr = mk_name_array(nodes.branch.nodes.len, a);
+
+    for (size_t i = 0; i < nodes.branch.nodes.len; i++) {
+        RawTree node = nodes.branch.nodes.data[i];
+        if (node.type != RawAtom || node.atom.type != ASymbol) { return false; }
+        if (node.atom.symbol.did != 0) { return false; }
+        push_name(node.atom.symbol.name, arr);
     }
     return true;
 }
@@ -2895,17 +2909,18 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Symbol sym = raw.branch.nodes.data[1].atom.symbol;
+        // TODO: check did == 0
+        Name bind = raw.branch.nodes.data[1].atom.symbol.name;
         
         RawTree* raw_term = (raw.branch.nodes.len == 3) ? &raw.branch.nodes.data[2] : raw_slice(&raw, 2, ctx.pia);
 
-        shadow_var(sym, ctx.env);
+        shadow_var((Symbol){.name = bind, .did = 0}, ctx.env);
         SynRef out = abstract_expr_i(*raw_term, ctx);
         shadow_pop(1, ctx.env);
 
         res = (TopLevel) {
             .type = TLDef,
-            .def.bind = sym,
+            .def.bind = bind,
             .def.value = out,
         };
 
@@ -2924,14 +2939,15 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
-        Symbol sym = raw.branch.nodes.data[1].atom.symbol;
+        // TODO: check did == 0
+        Name bind = raw.branch.nodes.data[1].atom.symbol.name;
         
         // Declaration bodies are a set of field, value pairs, e.g.
         // [.type <Type>]
         // [.optimise <level>]
         // [.inline-hint <hint>]
 
-        shadow_var(sym, ctx.env);
+        shadow_var((Symbol){.name = bind, .did = 0}, ctx.env);
         SymSynAMap properties = mk_sym_syn_amap(raw.branch.nodes.len, a);
         for (size_t i = 2; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
@@ -2963,7 +2979,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
 
         res = (TopLevel) {
             .type = TLDecl,
-            .decl.bind = sym,
+            .decl.bind = bind,
             .decl.properties = properties,
         };
 
@@ -3082,7 +3098,8 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
     PicoError err;
     if (is_symbol(*raw)) {
         PathSegmentArray path = mk_path_segment_array(1,a);
-        PathSegment segment = {.type = SegSymbol, .symbol = raw->atom.symbol};
+        // TODO: check did == 0
+        PathSegment segment = {.type = SegName, .name = raw->atom.symbol.name};
         push_path_segment(segment, &path);
         return (ImportClause) {
             .type = ImportSimple,
@@ -3164,7 +3181,8 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                     import_as_bad_symbol(*raw, index, point, a);
 
                 out_clause.import_as = true;
-                out_clause.to = raw_to.atom.symbol;
+                // TODO: check did == 0
+                out_clause.to = raw_to.atom.symbol.name;
 
             } else {
                 import_key_malformed(raw->branch.nodes.data[1], point, a);
@@ -3188,7 +3206,8 @@ ImportValueArray abstract_import_values(RawTree* raw, PiErrorPoint* point, Alloc
         RawTree target = raw->branch.nodes.data[i];
         if (is_symbol(target)) {
             ImportValue out = {
-                .from = target.atom.symbol
+                // TODO: check did == 0
+                .from = target.atom.symbol.name
             };
             push_import_value(out, &values);
         } else if (target.type == RawBranch) {
@@ -3207,8 +3226,9 @@ ImportValueArray abstract_import_values(RawTree* raw, PiErrorPoint* point, Alloc
 
             ImportValue out = {
                 .should_rename = true,
-                .from = target.branch.nodes.data[0].atom.symbol,
-                .to = target.branch.nodes.data[2].atom.symbol,
+                // TODO: check did == 0
+                .from = target.branch.nodes.data[0].atom.symbol.name,
+                .to = target.branch.nodes.data[2].atom.symbol.name,
             };
             push_import_value(out, &values);
         } else {
@@ -3249,21 +3269,22 @@ PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
                             import_bad_path(raw, point, a);
                         }
                     } else {
-                        SymbolArray symlist;
-                        if (!get_symbol_list(&symlist, segment_part, a)) {
+                        NameArray name_list;
+                        if (!get_name_list(&name_list, segment_part, a)) {
                             import_bad_path(raw, point, a);
                         }
 
                         PathSegment segment = {
-                            .type = SegSymbols,
-                            .symbols = symlist,
+                            .type = SegNames,
+                            .names = name_list,
                         };
                         push_path_segment(segment, &path);
                     }
                 } else if (segment_part.type == RawAtom && segment_part.atom.type == ASymbol) {
                     PathSegment segment = {
-                        .type = SegSymbol,
-                        .symbol = segment_part.atom.symbol,
+                        .type = SegName,
+                        // TODO: check did == 0
+                        .name = segment_part.atom.symbol.name,
                     };
                     push_path_segment(segment, &path);
                 } else {
@@ -3272,20 +3293,21 @@ PathSegmentArray get_path(RawTree raw, PiErrorPoint *point, Allocator* a) {
             
                 cont = cont.branch.nodes.data[2];
             } else {
-                SymbolArray symlist;
-                if (!get_symbol_list(&symlist, cont, a)) {
+                NameArray name_list;
+                if (!get_name_list(&name_list, cont, a)) {
                     import_bad_path(raw, point, a);
                 }
 
                 PathSegment segment = {
-                    .type = SegSymbols,
-                    .symbols = symlist,
+                    .type = SegNames,
+                    .names = name_list,
                 };
                 push_path_segment(segment, &path);
                 running = false;
             }
         } else if (cont.type == RawAtom && cont.atom.type == ASymbol) {
-            PathSegment segment = {.type = SegSymbol, .symbol = cont.atom.symbol};
+            // TODO: check did == 0
+            PathSegment segment = {.type = SegName, .name = cont.atom.symbol.name};
             push_path_segment(segment, &path);
             running = false;
         } else {
@@ -3309,7 +3331,8 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
     if (is_symbol(*raw)) {
         return (ExportClause) {
             .type = ExportName,
-            .name = raw->atom.symbol,
+            // TODO: check did == 0
+            .name = raw->atom.symbol.name,
         };
     } else if (raw->type == RawBranch) {
         // If branch, there are two options
@@ -3359,10 +3382,11 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
                 throw_pi_error(point, err);
             }
 
+            // TODO: check did of symbols is 0
             return (ExportClause) {
                 .type = ExportNameAs,
-                .name = name,
-                .rename = rename,
+                .name = name.name,
+                .rename = rename.name,
             };
         } else {
             err.range = raw->range;
@@ -3423,7 +3447,8 @@ Module* try_get_module(SynRef ref, AbstractionICtx ctx) {
         Syntax syn = get_syntax(ref, ctx.tape);
         Module *module = try_get_module(syn.projector.val, ctx);
         if (module) {
-            ModuleEntry* entry = get_def_external(syn.projector.field, module);
+            // TODO: check did == 0
+            ModuleEntry* entry = get_def_external(syn.projector.field.name, module);
             if (entry->is_module) { return entry->value; }
             else { return NULL; }
         } else {
@@ -3503,7 +3528,8 @@ SynRef resolve_module_projector(Range range, SynRef source, RawTree* msym, Abstr
          * Note: seems like having to check for the special case of
          * Kind/Constraint is causing issues. 
          */
-        ModuleEntry* e = get_def_external(msym->atom.symbol, m);
+        // TODO: check did == 0
+        ModuleEntry* e = get_def_external(msym->atom.symbol.name, m);
         if (e) {
             if (e->is_module) {
                 Syntax syn = {

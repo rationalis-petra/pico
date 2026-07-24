@@ -555,12 +555,12 @@ typedef enum {
 } TopLevel_t;
 
 typedef struct {
-    Symbol bind;
+    Name bind;
     SynRef value;
 } Definition;
 
 typedef struct {
-    Symbol bind;
+    Name bind;
     union {
         SymSynAMap properties;
         PtrArray decls;

@@ -12,7 +12,7 @@ void add_meta_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("meta")),
+        .name = string_to_name(mv_string("meta")),
         .imports = imports,
         .exports = exports,
     };

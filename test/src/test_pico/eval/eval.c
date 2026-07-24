@@ -29,7 +29,7 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("eval-test-module")),
+        .name = string_to_name(mv_string("eval-test-module")),
         .imports = imports,
         .exports = exports,
     };

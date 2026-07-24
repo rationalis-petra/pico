@@ -8,13 +8,12 @@
 
 #include "pico/values/values.h"
 #include "pico/data/string_array.h"
-#include "pico/data/symbol_array.h"
 #include "pico/data/range.h"
 
 typedef struct {
     Option_t type;
-    Symbol value;
-} SymbolOption;
+    Name value;
+} NameOption;
 
 typedef enum {
     StExecutable,
@@ -22,17 +21,17 @@ typedef enum {
 } Stanza_t;
 
 typedef struct {
-    Symbol name;
+    Name name;
     String filename;
-    Symbol entry_point;
-    SymbolArray dependencies;
+    Name entry_point;
+    NameArray dependencies;
 } Executable;
 
 typedef struct {
-    Symbol name;
+    Name name;
     StringOption filename;
     StringArray submodules;
-    SymbolArray dependencies;
+    NameArray dependencies;
 } Library;
 
 typedef struct {

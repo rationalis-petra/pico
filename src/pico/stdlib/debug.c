@@ -25,12 +25,12 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("debug")),
+        .name = string_to_name(mv_string("debug")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
-    Symbol sym;
+    Name name;
 
     PiType type;
     //PiType* typep;
@@ -39,10 +39,7 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
         panic(doc_to_str(point.error_message, 120, &ra));
     }
 
-    // TODO: we use int64_t as it has the requisite size (8 bytes)
-    // for pico values: currently don't support non-64 bit values 
     TermFormer former;
-    //TermFormer former;
     type.sort = TPrim;
     type.prim = TFormer;
 
@@ -55,8 +52,8 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     // Term Formers
     // ------------------------------------------------------------------------
     former = FDescribe;
-    sym = string_to_symbol(mv_string("describe"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("describe"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
     // Functions
@@ -71,10 +68,10 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
     PiType* typep;
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
     build_debug_break_fn(typep, target.target, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("debug-break"));
+    name = string_to_name(mv_string("debug-break"));
     fn_segments.code = get_instructions(target.target);
     prepped = prep_target(module, fn_segments, target.target, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(target.target);
 }
 

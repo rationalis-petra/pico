@@ -144,12 +144,12 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("refl")),
+        .name = string_to_name(mv_string("refl")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(meta), meta);
-    Symbol sym;
+    Name name;
 
     PiType type;
     PiType* typep;
@@ -175,13 +175,13 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     };
 
     typep = mk_opaque_type(&pia, "Module", module, mk_prim_type(&pia, Address));
-    sym = string_to_symbol(mv_string("Module"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Module"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     PiType* module_type = typep;
 
     typep = mk_opaque_type(&pia, "Package", module, mk_prim_type(&pia, Address));
-    sym = string_to_symbol(mv_string("Package"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Package"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     PiType* package_type = typep;
 
     // ------------------------------------------------------------------------
@@ -191,13 +191,13 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     void* nul = NULL;
     std_current_module = mk_dynamic_var(sizeof(Module*), &nul); 
     typep = mk_dynamic_type(&pia, module_type);
-    sym = string_to_symbol(mv_string("current-module"));
-    add_def(module, sym, *typep, &std_current_module, null_segments, NULL);
+    name = string_to_name(mv_string("current-module"));
+    add_def(module, name, *typep, &std_current_module, null_segments, NULL);
 
     std_current_package = mk_dynamic_var(sizeof(Package*), &nul); 
     typep = mk_dynamic_type(&pia, package_type);
-    sym = string_to_symbol(mv_string("current-package"));
-    add_def(module, sym, *typep, &std_current_module, null_segments, NULL);
+    name = string_to_name(mv_string("current-package"));
+    add_def(module, name, *typep, &std_current_module, null_segments, NULL);
 
     Segments fn_segments = (Segments) {.data = mk_u8_array(0, &ra),};
     Segments prepped;    // load-module : Proc [String] Unit
@@ -206,10 +206,10 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
                          mk_app_type(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_load_module_fun(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("load-module"));
+    name = string_to_name(mv_string("load-module"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // run-script : Proc [String] Result
@@ -218,9 +218,9 @@ void add_refl_module(Assembler* ass, Module* meta, RegionAllocator* region) {
                          mk_app_type(&pia, get_maybe_type(), module_type),
                          mk_enum_type(&pia, 2, "Ok", 0, "Err", 1, mk_string_type(&pia)));
     build_run_script_fun(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("run-script"));
+    name = string_to_name(mv_string("run-script"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

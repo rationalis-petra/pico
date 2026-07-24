@@ -48,6 +48,6 @@ typedef struct {
     size_t data_size;
 } ProgramFragments;
 
-ProgramFragments gather_fragments(Symbol entry_point, Module* module, BuildErrorPoint* point, Allocator* allocator);
+ProgramFragments gather_fragments(Name entry_point, Module* module, BuildErrorPoint* point, Allocator* allocator);
 
 #endif

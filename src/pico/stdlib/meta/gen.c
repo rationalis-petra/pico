@@ -151,13 +151,13 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("gen")),
+        .name = string_to_name(mv_string("gen")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(meta), meta);
     delete_module_header(header);
-    Symbol sym;
+    Name name;
 
     PiType type;
     PiType* typep;
@@ -185,16 +185,16 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
     // Term Formers
     // ------------------------------------------------------------------------
     former = FTypeOf;
-    sym = string_to_symbol(mv_string("type-of"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("type-of"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FQuote;
-    sym = string_to_symbol(mv_string("quote"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("quote"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FCapture;
-    sym = string_to_symbol(mv_string("capture"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("capture"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
     // Types 
@@ -209,11 +209,11 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
                                                  "name", mk_prim_type(&pia, UInt_64), 
                                                  "did", mk_prim_type(&pia, UInt_64)));
         typep = symbol_type;
-        sym = string_to_symbol(mv_string("Symbol"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
+        name = string_to_name(mv_string("Symbol"));
+        add_def(module, name, type, &typep, null_segments, NULL);
         delete_pi_type_p(typep, &pia);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         symbol_type = e->value;
 
         PiType* atom_type = mk_enum_type(&pia, 6,
@@ -224,20 +224,20 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
                                          "string", 1, mk_string_type(&pia),
                                          "capture", 2, mk_prim_type(&pia, Address), mk_prim_type(&pia, Address));
         typep = atom_type;
-        sym = string_to_symbol(mv_string("Atom"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
+        name = string_to_name(mv_string("Atom"));
+        add_def(module, name, type, &typep, null_segments, NULL);
 
         PiType* hint_type = mk_enum_type(&pia, 3, "expr", 0, "special", 0, "implicit", 0);
         typep = hint_type;
-        sym = string_to_symbol(mv_string("Hint"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
+        name = string_to_name(mv_string("Hint"));
+        add_def(module, name, type, &typep, null_segments, NULL);
 
         range_type = mk_struct_type(&pia, 2, "start", mk_prim_type(&pia, UInt_64), "end", mk_prim_type(&pia, UInt_64));
         typep = range_type;
-        sym = string_to_symbol(mv_string("Range"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
+        name = string_to_name(mv_string("Range"));
+        add_def(module, name, type, &typep, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         range_type = e->value;
 
         PiType* syn_name_ty = mk_var_type(&pia, "Syntax");
@@ -249,25 +249,25 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
                                               "atom", 2, copy_pi_type_p(range_type, &pia), atom_type,
                                               "node", 3, copy_pi_type_p(range_type, &pia), hint_type, syn_array));
 
-        sym = string_to_symbol(mv_string("Syntax"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def_internal(sym, module);
+        name = string_to_name(mv_string("Syntax"));
+        add_def(module, name, type, &typep, null_segments, NULL);
+        e = get_def_internal(name, module);
         syntax_type = e->value;
 
         delete_pi_type_p(typep, &pia);
 
         typep = mk_struct_type(&pia, 2, "message", mk_string_type(&pia), "range", copy_pi_type_p(range_type, &pia));
-        sym = string_to_symbol(mv_string("MacroError"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def_internal(sym, module);
+        name = string_to_name(mv_string("MacroError"));
+        add_def(module, name, type, &typep, null_segments, NULL);
+        e = get_def_internal(name, module);
         macro_error_type = e->value;
 
         delete_pi_type_p(typep, &pia);
 
         typep = mk_app_type(&pia, get_either_type(), copy_pi_type_p(macro_error_type, &pia), copy_pi_type_p(syntax_type, &pia));
-        sym = string_to_symbol(mv_string("MacroResult"));
-        add_def(module, sym, type, &typep, null_segments, NULL);
-        e = get_def_internal(sym, module);
+        name = string_to_name(mv_string("MacroResult"));
+        add_def(module, name, type, &typep, null_segments, NULL);
+        e = get_def_internal(name, module);
         macro_result_type = e->value;
 
         delete_pi_type_p(typep, &pia);
@@ -287,50 +287,50 @@ void add_gen_module(Assembler* ass, Module* meta, RegionAllocator* region) {
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), mk_prim_type(&pia, UInt_64));
     build_mk_name_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("mk-name"));
+    name = string_to_name(mv_string("mk-name"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
     build_mk_symbol_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("mk-symbol"));
+    name = string_to_name(mv_string("mk-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
     build_mk_unique_symbol_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("mk-unique-symbol"));
+    name = string_to_name(mv_string("mk-unique-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_string_type(&pia), copy_pi_type_p(get_symbol_type(), &pia));
     build_mk_unique_symbol_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("mk-unique-symbol"));
+    name = string_to_name(mv_string("mk-unique-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 2, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, UInt_64), copy_pi_type_p(range_type, &pia));
     build_range_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("range"));
+    name = string_to_name(mv_string("range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, get_syntax_type(), copy_pi_type_p(range_type, &pia));
     build_get_range_fn(typep, ass, &pia, &ra, &point);
-    sym = string_to_symbol(mv_string("get-range"));
+    name = string_to_name(mv_string("get-range"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     sdelete_u8_array(null_segments.code);

@@ -14,7 +14,7 @@ Document* pretty_stanza(Stanza stanza, Allocator* a) {
         {
             PtrArray name_nodes = mk_ptr_array(2, a);
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("name"), a), a), &name_nodes);
-            push_ptr(mk_str_doc(view_symbol_string(stanza.library.name), a), &name_nodes);
+            push_ptr(mk_str_doc(view_name_string(stanza.library.name), a), &name_nodes);
 
             Document* name_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(name_nodes, a), a), a);
             push_ptr(name_doc, &nodes);
@@ -65,7 +65,7 @@ Document* pretty_stanza(Stanza stanza, Allocator* a) {
         {
             PtrArray name_nodes = mk_ptr_array(2, a);
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("name"), a), a), &name_nodes);
-            push_ptr(mk_str_doc(view_symbol_string(stanza.executable.name), a), &name_nodes);
+            push_ptr(mk_str_doc(view_name_string(stanza.executable.name), a), &name_nodes);
 
             Document* name_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(name_nodes, a), a), a);
             push_ptr(name_doc, &nodes);
@@ -83,7 +83,7 @@ Document* pretty_stanza(Stanza stanza, Allocator* a) {
         {
             PtrArray entry_point_nodes = mk_ptr_array(2, a);
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("entry-point"), a), a), &entry_point_nodes);
-            push_ptr(mk_str_doc(view_symbol_string(stanza.executable.entry_point), a), &entry_point_nodes);
+            push_ptr(mk_str_doc(view_name_string(stanza.executable.entry_point), a), &entry_point_nodes);
 
             Document* entry_point_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(entry_point_nodes, a), a), a);
             push_ptr(entry_point_doc, &nodes);
@@ -93,9 +93,9 @@ Document* pretty_stanza(Stanza stanza, Allocator* a) {
             PtrArray dep_nodes = mk_ptr_array(1 + stanza.executable.dependencies.len, a);
             push_ptr(mv_style_doc(field_style, mk_str_doc(mv_string("dependencies"), a), a), &dep_nodes);
 
-            SymbolArray deps = stanza.executable.dependencies;
+            NameArray deps = stanza.executable.dependencies;
             for (size_t i = 0; i < deps.len; i ++) {
-                push_ptr(mk_str_doc(view_symbol_string(deps.data[i]), a), &dep_nodes);
+                push_ptr(mk_str_doc(view_name_string(deps.data[i]), a), &dep_nodes);
             }
 
             Document* dep_doc = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(dep_nodes, a), a), a);

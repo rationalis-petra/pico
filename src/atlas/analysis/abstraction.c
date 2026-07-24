@@ -43,10 +43,10 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
             //   file :: string option
             //   submodules :: string list
             PropSet* props = make_prop_set(4, &ra);
-            add_symbol_prop(mv_string("name"), &library_stanza.name, props);
+            add_name_prop(mv_string("name"), &library_stanza.name, props);
             add_string_option_prop(mv_string("file"), &library_stanza.filename, props);
             add_string_array_prop(mv_string("submodules"), &library_stanza.submodules, props);
-            add_symbol_array_prop(mv_string("dependencies"), &library_stanza.dependencies, props);
+            add_name_array_prop(mv_string("dependencies"), &library_stanza.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {
                 parse_prop(raw.branch.data[i], props, library_checks, point, &ra);
@@ -68,10 +68,10 @@ Stanza abstract_atlas(RawAtlas raw, RegionAllocator* region, PiErrorPoint* point
             //   entry-point :: symbol
             //   dependencies :: symbol list
             PropSet* props = make_prop_set(4, &ra);
-            add_symbol_prop(mv_string("name"), &executable_stanza.name, props);
+            add_name_prop(mv_string("name"), &executable_stanza.name, props);
             add_string_prop(mv_string("file"), &executable_stanza.filename, props);
-            add_symbol_prop(mv_string("entry-point"), &executable_stanza.entry_point, props);
-            add_symbol_array_prop(mv_string("dependencies"), &executable_stanza.dependencies, props);
+            add_name_prop(mv_string("entry-point"), &executable_stanza.entry_point, props);
+            add_name_array_prop(mv_string("dependencies"), &executable_stanza.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {
                 parse_prop(raw.branch.data[i], props, executable_checks, point, &ra);
@@ -148,8 +148,8 @@ void abstract_atlas_project(Project *project, ProjectRecord *record, RawAtlas ra
             // - package-name :: symbol
             // - package-dependencies :: symbol list
             PropSet* props = make_prop_set(4, &ra);
-            add_symbol_prop(mv_string("name"), &project->package.name, props);
-            add_symbol_array_prop(mv_string("dependencies"), &project->package.dependencies, props);
+            add_name_prop(mv_string("name"), &project->package.name, props);
+            add_name_array_prop(mv_string("dependencies"), &project->package.dependencies, props);
 
             for (size_t i = 1; i < raw.branch.len; i++) {
                 parse_prop(raw.branch.data[i], props, package_checks, point, &ra);

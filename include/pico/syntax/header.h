@@ -24,23 +24,23 @@ typedef enum : uint8_t {
 
 typedef struct {
     bool should_rename;
-    Symbol from;
-    Symbol to;
+    Name from;
+    Name to;
 } ImportValue;
 
 ARRAY_HEADER(ImportValue, import_value, ImportValue)
 
 typedef enum : uint8_t {
-  SegSymbol,
-  SegSymbols,
+  SegName,
+  SegNames,
   SegWildcard,
 } PathSegment_t;
 
 typedef struct {
     PathSegment_t type;
     union {
-        Symbol symbol;
-        SymbolArray symbols;
+        Name name;
+        NameArray names;
     };
 } PathSegment;
 
@@ -56,7 +56,7 @@ typedef struct {
     bool import_as;
     bool import_values;
     ImportValueArray values;
-    Symbol to;
+    Name to;
 } ImportClause;
 
 ARRAY_HEADER(ImportClause, import_clause, ImportClause)
@@ -91,8 +91,8 @@ typedef enum {
 
 typedef struct {
     ExportClause_t type;
-    Symbol name;
-    Symbol rename;
+    Name name;
+    Name rename;
 } ExportClause;
 
 ARRAY_HEADER(ExportClause, export_clause, ExportClause)
@@ -120,7 +120,7 @@ typedef struct {
  */
 
 typedef struct {
-    Symbol name;
+    Name name;
     Imports imports;
     ReExports re_exports;
     Exports exports;

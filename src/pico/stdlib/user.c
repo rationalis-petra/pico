@@ -29,7 +29,7 @@ void add_user_module(Package* base, RegionAllocator* region) {
     };
 
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("user")),
+        .name = string_to_name(mv_string("user")),
         .imports = imports,
         .exports = exports,
     };

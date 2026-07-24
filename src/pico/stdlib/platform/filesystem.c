@@ -145,12 +145,12 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("filesystem")),
+        .name = string_to_name(mv_string("filesystem")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(platform), platform);
-    Symbol sym;
+    Name name;
 
     ModuleEntry* e;
     PiType type;
@@ -169,10 +169,10 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
 
     typep = mk_opaque_type(pia, "File", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("File"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("File"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def_internal(sym, module);
+    e = get_def_internal(name, module);
     file_ty = e->value;
 
     typep =
@@ -181,60 +181,60 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
                                    "already-exists", 0, "permission-denied", 0,
                                    "file-in-use", 0, "invalid-argument", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("FileError"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("FileError"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def_internal(sym, module);
+    e = get_def_internal(name, module);
     file_err_ty = e->value;
 
     typep = mk_named_type(pia, "Mode", mk_enum_type(pia, 3, "read", 0, "write", 0, "read-write", 0, "append", 0, "read-append", 0));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Mode"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Mode"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def_internal(sym, module);
+    e = get_def_internal(name, module);
     file_mode_ty = e->value;
 
     typep = mk_proc_type(pia, 0, mk_string_type(pia));
     build_current_dir_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("get-current-directory"));
+    name = string_to_name(mv_string("get-current-directory"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
     build_set_current_dir_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("set-current-directory"));
+    name = string_to_name(mv_string("set-current-directory"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2, mk_string_type(pia),
                          file_mode_ty,
                          mk_app_type(pia, get_result_type(), file_ty, file_err_ty));
     build_open_file_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("open-file"));
+    name = string_to_name(mv_string("open-file"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(file_ty, pia), mk_prim_type(pia, Unit));
     build_close_file_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("close-file"));
+    name = string_to_name(mv_string("close-file"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(file_ty, pia), mk_prim_type(pia, UInt_8));
     build_read_byte_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("read-byte"));
+    name = string_to_name(mv_string("read-byte"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     PiType* u64 = mk_prim_type(pia, UInt_64);
@@ -243,36 +243,36 @@ void add_filesystem_module(Assembler *ass, Module *platform, RegionAllocator* re
                          mk_app_type(pia, get_maybe_type(), u64),
                          mk_app_type(pia, get_list_type(), u8));
     build_read_chunk_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("read-chunk"));
+    name = string_to_name(mv_string("read-chunk"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(u64, pia);
 
     typep = mk_proc_type(pia, 2, copy_pi_type_p(file_ty, pia), mk_prim_type(pia, UInt_8), mk_prim_type(pia, Unit));
     build_write_byte_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("write-byte"));
+    name = string_to_name(mv_string("write-byte"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 2, copy_pi_type_p(file_ty, pia),
                          mk_app_type(pia, get_list_type(), u8),
                          mk_prim_type(pia, Unit));
     build_write_chunk_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("write-chunk"));
+    name = string_to_name(mv_string("write-chunk"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(file_err_ty, pia), mk_string_type(pia));
     build_error_description_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("error-description"));
+    name = string_to_name(mv_string("error-description"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

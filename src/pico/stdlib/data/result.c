@@ -20,7 +20,7 @@ void add_result_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("result")),
+        .name = string_to_name(mv_string("result")),
         .imports = imports,
         .exports = exports,
     };

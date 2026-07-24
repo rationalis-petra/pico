@@ -31,12 +31,12 @@ void add_thread_module(Assembler *ass, Module *platform, RegionAllocator* region
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("thread")),
+        .name = string_to_name(mv_string("thread")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(platform), platform);
-    Symbol sym;
+    Name name;
 
     ModuleEntry* e;
     PiType type;
@@ -55,17 +55,17 @@ void add_thread_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     typep = mk_named_type(pia, "Seconds", mk_prim_type(pia, Float_64));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Seconds"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("Seconds"));
+    add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
-    e = get_def_internal(sym, module);
+    e = get_def_internal(name, module);
     PiType* seconds_ty = e->value;
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(seconds_ty, pia), mk_prim_type(pia, Unit));
     build_sleep_for_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("sleep-for"));
+    name = string_to_name(mv_string("sleep-for"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

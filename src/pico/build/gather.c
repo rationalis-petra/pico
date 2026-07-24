@@ -73,7 +73,7 @@ void gather_package(Package* package, GatherState* state) {
     }
 }
 
-ProgramFragments gather_fragments(Symbol entry_point, Module* module, BuildErrorPoint* point, Allocator* a) {
+ProgramFragments gather_fragments(Name entry_point, Module* module, BuildErrorPoint* point, Allocator* a) {
 
   /**
    * General overview of the gathering algorithm

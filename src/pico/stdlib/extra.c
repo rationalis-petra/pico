@@ -836,14 +836,14 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("extra")),
+        .name = string_to_name(mv_string("extra")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
 
     PiType* typep;
-    Symbol sym;
+    Name name;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(doc_to_str(point.error_message, 120, &ra));
@@ -859,19 +859,19 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     // exit : Proc [] Unit
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, Unit));
     build_exit_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("exit"));
+    name = string_to_name(mv_string("exit"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // panic : All [A] Proc [String] A
     typep = build_panic_fn_ty(pia);
     build_panic_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("panic"));
+    name = string_to_name(mv_string("panic"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     PiType* syntax_array = mk_app_type(pia, get_list_type(), get_syntax_type());
@@ -880,41 +880,41 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
     // loop : Macro ≃ Proc [(Array Syntax)] Syntax
     typep = mk_prim_type(pia, TMacro);
     build_loop_macro(macro_proc, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("loop"));
+    name = string_to_name(mv_string("loop"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_prim_type(pia, TMacro);
     build_ann_macro(macro_proc, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("ann"));
+    name = string_to_name(mv_string("ann"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_prim_type(pia, TMacro);
     build_when_macro(macro_proc, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("when"));
+    name = string_to_name(mv_string("when"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_prim_type(pia, TMacro);
     build_thread_macro(macro_proc, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("->"));
+    name = string_to_name(mv_string("->"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_prim_type(pia, TMacro);
     build_thread_end_macro(macro_proc, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("->>"));
+    name = string_to_name(mv_string("->>"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

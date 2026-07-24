@@ -48,7 +48,7 @@ bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allo
     Environment* env = env_from_module(module, &point, &ra);
 
     if (!opts.is_eval) {
-        String name = symbol_to_string(module_name(module), &ra);
+        String name = name_to_string(module_name(module), &ra);
         write_fstring(name, cout);
         write_fstring(mv_string(" > "), cout);
     }

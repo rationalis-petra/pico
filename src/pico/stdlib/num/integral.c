@@ -207,7 +207,7 @@ static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAl
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 }
 
-void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
+void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
@@ -219,12 +219,12 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(name),
+        .name = string_to_name(moudle_name),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(num), num);
-    Symbol sym;
+    Name name;
 
     PiType* typep;
     ErrorPoint point;
@@ -244,135 +244,135 @@ void add_integral_module(String name, LocationSize sz, bool is_signed, Assembler
     if (sz > sz_16) {
         typep = mk_unop_type(pia, prim, prim);
         build_unary_fn(ass, BSwap, sz, a, &point);
-        sym = string_to_symbol(mv_string("byte-swap"));
+        name = string_to_name(mv_string("byte-swap"));
         fn_segments.code = get_instructions(ass);
         prepped = prep_target(module, fn_segments, ass, NULL);
-        add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+        add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
         clear_assembler(ass);
     }
 
     build_binary_fn(ass, Add, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
-    sym = string_to_symbol(mv_string("+"));
+    name = string_to_name(mv_string("+"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, Sub, sz, a, &point);
-    sym = string_to_symbol(mv_string("-"));
+    name = string_to_name(mv_string("-"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_special_binary_fn(ass, is_signed ? IMul : Mul, RAX, sz, a, &point);
-    sym = string_to_symbol(mv_string("*"));
+    name = string_to_name(mv_string("*"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_special_binary_fn(ass, is_signed ? IDiv : Div, RAX, sz, a, &point);
-    sym = string_to_symbol(mv_string("/"));
+    name = string_to_name(mv_string("/"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, And, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
-    sym = string_to_symbol(mv_string("and"));
+    name = string_to_name(mv_string("and"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, Or, sz, a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
-    sym = string_to_symbol(mv_string("or"));
+    name = string_to_name(mv_string("or"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // TODO: set out to AH if size == 8
     Regname out = sz == sz_8 ? AH : RDX;
     build_special_binary_fn(ass, is_signed ? IDiv : Div, out, sz, a, &point);
-    sym = string_to_symbol(mv_string("mod"));
+    name = string_to_name(mv_string("mod"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // Type Change
     typep = mk_binop_type(pia, UInt_8, prim, prim);
 
     build_shift_fn(ass, SHLCL, sz, a, &point);
-    sym = string_to_symbol(mv_string("shl"));
+    name = string_to_name(mv_string("shl"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_shift_fn(ass, SHRCL, sz, a, &point);
-    sym = string_to_symbol(mv_string("shr"));
+    name = string_to_name(mv_string("shr"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // Type Change
     typep = mk_binop_type(pia, prim, prim, Bool);
 
     build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
-    sym = string_to_symbol(mv_string("<"));
+    name = string_to_name(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, is_signed ? SetLE : SetBE, sz, a, &point);
-    sym = string_to_symbol(mv_string("<="));
+    name = string_to_name(mv_string("<="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, is_signed ? SetG : SetA, sz, a, &point);
-    sym = string_to_symbol(mv_string(">"));
+    name = string_to_name(mv_string(">"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, is_signed ? SetGE : SetAE, sz, a, &point);
-    sym = string_to_symbol(mv_string(">="));
+    name = string_to_name(mv_string(">="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, SetE, sz, a, &point);
-    sym = string_to_symbol(mv_string("="));
+    name = string_to_name(mv_string("="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, SetNE, sz, a, &point);
-    sym = string_to_symbol(mv_string("!="));
+    name = string_to_name(mv_string("!="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
     build_to_string_fn(typep, prim, ass, pia, a, &point);
-    sym = string_to_symbol(mv_string("to-string"));
+    name = string_to_name(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }
 
@@ -388,12 +388,12 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("bool")),
+        .name = string_to_name(mv_string("bool")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(num), num);
-    Symbol sym;
+    Name name;
 
     PiType* typep;
     ErrorPoint point;
@@ -407,47 +407,47 @@ void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
     typep = mk_binop_type(pia, Bool, Bool, Bool);
 
     build_comp_fn(ass, SetE, sz_8, a, &point);
-    sym = string_to_symbol(mv_string("="));
+    name = string_to_name(mv_string("="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_comp_fn(ass, SetNE, sz_8, a, &point);
-    sym = string_to_symbol(mv_string("!="));
+    name = string_to_name(mv_string("!="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, And, sz_8, a, &point);
-    sym = string_to_symbol(mv_string("and"));
+    name = string_to_name(mv_string("and"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_fn(ass, Or, sz_8, a, &point);
-    sym = string_to_symbol(mv_string("or"));
+    name = string_to_name(mv_string("or"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_unop_type(pia, Bool, Bool);
     build_not_fn(ass, a, &point);
-    sym = string_to_symbol(mv_string("not"));
+    name = string_to_name(mv_string("not"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, Bool), mk_string_type(pia));
     build_to_string_fn(typep, Bool, ass, pia, a, &point);
-    sym = string_to_symbol(mv_string("to-string"));
+    name = string_to_name(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }
 

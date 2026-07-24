@@ -125,7 +125,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("foreign")),
+        .name = string_to_name(mv_string("foreign")),
         .imports = imports,
         .exports = exports,
     };
@@ -133,7 +133,7 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
 
     PiType type;
     PiType* typep;
-    Symbol sym;
+    Name name;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(doc_to_str(point.error_message, 120, &ra));
@@ -150,20 +150,20 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
 
     type = (PiType) {.sort = TPrim, .prim = TFormer};
     TermFormer former = FReinterpretRelic;
-    sym = string_to_symbol(mv_string("reinterpret-relic"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("reinterpret-relic"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FReinterpretNative;
-    sym = string_to_symbol(mv_string("reinterpret-native"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("reinterpret-native"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FConvertRelic;
-    sym = string_to_symbol(mv_string("convert-relic"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("convert-relic"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FConvertNative;
-    sym = string_to_symbol(mv_string("convert-native"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("convert-native"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     // C Type Type
     {
@@ -176,23 +176,23 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
                                              "long", 0,
                                              "long-long", 0);
         type_data = prim_sort_type;
-        sym = string_to_symbol(mv_string("CPrimSort"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("CPrimSort"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
         PiType* signed_type = mk_enum_type(pia, 3,
                                           "signed", 0,
                                           "unsigned", 0,
                                           "unspecified", 0);
         type_data = signed_type;
-        sym = string_to_symbol(mv_string("Signed"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Signed"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
         PiType* prim_type = mk_struct_type(pia, 2,
                                    "sort", prim_sort_type,
                                    "signed", signed_type);
         type_data = prim_type;
-        sym = string_to_symbol(mv_string("CPrim"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("CPrim"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
 
         // TODO: replace u64 with symbol
@@ -213,10 +213,10 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
                                          mk_app_type(pia, get_list_type(), mk_app_type(pia, get_pair_type(), mk_prim_type(pia, UInt_64), mk_var_type(pia, "CType"))),
                                        "unspecified", 0));
         type_data = c_type;
-        sym = string_to_symbol(mv_string("CType"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("CType"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        ModuleEntry* e = get_def_internal(sym, module);
+        ModuleEntry* e = get_def_internal(name, module);
         exported_c_type = e->value;
     }
 
@@ -227,35 +227,35 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
     PiType* dynlib_ty = mk_opaque_type(pia, "DynLib", module, mk_prim_type(pia, Address));
     type_data = dynlib_ty;
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("DynLib"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("DynLib"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
     clear_assembler(ass);
 
     PiType* str = mk_string_type(pia);
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_app_type(pia, get_either_type(), str, copy_pi_type_p(dynlib_ty, pia)));
     build_dynlib_open_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("dynlib-open"));
+    name = string_to_name(mv_string("dynlib-open"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, copy_pi_type_p(dynlib_ty, pia), mk_prim_type(pia, Unit));
     build_dynlib_close_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("dynlib-close"));
+    name = string_to_name(mv_string("dynlib-close"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     str = mk_string_type(pia);
     typep = mk_proc_type(pia, 2, dynlib_ty, mk_string_type(pia),
                          mk_app_type(pia, get_either_type(), str, mk_prim_type(pia, Address)));
     build_dynlib_symbol_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("dynlib-symbol"));
+    name = string_to_name(mv_string("dynlib-symbol"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // Short-hand C types 
@@ -264,77 +264,77 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
 
     // Int
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-long-long"));
+    name = string_to_name(mv_string("c-long-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unspecified});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-signed-long-long"));
+    name = string_to_name(mv_string("c-signed-long-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Signed});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-unsigned-long-long"));
+    name = string_to_name(mv_string("c-unsigned-long-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLongLong, .is_signed = Unsigned});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-long"));
+    name = string_to_name(mv_string("c-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unspecified});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-signed-long"));
+    name = string_to_name(mv_string("c-signed-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Signed});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-unsigned-long"));
+    name = string_to_name(mv_string("c-unsigned-long"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CLong, .is_signed = Unsigned});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-int"));
+    name = string_to_name(mv_string("c-int"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unspecified});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-signed-int"));
+    name = string_to_name(mv_string("c-signed-int"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Signed});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-unsigned-int"));
+    name = string_to_name(mv_string("c-unsigned-int"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CInt, .is_signed = Unsigned});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-short"));
+    name = string_to_name(mv_string("c-short"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unspecified});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-signed-short"));
+    name = string_to_name(mv_string("c-signed-short"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-unsigned-short"));
+    name = string_to_name(mv_string("c-unsigned-short"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Unsigned});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-char"));
+    name = string_to_name(mv_string("c-char"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unspecified});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-signed-char"));
+    name = string_to_name(mv_string("c-signed-char"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CShort, .is_signed = Signed});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 
     typep = get_c_type();
-    sym = string_to_symbol(mv_string("c-unsigned-char"));
+    name = string_to_name(mv_string("c-unsigned-char"));
     c_type = mk_primint_ctype((CPrimInt){.prim = CChar, .is_signed = Unsigned});
-    add_def(module, sym, *typep, cdata, null_segments, NULL);
+    add_def(module, name, *typep, cdata, null_segments, NULL);
 }

@@ -65,7 +65,7 @@ static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAl
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 }
 
-void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
+void add_float_module(String module_name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
@@ -77,12 +77,12 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(name),
+        .name = string_to_name(module_name),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(num), num);
-    Symbol sym;
+    Name name;
 
     PiType* typep;
     ErrorPoint point;
@@ -96,10 +96,10 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
     build_to_string_fn(typep, prim, ass, pia, a, &point);
-    sym = string_to_symbol(mv_string("to-string"));
+    name = string_to_name(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     BinaryOp add_op = prim == Float_64 ? AddSD : AddSS;
@@ -110,45 +110,45 @@ void add_float_module(String name, PrimType prim, Assembler* ass, Module* num, A
     typep = mk_binop_type(pia, prim, prim, prim);
 
     build_binary_float_fn(ass, add_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("+"));
+    name = string_to_name(mv_string("+"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_float_fn(ass, sub_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("-"));
+    name = string_to_name(mv_string("-"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_float_fn(ass, mul_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("*"));
+    name = string_to_name(mv_string("*"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     build_binary_float_fn(ass, div_op, sz, a, &point);
-    sym = string_to_symbol(mv_string("/"));
+    name = string_to_name(mv_string("/"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_prim_type(pia, prim));
-    sym = string_to_symbol(mv_string("sin"));
+    name = string_to_name(mv_string("sin"));
     build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)sin_f64 : (void*)sin_f32, ass, pia, a, &point);
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    sym = string_to_symbol(mv_string("cos"));
+    name = string_to_name(mv_string("cos"));
     build_unary_float_fn(typep, sz, sz == sz_64 ? (void*)cos_f64 : (void*)cos_f32, ass, pia, a, &point);
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

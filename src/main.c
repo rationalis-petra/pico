@@ -64,7 +64,7 @@ int main(int argc, char** argv) {
     reset_subregion(subregion);
     delete_assembler(ass_base);
 
-    Module* module = get_module(string_to_symbol(mv_string("user")), base);
+    Module* module = get_module(string_to_name(mv_string("user")), base);
 
     set_std_current_module(module);
     set_current_package(base);

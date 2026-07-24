@@ -12,7 +12,7 @@ void add_platform_module(Assembler* ass, Package* base, Allocator* default_alloc
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("platform")),
+        .name = string_to_name(mv_string("platform")),
         .imports = imports,
         .exports = exports,
     };

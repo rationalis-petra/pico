@@ -111,7 +111,7 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("allocators")),
+        .name = string_to_name(mv_string("allocators")),
         .imports = imports,
         .exports = exports,
     };
@@ -121,7 +121,7 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
 
     PiType* typep;
     PiType type;
-    Symbol sym;
+    Name name;
     ModuleEntry* e;
     ErrorPoint point;
     if (catch_error(point)) {
@@ -137,41 +137,41 @@ void add_allocators_module(Assembler* ass, Module* data, RegionAllocator* region
 
     typep = mk_opaque_type(pia, "Arena", module, mk_prim_type(pia, Address));
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("Arena"));
-    add_def(module, sym, type, &typep, null_segments, NULL);
-    e = get_def_internal(sym, module);
+    name = string_to_name(mv_string("Arena"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    e = get_def_internal(name, module);
     arena_ty = e->value;
 
     typep = mk_proc_type(pia, 2, get_allocator_type(), mk_prim_type(pia, UInt_64), arena_ty);
     build_make_arena_allocator_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("make-arena"));
+    name = string_to_name(mv_string("make-arena"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, arena_ty, mk_prim_type(pia, Unit));
     build_destroy_arena_allocator_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("destroy-arena"));
+    name = string_to_name(mv_string("destroy-arena"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, arena_ty, mk_prim_type(pia, Unit));
     build_reset_arena_allocator_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("reset-arena"));
+    name = string_to_name(mv_string("reset-arena"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, arena_ty, get_allocator_type());
     build_adapt_arena_allocator_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("adapt-arena"));
+    name = string_to_name(mv_string("adapt-arena"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     /* reset_subregion(subregion); */

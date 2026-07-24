@@ -11,7 +11,7 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("data")),
+        .name = string_to_name(mv_string("data")),
         .imports = imports,
         .exports = exports,
     };

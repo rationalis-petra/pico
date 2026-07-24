@@ -23,7 +23,7 @@ int cmp_export_clauses(ExportClause lhs, ExportClause rhs) {
     // TODO: this doesn't account for renames!!
     int res = lhs.type - rhs.type;
     if (res) return res;
-    return symbol_cmp(lhs.name, rhs.name);
+    return lhs.name - rhs.name;
 }
 
 ARRAY_COMMON_IMPL(ImportValue, import_value, ImportValue);
@@ -39,15 +39,14 @@ bool import_path_eq(PathSegmentArray p1, PathSegmentArray p2) {
         PathSegment s2 = p2.data[i];
         if (s1.type != s2.type) return false;
         switch (s1.type) {
-        case SegSymbol:
-            if (symbol_cmp(s1.symbol, s2.symbol) != 0) return false;
+        case SegName:
+            if (s1.name != s2.name) return false;
             break;
-        case SegSymbols:
-            if (s1.symbols.len != s2.symbols.len) return false;
-            for (size_t j = 0; j < s1.symbols.len; j++) {
-                if (symbol_cmp(s1.symbols.data[j], s2.symbols.data[j]) != 0) return false;
+        case SegNames:
+            if (s1.names.len != s2.names.len) return false;
+            for (size_t j = 0; j < s1.names.len; j++) {
+                if (s1.names.data[j] != s2.names.data[j]) return false;
             }
-            if (symbol_cmp(s1.symbol, s2.symbol) != 0) return false;
             break;
         case SegWildcard:
             // Do Nothong
@@ -77,14 +76,14 @@ bool imclause_eq(ImportClause c1, ImportClause c2) {
               ImportValue v2 = c2.values.data[i];
               if (v1.should_rename != v2.should_rename) return false;
               if (v1.should_rename) {
-                  if ((symbol_cmp(v1.from, v2.from) != 0) || (symbol_cmp(v1.to, v2.to) != 0)) return false;
+                  if ((v1.from != v2.from) || (v1.to != v2.to)) return false;
               } else {
-                  if (symbol_cmp(v1.from, v2.from) != 0) return false;
+                  if (v1.from != v2.from) return false;
               }
           }
       }
       if (c1.import_as) {
-        return symbol_cmp(c1.to, c2.to) == 0;
+        return c1.to == c2.to;
       }
       return true;
     case ImportAll:
@@ -96,7 +95,7 @@ bool imclause_eq(ImportClause c1, ImportClause c2) {
 bool is_simple_path(PathSegmentArray path) {
     bool is_simple = true;
     for (size_t i = 0; i < path.len; i++) {
-        is_simple &= path.data[i].type == SegSymbol;
+        is_simple &= path.data[i].type == SegName;
     }
     return is_simple;
 } 
@@ -139,13 +138,13 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
     for (size_t i = 0; i < clause.path.len; i++) {
         PathSegment segment = clause.path.data[i];
         switch (segment.type) {
-        case SegSymbol:
-            push_ptr(mk_str_doc(view_symbol_string(segment.symbol), a), &path_nodes);
+        case SegName:
+            push_ptr(mk_str_doc(view_name_string(segment.name), a), &path_nodes);
             break;
-        case SegSymbols: {
-            PtrArray nodes = mk_ptr_array(segment.symbols.len, a);
-            for (size_t i = 0; i < segment.symbols.len; i++) {
-                push_ptr(mv_str_doc(view_symbol_string(segment.symbols.data[i]), a), &nodes);
+        case SegNames: {
+            PtrArray nodes = mk_ptr_array(segment.names.len, a);
+            for (size_t i = 0; i < segment.names.len; i++) {
+                push_ptr(mv_str_doc(view_name_string(segment.names.data[i]), a), &nodes);
             }
             Document* symbols = mv_group_doc(mk_paren_doc("(", ")", mv_sep_doc(nodes, a), a), a);
             push_ptr(symbols, &path_nodes);
@@ -179,7 +178,7 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
         }
         if (clause.import_as) {
             push_ptr(mv_cstr_doc(":as", a), &nodes);
-            push_ptr(mk_str_doc(view_symbol_string(clause.to), a), &nodes);
+            push_ptr(mk_str_doc(view_name_string(clause.to), a), &nodes);
         }
         if (clause.import_values) {
             push_ptr(mv_cstr_doc(":values", a), &nodes);
@@ -187,11 +186,11 @@ Document* pretty_import_clause(ImportClause clause, Allocator* a) {
             for (size_t i = 0; i < clause.values.len; i++) {
                 ImportValue value = clause.values.data[i];
                 if (value.should_rename) {
-                    push_ptr(mk_str_doc(view_symbol_string(value.from), a), &value_nodes);
+                    push_ptr(mk_str_doc(view_name_string(value.from), a), &value_nodes);
                     push_ptr(mk_cstr_doc(":as", a), &value_nodes);
-                    push_ptr(mk_str_doc(view_symbol_string(value.to), a), &value_nodes);
+                    push_ptr(mk_str_doc(view_name_string(value.to), a), &value_nodes);
                 } else {
-                    push_ptr(mk_str_doc(view_symbol_string(value.from), a), &value_nodes);
+                    push_ptr(mk_str_doc(view_name_string(value.from), a), &value_nodes);
                 }
             }
             push_ptr(mk_paren_doc("(", ")", mv_group_doc(mv_sep_doc(value_nodes, a), a), a), &nodes);

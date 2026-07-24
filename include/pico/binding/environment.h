@@ -42,7 +42,7 @@ typedef enum {
 
 typedef struct {
     ImportClauseStatusType type;
-    Symbol bad_symbol;
+    Name bad_symbol;
 } ImportClauseStatus;
 ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Allocator* a);
 

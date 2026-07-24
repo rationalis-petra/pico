@@ -145,13 +145,13 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("terminal")),
+        .name = string_to_name(mv_string("terminal")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(platform), platform);
     delete_module_header(header);
-    Symbol sym;
+    Name name;
 
     PiType* typep;
     ErrorPoint point;
@@ -168,55 +168,55 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
 
     typep = mk_proc_type(pia, 0, mk_prim_type(pia, UInt_32));
     build_read_codepoint_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("read-codepoint"));
+    name = string_to_name(mv_string("read-codepoint"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 0, mk_string_type(pia));
     build_read_line_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("read-line"));
+    name = string_to_name(mv_string("read-line"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_32), mk_prim_type(pia, Unit));
     build_write_codepoint_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("write-codepoint"));
+    name = string_to_name(mv_string("write-codepoint"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
     build_write_string_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("write-string"));
+    name = string_to_name(mv_string("write-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 1, mk_string_type(pia), mk_prim_type(pia, Unit));
     build_write_line_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("write-line"));
+    name = string_to_name(mv_string("write-line"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 
     typep = mk_proc_type(pia, 3, mk_prim_type(pia, UInt_8), mk_prim_type(pia, UInt_8), mk_prim_type(pia, UInt_8), mk_prim_type(pia, Unit));
     build_set_background_colour_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("set-bg-colour"));
+    name = string_to_name(mv_string("set-bg-colour"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
     delete_pi_type_p(typep, pia);
 

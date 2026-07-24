@@ -29,19 +29,20 @@ void type_check(TopLevel* top, Environment* env, TypeCheckContext ctx) {
     TypeEnv *t_env = mk_type_env(env, ctx.a);
     switch (top->type) {
     case TLDef: {
-        PiType* ty = env_lookup_tydecl(top->def.bind, env);
+        Symbol sym = {.name = top->def.bind, .did = 0};
+        PiType* ty = env_lookup_tydecl(sym, env);
         SynRef term = top->def.value;
 
         if (ctx.logger) {
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
             PtrArray nodes = mk_ptr_array(4, ctx.a);
             push_ptr(mv_cstr_doc("                    TYPECHECK FOR:", ctx.a), &nodes);
-            push_ptr(mv_str_doc(view_symbol_string(top->def.bind), ctx.a), &nodes);
+            push_ptr(mv_str_doc(view_symbol_string(sym), ctx.a), &nodes);
             log_doc(mv_hsep_doc(nodes, ctx.a), ctx.logger);
             log_str(mv_string("\n--------------------------------------------------------------------------------\n"), ctx.logger);
         }
 
-        mark_recur(term, top->def.bind, ctx);
+        mark_recur(term, sym, ctx);
         if (ty) {
             type_check_expr(term, *ty, t_env, ctx);
         } else {
@@ -1839,7 +1840,8 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             }
 
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def_external(untyped.to_describe.data[i], entry.module);
+                // TODO: ensure did == 0 (or make non-symbol)
+                ModuleEntry* mentry = get_def_external(untyped.to_describe.data[i].name, entry.module);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.module = mentry->value;

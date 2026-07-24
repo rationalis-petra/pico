@@ -229,12 +229,12 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("memory")),
+        .name = string_to_name(mv_string("memory")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(platform), platform);
-    Symbol sym;
+    Name name;
 
     PiType kind;
     PiType* typep;
@@ -253,8 +253,8 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     
     typep = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     kind = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("MemBlock"));
-    add_def(module, sym, kind, &typep, null_segments, NULL);
+    name = string_to_name(mv_string("MemBlock"));
+    add_def(module, name, kind, &typep, null_segments, NULL);
     clear_assembler(ass);
 
     //  Paged Allocation 
@@ -262,40 +262,40 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     uint32_t flag_val = 1; // ARead
     typep = mk_prim_type(pia, UInt_32);
     kind = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("read"));
-    add_def(module, sym, *typep, &flag_val, null_segments, NULL);
+    name = string_to_name(mv_string("read"));
+    add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
 
     flag_val = 2; // AWrite
     typep = mk_prim_type(pia, UInt_32);
     kind = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("write"));
-    add_def(module, sym, *typep, &flag_val, null_segments, NULL);
+    name = string_to_name(mv_string("write"));
+    add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
 
     flag_val = 4; // AExecute
     typep = mk_prim_type(pia, UInt_32);
     kind = (PiType) {.sort = TKind, .kind.nargs = 0};
-    sym = string_to_symbol(mv_string("execute"));
-    add_def(module, sym, *typep, &flag_val, null_segments, NULL);
+    name = string_to_name(mv_string("execute"));
+    add_def(module, name, *typep, &flag_val, null_segments, NULL);
     clear_assembler(ass);
 
     PiType* memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 2, mk_prim_type(pia, UInt_64), mk_prim_type(pia, UInt_32), memblk);
     build_platform_alloc_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("paged-allocate"));
+    name = string_to_name(mv_string("paged-allocate"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     memblk = mk_struct_type(pia, 2, "data", mk_prim_type(pia, Address), "size", mk_prim_type(pia, UInt_64));
     typep = mk_proc_type(pia, 1, memblk, mk_prim_type(pia, Unit));
     build_platform_free_fn(typep, ass, pia, &ra, &point);
-    sym = string_to_symbol(mv_string("paged-free"));
+    name = string_to_name(mv_string("paged-free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     //  Allocators
@@ -303,17 +303,17 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     typep = mk_dynamic_type(pia, get_allocator_type());
     PiAllocator pico_default_allocator = convert_to_pallocator(default_allocator);
     std_perm_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator);
-    sym = string_to_symbol(mv_string("perm-allocator"));
-    add_def(module, sym, *typep, &std_perm_allocator, null_segments, NULL);
+    name = string_to_name(mv_string("perm-allocator"));
+    add_def(module, name, *typep, &std_perm_allocator, null_segments, NULL);
 
     std_current_allocator = mk_dynamic_var(sizeof(PiAllocator), &pico_default_allocator); 
-    sym = string_to_symbol(mv_string("current-allocator"));
-    add_def(module, sym, *typep, &std_current_allocator, null_segments, NULL);
+    name = string_to_name(mv_string("current-allocator"));
+    add_def(module, name, *typep, &std_current_allocator, null_segments, NULL);
 
     PiAllocator nul_alloc = (PiAllocator){};
     std_temp_allocator = mk_dynamic_var(sizeof(PiAllocator), &nul_alloc); 
-    sym = string_to_symbol(mv_string("temp-allocator"));
-    add_def(module, sym, *typep, &std_temp_allocator, null_segments, NULL);
+    name = string_to_name(mv_string("temp-allocator"));
+    add_def(module, name, *typep, &std_temp_allocator, null_segments, NULL);
     clear_assembler(ass);
 
 
@@ -322,10 +322,10 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
     build_malloc_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("alloc"));
+    name = string_to_name(mv_string("alloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // realloc : Proc (Address U64) Address
@@ -333,27 +333,27 @@ void add_platform_memory_module(Assembler *ass, Module *platform, Allocator* def
                         mk_prim_type(pia, UInt_64),
                         mk_prim_type(pia, Address));
     build_realloc_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("realloc"));
+    name = string_to_name(mv_string("realloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // realloc : Proc [String] Unit
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, Address), mk_prim_type(pia, Unit));
     build_free_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("free"));
+    name = string_to_name(mv_string("free"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     // malloc : Proc [U64] Address
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, UInt_64), mk_prim_type(pia, Address));
     build_temp_malloc_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("temp-alloc"));
+    name = string_to_name(mv_string("temp-alloc"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }

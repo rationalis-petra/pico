@@ -265,7 +265,7 @@ Document* pretty_res(EvalResult res, Allocator* a) {
     case ERDef: {
         PtrArray docs = mk_ptr_array(4, a);
         push_ptr(mk_str_doc(mv_string("Defined "), a), &docs);
-        push_ptr(mk_str_doc(symbol_to_string(res.def.name, a), a), &docs);
+        push_ptr(mk_str_doc(name_to_string(res.def.name, a), a), &docs);
         push_ptr(mk_str_doc(mv_string(" : "), a), &docs);
         PrettyTypeParams ptp = default_ptp; 
         ptp.show_named = true;

@@ -16,7 +16,7 @@ struct RelicProgram {
     U8Array segments;
 };
 
-RelicProgram* build_program(Module* module, Symbol entry_point, BuildErrorPoint* point, Allocator* a) {
+RelicProgram* build_program(Module* module, Name entry_point, BuildErrorPoint* point, Allocator* a) {
     RelicProgram* program = mem_alloc(sizeof(RelicProgram), a);
     /**
      * Two *segment* entries

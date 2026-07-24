@@ -1,11 +1,11 @@
 #ifndef __ATLAS_SYNTAX_PROJECT_H
 #define __ATLAS_SYNTAX_PROJECT_H
 
-#include "pico/data/symbol_array.h"
+#include "pico/values/values.h"
 
 typedef struct {
-    Symbol name;
-    SymbolArray dependencies;
+    Name name;
+    NameArray dependencies;
 } AtlPackage;
 
 typedef struct {

@@ -103,17 +103,17 @@ _Noreturn void type_error_invalid_declaration(Symbol type, SynRef arg, TypeCheck
     throw_pi_error(ctx.point, err);
 }
 
-_Noreturn void type_error_invalid_import(ImportClause clause, Symbol bad, bool exists, Range range, TypeCheckContext ctx) {
+_Noreturn void type_error_invalid_import(ImportClause clause, Name bad, bool exists, Range range, TypeCheckContext ctx) {
     PtrArray nodes = mk_ptr_array(5, ctx.a);
     push_ptr(mv_cstr_doc("The import clause", ctx.a), &nodes);
     push_ptr(mk_paren_doc("'", "'", pretty_import_clause(clause, ctx.a), ctx.a), &nodes);
     if (exists) {
         push_ptr(mv_cstr_doc("is malformed, as the you attemped to import from", ctx.a), &nodes);
-        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_symbol_string(bad), ctx.a), ctx.a), &nodes);
+        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_name_string(bad), ctx.a), ctx.a), &nodes);
         push_ptr(mv_cstr_doc("which is not a module.", ctx.a), &nodes);
     } else {
         push_ptr(mv_cstr_doc("is malformed, as the you attemped to import", ctx.a), &nodes);
-        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_symbol_string(bad), ctx.a), ctx.a), &nodes);
+        push_ptr(mk_paren_doc("'", "',", mk_str_doc(view_name_string(bad), ctx.a), ctx.a), &nodes);
         push_ptr(mv_cstr_doc("which does not exist.", ctx.a), &nodes);
     }
 
@@ -606,9 +606,9 @@ _Noreturn void type_error_ambiguous_instance(SynRef syn, PiType* instance, InstS
         InstanceSrc source = sources.data[i];
         PtrArray source_nodes = mk_ptr_array(4, a); 
         push_ptr(mv_cstr_doc("• Module:", a), &source_nodes);
-        push_ptr(mv_str_doc(symbol_to_string(module_name(source.src), a), a), &source_nodes);
+        push_ptr(mv_str_doc(name_to_string(module_name(source.src), a), a), &source_nodes);
         push_ptr(mv_cstr_doc("Definition:", a), &source_nodes);
-        push_ptr(mv_str_doc(symbol_to_string(source.src_sym, a), a), &source_nodes);
+        push_ptr(mv_str_doc(name_to_string(source.src_sym, a), a), &source_nodes);
 
         push_ptr(mv_nest_doc(2, mv_hsep_doc(source_nodes, a), a), &sources_nodes);
     }

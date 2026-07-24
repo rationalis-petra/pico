@@ -29,7 +29,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pipeline-test-module")),
+        .name = string_to_name(mv_string("pipeline-test-module")),
         .imports = imports,
         .exports = exports,
     };

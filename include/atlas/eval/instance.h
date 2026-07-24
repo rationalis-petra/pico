@@ -3,7 +3,6 @@
 
 #include "platform/memory/region.h"
 
-#include "pico/data/error.h"
 #include "pico/values/modular.h"
 
 #include "atlas/data/error.h"

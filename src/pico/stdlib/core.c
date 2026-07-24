@@ -197,12 +197,12 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("core")),
+        .name = string_to_name(mv_string("core")),
         .imports = imports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);
-    Symbol sym;
+    Name name;
 
     PiType type;
     PiType* typep;
@@ -228,216 +228,216 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     // Term Formers
     // ------------------------------------------------------------------------
     former = FDefine;
-    sym = string_to_symbol(mv_string("def"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("def"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDeclare;
-    sym = string_to_symbol(mv_string("declare"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("declare"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FImport;
-    sym = string_to_symbol(mv_string("import"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("import"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FProcedure;
-    sym = string_to_symbol(mv_string("proc"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("proc"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FAll;
-    sym = string_to_symbol(mv_string("all"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("all"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FSeal;
-    sym = string_to_symbol(mv_string("seal"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("seal"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FMacro;
-    sym = string_to_symbol(mv_string("macro"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("macro"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FApplication;
-    sym = string_to_symbol(mv_string("apply"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("apply"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FUnseal;
-    sym = string_to_symbol(mv_string("unseal"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("unseal"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynamic;
-    sym = string_to_symbol(mv_string("dynamic"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("dynamic"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynamicUse;
-    sym = string_to_symbol(mv_string("use"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("use"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynamicSet;
-    sym = string_to_symbol(mv_string("modify"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("modify"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynamicLet;
-    sym = string_to_symbol(mv_string("bind"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("bind"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FInstance;
-    sym = string_to_symbol(mv_string("instance"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("instance"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FArray;
-    sym = string_to_symbol(mv_string("array"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("array"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FArrayElt;
-    sym = string_to_symbol(mv_string("aelt"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("aelt"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructure;
-    sym = string_to_symbol(mv_string("struct"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("struct"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FProjector;
-    sym = string_to_symbol(mv_string("."));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("."));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FVariant;
-    sym = string_to_symbol(mv_string(":"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string(":"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FMatch;
-    sym = string_to_symbol(mv_string("match"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("match"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FIf;
-    sym = string_to_symbol(mv_string("if"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("if"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FCond;
-    sym = string_to_symbol(mv_string("cond"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("cond"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FLabels;
-    sym = string_to_symbol(mv_string("labels"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("labels"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FGoTo;
-    sym = string_to_symbol(mv_string("go-to"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("go-to"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FWithReset;
-    sym = string_to_symbol(mv_string("with-reset"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("with-reset"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FResetTo;
-    sym = string_to_symbol(mv_string("reset-to"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("reset-to"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FSequence;
-    sym = string_to_symbol(mv_string("seq"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("seq"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FLet;
-    sym = string_to_symbol(mv_string("let"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("let"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FIs;
-    sym = string_to_symbol(mv_string("is"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("is"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FInTo;
-    sym = string_to_symbol(mv_string("into"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("into"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FOutOf;
-    sym = string_to_symbol(mv_string("out-of"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("out-of"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FName;
-    sym = string_to_symbol(mv_string("name"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("name"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FWiden;
-    sym = string_to_symbol(mv_string("widen"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("widen"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FNarrow;
-    sym = string_to_symbol(mv_string("narrow"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("narrow"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FUnName;
-    sym = string_to_symbol(mv_string("unname"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("unname"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FSizeOf;
-    sym = string_to_symbol(mv_string("size-of"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("size-of"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FAlignOf;
-    sym = string_to_symbol(mv_string("align-of"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("align-of"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FOffsetOf;
-    sym = string_to_symbol(mv_string("offset-of"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("offset-of"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynAlloc;
-    sym = string_to_symbol(mv_string("dyn-alloc"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("dyn-alloc"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FProcType;
-    sym = string_to_symbol(mv_string("Proc"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Proc"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FArrayType;
-    sym = string_to_symbol(mv_string("Array"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Array"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FStructType;
-    sym = string_to_symbol(mv_string("Struct"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Struct"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FEnumType;
-    sym = string_to_symbol(mv_string("Enum"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Enum"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FResetType;
-    sym = string_to_symbol(mv_string("Reset"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Reset"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDynamicType;
-    sym = string_to_symbol(mv_string("Dynamic"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Dynamic"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FNamedType;
-    sym = string_to_symbol(mv_string("Named"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Named"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FDistinctType;
-    sym = string_to_symbol(mv_string("Distinct"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Distinct"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FOpaqueType;
-    sym = string_to_symbol(mv_string("Opaque"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Opaque"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FTraitType;
-    sym = string_to_symbol(mv_string("Trait"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Trait"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FAllType;
-    sym = string_to_symbol(mv_string("All"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("All"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FSealedType;
-    sym = string_to_symbol(mv_string("Sealed"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Sealed"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FFamily;
-    sym = string_to_symbol(mv_string("Family"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("Family"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     former = FLiftCType;
-    sym = string_to_symbol(mv_string("LiftCType"));
-    add_def(module, sym, type, &former, null_segments, NULL);
+    name = string_to_name(mv_string("LiftCType"));
+    add_def(module, name, type, &former, null_segments, NULL);
 
     // ------------------------------------------------------------------------
     // Types 
@@ -449,60 +449,60 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     };
 
     type_val = type;
-    sym = string_to_symbol(mv_string("Type"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("Type"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Unit};
-    sym = string_to_symbol(mv_string("Unit"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("Unit"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Bool};
-    sym = string_to_symbol(mv_string("Bool"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("Bool"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Address};
-    sym = string_to_symbol(mv_string("Address"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("Address"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Int_64};
-    sym = string_to_symbol(mv_string("I64"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("I64"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Int_32};
-    sym = string_to_symbol(mv_string("I32"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("I32"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Int_16};
-    sym = string_to_symbol(mv_string("I16"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("I16"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Int_8};
-    sym = string_to_symbol(mv_string("I8"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("I8"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = UInt_64};
-    sym = string_to_symbol(mv_string("U64"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("U64"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = UInt_32};
-    sym = string_to_symbol(mv_string("U32"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("U32"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = UInt_16};
-    sym = string_to_symbol(mv_string("U16"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("U16"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = UInt_8};
-    sym = string_to_symbol(mv_string("U8"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("U8"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Float_32};
-    sym = string_to_symbol(mv_string("F32"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("F32"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     type_val = (PiType) {.sort = TPrim, .prim = Float_64};
-    sym = string_to_symbol(mv_string("F64"));
-    add_def(module, sym, type, &type_data, null_segments, NULL);
+    name = string_to_name(mv_string("F64"));
+    add_def(module, name, type, &type_data, null_segments, NULL);
 
     // All standard library types: components and definition 
     // These are aggregated here, even if they are present in other modules, 
@@ -520,10 +520,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                           vars,
                                                           mk_prim_type(&pia, Address)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Ptr"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Ptr"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         ptr_type = e->value;
 
         // Allocator Type
@@ -551,9 +551,9 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                "realloc", realloc_fn_type,
                                                                "free", free_fn_type)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("AllocVTable"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
-        e = get_def_internal(sym, module);
+        name = string_to_name(mv_string("AllocVTable"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
+        e = get_def_internal(name, module);
         allocator_vtable_type = e->value;
 
         // Allocator Type
@@ -565,10 +565,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                      "context", mk_app_type(&pia, ptr_type, mk_var_type(&pia, "A")))));
         type.kind.nargs = 0;
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Allocator"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Allocator"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         allocator_type = e->value;
 
         // List Type 
@@ -586,10 +586,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                         "capacity", mk_prim_type(&pia, UInt_64),
                                                         "gpa", copy_pi_type_p(allocator_type, &pia))));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("List"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("List"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         list_type = e->value;
         
         // Maybe Type 
@@ -602,10 +602,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                    "some", 1, mk_var_type(&pia, "A"),
                                                                    "none", 0)));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Maybe"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Maybe"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         maybe_type = e->value;
 
         // Either Type 
@@ -620,10 +620,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                           "left", 1, mk_var_type(&pia, "A"),
                                                                           "right", 1, mk_var_type(&pia, "B"))));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Either"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Either"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         either_type = e->value;
 
         // Result Type 
@@ -638,10 +638,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                           "ok", 1, mk_var_type(&pia, "Value"),
                                                                           "error", 1, mk_var_type(&pia, "Error"))));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Result"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Result"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         result_type = e->value;
 
         // Pair Type 
@@ -656,10 +656,10 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
                                                                    "_1", mk_var_type(&pia, "A"),
                                                                    "_2", mk_var_type(&pia, "B"))));
         type_data = type_val;
-        sym = string_to_symbol(mv_string("Pair"));
-        add_def(module, sym, type, &type_data, null_segments, NULL);
+        name = string_to_name(mv_string("Pair"));
+        add_def(module, name, type, &type_data, null_segments, NULL);
 
-        e = get_def_internal(sym, module);
+        e = get_def_internal(name, module);
         pair_type = e->value;
     }
 
@@ -670,34 +670,34 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
 
     type = build_store_fn_ty(&pia);
     build_store_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("store"));
+    name = string_to_name(mv_string("store"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, name, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     type = build_load_fn_ty(&pia);
     build_load_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("load"));
+    name = string_to_name(mv_string("load"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, type, &prepped.code.data, prepped, NULL);
+    add_def(module, name, type, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, Address), mk_prim_type(&pia, UInt_64));
     build_nop_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("address-to-num"));
+    name = string_to_name(mv_string("address-to-num"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
     typep = mk_proc_type(&pia, 1, mk_prim_type(&pia, UInt_64), mk_prim_type(&pia, Address));
     build_nop_fn(ass, &ra, &point);
-    sym = string_to_symbol(mv_string("num-to-address"));
+    name = string_to_name(mv_string("num-to-address"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
-    add_def(module, sym, *typep, &prepped.code.data, prepped, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 }
 

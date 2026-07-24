@@ -18,7 +18,7 @@
 #include "pico/values/modular_build.h"
 #include "pico/syntax/header.h"
 #include "pico/data/sym_sarr_amap.h"
-#include "pico/data/sym_ptr_amap.h"
+#include "pico/data/name_ptr_amap.h"
 #include "pico/eval/call.h"
 
 /* Module and package implementation details
@@ -73,8 +73,8 @@ struct Instances {
 };
 
 ARRAY_COMMON_IMPL(InstanceSrc, inst_src, InstSrc)
-AMAP_HEADER(Symbol, ModuleEntryInternal, entry, Entry)
-AMAP_CMP_IMPL(Symbol, ModuleEntryInternal, symbol_cmp, entry, Entry)
+AMAP_HEADER(Name, ModuleEntryInternal, entry, Entry)
+AMAP_IMPL(Name, ModuleEntryInternal, entry, Entry)
 
 struct Package {
     Name name;
@@ -111,13 +111,13 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
     Package* package = call_alloc(sizeof(Package), &pico_allocator);
     Allocator a = convert_to_callocator(&pico_allocator);
 
-    String root_name = string_cat(mv_string("root-for-"), view_name_string(name), &a);
-    Symbol root_sym = string_to_symbol(root_name);
-    mem_free(root_name.bytes, &a);
+    String root_str = string_cat(mv_string("root-for-"), view_name_string(name), &a);
+    Name root_name = string_to_name(root_str);
+    mem_free(root_str.bytes, &a);
 
     // Setup for root module;
     ModuleHeader header = (ModuleHeader) {
-        .name = root_sym,
+        .name = root_name,
         .imports = (Imports) {.clauses = mk_import_clause_array(8, &a),},
         .exports = (Exports) {
             .export_all = true,
@@ -155,14 +155,14 @@ void add_dependency(Package *package, Package *dep) {
     push_addr(dep, &package->dependencies);
 }
 
-Result add_module(Symbol symbol, Module* module, Package* package) {
-    return add_module_def(package->root_module, symbol, module); 
+Result add_module(Name name, Module* module, Package* package) {
+    return add_module_def(package->root_module, name, module); 
 }
 
-Result remove_module(Package* package, Symbol symbol) {
+Result remove_module(Package* package, Name name) {
     Module* root = package->root_module;
     typedef void(*Deleter)(ModuleEntryInternal, void*);
-    entry_remove(symbol, (Deleter)delete_module_entry, root, &root->entries);
+    entry_remove(name, (Deleter)delete_module_entry, root, &root->entries);
     return (Result) {.type = Ok};
 }
 
@@ -182,8 +182,8 @@ void add_import_clause(ImportClause clause, Module *module) {
 }
 
 /** TODO: Update with internal/external variants */
-Module* get_module(Symbol symbol, Package* package) {
-    ModuleEntry* entry = get_def_internal(symbol, package->root_module);
+Module* get_module(Name name, Package* package) {
+    ModuleEntry* entry = get_def_internal(name, package->root_module);
     if (entry && entry->is_module) {
         return entry->value;
     } else {
@@ -200,7 +200,7 @@ Module* package_root_module(Package* package) {
 // -----------------------------------------------------------------------------
 
 // Forward declaration of utility functions
-void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links);
+void update_function(uint8_t* val, NamePtrAMap new_vals, SymSArrAMap links);
 
 Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent) {
     PiAllocator pico_allocator = pkg_parent->gpa;
@@ -363,8 +363,8 @@ Segments prep_target(Module* module, Segments in_segments, Assembler* target, Li
     return out;
 }
 
-Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments segments, LinkData* links) {
-    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
+Result add_def(Module* module, Name name, PiType type, void* data, Segments segments, LinkData* links) {
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
     
     ModuleEntryInternal entry = (ModuleEntryInternal) {};
     PtrArray* declarations = NULL;
@@ -440,10 +440,10 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
         if (segments.code.len != 0) {
             // Move this to the code segment bit?
             // swap out self-references
-            SymPtrAMap self_ref = mk_sym_ptr_amap(1, &module->allocator);
-            sym_ptr_insert(symbol, entry.value, &self_ref);
+            NamePtrAMap self_ref = mk_name_ptr_amap(1, &module->allocator);
+            name_ptr_insert(name, entry.value, &self_ref);
             update_function(entry.code_segment->data, self_ref, links->external_code_links);
-            sdelete_sym_ptr_amap(self_ref);
+            sdelete_name_ptr_amap(self_ref);
         }
     } else {
         entry.backlinks = NULL;
@@ -452,7 +452,7 @@ Result add_def(Module* module, Symbol symbol, PiType type, void* data, Segments 
     entry.type = copy_pi_type(type, &module->pico_allocator);
 
     // Free a previous definition (if it exists!)
-    entry_insert(symbol, entry, &module->entries);
+    entry_insert(name, entry, &module->entries);
 
     Result out;
     out.type = Ok;
@@ -470,9 +470,9 @@ ModuleDecl copy_decl(ModuleDecl decl, Allocator *a) {
     return out;
 }
 
-Result add_decl(Module *module, Symbol symbol, ModuleDecl decl) {
+Result add_decl(Module *module, Name name, ModuleDecl decl) {
     ModuleEntryInternal entry = (ModuleEntryInternal) {};
-    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
     if (old_entry) entry = *old_entry;
     PtrArray* declarations = entry.declarations;
     if (!declarations) {
@@ -497,14 +497,14 @@ Result add_decl(Module *module, Symbol symbol, ModuleDecl decl) {
     }
 
     entry.declarations = declarations;
-    entry_insert(symbol, entry, &module->entries);
+    entry_insert(name, entry, &module->entries);
 
     Result out;
     out.type = Ok;
     return out;
 }
 
-Result add_module_def(Module* module, Symbol symbol, Module* child) {
+Result add_module_def(Module* module, Name name, Module* child) {
     ModuleEntryInternal entry = (ModuleEntryInternal) {
         .value = child,
         .is_module = true,
@@ -515,18 +515,18 @@ Result add_module_def(Module* module, Symbol symbol, Module* child) {
 
     // Free a previous definition (if it exists!)
     // TODO BUG UB: possibly throw here?
-    ModuleEntryInternal* old_entry = entry_lookup(symbol, module->entries);
+    ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
     if (old_entry) {
         delete_module_entry(*old_entry, module);
     }
 
-    entry_insert(symbol, entry, &module->entries);
+    entry_insert(name, entry, &module->entries);
 
     return (Result) {.type = Ok};
 }
 
-void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray implicits) {
-    ModuleEntryInternal* entry = entry_lookup(symbol, module->entries);
+void* get_instantiation(Module *module, Name name, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray implicits) {
+    ModuleEntryInternal* entry = entry_lookup(name, module->entries);
     if (!entry) return NULL;
     if (!entry->instances) return NULL; 
 
@@ -608,12 +608,12 @@ void* get_instantiation(Module *module, Symbol symbol, SymPtrAssoc type_binds, U
     return instance;
 }
 
-ModuleEntry* get_def_internal(Symbol symbol, Module* module) {
+ModuleEntry* get_def_internal(Name name, Module* module) {
     Module* root = module->lexical_parent_package->root_module;
     if (module != root) {
-        return (ModuleEntry*)entry_lookup(symbol, module->entries);
+        return (ModuleEntry*)entry_lookup(name, module->entries);
     } else {
-        ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        ModuleEntry* e = (ModuleEntry*)entry_lookup(name, module->entries);
         if (e) return e;
 
         // Root module should also return definitions available in 
@@ -621,32 +621,32 @@ ModuleEntry* get_def_internal(Symbol symbol, Module* module) {
         Package* package = module->lexical_parent_package;
         for (size_t i = 0; i < package->dependencies.len; i++) {
             Package* dep = package->dependencies.data[i];
-            ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, dep->root_module->entries);
+            ModuleEntry* e = (ModuleEntry*)entry_lookup(name, dep->root_module->entries);
             if (e) return e;
         }
         return NULL;
     }
 }
 
-ModuleEntry* get_def_external(Symbol symbol, Module* module) {
+ModuleEntry* get_def_external(Name name, Module* module) {
     if (module->header.exports.export_all) {
-        return get_def_internal(symbol, module);
+        return get_def_internal(name, module);
     }
     Module* root = module->lexical_parent_package->root_module;
     if (module != root) {
-        ModuleEntry* entry = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        ModuleEntry* entry = (ModuleEntry*)entry_lookup(name, module->entries);
         if (entry == NULL) return NULL;
         /** TODO (performance): should cache if definition is exported in the module def? */
         ExportClauseArray clauses = module->header.exports.clauses;
         for (size_t i = 0; i < clauses.len; i++) {
             ExportClause clause = clauses.data[i]; 
-            if (clause.type == ExportName && symbol_eq(symbol, clause.name)) {
+            if (clause.type == ExportName && name == clause.name) {
                 return entry;
             }
         }
         return NULL;
     } else {
-        ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, module->entries);
+        ModuleEntry* e = (ModuleEntry*)entry_lookup(name, module->entries);
         if (e) return e;
 
         // Root module should also return definitions available in 
@@ -654,39 +654,39 @@ ModuleEntry* get_def_external(Symbol symbol, Module* module) {
         Package* package = module->lexical_parent_package;
         for (size_t i = 0; i < package->dependencies.len; i++) {
             Package* dep = package->dependencies.data[i];
-            ModuleEntry* e = (ModuleEntry*)entry_lookup(symbol, dep->root_module->entries);
+            ModuleEntry* e = (ModuleEntry*)entry_lookup(name, dep->root_module->entries);
             if (e) return e;
         }
         return NULL;
     }
 }
 
-Symbol module_name(Module* module) {
+Name module_name(Module* module) {
     return module->header.name;
 }
 
-SymbolArray get_defined_symbols(Module* module, Allocator* a) {
-    SymbolArray symbols = mk_symbol_array(module->entries.len, a);
+NameArray get_defined_symbols(Module* module, Allocator* a) {
+    NameArray symbols = mk_name_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
-        push_symbol(module->entries.data[i].key, &symbols);
+        push_name(module->entries.data[i].key, &symbols);
     };
     return symbols;
 }
 
-SymbolArray get_exported_symbols(Module* module, Allocator* a) {
-    SymbolArray symbols; 
+NameArray get_exported_symbols(Module* module, Allocator* a) {
+    NameArray symbols; 
     if (module->header.exports.export_all) {
-        symbols = mk_symbol_array(module->entries.len, a);
+        symbols = mk_name_array(module->entries.len, a);
         for (size_t i = 0; i < module->entries.len; i++) {
-            push_symbol(module->entries.data[i].key, &symbols);
+            push_name(module->entries.data[i].key, &symbols);
         };
     } else {
         ExportClauseArray clauses = module->header.exports.clauses;
-        symbols = mk_symbol_array(clauses.len, a);
+        symbols = mk_name_array(clauses.len, a);
         for (size_t i = 0; i < clauses.len; i++) {
             ExportClause clause = clauses.data[i]; 
             if (clause.type == ExportName && get_def_internal(clause.name, module)) {
-                push_symbol(clause.name, &symbols);
+                push_name(clause.name, &symbols);
             }
         }
     }
@@ -735,9 +735,9 @@ Exports get_exports(Module* module) {
 // Implementation internals.
 //------------------------------------------------------------------------------
 
-void update_function(uint8_t* val, SymPtrAMap new_vals, SymSArrAMap links) {
+void update_function(uint8_t* val, NamePtrAMap new_vals, SymSArrAMap links) {
     for (size_t i = 0; i < new_vals.len; i++) {
-        Symbol sym = new_vals.data[i].key;
+        Symbol sym = (Symbol){.name =(new_vals.data[i].key), .did = 0};
         uint64_t new_loc = (uint64_t)new_vals.data[i].val;
         uint8_t* src = (uint8_t*)&new_loc;
 
@@ -871,11 +871,11 @@ bool next_iterator(ModuleIndex* index, ModuleFragment* fragment, Module* module,
     switch (component_index) {
     case ValueComponent: {
         if (entry.value == NULL) {
-            Symbol name = module->entries.data[entry_index].key;
+            Name name = module->entries.data[entry_index].key;
             PtrArray nodes = mk_ptr_array(3, a);
 
             push_ptr(mv_cstr_doc("Symbol", a), &nodes);
-            push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(name), a), a), &nodes);
+            push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_name_string(name), a), a), &nodes);
             push_ptr(mv_cstr_doc("is declared in module", a), &nodes);
             push_ptr(mv_cstr_doc("<TODO: add module name>", a), &nodes);
             push_ptr(mv_cstr_doc("but is lacking definition", a), &nodes);

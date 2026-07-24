@@ -21,7 +21,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_symbol(mv_string("pointer")),
+        .name = string_to_name(mv_string("pointer")),
         .imports = imports,
         .exports = exports,
     };

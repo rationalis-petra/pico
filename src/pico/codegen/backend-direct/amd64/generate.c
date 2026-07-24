@@ -3259,7 +3259,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         EnvEntry entry = env_lookup(syn.to_describe.data[0], base);
         for (size_t i = 1; i < syn.to_describe.len; i++) {
             if (entry.is_module) {
-                ModuleEntry* mentry = get_def_external(syn.to_describe.data[i], entry.value);
+                ModuleEntry* mentry = get_def_external(syn.to_describe.data[i].name, entry.value);
                 if (mentry) {
                     entry.is_module = mentry->is_module;
                     entry.value = mentry->value;
@@ -3275,11 +3275,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
         if (entry.success == Ok) {
           if (entry.is_module) {
-              SymbolArray syms = get_defined_symbols(entry.value, a);
+              NameArray syms = get_defined_symbols(entry.value, a);
               PtrArray lines = mk_ptr_array(syms.len + 8, a);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String m_name = symbol_to_string(module_name(entry.value), a);
+                  String m_name = name_to_string(module_name(entry.value), a);
                   push_ptr(mk_str_doc(mv_string("Module: "), a), &moduledesc);
                   push_ptr(mk_str_doc(m_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);
@@ -3287,15 +3287,15 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
 
               for (size_t i = 0; i < syms.len; i++) {
-                  Symbol symbol = syms.data[i];
-                  ModuleEntry* mentry = get_def_external(symbol, entry.value);
+                  Name name = syms.data[i];
+                  ModuleEntry* mentry = get_def_external(name, entry.value);
                   if (mentry) {
                       PtrArray desc = mk_ptr_array(3, a);
                       if (mentry->is_module) {
                           push_ptr(mk_str_doc(mv_string("Module"), a), &desc);
-                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
+                          push_ptr(mk_str_doc(name_to_string(name, a), a), &desc);
                       } else {
-                          push_ptr(mk_str_doc(symbol_to_string(symbol, a), a), &desc);
+                          push_ptr(mk_str_doc(name_to_string(name, a), a), &desc);
                           push_ptr(mk_str_doc(mv_string(":"), a), &desc);
                           push_ptr(mv_nest_doc(2, pretty_type(&mentry->type, default_ptp, a), a), &desc);
                       }
@@ -3323,7 +3323,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
               push_ptr(mk_str_doc(mv_string("────────────────────────────────────────────"), a), &lines);
               {
                   PtrArray moduledesc = mk_ptr_array(2, a);
-                  String m_name = symbol_to_string(module_name(entry.source), a);
+                  String m_name = name_to_string(module_name(entry.source), a);
                   push_ptr(mk_str_doc(mv_string("Source Module: "), a), &moduledesc);
                   push_ptr(mk_str_doc(m_name, a), &moduledesc);
                   push_ptr(mv_sep_doc(moduledesc, a), &lines);

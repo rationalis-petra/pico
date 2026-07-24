@@ -5,9 +5,9 @@
 #include "atlas/analysis/propchecker.h"
 
 typedef enum {
-    PSymbol,
-    PSymbolOption,
-    PSymbolArray,
+    PName,
+    PNameOption,
+    PNameArray,
 
     PString,
     PStringOption,
@@ -70,29 +70,29 @@ void add_string_array_prop(String propname, StringArray* location, PropSet* prop
 
 }
 
-void add_symbol_prop(String propname, Symbol* location, PropSet* props) {
+void add_name_prop(String propname, Name* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PSymbol,
+        .type = PName,
     };
     push_prop(prop, &props->props);
 }
 
-void add_symbol_option_prop(String propname, SymbolOption* location, PropSet* props) {
+void add_name_option_prop(String propname, NameOption* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PSymbolOption,
+        .type = PNameOption,
     };
     push_prop(prop, &props->props);
 }
 
-void add_symbol_array_prop(String propname, SymbolArray* location, PropSet* props) {
+void add_name_array_prop(String propname, NameArray* location, PropSet* props) {
     Prop prop = {
         .name = propname,
         .location = location,
-        .type = PSymbolArray,
+        .type = PNameArray,
     };
     push_prop(prop, &props->props);
 
@@ -136,7 +136,7 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
             Prop prop = props->props.data[i];
             checks[i] = true;
             switch (prop.type) {
-            case PSymbol:
+            case PName:
                 if (term.branch.len != 2) {
                     PicoError err = {
                         .range = term.range,
@@ -157,12 +157,12 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
                 Symbol* dest = prop.location;
                 *dest = rstr.atom.symbol;
                 break;
-            case PSymbolOption:
+            case PNameOption:
                 
                 panic(mv_string("not parsing symbol option yet!"));
                 break;
-            case PSymbolArray: {
-                SymbolArray arr = mk_symbol_array(term.branch.len - 1, a);
+            case PNameArray: {
+                NameArray arr = mk_name_array(term.branch.len - 1, a);
 
                 for (size_t i = 1; i < term.branch.len; i++) {
                     RawAtlas rstr = term.branch.data[i];
@@ -173,10 +173,11 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
                         };
                         throw_pi_error(point, err);
                     }
-                    push_symbol(rstr.atom.symbol, &arr);
+                    // TODO: ensure did == 0
+                    push_name(rstr.atom.symbol.name, &arr);
                 }
 
-                SymbolArray* dest = prop.location;
+                NameArray* dest = prop.location;
                 *dest = arr;
                 break;
             }
@@ -267,7 +268,7 @@ void parse_prop(RawAtlas term, PropSet* props, bool checks[], PiErrorPoint* poin
 
 bool is_mandatory(PropType type) {
     switch (type) {
-    case PSymbol:
+    case PName:
     case PString:
         return true;
     default:

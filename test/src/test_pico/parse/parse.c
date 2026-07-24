@@ -32,7 +32,7 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     .clauses = mk_export_clause_array(0, a),
   };
   ModuleHeader header = (ModuleHeader) {
-    .name = string_to_symbol(mv_string("pipeline-test-module")),
+    .name = string_to_name(mv_string("pipeline-test-module")),
     .imports = imports,
     .exports = exports,
   };
@@ -165,5 +165,5 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(foo #,)");
   }
 
-  remove_module(base, string_to_symbol(mv_string("pipeline-test-module")));
+  remove_module(base, string_to_name(mv_string("pipeline-test-module")));
 }
