@@ -77,27 +77,29 @@ AMAP_HEADER(Name, ModuleEntryInternal, entry, Entry)
 AMAP_IMPL(Name, ModuleEntryInternal, entry, Entry)
 
 struct Package {
-    Name name;
-    Module* root_module;
-    AddrPiList dependencies;
-    PiAllocator gpa;
+  Name name;
+  Module* root_module;
+  AddrPiList dependencies;
+  PiAllocator gpa;
 };
 
 struct Module {
-    EntryAMap entries;
+  EntryAMap entries;
+  // The list of names that are exported from this module.
+  NameArray self_exports;
 
-    ModuleHeader header;
-    Package* lexical_parent_package;
-    Module* lexical_parent_module;
+  ModuleHeader header;
+  Package* lexical_parent_package;
+  Module* lexical_parent_module;
 
-    // The module owns all values defined within it, using memory allocated by
-    // its' allocator. When the module is deleted, this will be used to free all
-    // values (except functions, which are freed via the executable allocator) 
-    PiAllocator pico_allocator;
-    Allocator allocator;
+  // The module owns all values defined within it, using memory allocated by
+  // its' allocator. When the module is deleted, this will be used to free all
+  // values (except functions, which are freed via the executable allocator) 
+  PiAllocator pico_allocator;
+  Allocator allocator;
 
-    // RWX memory is kept separate from regular values, for storing assembled function code
-    Allocator executable_allocator; 
+  // RWX memory is kept separate from regular values, for storing assembled function code
+  Allocator executable_allocator; 
 };
 
 // Helper forward declarations
@@ -119,6 +121,7 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
     ModuleHeader header = (ModuleHeader) {
         .name = root_name,
         .imports = (Imports) {.clauses = mk_import_clause_array(8, &a),},
+        .re_exports = (ReExports) {.clauses = mk_import_clause_array(8, &a),},
         .exports = (Exports) {
             .export_all = true,
             .clauses = mk_export_clause_array(0, &a),
@@ -134,6 +137,7 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
     *root = (Module) {.pico_allocator = pico_allocator};
     root->allocator = convert_to_callocator(&root->pico_allocator);
     root->entries = mk_entry_amap(32, &root->allocator);
+    root->self_exports = mk_name_array(32, &root->allocator);
     root->header = copy_module_header(header, &root->allocator),
     root->lexical_parent_package = package;
     root->executable_allocator = mk_executable_allocator(&root->allocator);
@@ -209,6 +213,7 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent) {
     *module = (Module) {.pico_allocator = pico_allocator};
     module->allocator = convert_to_callocator(&module->pico_allocator);
     module->entries = mk_entry_amap(32, &module->allocator);
+    module->self_exports = mk_name_array(32, &module->allocator);
     module->header = copy_module_header(header, &module->allocator);
     module->lexical_parent_package = pkg_parent;
     module->lexical_parent_module = parent ? parent : package_root_module(pkg_parent);
@@ -305,6 +310,7 @@ void delete_module(Module* module) {
         delete_module_entry(entry, module);
     };
     sdelete_entry_amap(module->entries);
+    sdelete_name_array(module->self_exports);
     delete_module_header(module->header);
 
     release_executable_allocator(module->executable_allocator);
@@ -372,6 +378,18 @@ Result add_def(Module* module, Name name, PiType type, void* data, Segments segm
         declarations = old_entry->declarations;
         old_entry->declarations = NULL;
         delete_module_entry(*old_entry, module);
+    } else {
+      if (module->header.exports.export_all) {
+        push_name(name, &module->self_exports);
+      } else {
+        ExportClauseArray clauses = module->header.exports.clauses;
+        for (size_t i = 0; i < clauses.len; i++) {
+          ExportClause clause = clauses.data[i]; 
+          if (clause.type == ExportName && clause.name == name) {
+            push_name(name, &module->self_exports);
+          }
+        }
+      }
     }
     entry.declarations = declarations;
     entry.is_module = false;
@@ -518,6 +536,18 @@ Result add_module_def(Module* module, Name name, Module* child) {
     ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
     if (old_entry) {
         delete_module_entry(*old_entry, module);
+    } else {
+      if (module->header.exports.export_all) {
+        push_name(name, &module->self_exports);
+      } else {
+        ExportClauseArray clauses = module->header.exports.clauses;
+        for (size_t i = 0; i < clauses.len; i++) {
+          ExportClause clause = clauses.data[i]; 
+          if (clause.type == ExportName && clause.name == name) {
+            push_name(name, &module->self_exports);
+          }
+        }
+      }
     }
 
     entry_insert(name, entry, &module->entries);
@@ -673,24 +703,11 @@ NameArray get_defined_symbols(Module* module, Allocator* a) {
     return symbols;
 }
 
-NameArray get_exported_symbols(Module* module, Allocator* a) {
-    NameArray symbols; 
-    if (module->header.exports.export_all) {
-        symbols = mk_name_array(module->entries.len, a);
-        for (size_t i = 0; i < module->entries.len; i++) {
-            push_name(module->entries.data[i].key, &symbols);
-        };
-    } else {
-        ExportClauseArray clauses = module->header.exports.clauses;
-        symbols = mk_name_array(clauses.len, a);
-        for (size_t i = 0; i < clauses.len; i++) {
-            ExportClause clause = clauses.data[i]; 
-            if (clause.type == ExportName && get_def_internal(clause.name, module)) {
-                push_name(clause.name, &symbols);
-            }
-        }
-    }
-    return symbols;
+ModuleExports view_module_exports(Module* module) {
+    return (ModuleExports) {
+      .internal_exports = module->self_exports,
+      .re_exports = module->header.re_exports.clauses,
+    };
 }
 
 PtrArray get_defined_instances(Module* module, Allocator* a) {

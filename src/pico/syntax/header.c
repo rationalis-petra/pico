@@ -211,6 +211,7 @@ ModuleHeader copy_module_header(ModuleHeader h, Allocator* a) {
     return (ModuleHeader) {
         .name = h.name,
         .imports.clauses = copy_import_clause_array(h.imports.clauses, copy_import_clause, a),
+        .re_exports.clauses = copy_import_clause_array(h.re_exports.clauses, copy_import_clause, a),
 
         .exports.export_all = h.exports.export_all,
         .exports.clauses = scopy_export_clause_array(h.exports.clauses, a),
@@ -222,5 +223,9 @@ void delete_module_header(ModuleHeader h) {
         delete_import_clause(h.imports.clauses.data[i]);
     }
     sdelete_import_clause_array(h.imports.clauses);
+    for (size_t i = 0; i < h.re_exports.clauses.len; i++) {
+        delete_import_clause(h.re_exports.clauses.data[i]);
+    }
+    sdelete_import_clause_array(h.re_exports.clauses);
     sdelete_export_clause_array(h.exports.clauses);
 }

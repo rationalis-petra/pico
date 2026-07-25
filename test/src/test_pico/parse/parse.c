@@ -27,6 +27,9 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
   add_import_all(&imports.clauses, a, 1, "data");
   add_import_all(&imports.clauses, a, 2, "platform", "memory");
 
+  ReExports re_exports = (ReExports) {
+      .clauses = mk_import_clause_array(0, a),
+  };
   Exports exports = (Exports) {
     .export_all = true,
     .clauses = mk_export_clause_array(0, a),
@@ -34,6 +37,7 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
   ModuleHeader header = (ModuleHeader) {
     .name = string_to_name(mv_string("pipeline-test-module")),
     .imports = imports,
+    .re_exports = re_exports,
     .exports = exports,
   };
   Module* module = mk_module(header, base, NULL);

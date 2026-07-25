@@ -214,6 +214,9 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, a),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, a),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, a),
@@ -221,6 +224,7 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_name(moudle_name),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(num), num);

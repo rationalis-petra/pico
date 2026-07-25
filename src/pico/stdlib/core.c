@@ -192,6 +192,9 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
@@ -199,6 +202,7 @@ void add_core_module(Assembler* ass, Package* base, RegionAllocator* region) {
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_name(mv_string("core")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, base, NULL);

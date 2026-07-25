@@ -254,6 +254,7 @@ ModuleHeader* abstract_header(RawTree raw, Allocator* a, PiErrorPoint* point) {
     *out = (ModuleHeader) {
         .name = module_name,
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
         .range = raw.range,
     };

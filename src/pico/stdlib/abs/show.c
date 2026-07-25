@@ -15,6 +15,9 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "data", "string");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
@@ -22,6 +25,7 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_name(mv_string("show")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(abs), abs);

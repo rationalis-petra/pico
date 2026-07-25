@@ -23,6 +23,9 @@ void add_user_module(Package* base, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 1, "debug");
     add_import(&imports.clauses, &ra, 1, "dev");
 
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
@@ -31,6 +34,7 @@ void add_user_module(Package* base, RegionAllocator* region) {
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_name(mv_string("user")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     mk_module(header, base, NULL);

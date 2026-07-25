@@ -140,6 +140,9 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
+    ReExports re_exports = (ReExports) {
+        .clauses = mk_import_clause_array(0, &ra),
+    };
     Exports exports = (Exports) {
         .export_all = true,
         .clauses = mk_export_clause_array(0, &ra),
@@ -147,6 +150,7 @@ void add_terminal_module(Assembler *ass, Module *platform, RegionAllocator* regi
     ModuleHeader header = (ModuleHeader) {
         .name = string_to_name(mv_string("terminal")),
         .imports = imports,
+        .re_exports = re_exports,
         .exports = exports,
     };
     Module* module = mk_module(header, get_package(platform), platform);

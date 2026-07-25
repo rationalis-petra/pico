@@ -178,7 +178,8 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
                 break;
             }
             case SegWildcard: {
-                NameArray names = get_exported_symbols(module, a);
+                ModuleExports exports = view_module_exports(module);
+                NameArray names = exports.internal_exports;
                 for (size_t k = 0; k < names.len; k++) {
                     ModuleEntry* entry = get_def_external(names.data[k], module);
                     check_entry(entry, !last_iteration, names.data[k], mfor, point, a);
@@ -310,6 +311,85 @@ void add_instances_from(Module* importee, Environment* env, Allocator* a) {
     sdelete_ptr_array(instances);
 }
 
+void incorporate_import_clause(ImportClause clause, Environment* env, Module* module, Module* root_module, ErrorPoint* point, Allocator* a) {
+    switch (clause.type) {
+    case ImportSimple: {
+        ParentMap parents = get_origins(clause.path, root_module, module, point, a);
+        for (size_t i = 0; i < parents.names.len; i++) {
+            name_ptr_insert(parents.names.data[i], parents.values.data[i], &env->symbol_origins);
+        }
+        sdelete_ptr_array(parents.values);
+        sdelete_u64_array(parents.names);
+        break;
+    }
+    case ImportComplex: {
+        Targets targets = get_targets(clause.path, root_module, module, point, a);
+
+        for (size_t i = 0; i < targets.values.len; i++ ) {
+            Module* target = targets.values.data[i];
+            if (clause.import_instances | clause.import_types) {
+                ModuleExports exports = view_module_exports(target);
+                NameArray names = exports.internal_exports;
+                // TODO: lookup here is probably n^2. Can we just...
+                // generate a list of exports instead?
+                for (size_t j = 0; j < names.len; j++) {
+                    ModuleEntry* entry = get_def_external(names.data[j], target);
+                    if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
+                        name_ptr_insert(names.data[j], target, &env->symbol_origins);
+                    }
+                    if (clause.import_types & (entry->type.sort == TKind)) {
+                        name_ptr_insert(names.data[j], target, &env->symbol_origins);
+                    }
+                }
+                if (clause.import_instances) {
+                    add_instances_from(target, env, a);
+                }
+            }
+            if (clause.import_values) {
+                for (size_t j = 0; j < clause.values.len; j++) {
+                    // TODO: make sure is exported
+                    Name name = clause.values.data[j].from;
+                    ModuleEntry* entry = get_def_external(name, target);
+                    check_entry(entry, false, name, module, point, a);
+                    if (clause.values.data[j].should_rename) {
+                        u64_name_insert(env->symbol_origins.len, name, &env->symbol_renames);
+                        name_ptr_insert(clause.values.data[j].to, target, &env->symbol_origins);
+                    } else {
+                        name_ptr_insert(name, target, &env->symbol_origins);
+                    }
+                }
+            }
+        }
+        sdelete_ptr_array(targets.values);
+        break;
+    }
+    case ImportAll: {
+        // Find the package
+        Targets targets = get_targets(clause.path, root_module, module, point, a);
+
+        for (size_t i = 0; i < targets.values.len; i++ ) {
+            Module* target = targets.values.data[i];
+            Package* package = get_package(target);
+            Module* root = package_root_module(package);
+            ModuleExports exports = view_module_exports(target);
+            NameArray names = exports.internal_exports;
+            for (size_t j = 0; j < names.len; j++ ) {
+                name_ptr_insert(names.data[j], target, &env->symbol_origins);
+            }
+            for (size_t j = 0; j < exports.re_exports.len; j++) {
+                ImportClause re_export = exports.re_exports.data[i];
+                incorporate_import_clause(re_export, env, target, root, point, a);
+            }
+            add_instances_from(target, env, a);
+        }
+        sdelete_ptr_array(targets.values);
+        break;
+    }
+    default:
+        panic(mv_string("Unrecognized import form in env_from_module"));
+    }
+}
+
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
     Environment* env = mem_alloc(sizeof(Environment), a);
     *env = (Environment) {
@@ -330,76 +410,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         // TODO (BUG): currently, we only search in the package, not the parent
         // module's submodules!
         ImportClause clause = imports.clauses.data[i];
-        switch (clause.type) {
-        case ImportSimple: {
-            ParentMap parents = get_origins(clause.path, root_module, module, point, a);
-            for (size_t i = 0; i < parents.names.len; i++) {
-                name_ptr_insert(parents.names.data[i], parents.values.data[i], &env->symbol_origins);
-            }
-            sdelete_ptr_array(parents.values);
-            sdelete_u64_array(parents.names);
-            break;
-        }
-        case ImportComplex: {
-            Targets targets = get_targets(clause.path, root_module, module, point, a);
-
-            for (size_t i = 0; i < targets.values.len; i++ ) {
-                Module* target = targets.values.data[i];
-                if (clause.import_instances | clause.import_types) {
-                    NameArray syms = get_exported_symbols(target, a);
-                    // TODO: lookup here is probably n^2. Can we just...
-                    // generate a list of exports instead?
-                    for (size_t j = 0; j < syms.len; j++) {
-                        ModuleEntry* entry = get_def_external(syms.data[j], target);
-                        if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
-                            name_ptr_insert(syms.data[j], target, &env->symbol_origins);
-                        }
-                        if (clause.import_types & (entry->type.sort == TKind)) {
-                            name_ptr_insert(syms.data[j], target, &env->symbol_origins);
-                        }
-                    }
-                    if (clause.import_instances) {
-                        add_instances_from(target, env, a);
-                    }
-                    sdelete_name_array(syms);
-                }
-                if (clause.import_values) {
-                    for (size_t j = 0; j < clause.values.len; j++) {
-                        // TODO: make sure is exported
-                        Name name = clause.values.data[j].from;
-                        ModuleEntry* entry = get_def_external(name, target);
-                        check_entry(entry, false, name, module, point, a);
-                        if (clause.values.data[j].should_rename) {
-                            u64_name_insert(env->symbol_origins.len, name, &env->symbol_renames);
-                            name_ptr_insert(clause.values.data[j].to, target, &env->symbol_origins);
-                        } else {
-                            name_ptr_insert(name, target, &env->symbol_origins);
-                        }
-                    }
-                }
-            }
-            sdelete_ptr_array(targets.values);
-            break;
-        }
-        case ImportAll: {
-            // Find the package
-            Targets targets = get_targets(clause.path, root_module, module, point, a);
-
-            for (size_t i = 0; i < targets.values.len; i++ ) {
-                Module* target = targets.values.data[i];
-                NameArray names = get_exported_symbols(target, a);
-                for (size_t j = 0; j < names.len; j++ ) {
-                    name_ptr_insert(names.data[j], target, &env->symbol_origins);
-                }
-                sdelete_name_array(names);
-                add_instances_from(target, env, a);
-            }
-            sdelete_ptr_array(targets.values);
-            break;
-        }
-        default:
-            panic(mv_string("Unrecognized import form in env_from_module"));
-        }
+        incorporate_import_clause(clause, env, module, root_module, point, a);
     }
 
     // The local (module) definitions have the highest priority, so they  
@@ -487,7 +498,8 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
                 break;
             }
             case SegWildcard: {
-                NameArray names = get_exported_symbols(module, a);
+                ModuleExports exports = view_module_exports(module);
+                NameArray names = exports.internal_exports;;
                 for (size_t k = 0; k < names.len; k++) {
                     ModuleEntry* entry = get_def_external(names.data[k], module);
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {

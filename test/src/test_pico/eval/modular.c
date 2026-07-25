@@ -102,15 +102,13 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
-    /*
     if (test_start(log, mv_string("module-re-export-values"))) {
         MODULE("(module sub1 (import (core :all) (num.i64 :all)) (export val1)) \n"
-               "(def val1 1)");
+               "(def val1 7)");
         MODULE("(module sub2 (import (core :all) (num.i64 :all)) (re-export (sub1 :values (val1)))) \n");
         MODULE("(module test-module (import (core :all) (sub2 :all) (num.i64 :all)) (export val)) \n"
             "  (def val val1)");
-        int64_t expected = 3;
+        int64_t expected = 7;
         TEST_EQ("test-module.val");
     }
-    */
 }

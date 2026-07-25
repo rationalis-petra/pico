@@ -126,7 +126,11 @@ Result add_decl(Module* module, Name name, ModuleDecl decl);
  */
 void add_import_clause(ImportClause clause, Module* module);
 
-NameArray get_exported_symbols(Module* module, Allocator* a);
+typedef struct {
+    NameArray internal_exports;
+    ImportClauseArray re_exports;
+} ModuleExports;
+ModuleExports view_module_exports(Module* module);
 NameArray get_defined_symbols(Module* module, Allocator* a);
 
 /** Get a definition as an external module, i.e. 'getting' a non-exported
