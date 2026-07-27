@@ -365,6 +365,20 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                         name_ptr_insert(names.data[j], target, data.origins);
                     }
                 }
+                for (size_t j = 0; j < exports.re_exports.len; j++) {
+                    NameSourceCell cell = exports.re_exports.data[i];
+                    Module* target = cell.key;
+                    for (size_t k = 0; k < cell.val.names.len; k++) {
+                        Name name = cell.val.names.data[k];
+                        ModuleEntry* entry = get_def_external(name, target);
+                        if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
+                            name_ptr_insert(name, target, data.origins);
+                        }
+                        if (clause.import_types & (entry->type.sort == TKind)) {
+                            name_ptr_insert(name, target, data.origins);
+                        }
+                    }
+                }
                 if (clause.import_instances && data.env) {
                     add_instances_from(target, data.env, a);
                 }

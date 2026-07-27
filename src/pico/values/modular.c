@@ -800,7 +800,7 @@ ModuleEntry* get_def_external(Name name, Module* module) {
       }
       return NULL;
     } else if (module->re_exports) {
-      /** entry is NULL, but we need to check in the renamed exports before
+      /** Entry is NULL, but we need to check in the renamed exports before
           completely giving up! */
       NameSourceAMap sources = module->re_exports->re_exports;
       for (size_t i = 0; i < sources.len; i++) {

@@ -121,4 +121,14 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         int64_t expected = 8;
         TEST_EQ("test-module.val");
     }
+
+    if (test_start(log, mv_string("module-re-export-types"))) {
+        MODULE("(module sub1 (import (core :all) (num.i64 :all)) (export TestStruct)) \n"
+               "(def TestStruct Struct [.x I64] [.y I64])\n");
+        MODULE("(module sub2 (import (core :all) (num.i64 :all)) (re-export (sub1 :types))) \n");
+        MODULE("(module test-module (import (core :all) (sub2 :types)) (export val)) \n"
+            "  (def val struct TestStruct [.x 3] [.y 4])");
+        int64_t expected[2] = {3, 4};
+        TEST_EQ("test-module.val");
+    }
 }
