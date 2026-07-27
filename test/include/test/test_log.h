@@ -14,6 +14,7 @@ typedef struct {
     bool show_passes;
     bool show_errors;
     bool show_info;
+    bool log_extra_info;
 } Verbosity;
 
 typedef struct {

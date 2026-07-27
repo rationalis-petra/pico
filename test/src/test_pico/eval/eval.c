@@ -82,5 +82,5 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     }
 
     delete_env(env, a);
-    delete_module(module);
+    remove_module(base, string_to_name(mv_string("eval-test-module")));
 }

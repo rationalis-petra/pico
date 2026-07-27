@@ -34,6 +34,7 @@ typedef enum {
 typedef struct {
     String report_file;
     ReportType report_type;
+    uint8_t log_level;
     uint8_t report_level;
     uint8_t print_level;
     CodegenBackend backend;

@@ -160,6 +160,7 @@ void delete_test_log(TestLog* log, Allocator* a) {
 }
 
 Logger* get_structured_logger(TestLog *log) {
+    if (!log->verbosity.log_extra_info) return NULL;
     if (!log->slogger && log->in_test) {
         log->slogger = make_logger(log->gpa);
     }

@@ -126,6 +126,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
 
     set_std_current_module(old_current);
     delete_env(env, a);
-    delete_module(module);
+
+    remove_module(base, string_to_name(mv_string("pipeline-test-module")));
     delete_region_allocator(region);
 }

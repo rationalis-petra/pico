@@ -87,7 +87,15 @@ TestLog* setup_testlog(TestCommand command, FormattedOStream* cout, Allocator *a
         .show_fails = false,
         .show_info = false,
         .show_errors = false,
+        .log_extra_info = false,
     };
+    switch (command.opts.log_level) {
+    default:
+    case 1:
+      v.log_extra_info = true;
+    case 0:
+      break;
+    }
     switch (command.opts.print_level) {
     default:
     case 4:
