@@ -2,9 +2,6 @@
 
 #include "platform/signals.h"
 
-#include "pico/data/name_ptr_amap.h"
-#include "pico/data/u64_name_amap.h"
-
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
     NamePtrAMap symbol_origins;
@@ -79,6 +76,9 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
         if (!entry) goto symbol_root_check;
         check_entry(entry, !last_iteration, segment.name, mfor, point, a);
         all_modules &= entry->is_module;
+        if (entry->is_module) {
+            refresh_re_exports(entry->value, point, a);
+        }
         if (last_iteration && gather_names) {
             push_ptr(parent, &values);
             push_name(segment.name, &out_names);
@@ -91,6 +91,9 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
         entry = get_def_internal(segment.name, root);
         check_entry(entry, !last_iteration, segment.name, mfor, point, a);
         all_modules &= entry->is_module;
+        if (entry->is_module) {
+            refresh_re_exports(entry->value, point, a);
+        }
         if (last_iteration && gather_names) {
             push_ptr(root, &values);
             push_u64(segment.name, &out_names);
@@ -105,6 +108,9 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
             if (!entry) goto symbols_root_check;
             check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
             all_modules &= entry->is_module;
+            if (entry->is_module) {
+                refresh_re_exports(entry->value, point, a);
+            }
             if (last_iteration && gather_names) {
                 push_ptr(parent, &values);
                 push_u64(segment.names.data[k], &out_names);
@@ -117,6 +123,9 @@ Origins initialise_path_trace(PathSegmentArray path, bool gather_names, Module* 
             entry = get_def_internal(segment.names.data[k], root);
             check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
             all_modules &= entry->is_module;
+            if (entry->is_module) {
+                refresh_re_exports(entry->value, point, a);
+            }
             if (last_iteration && gather_names) {
                 push_ptr(root, &values);
                 push_u64(segment.names.data[k], &out_names);
@@ -155,6 +164,9 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
                 ModuleEntry* entry = get_def_external(segment.name, module);
                 check_entry(entry, !last_iteration, segment.name, mfor, point, a);
                 all_modules &= entry->is_module;
+                if (entry->is_module) {
+                    refresh_re_exports(entry->value, point, a);
+                }
                 if (last_iteration && gather_names) {
                     push_ptr(module, &next_set);
                     push_name(segment.name, &out_names);
@@ -168,6 +180,9 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
                     ModuleEntry* entry = get_def_external(segment.names.data[k], module);
                     check_entry(entry, !last_iteration, segment.names.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
+                    if (entry->is_module) {
+                        refresh_re_exports(entry->value, point, a);
+                    }
                     if (last_iteration && gather_names) {
                         push_ptr(module, &next_set);
                         push_name(segment.names.data[k], &out_names);
@@ -179,11 +194,14 @@ Origins path_trace_internal(PathSegmentArray path, bool gather_names, Module* ro
             }
             case SegWildcard: {
                 ModuleExports exports = view_module_exports(module);
-                NameArray names = exports.internal_exports;
+                NameArray names = exports.self_exports;
                 for (size_t k = 0; k < names.len; k++) {
                     ModuleEntry* entry = get_def_external(names.data[k], module);
                     check_entry(entry, !last_iteration, names.data[k], mfor, point, a);
                     all_modules &= entry->is_module;
+                    if (entry->is_module) {
+                        refresh_re_exports(entry->value, point, a);
+                    }
                     if (last_iteration && gather_names) {
                         push_ptr(module, &next_set);
                         push_name(names.data[k], &out_names);
@@ -311,12 +329,18 @@ void add_instances_from(Module* importee, Environment* env, Allocator* a) {
     sdelete_ptr_array(instances);
 }
 
-void incorporate_import_clause(ImportClause clause, Environment* env, Module* module, Module* root_module, ErrorPoint* point, Allocator* a) {
+typedef struct {
+    NamePtrAMap* origins;
+    U64NameAMap* rename;
+    Environment* env;
+} InternalImportData;
+
+void incorporate_import_clause_internal(ImportClause clause, InternalImportData data, Module* module, Module* root_module, ErrorPoint* point, Allocator* a) {
     switch (clause.type) {
     case ImportSimple: {
         ParentMap parents = get_origins(clause.path, root_module, module, point, a);
         for (size_t i = 0; i < parents.names.len; i++) {
-            name_ptr_insert(parents.names.data[i], parents.values.data[i], &env->symbol_origins);
+            name_ptr_insert(parents.names.data[i], parents.values.data[i], data.origins);
         }
         sdelete_ptr_array(parents.values);
         sdelete_u64_array(parents.names);
@@ -329,20 +353,20 @@ void incorporate_import_clause(ImportClause clause, Environment* env, Module* mo
             Module* target = targets.values.data[i];
             if (clause.import_instances | clause.import_types) {
                 ModuleExports exports = view_module_exports(target);
-                NameArray names = exports.internal_exports;
+                NameArray names = exports.self_exports;
                 // TODO: lookup here is probably n^2. Can we just...
                 // generate a list of exports instead?
                 for (size_t j = 0; j < names.len; j++) {
                     ModuleEntry* entry = get_def_external(names.data[j], target);
                     if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
-                        name_ptr_insert(names.data[j], target, &env->symbol_origins);
+                        name_ptr_insert(names.data[j], target, data.origins);
                     }
                     if (clause.import_types & (entry->type.sort == TKind)) {
-                        name_ptr_insert(names.data[j], target, &env->symbol_origins);
+                        name_ptr_insert(names.data[j], target, data.origins);
                     }
                 }
-                if (clause.import_instances) {
-                    add_instances_from(target, env, a);
+                if (clause.import_instances && data.env) {
+                    add_instances_from(target, data.env, a);
                 }
             }
             if (clause.import_values) {
@@ -352,10 +376,10 @@ void incorporate_import_clause(ImportClause clause, Environment* env, Module* mo
                     ModuleEntry* entry = get_def_external(name, target);
                     check_entry(entry, false, name, module, point, a);
                     if (clause.values.data[j].should_rename) {
-                        u64_name_insert(env->symbol_origins.len, name, &env->symbol_renames);
-                        name_ptr_insert(clause.values.data[j].to, target, &env->symbol_origins);
+                        u64_name_insert(data.origins->len, name, data.rename);
+                        name_ptr_insert(clause.values.data[j].to, target, data.origins);
                     } else {
-                        name_ptr_insert(name, target, &env->symbol_origins);
+                        name_ptr_insert(name, target, data.origins);
                     }
                 }
             }
@@ -369,18 +393,21 @@ void incorporate_import_clause(ImportClause clause, Environment* env, Module* mo
 
         for (size_t i = 0; i < targets.values.len; i++ ) {
             Module* target = targets.values.data[i];
-            Package* package = get_package(target);
-            Module* root = package_root_module(package);
             ModuleExports exports = view_module_exports(target);
-            NameArray names = exports.internal_exports;
+            NameArray names = exports.self_exports;
             for (size_t j = 0; j < names.len; j++ ) {
-                name_ptr_insert(names.data[j], target, &env->symbol_origins);
+                name_ptr_insert(names.data[j], target, data.origins);
             }
             for (size_t j = 0; j < exports.re_exports.len; j++) {
-                ImportClause re_export = exports.re_exports.data[i];
-                incorporate_import_clause(re_export, env, target, root, point, a);
+                NameSourceCell cell = exports.re_exports.data[i];
+                Module* module = cell.key;
+                for (size_t k = 0; k < cell.val.names.len; k++) {
+                    name_ptr_insert(cell.val.names.data[k], module, data.origins);
+                }
             }
-            add_instances_from(target, env, a);
+            if (data.env) {
+                add_instances_from(target, data.env, a);
+            }
         }
         sdelete_ptr_array(targets.values);
         break;
@@ -388,6 +415,25 @@ void incorporate_import_clause(ImportClause clause, Environment* env, Module* mo
     default:
         panic(mv_string("Unrecognized import form in env_from_module"));
     }
+}
+
+void incorporate_import_clause(ImportClause clause, ImportData data, Module* module, ErrorPoint* point, Allocator* a) {
+    Package* package = get_package(module);
+    Module* root = package_root_module(package);
+    InternalImportData i_data = {
+        .origins = data.origins,
+        .rename = data.rename,
+    };
+    incorporate_import_clause_internal(clause, i_data, module, root, point, a);
+}
+
+
+PtrArray get_import_sources(ImportClause clause, Module* module, ErrorPoint* point, Allocator* a) {
+    Package* package = get_package(module);
+    Module* root = package_root_module(package);
+    Origins origins = path_trace_internal(clause.path, false, root, module, point, a);
+    sdelete_u64_array(origins.names);
+    return origins.values;
 }
 
 Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
@@ -400,17 +446,18 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
         .gpa = a,
     };
 
-    // TODO (PERFORMANCE): this is quite expensive every REPL iteration... possibly 
-    // cache results?
     Imports imports = get_imports(module);
     Package* package = get_package(module);
     Module* root_module = package_root_module(package);
 
     for (size_t i = 0; i < imports.clauses.len; i++) {
-        // TODO (BUG): currently, we only search in the package, not the parent
-        // module's submodules!
         ImportClause clause = imports.clauses.data[i];
-        incorporate_import_clause(clause, env, module, root_module, point, a);
+        InternalImportData data = {
+            .origins = &env->symbol_origins,
+            .rename = &env->symbol_renames,
+            .env = env,
+        };
+        incorporate_import_clause_internal(clause, data, module, root_module, point, a);
     }
 
     // The local (module) definitions have the highest priority, so they  
@@ -499,7 +546,7 @@ ImportClauseStatus import_clause_valid(Environment* env, ImportClause clause, Al
             }
             case SegWildcard: {
                 ModuleExports exports = view_module_exports(module);
-                NameArray names = exports.internal_exports;;
+                NameArray names = exports.self_exports;;
                 for (size_t k = 0; k < names.len; k++) {
                     ModuleEntry* entry = get_def_external(names.data[k], module);
                     if (!entry->is_module && (!last_iteration || clause.type == ImportComplex)) {

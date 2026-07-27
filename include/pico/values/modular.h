@@ -2,12 +2,15 @@
 #define __PICO_VALUES_MODULAR_H
 
 #include "data/meta/array_header.h"
+#include "data/meta/amap_header.h"
 #include "data/result.h"
 
 #include "components/assembler/assembler.h"
 
+#include "pico/data/u64_name_amap.h"
 #include "pico/data/client/allocator.h"
 #include "pico/data/client/list.h"
+
 #include "pico/codegen/link_data.h"
 #include "pico/syntax/header.h"
 #include "pico/values/values.h"
@@ -126,9 +129,19 @@ Result add_decl(Module* module, Name name, ModuleDecl decl);
  */
 void add_import_clause(ImportClause clause, Module* module);
 
+/**
+ * Refresh the re-exported symbols in this module
+ */
+void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a);
+
 typedef struct {
-    NameArray internal_exports;
-    ImportClauseArray re_exports;
+    NameArray names;
+    U64NameAMap renames;
+} NameSource;
+AMAP_HEADER(Module*, NameSource, name_source, NameSource)
+typedef struct {
+    NameArray self_exports;
+    NameSourceAMap re_exports;
 } ModuleExports;
 ModuleExports view_module_exports(Module* module);
 NameArray get_defined_symbols(Module* module, Allocator* a);

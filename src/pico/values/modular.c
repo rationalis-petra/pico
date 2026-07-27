@@ -60,6 +60,7 @@ typedef struct {
 
 ARRAY_HEADER(InstantiatedInstance, inst, Inst)
 ARRAY_COMMON_IMPL(InstantiatedInstance, inst, Inst)
+AMAP_IMPL(Module*, NameSource, name_source, NameSource)
 
 struct Instances {
   uint64_t instance_offset;
@@ -71,6 +72,18 @@ struct Instances {
 
   ClosureLinkArray* closures;
 };
+
+typedef struct {
+  uint64_t timestamp;
+  Module* module;
+} StampedModule;
+ARRAY_HEADER(StampedModule, stamped_module, StampedModule)
+ARRAY_COMMON_IMPL(StampedModule, stamped_module, StampedModule)
+
+typedef struct {
+  StampedModuleArray targets;
+  NameSourceAMap re_exports;
+} ReExportData;
 
 ARRAY_COMMON_IMPL(InstanceSrc, inst_src, InstSrc)
 AMAP_HEADER(Name, ModuleEntryInternal, entry, Entry)
@@ -87,6 +100,8 @@ struct Module {
   EntryAMap entries;
   // The list of names that are exported from this module.
   NameArray self_exports;
+  ReExportData* re_exports;
+  size_t timestamp;
 
   ModuleHeader header;
   Package* lexical_parent_package;
@@ -104,6 +119,7 @@ struct Module {
 
 // Helper forward declarations
 void delete_module_entry(ModuleEntryInternal entry, Module* module);
+void update_timestamp(Module* module);
 
 
 // -----------------------------------------------------------------------------
@@ -137,7 +153,9 @@ Package* mk_package(Name name, PiAllocator pico_allocator) {
     *root = (Module) {.pico_allocator = pico_allocator};
     root->allocator = convert_to_callocator(&root->pico_allocator);
     root->entries = mk_entry_amap(32, &root->allocator);
+    root->timestamp = 0;
     root->self_exports = mk_name_array(32, &root->allocator);
+    root->re_exports = NULL;
     root->header = copy_module_header(header, &root->allocator),
     root->lexical_parent_package = package;
     root->executable_allocator = mk_executable_allocator(&root->allocator);
@@ -185,6 +203,81 @@ void add_import_clause(ImportClause clause, Module *module) {
     push_import_clause(clause, &module->header.imports.clauses);
 }
 
+void refresh_re_exports(Module* module, ErrorPoint* point, Allocator* a) {
+  if (module->re_exports == NULL) return;
+
+  StampedModuleArray targets = module->re_exports->targets;
+  bool should_refresh = false;
+  if (targets.data == NULL) {
+    targets = mk_stamped_module_array(module->header.re_exports.clauses.len, &module->allocator);
+    should_refresh = true;
+  }
+  for (size_t i = 0; i < targets.len; i++) {
+    should_refresh |= targets.data[i].timestamp != targets.data[i].module->timestamp; 
+  }
+  if (!should_refresh) return;
+
+
+  ImportClauseArray clauses = module->header.re_exports.clauses;
+  NamePtrAMap origins = mk_name_ptr_amap(32, &module->allocator);
+  U64NameAMap rename = mk_u64_name_amap(32, &module->allocator);
+  for (size_t i = 0; i < clauses.len; i++) {
+    ImportClause clause = clauses.data[i];
+    PtrArray sources = get_import_sources(clause, module, point, a);
+    for (size_t j = 0; j < sources.len; j++) {
+      Module* module = sources.data[j];
+      StampedModule sm = {.module = module, .timestamp = module->timestamp};
+      push_stamped_module(sm, &targets);
+    }
+
+    ImportData data = {
+      .origins = &origins,
+      .rename = &rename,
+    };
+    incorporate_import_clause(clause, data, module, point, a);
+  }
+  module->re_exports->targets = targets;
+
+  NameSourceAMap* source_map = &module->re_exports->re_exports;
+  for (size_t i = 0; i < source_map->len; i++) {
+    sdelete_name_array(source_map->data[i].val.names);
+    if (source_map->data[i].val.renames.data)
+      sdelete_u64_name_amap(source_map->data[i].val.renames);
+  }
+  source_map->len = 0;
+  for (size_t i = 0; i < origins.len; i++) {
+    NamePtrCell cell = origins.data[i];
+    Module* source_module = cell.val;
+    Name name = cell.key;
+    Name* alt_name = u64_name_lookup(i, rename);
+
+    size_t idx = 0;
+    if (name_source_find(&idx, source_module, *source_map)) {
+      NameSource* source = &source_map->data[idx].val;
+      push_name(name, &source->names);
+      if (alt_name) {
+        if (source->renames.data) {
+          u64_name_insert(source->names.len, *alt_name, &source->renames);
+        } else {
+          source->renames = mk_u64_name_amap(8, &module->allocator);
+          u64_name_insert(source->names.len, *alt_name, &source->renames);
+        }
+      }
+    } else {
+      NameArray names = mk_name_array(8, &module->allocator);
+      push_name(name, &names);
+      NameSource source = {.names = names};
+      if (alt_name) {
+          source.renames = mk_u64_name_amap(8, &module->allocator);
+          u64_name_insert(source.names.len, *alt_name, &source.renames);
+      }
+      name_source_insert(source_module, source, source_map);
+    }
+  }
+  sdelete_name_ptr_amap(origins);
+  sdelete_u64_name_amap(rename);
+}
+
 /** TODO: Update with internal/external variants */
 Module* get_module(Name name, Package* package) {
     ModuleEntry* entry = get_def_internal(name, package->root_module);
@@ -213,11 +306,20 @@ Module* mk_module(ModuleHeader header, Package* pkg_parent, Module* parent) {
     *module = (Module) {.pico_allocator = pico_allocator};
     module->allocator = convert_to_callocator(&module->pico_allocator);
     module->entries = mk_entry_amap(32, &module->allocator);
+    module->timestamp = 0;
     module->self_exports = mk_name_array(32, &module->allocator);
+    module->re_exports = NULL;
     module->header = copy_module_header(header, &module->allocator);
     module->lexical_parent_package = pkg_parent;
     module->lexical_parent_module = parent ? parent : package_root_module(pkg_parent);
     module->executable_allocator = mk_executable_allocator(&module->allocator);
+
+    if (header.re_exports.clauses.len > 0) {
+      module->re_exports = mem_alloc(sizeof(ReExportData), &module->allocator);
+      *module->re_exports = (ReExportData) {
+        .re_exports = mk_name_source_amap(header.re_exports.clauses.len, &module->allocator),
+      };
+    }
 
     if (parent) {
         add_module_def(parent, header.name, module);
@@ -311,6 +413,20 @@ void delete_module(Module* module) {
     };
     sdelete_entry_amap(module->entries);
     sdelete_name_array(module->self_exports);
+    if (module->re_exports) {
+      if (module->re_exports->targets.data)
+        sdelete_stamped_module_array(module->re_exports->targets);
+
+      NameSourceAMap source_map = module->re_exports->re_exports;
+      for (size_t i = 0; i < source_map.len; i++) {
+        NameSource source = source_map.data[i].val;
+        sdelete_name_array(source.names);
+        if (source.renames.data)
+          sdelete_u64_name_amap(source_map.data[i].val.renames);
+      }
+      sdelete_name_source_amap(source_map);
+      mem_free(module->re_exports, &module->allocator);
+    }
     delete_module_header(module->header);
 
     release_executable_allocator(module->executable_allocator);
@@ -472,6 +588,7 @@ Result add_def(Module* module, Name name, PiType type, void* data, Segments segm
     // Free a previous definition (if it exists!)
     entry_insert(name, entry, &module->entries);
 
+    update_timestamp(module);
     Result out;
     out.type = Ok;
     return out;
@@ -517,6 +634,7 @@ Result add_decl(Module *module, Name name, ModuleDecl decl) {
     entry.declarations = declarations;
     entry_insert(name, entry, &module->entries);
 
+    update_timestamp(module);
     Result out;
     out.type = Ok;
     return out;
@@ -552,7 +670,14 @@ Result add_module_def(Module* module, Name name, Module* child) {
 
     entry_insert(name, entry, &module->entries);
 
+    update_timestamp(module);
     return (Result) {.type = Ok};
+}
+
+void update_timestamp(Module* module) {
+  module->timestamp++;
+  if (module->lexical_parent_module)
+    update_timestamp(module->lexical_parent_module);
 }
 
 void* get_instantiation(Module *module, Name name, SymPtrAssoc type_binds, U64Array type_encodings, PtrArray implicits) {
@@ -662,32 +787,38 @@ ModuleEntry* get_def_external(Name name, Module* module) {
     if (module->header.exports.export_all) {
         return get_def_internal(name, module);
     }
-    Module* root = module->lexical_parent_package->root_module;
-    if (module != root) {
-        ModuleEntry* entry = (ModuleEntry*)entry_lookup(name, module->entries);
-        if (entry == NULL) return NULL;
-        /** TODO (performance): should cache if definition is exported in the module def? */
-        ExportClauseArray clauses = module->header.exports.clauses;
-        for (size_t i = 0; i < clauses.len; i++) {
-            ExportClause clause = clauses.data[i]; 
-            if (clause.type == ExportName && name == clause.name) {
-                return entry;
-            }
-        }
-        return NULL;
-    } else {
-        ModuleEntry* e = (ModuleEntry*)entry_lookup(name, module->entries);
-        if (e) return e;
 
-        // Root module should also return definitions available in 
-        //   imported packages...
-        Package* package = module->lexical_parent_package;
-        for (size_t i = 0; i < package->dependencies.len; i++) {
-            Package* dep = package->dependencies.data[i];
-            ModuleEntry* e = (ModuleEntry*)entry_lookup(name, dep->root_module->entries);
-            if (e) return e;
+    ModuleEntry* entry = (ModuleEntry*)entry_lookup(name, module->entries);
+    if (entry != NULL) {
+      /** TODO (performance): should cache if definition is exported in the module def? */
+      ExportClauseArray clauses = module->header.exports.clauses;
+      for (size_t i = 0; i < clauses.len; i++) {
+        ExportClause clause = clauses.data[i]; 
+        if (clause.type == ExportName && name == clause.name) {
+          return entry;
         }
-        return NULL;
+      }
+      return NULL;
+    } else if (module->re_exports) {
+      /** entry is NULL, but we need to check in the renamed exports before
+          completely giving up! */
+      NameSourceAMap sources = module->re_exports->re_exports;
+      for (size_t i = 0; i < sources.len; i++) {
+        NameArray names = sources.data[i].val.names;
+        for (size_t j = 0; i < names.len; i++) {
+          if (names.data[j] == name) {
+            Name* rename = u64_name_lookup(j, sources.data[i].val.renames);
+            if (rename) {
+              return get_def_external(*rename, sources.data[i].key);
+            } else {
+              return get_def_external(name, sources.data[i].key);
+            }
+          }
+        }
+      }
+      return NULL;
+    } else {
+      return NULL;
     }
 }
 
@@ -705,8 +836,10 @@ NameArray get_defined_symbols(Module* module, Allocator* a) {
 
 ModuleExports view_module_exports(Module* module) {
     return (ModuleExports) {
-      .internal_exports = module->self_exports,
-      .re_exports = module->header.re_exports.clauses,
+      .self_exports = module->self_exports,
+      .re_exports = module->re_exports
+                    ? module->re_exports->re_exports
+                    : (NameSourceAMap){},
     };
 }
 
