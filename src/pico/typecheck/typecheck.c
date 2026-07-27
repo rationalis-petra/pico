@@ -328,6 +328,7 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             .sort = TProc,
             .proc.implicits = mk_addr_list(untyped.procedure.implicits.len, ctx.pia),
             .proc.args = mk_addr_list(untyped.procedure.args.len, ctx.pia),
+            .proc.ret = mk_uvar(ctx.pia),
         };
         set_type(ref, proc_ty, ctx.tape);;
 
@@ -357,34 +358,31 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg.key, aty, env);
             push_addr(aty, &proc_ty->proc.args);
         }
-
         if (untyped.procedure.is_recursive) {
-            proc_ty->proc.ret = mk_uvar(ctx.pia);
             type_var(untyped.procedure.recursive_sym, proc_ty, env);
         }
+
         type_infer_i(untyped.procedure.body, env, ctx); 
         pop_types(env, untyped.procedure.args.len + untyped.procedure.implicits.len);
 
         if (untyped.procedure.is_recursive) {
             pop_type(env);
-            UnifyContext uctx = (UnifyContext) {
-                .a = ctx.a,
-                .pia = ctx.pia,
-                .current_module = type_env_module(env),
-                .logger = ctx.logger,
-            };
-            PiType* expected = get_type(untyped.procedure.body, ctx.tape);
-            UnifyResult out = unify(expected, proc_ty->proc.ret, uctx);
-            UnifyReason reason = {
-                .type = URCheck,
-                .check.range = get_range(ref, ctx.tape).term,
-                .check.expected = expected,
-                .check.actual = proc_ty->proc.ret,
-            };
-            check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
-        } else {
-            proc_ty->proc.ret = get_type(untyped.procedure.body, ctx.tape);
         }
+        UnifyContext uctx = (UnifyContext) {
+            .a = ctx.a,
+            .pia = ctx.pia,
+            .current_module = type_env_module(env),
+            .logger = ctx.logger,
+        };
+        PiType* expected = get_type(untyped.procedure.body, ctx.tape);
+        UnifyResult out = unify(expected, proc_ty->proc.ret, uctx);
+        UnifyReason reason = {
+            .type = URCheck,
+            .check.range = get_range(ref, ctx.tape).term,
+            .check.expected = expected,
+            .check.actual = proc_ty->proc.ret,
+        };
+        check_result_out(out, get_range(ref, ctx.tape).term, reason, ctx.a, ctx.point);
         break;
     }
     case SAll: {

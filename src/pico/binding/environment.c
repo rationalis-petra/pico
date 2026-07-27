@@ -361,7 +361,7 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                     if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
                         name_ptr_insert(names.data[j], target, data.origins);
                     }
-                    if (clause.import_types & (entry->type.sort == TKind)) {
+                    if (clause.import_types & (entry->type.sort == TKind || entry->type.sort == TConstraint)) {
                         name_ptr_insert(names.data[j], target, data.origins);
                     }
                 }
@@ -378,6 +378,7 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                             name_ptr_insert(name, target, data.origins);
                         }
                     }
+                    // TODO: 
                 }
                 if (clause.import_instances && data.env) {
                     add_instances_from(target, data.env, a);

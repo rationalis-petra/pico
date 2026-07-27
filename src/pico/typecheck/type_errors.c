@@ -133,7 +133,7 @@ _Noreturn void type_error_expecting_instance_arg(size_t implicit_idx, SynRef ref
     push_ptr(mv_cstr_doc("The argument", ctx.a), &nodes);
     push_ptr(mk_paren_doc("'", "'", 
                           mv_str_doc(view_symbol_string(arg.key), ctx.a), ctx.a), &nodes);
-    push_ptr(mv_cstr_doc("is beign used as an instance argument, i.e. between '{' and '}'."
+    push_ptr(mv_cstr_doc("is being used as an instance argument, i.e. between '{' and '}'."
                          " As such, it is expected to have a trait (instance) type, but"
                          " it instead has type:" , ctx.a), &nodes);
     push_ptr(mv_nest_doc(2, pretty_type(get_type(ref, ctx.tape), default_ptp, ctx.a), ctx.a), &nodes);
