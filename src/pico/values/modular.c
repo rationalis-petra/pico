@@ -843,9 +843,11 @@ ModuleExports view_module_exports(Module* module) {
     };
 }
 
-PtrArray get_defined_instances(Module* module, Allocator* a) {
+PtrArray get_instances_internal(bool exported, Module* module, Allocator* a) {
     PtrArray instances = mk_ptr_array(module->entries.len, a);
     for (size_t i = 0; i < module->entries.len; i++) {
+        /** TODO (BUG) if `exported` is true, make sure to not include internal
+            instances (i.e. non-exported definitions)! */
         ModuleEntryInternal m_entry = module->entries.data[i].val;
         if (m_entry.type.sort == TTraitInstance) {
             InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
@@ -861,7 +863,39 @@ PtrArray get_defined_instances(Module* module, Allocator* a) {
             push_ptr(entry, &instances);
         }
     };
+    if (module->re_exports == NULL || !exported) return instances;
+
+    /** TODO: performance: nested loops O(n^2), can be faster! */
+    NameSourceAMap source_map = module->re_exports->re_exports;
+    for (size_t i = 0; i < source_map.len; i++) {
+        Module* target = source_map.data[i].key;
+        NameSource source = source_map.data[i].val;
+        for (size_t j = 0; j < source.names.len; j++) {
+            ModuleEntryInternal* m_entry = (ModuleEntryInternal*)get_def_external(source.names.data[j], target);
+            if (m_entry && !m_entry->is_module && m_entry->type.sort == TTraitInstance) {
+                InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
+                *entry = (InstanceSrc) {
+                    .id = m_entry->type.instance.instance_of,
+                    .over = m_entry->type.instance.over,
+                    .dependencies = m_entry->type.instance.implicits,
+                    .args = m_entry->type.instance.args,
+                    .src_sym = module->entries.data[i].key,
+                    .src = module,
+                };
+
+                push_ptr(entry, &instances);
+            }
+        }
+    }
     return instances;
+}
+
+PtrArray get_defined_instances(Module* module, Allocator* a) {
+    return get_instances_internal(false, module, a);
+}
+
+PtrArray get_exported_instances(Module* module, Allocator* a) {
+    return get_instances_internal(true, module, a);
 }
 
 Package* get_package(Module* module) {

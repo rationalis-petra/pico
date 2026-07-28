@@ -1,4 +1,5 @@
-/* Qualities of a good unit test framework:
+/**
+ * Qualities of a good unit test framework:
  * -----------------------------------------------------------------------------
  * • Can run specific sub-tests.
  * • Allows hooks for providing useful error messages, e.g.
@@ -14,7 +15,8 @@
  * 
  */
 
-/* Pico-specific
+/**
+ * Pico-specific
  * -----------------------------------------------------------------------------
  * • Utilities to wrap parsing/syntax creation, etc. 
  * • Allow 'wiping' of the user module, module creation etc.

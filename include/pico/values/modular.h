@@ -154,7 +154,10 @@ ModuleEntry* get_def_external(Name name, Module* module);
     symbol will be ok */
 ModuleEntry* get_def_internal(Name Name, Module* module);
 
-// TODO: update with exteranal/internal variants
+/**
+ * The environment
+ */
+PtrArray get_exported_instances(Module* module, Allocator* a);
 PtrArray get_defined_instances(Module* module, Allocator* a);
 
 Name module_name(Module* module);

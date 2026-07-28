@@ -7,7 +7,8 @@
 #include "pico/codegen/codegen.h"
 #include "pico/data/string_array.h"
 
-/* Command line interface
+/**
+ * Command line interface
  * test <subcommand> -- <options> where subcommand is
  *  • all
  *  • only path1 path2 ...
@@ -15,6 +16,7 @@
  * and options are
  * --report-file=<filename>
  * --report-type=<extname>
+ * --logging=[0-1]
  * --report-level=[0-3]
  * --print-level=[0-3]
  */

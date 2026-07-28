@@ -132,7 +132,6 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
-    /*
     if (test_start(log, mv_string("module-re-export-instances"))) {
         MODULE("(module sub-eq (import (core :all) (num.i64 :all)) (export :all)) \n"
                "(def Eq Trait Eq [A] [.eq Proc [A A] Bool])\n"
@@ -147,5 +146,4 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         bool expected = false;
         TEST_EQ("test-module.val");
     }
-    */
 }

@@ -2,6 +2,30 @@
 
 #include "platform/signals.h"
 
+/** 
+ * TODO: 
+ * LARGE REFACTOR: Currently, the environment as it pertains to globals
+ * makes use of the module interface. This means two things:
+ * 1. When we add multithreading + module-level locking, the environment will
+ *    not necessarily have access to what is locked/what is not, will need to
+ *    update the module interface and environment.
+ * 2. There is a LOT of redundant iteration, re-finding variables by name when
+ *    we could be using internal indexes.
+ * 
+ * SOLUTION:  
+ * Rewrite the parts of the environment that pertain to globals so that it is 
+ * instead part of the internals of the module interface. This will allow
+ * several improvements:
+ * - Simplify the module interface (several methods were added *purely* for the
+ *   environment
+ * - Performance enhancements
+ * 
+ * Note: 
+ * Like the builder, we may want to build a specific interface to modular
+ * which exposes more of the internals and/or create a separate *.c file
+ * under values/modular (instead of just having modular.c)
+ */
+
 struct Environment {
     // Maps a symbol to the module it is impoted from/defined in. 
     NamePtrAMap symbol_origins;
@@ -302,9 +326,8 @@ Module* env_module(Environment *env) {
     return env->base;
 }
 
-void add_instances_from(Module* importee, Environment* env, Allocator* a) {
+void add_instances_from(PtrArray instances, Environment* env, Allocator* a) {
     // Get all implicits
-    PtrArray instances = get_defined_instances(importee, a);
     for (size_t j = 0; j < instances.len; j++) {
         InstanceSrc* instance = instances.data[j];
 
@@ -323,10 +346,6 @@ void add_instances_from(Module* importee, Environment* env, Allocator* a) {
         // Add this instance to the array
         push_ptr(instance, arr);
     }
-
-    // We do not delete instance entries are they are now in
-    // the environment's instances - just delete the array.
-    sdelete_ptr_array(instances);
 }
 
 typedef struct {
@@ -368,9 +387,22 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                 for (size_t j = 0; j < exports.re_exports.len; j++) {
                     NameSourceCell cell = exports.re_exports.data[i];
                     Module* target = cell.key;
+
+                    PtrArray instances = get_exported_instances(target, a);
+                    PtrArray actual_instances = mk_ptr_array(clause.values.len, a);
                     for (size_t k = 0; k < cell.val.names.len; k++) {
                         Name name = cell.val.names.data[k];
                         ModuleEntry* entry = get_def_external(name, target);
+
+                        for (size_t k = 0; k < instances.len; k++) {
+                            InstanceSrc* instance = instances.data[k];
+                            if (instance->src_sym == name) {
+                                push_ptr(instance, &actual_instances);
+                                instances.len--;
+                                instances.data[k] = instances.data[instances.len];
+                                k--;
+                            }
+                        }
                         if (clause.import_instances & (entry->type.sort == TTraitInstance)) {
                             name_ptr_insert(name, target, data.origins);
                         }
@@ -378,16 +410,35 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                             name_ptr_insert(name, target, data.origins);
                         }
                     }
-                    // TODO: 
+                    if (data.env) {
+                        add_instances_from(actual_instances, data.env, a);
+                    }
+                    sdelete_ptr_array(actual_instances);
+                    sdelete_ptr_array(instances);
                 }
                 if (clause.import_instances && data.env) {
-                    add_instances_from(target, data.env, a);
+                    PtrArray instances = get_exported_instances(target, a);
+                    add_instances_from(instances, data.env, a);
+                    sdelete_ptr_array(instances);
                 }
             }
             if (clause.import_values) {
+                PtrArray instances = get_exported_instances(target, a);
+                PtrArray actual_instances = mk_ptr_array(clause.values.len, a);
+
                 for (size_t j = 0; j < clause.values.len; j++) {
                     // TODO: make sure is exported
                     Name name = clause.values.data[j].from;
+
+                    for (size_t k = 0; k < instances.len; k++) {
+                        InstanceSrc* instance = instances.data[k];
+                        if (instance->src_sym == name) {
+                            push_ptr(instance, &actual_instances);
+                            instances.len--;
+                            instances.data[k] = instances.data[instances.len];
+                            k--;
+                        }
+                    }
                     ModuleEntry* entry = get_def_external(name, target);
                     check_entry(entry, false, name, module, point, a);
                     if (clause.values.data[j].should_rename) {
@@ -397,6 +448,12 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                         name_ptr_insert(name, target, data.origins);
                     }
                 }
+
+                if (data.env) {
+                    add_instances_from(actual_instances, data.env, a);
+                }
+                sdelete_ptr_array(actual_instances);
+                sdelete_ptr_array(instances);
             }
         }
         sdelete_ptr_array(targets.values);
@@ -421,7 +478,9 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                 }
             }
             if (data.env) {
-                add_instances_from(target, data.env, a);
+                PtrArray instances = get_exported_instances(target, a);
+                add_instances_from(instances, data.env, a);
+                sdelete_ptr_array(instances);
             }
         }
         sdelete_ptr_array(targets.values);
@@ -485,23 +544,7 @@ Environment* env_from_module(Module* module, ErrorPoint* point, Allocator* a) {
 
     // Get all implicits
     PtrArray instances = get_defined_instances(module, a);
-    for (size_t i = 0; i < instances.len; i++ ) {
-        InstanceSrc* instance = instances.data[i];
-        PtrArray** res = (PtrArray**)name_ptr_lookup(instance->id, env->instances);
-        PtrArray* p;
-        if (res) {
-            p = *res;
-        } else {
-            p = mem_alloc(sizeof(PtrArray), a);
-            *p = mk_ptr_array(8, a);
-            // TODO: we know this isn't in the instances; could perhaps
-            // speed up the process?
-            name_ptr_insert(instance->id, p, &env->instances);
-        }
-
-        // Add this instance to the array
-        push_ptr(instance, p);
-    }
+    add_instances_from(instances, env, a);
     sdelete_ptr_array(instances);
 
     return env;
