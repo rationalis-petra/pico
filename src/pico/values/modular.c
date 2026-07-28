@@ -800,13 +800,10 @@ ModuleEntry* get_def_internal(Name name, Module* module) {
 }
 
 ModuleEntry* get_def_external(Name name, Module* module) {
-    if (module->header.exports.export_all) {
-        return get_def_internal(name, module);
-    }
-
     ModuleEntry* entry = (ModuleEntry*)entry_lookup(name, module->entries);
     if (entry != NULL) {
       /** TODO (performance): should cache if definition is exported in the module def? */
+      if (module->header.exports.export_all) return entry;
       ExportClauseArray clauses = module->header.exports.clauses;
       for (size_t i = 0; i < clauses.len; i++) {
         ExportClause clause = clauses.data[i]; 
@@ -821,7 +818,7 @@ ModuleEntry* get_def_external(Name name, Module* module) {
       NameSourceAMap sources = module->re_exports->re_exports;
       for (size_t i = 0; i < sources.len; i++) {
         NameArray names = sources.data[i].val.names;
-        for (size_t j = 0; i < names.len; i++) {
+        for (size_t j = 0; j < names.len; j++) {
           if (names.data[j] == name) {
             Name* rename = u64_name_lookup(j, sources.data[i].val.renames);
             if (rename) {
@@ -887,7 +884,8 @@ PtrArray get_instances_internal(bool exported, Module* module, Allocator* a) {
         Module* target = source_map.data[i].key;
         NameSource source = source_map.data[i].val;
         for (size_t j = 0; j < source.names.len; j++) {
-            ModuleEntryInternal* m_entry = (ModuleEntryInternal*)get_def_external(source.names.data[j], target);
+            Name name = source.names.data[j];
+            ModuleEntryInternal* m_entry = (ModuleEntryInternal*)get_def_external(name, target);
             if (m_entry && !m_entry->is_module && m_entry->type.sort == TTraitInstance) {
                 InstanceSrc* entry = mem_alloc(sizeof(InstanceSrc), a);
                 *entry = (InstanceSrc) {
@@ -895,7 +893,7 @@ PtrArray get_instances_internal(bool exported, Module* module, Allocator* a) {
                     .over = m_entry->type.instance.over,
                     .dependencies = m_entry->type.instance.implicits,
                     .args = m_entry->type.instance.args,
-                    .src_sym = module->entries.data[i].key,
+                    .src_sym = name,
                     .src = module,
                 };
 

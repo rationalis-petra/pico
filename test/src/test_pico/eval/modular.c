@@ -156,4 +156,16 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         bool expected = false;
         TEST_EQ("test-module.val");
     }
+
+    if (test_start(log, mv_string("module-re-export-multiple-clauses"))) {
+        MODULE("(module sub-x (import (core :all)) (export :all)) \n"
+               "(def x 10)\n");
+        MODULE("(module sub-y (import (core :all)) (export :all)) \n"
+               "(def y 15)\n");
+        MODULE("(module sub-comb (import (core :all)) (re-export (sub-x :all) (sub-y :all))) \n");
+        MODULE("(module test-module (import (core :all) (num.i64 :all) (sub-comb :all)) (export val))\n"
+            "  (def val + x y)");
+        int64_t expected = 25;
+        TEST_EQ("test-module.val");
+    }
 }

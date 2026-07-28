@@ -471,7 +471,7 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
                 name_ptr_insert(names.data[j], target, data.origins);
             }
             for (size_t j = 0; j < exports.re_exports.len; j++) {
-                NameSourceCell cell = exports.re_exports.data[i];
+                NameSourceCell cell = exports.re_exports.data[j];
                 Module* module = cell.key;
                 for (size_t k = 0; k < cell.val.names.len; k++) {
                     name_ptr_insert(cell.val.names.data[k], module, data.origins);
