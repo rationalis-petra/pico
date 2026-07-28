@@ -11,6 +11,7 @@
 #include "pico/stdlib/debug.h"
 #include "pico/stdlib/dev.h"
 #include "pico/stdlib/foreign.h"
+#include "pico/stdlib/prelude.h"
 #include "pico/stdlib/user.h"
 
 static Package* base;
@@ -55,7 +56,8 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     reset_subregion(subregion);
 
 
-    add_user_module(base, region);
+    add_prelude_module(base, region);
+
     reset_subregion(subregion);
 
     release_executable_allocator(exalloc);

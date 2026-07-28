@@ -1,9 +1,8 @@
-#include "platform/signals.h"
-
 #include "pico/stdlib/user.h"
 #include "pico/stdlib/helpers.h"
 
-void add_user_module(Package* base, RegionAllocator* region) {
+void add_user_module(Package* user, RegionAllocator* region) {
+
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {.clauses = mk_import_clause_array(246, &ra),};
 
@@ -37,5 +36,15 @@ void add_user_module(Package* base, RegionAllocator* region) {
         .re_exports = re_exports,
         .exports = exports,
     };
-    mk_module(header, base, NULL);
+    mk_module(header, user, NULL);
+}
+
+Package* mk_user_package(Package* base, PiAllocator* module_allocator, RegionAllocator* region) {
+    Package* user = mk_package(string_to_name(mv_string("base")), *module_allocator);
+    add_dependency(user, base);
+
+    RegionAllocator* subregion = make_subregion(region);
+    add_user_module(user, subregion);
+
+    return user;
 }

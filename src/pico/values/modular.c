@@ -608,7 +608,23 @@ ModuleDecl copy_decl(ModuleDecl decl, Allocator *a) {
 Result add_decl(Module *module, Name name, ModuleDecl decl) {
     ModuleEntryInternal entry = (ModuleEntryInternal) {};
     ModuleEntryInternal* old_entry = entry_lookup(name, module->entries);
-    if (old_entry) entry = *old_entry;
+    if (old_entry) { entry = *old_entry; }
+    else {
+      /** TODO: I feel that we shouldn't export definitions that are PURE
+          declarations? Perhaps we need some means of signifying that a
+          definition is not implemented (do we want to error etc.)? */
+      if (module->header.exports.export_all) {
+        push_name(name, &module->self_exports);
+      } else {
+        ExportClauseArray clauses = module->header.exports.clauses;
+        for (size_t i = 0; i < clauses.len; i++) {
+          ExportClause clause = clauses.data[i]; 
+          if (clause.type == ExportName && clause.name == name) {
+            push_name(name, &module->self_exports);
+          }
+        }
+      }
+    }
     PtrArray* declarations = entry.declarations;
     if (!declarations) {
         declarations = mem_alloc(sizeof(PtrArray), &module->allocator);

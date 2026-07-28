@@ -53,11 +53,21 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
             "  (def val1 1) (def val2 2) (def val3 3)");
         TEST_ABSTRACT_FAIL("test-module.val3");
     }
-    
+
     if (test_start(log, mv_string("modlue-import-path-all"))) {
         MODULE("(module test-module (import (core :all) (num.i64 :all)) (export val)) \n"
             "  (def val (+ 1 3))");
         int64_t expected = 4;
+        TEST_EQ("test-module.val");
+    }
+
+    if (test_start(log, mv_string("modlue-export-annotated"))) {
+        MODULE("(module test-sub (import (core :all) (extra :all) (num.i64 :all)) (export sub-val)) \n"
+            "(ann sub-val I64) "
+            "(def sub-val (+ 1 3))");
+        MODULE("(module test-module (import (core :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
+            "(def val (+ 1 sub-val))");
+        int64_t expected = 5;
         TEST_EQ("test-module.val");
     }
 

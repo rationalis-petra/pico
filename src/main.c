@@ -10,6 +10,7 @@
 #include "components/assembler/assembler.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/user.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 
@@ -64,9 +65,6 @@ int main(int argc, char** argv) {
     reset_subregion(subregion);
     delete_assembler(ass_base);
 
-    Module* module = get_module(string_to_name(mv_string("user")), base);
-
-    set_std_current_module(module);
     set_current_package(base);
     set_std_istream(cin);
     set_std_ostream(cout);
@@ -81,7 +79,15 @@ int main(int argc, char** argv) {
 
     switch (command.type) {
     case CRepl: {
+        /** TODO (FUTURE BUG): move the codegen init to BEFORE the base package
+            is created! */
         init_codegen(command.repl.backend, stdalloc);
+
+        Package* user_pkg = mk_user_package(base, &module_allocator, subregion);
+        Module* user = get_module(string_to_name(mv_string("user")), user_pkg);
+        set_std_current_module(user);
+        set_current_package(user_pkg);
+
         IterOpts opts = (IterOpts) {
             .debug_print = command.repl.debug_print,
             .is_eval = false,
@@ -94,23 +100,32 @@ int main(int argc, char** argv) {
         if (command.repl.interactive) { 
             st_write_line(mv_string("Press 'Ctrl + q' to quit"), cout);
             terminal_set_raw_mode(true);
-            while (repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
+            while (repl_iter(stdalloc, subregion, &exalloc, user, opts)) {
                 reset_subregion(subregion);
             }
             terminal_set_raw_mode(false);
         } else {
-            while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
+            while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, user, opts)) {
                 reset_subregion(subregion);
             }
         }
+        delete_package(user_pkg);
         break;
     }
     case CScript: {
+        /** TODO (FUTURE BUG): move the codegen init to BEFORE the base package
+            is created! */
         init_codegen(command.script.backend, stdalloc);
+
+        Package* user_pkg = mk_user_package(base, &module_allocator, subregion);
+        Module* user = get_module(string_to_name(mv_string("user")), user_pkg);
+        set_std_current_module(user);
+        set_current_package(user_pkg);
+
         IStream* fin = open_file_istream(command.script.filename, stdalloc);
         if (fin) {
             RegionAllocator* region = make_region_allocator(16384, true, stdalloc);
-            run_script_from_istream(fin, get_formatted_stdout(), command.script.filename, module, region);
+            run_script_from_istream(fin, get_formatted_stdout(), command.script.filename, user, region);
             delete_region_allocator(region);
             
             delete_istream(fin, stdalloc);
@@ -119,20 +134,30 @@ int main(int argc, char** argv) {
             st_write_string(command.script.filename, cout);
             st_write_string(mv_string("\n"), cout);
         }
+        delete_package(user_pkg);
         break;
     }
     case CEval: {
+        /** TODO (FUTURE BUG): move the codegen init to BEFORE the base package
+            is created! */
         init_codegen(command.eval.backend, stdalloc);
+
+        Package* user_pkg = mk_user_package(base, &module_allocator, subregion);
+        Module* user = get_module(string_to_name(mv_string("user")), user_pkg);
+        set_std_current_module(user);
+        set_current_package(user_pkg);
+
         IterOpts opts = (IterOpts) {
             .debug_print = false,
             .is_eval = true,
         };
 
         IStream* sin = mv_string_istream(command.eval.expr, stdalloc);
-        while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, module, opts)) {
+        while (noninteractive_repl_iter(stdalloc, subregion, &exalloc, user, opts)) {
             reset_subregion(subregion);
         }
         delete_istream(sin, stdalloc);
+        delete_package(user_pkg);
         break;
     }
     case CHelp:
