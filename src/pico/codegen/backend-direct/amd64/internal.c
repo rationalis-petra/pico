@@ -1079,10 +1079,6 @@ void gen_mk_trait_ty(Symbol name, SymbolArray syms, Location dest,  Location nif
 
     generate_c_call(mk_trait_ty, ass, a, point);
     
-#if ABI == WIN_64
-    // Pop all structs from the stack
-    build_binary_op(Add, reg(RSP, sz_64), imm8(0x30), ass, a, point);
-#endif
     build_binary_op(Add, reg(RSP, sz_64), imm8(0x48), ass, a, point);
 
     if (dest.type != Dest_Register && dest.reg != RAX) {
