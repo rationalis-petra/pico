@@ -641,7 +641,7 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
     }
     case TTrait:  {
         // trait #id (vars...) [.field ty1] ...
-        PtrArray nodes = mk_ptr_array(3 + type->trait.implicit_fields.len + type->trait.fields.len, a);
+        PtrArray nodes = mk_ptr_array(3, a);
         push_ptr(mk_str_doc(mv_string("Trait"), a), &nodes);
         push_ptr(pretty_u64(type->trait.id, a), &nodes);
 
@@ -651,15 +651,17 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
         }
         push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
 
+        PtrArray field_nodes = mk_ptr_array(type->trait.implicit_fields.len + type->trait.fields.len, a);
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray field = mk_ptr_array(4, a);
             SymAddrPiCell cell = type->trait.fields.data[i];
             push_ptr(mk_str_doc(mv_string("."), a), &field);
             push_ptr(mk_str_doc(symbol_to_string(cell.key, a), a), &field);
             push_ptr(mk_str_doc(mv_string(" "), a), &field);
+            // TODO: make this pretty value?
             push_ptr(pretty_type(cell.val, params.type, a), &field);
 
-            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(field, a), a), &nodes);
+            push_ptr(mk_paren_doc("{", "}", mv_sep_doc(field, a), a), &field_nodes);
         }
 
         for (size_t i = 0; i < type->trait.fields.len; i++) {
@@ -670,8 +672,9 @@ Document* pretty_pi_value(void* val, PiType* type, PrettyValParams params, Alloc
             push_ptr(mk_str_doc(mv_string(" "), a), &field);
             push_ptr(pretty_type(cell.val, params.type, a), &field);
 
-            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &nodes);
+            push_ptr(mk_paren_doc("[", "]", mv_sep_doc(field, a), a), &field_nodes);
         }
+        push_ptr(mv_nest_doc(2, mv_group_doc(mv_sep_doc(field_nodes, a), a), a), &nodes);
 
         out = mv_sep_doc(nodes, a);
         break;
@@ -984,17 +987,17 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
         break;
     }
     case TTrait:  {
-        PtrArray nodes = mk_ptr_array(3 + type->trait.implicit_fields.len + type->trait.fields.len, a);
-        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &nodes);
-        
-        push_ptr(mk_str_doc(view_symbol_string(type->trait.name), a), &nodes);
+        PtrArray head_nodes = mk_ptr_array(3, a);
+        push_ptr(mv_style_doc(cstyle, mk_str_doc(mv_string("Trait" ), a), a), &head_nodes);
+        push_ptr(mk_str_doc(view_symbol_string(type->trait.name), a), &head_nodes);
 
         PtrArray vars = mk_ptr_array(type->trait.vars.len, a);
         for (size_t i = 0; i < type->trait.vars.len; i++) {
             push_ptr(mv_style_doc(vstyle, mk_str_doc(symbol_to_string(type->trait.vars.data[i], a), a), a), &vars);
         }
-        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &nodes);
+        push_ptr(mk_paren_doc("[", "]", mv_sep_doc(vars, a), a), &head_nodes);
 
+        PtrArray field_nodes = mk_ptr_array(type->trait.implicit_fields.len + type->trait.fields.len, a);
         for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
             Document* fname = mv_style_doc(field_style, mk_str_doc(symbol_to_string(type->trait.implicit_fields.data[i].key, a), a), a);
@@ -1004,7 +1007,7 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("{.", "}", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(mv_group_doc(fd_doc, a), &nodes);
+            push_ptr(mv_group_doc(fd_doc, a), &field_nodes);
         }
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             PtrArray fd_nodes = mk_ptr_array(2, a);
@@ -1015,8 +1018,11 @@ Document* pretty_type_internal(PiType* type, PrettyTypeParams ctx, Allocator* a)
             push_ptr(arg,   &fd_nodes);
             Document* fd_doc = mk_paren_doc("[.", "]", mv_sep_doc(fd_nodes, a), a);
 
-            push_ptr(mv_group_doc(fd_doc, a), &nodes);
+            push_ptr(mv_group_doc(fd_doc, a), &field_nodes);
         }
+        PtrArray nodes = mk_ptr_array(2, a);
+        push_ptr(mv_group_doc(mv_sep_doc(head_nodes, a), a), &nodes);
+        push_ptr(mv_nest_doc(2, mv_sep_doc(field_nodes, a), a), &nodes);
         out = mv_sep_doc(nodes, a);
         if (should_wrap) out = mk_paren_doc("(", ")", out, a);
         break;
@@ -1409,11 +1415,34 @@ size_t pi_align_of(PiType type) {
 }
 
 size_t pi_instance_size_of(PiType type) {
-    PiType as_struct = {
-        .sort = TStruct,
-        .structure.fields = type.instance.fields,
-    };
-    return pi_size_of(as_struct);
+  size_t align = 1;
+  size_t total = 0; 
+  for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
+    size_t tmp_align;
+    Result_t res = pi_maybe_align_of(*(PiType*)type.instance.implicit_fields.data[i].val, &tmp_align);
+    if (res != Ok) goto invalid_type;
+    align = align > tmp_align ? align : tmp_align;
+    total = pi_size_align(total, tmp_align);
+    size_t field_size;
+    res = pi_maybe_size_of(*(PiType*)type.instance.implicit_fields.data[i].val, &field_size);
+    if (res != Ok) goto invalid_type;
+    total += field_size;
+  }
+  for (size_t i = 0; i < type.instance.fields.len; i++) {
+    size_t tmp_align;
+    Result_t res = pi_maybe_align_of(*(PiType*)type.instance.fields.data[i].val, &tmp_align);
+    if (res != Ok) goto invalid_type;
+    align = align > tmp_align ? align : tmp_align;
+    total = pi_size_align(total, tmp_align);
+    size_t field_size;
+    res = pi_maybe_size_of(*(PiType*)type.instance.fields.data[i].val, &field_size);
+    if (res != Ok) goto invalid_type;
+    total += field_size;
+  }
+
+  return total;
+ invalid_type:
+  panic(mv_string("Cannot get size of polymorphic type!"));
 }
 
 Result_t pi_maybe_align_of(PiType type, size_t* out) {
