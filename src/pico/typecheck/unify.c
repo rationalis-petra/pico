@@ -747,6 +747,10 @@ bool has_unification_vars_p(PiType type) {
                 return true;
         }
 
+        for (size_t i = 0; i < type.instance.implicit_fields.len; i++) {
+            if (has_unification_vars_p(*(PiType*)type.instance.implicit_fields.data[i].val))
+                return true;
+        }
         for (size_t i = 0; i < type.instance.fields.len; i++) {
             if (has_unification_vars_p(*(PiType*)type.instance.fields.data[i].val))
                 return true;
@@ -890,6 +894,9 @@ void squash_type(PiType* type, UnifyContext ctx) {
     }
     case TTrait: {
         // TODO (INVESTIGATE PERFORMANCE): do we need to squash implicits also?
+        for (size_t i = 0; i < type->trait.implicit_fields.len; i++) {
+            squash_type((type->trait.implicit_fields.data + i)->val, ctx);
+        }
         for (size_t i = 0; i < type->trait.fields.len; i++) {
             squash_type((type->trait.fields.data + i)->val, ctx);
         }
@@ -900,6 +907,9 @@ void squash_type(PiType* type, UnifyContext ctx) {
             squash_type(type->instance.args.data[i], ctx);
         }
 
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            squash_type(type->instance.implicit_fields.data[i].val, ctx);
+        }
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             squash_type(type->instance.fields.data[i].val, ctx);
         }

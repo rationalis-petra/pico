@@ -11,9 +11,12 @@ void add_prelude_module(Package* base, RegionAllocator* region) {
     add_import_all(&re_exports.clauses, &ra, 1, "core");
     add_import_all(&re_exports.clauses, &ra, 1, "extra");
     add_import_all(&re_exports.clauses, &ra, 1, "num");
+    /** TODO: just re-export and, or, not etc. */
+    add_import_all(&re_exports.clauses, &ra, 2, "num", "bool");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "numeric");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "show");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&re_exports.clauses, &ra, 2, "abs", "order");
 
     Exports exports = (Exports) {
         .export_all = true,

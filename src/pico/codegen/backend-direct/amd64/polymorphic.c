@@ -493,6 +493,50 @@ void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, Addres
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
 }
 
+void generate_trait_offset_of(Regname dest, Symbol field, SymAddrPiAMap ifields, SymAddrPiAMap fields, AddressEnv *env, Assembler *ass, Allocator *a, ErrorPoint *point) {
+    build_unary_op(Push, imm8(0), ass, a, point);
+    bool is_implicit = false;
+    for (size_t i = 0; i < ifields.len; i++) {
+        if (i != 0) {
+            // Align to the new field; can skip if size = 0;
+            generate_align_of(R8, (PiType*)ifields.data[i].val, env, ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            generate_align_to(R9, R8, ass, a, point);
+            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+        }
+
+        if (symbol_eq(ifields.data[i].key, field)) {
+            is_implicit = true;
+            break;
+        }
+
+        // Push the size into RAX; this is then added to the value at
+        // the top of the stack  
+        generate_size_of(RAX, (PiType*)ifields.data[i].val, env, ass, a, point);
+        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+    }
+    if (!is_implicit) {
+        for (size_t i = 0; i < fields.len; i++) {
+            if (i != 0) {
+                // Align to the new field; can skip if size = 0;
+                generate_align_of(R8, (PiType*)fields.data[i].val, env, ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                generate_align_to(R9, R8, ass, a, point);
+                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+            }
+
+            if (symbol_eq(fields.data[i].key, field))
+                break;
+
+            // Push the size into RAX; this is then added to the value at
+            // the top of the stack  
+            generate_size_of(RAX, (PiType*)fields.data[i].val, env, ass, a, point);
+            build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+        }
+    }
+    build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
+}
+
 void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, Assembler* ass, Allocator* a, ErrorPoint* point) {
     size_t total = sizeof(uint64_t);
     // Push size onto stack

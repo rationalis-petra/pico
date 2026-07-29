@@ -250,6 +250,7 @@ typedef struct {
     SymbolArray params;
     SymPtrAMap implicits;
     SynRef constraint;
+    SymSynAMap implicit_fields;
     SymSynAMap fields;
 } SynInstance;
 
@@ -331,6 +332,7 @@ typedef struct {
 typedef struct {
     Symbol name;
     SymbolArray vars;
+    SymSynAMap implicit_fields;
     SymSynAMap fields;
 } SynTrait;
 

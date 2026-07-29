@@ -1055,6 +1055,11 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         } else if (source_type.sort == TTraitInstance) {
             // search for field
             PiType* ret_ty = NULL;
+            for (size_t i = 0; i < source_type.instance.implicit_fields.len; i++) {
+                if (symbol_eq(source_type.instance.implicit_fields.data[i].key, untyped.projector.field)) {
+                    ret_ty = source_type.instance.implicit_fields.data[i].val;
+                }
+            }
             for (size_t i = 0; i < source_type.instance.fields.len; i++) {
                 if (symbol_eq(source_type.instance.fields.data[i].key, untyped.projector.field)) {
                     ret_ty = source_type.instance.fields.data[i].val;
@@ -1127,12 +1132,23 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_error_instance_wrong_nfields(get_range(ref, ctx.tape).term, ty->instance.fields.len, untyped.instance.fields.len, ctx);
         }
 
-        for (size_t i = 0; i < ty->instance.fields.len; i++) {
-            SynRef* field_syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
-            if (field_syn) {
+        for (size_t i = 0; i < ty->instance.implicit_fields.len; i++) {
+            SynRef* syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
+            if (syn) {
                 PiType* field_ty = ty->instance.fields.data[i].val;
                 Range tysrc = get_range(untyped.instance.constraint, ctx.tape).term;
-                type_check_i(*field_syn, field_ty, tysrc, env, ctx);
+                type_check_i(*syn, field_ty, tysrc, env, ctx);
+            } else {
+                // Create an implicit field & try to instantiate
+                type_error_instance_missing_field(get_range(ref, ctx.tape).term, ty->instance.fields.data[i].key, ctx);
+            }
+        }
+        for (size_t i = 0; i < ty->instance.fields.len; i++) {
+            SynRef* syn = (SynRef*)sym_syn_lookup(ty->instance.fields.data[i].key, untyped.instance.fields);
+            if (syn) {
+                PiType* field_ty = ty->instance.fields.data[i].val;
+                Range tysrc = get_range(untyped.instance.constraint, ctx.tape).term;
+                type_check_i(*syn, field_ty, tysrc, env, ctx);
             } else {
                 type_error_instance_missing_field(get_range(ref, ctx.tape).term, ty->instance.fields.data[i].key, ctx);
             }
@@ -1691,6 +1707,13 @@ void type_infer_i(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
             type_var(arg, aty, env);
         }
 
+        PiType* cty = call_alloc(sizeof(PiType), ctx.pia);
+        *cty = (PiType) {.sort = TConstraint, .kind.nargs = 0};
+        for (size_t i = 0; i < untyped.trait.implicit_fields.len; i++) {
+            SynRef field = untyped.trait.implicit_fields.data[i].val;
+            type_check_i(field, cty, (Range){}, env, ctx);
+        }
+
         for (size_t i = 0; i < untyped.trait.fields.len; i++) {
             SynRef s = untyped.trait.fields.data[i].val;
             type_check_i(s, aty, (Range){}, env, ctx);
@@ -2189,6 +2212,41 @@ void post_unify(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         }
 
         PiType* type = get_type(ref, ctx.tape);
+        if (syn.instance.implicit_fields.len != 0) {
+            err.message = mv_cstr_doc("Expecting implicit fields in trait to not be instantiated.", ctx.a);
+            throw_pi_error(ctx.point, err);
+        }
+        for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+            Symbol field_name = type->instance.implicit_fields.data[i].key;
+            PiType* field_ty = type->instance.implicit_fields.data[i].val;
+            if (field_ty->sort != TTraitInstance) {
+                err.message = mv_cstr_doc("Implicit fields must have type trait instance!", ctx.a);
+                throw_pi_error(ctx.point, err);
+            }
+            InstanceEntry e = type_instance_lookup(field_ty->instance.instance_of, field_ty->instance.args, env);
+            switch (e.type) {
+            case IEAbsSymbol: {
+                SynRef new_impl = new_syntax(ctx.tape);
+                set_syntax(new_impl,
+                           (Syntax){
+                               .type = SAbsVariable,
+                               .abvar = e.abvar,
+                           },
+                           ctx.tape);
+                set_type(new_impl, field_ty, ctx.tape);
+                sym_syn_insert(field_name, new_impl, &syn.instance.implicit_fields);
+                set_syntax(ref, syn, ctx.tape);
+                break;
+            }
+            case IENotFound:
+                type_error_instance_not_found(ref, field_ty, ctx);
+            case IEAmbiguous:
+                type_error_ambiguous_instance(ref, field_ty, e.ambiguous_sources, ctx);
+            default:
+                panic(mv_string("Invalid instance entry type!"));
+            }
+        }
+
         for (size_t i = 0; i < type->instance.fields.len; i++) {
             SynRef* field_syn = (SynRef*)sym_syn_lookup(type->instance.fields.data[i].key, syn.instance.fields);
             if (field_syn) {

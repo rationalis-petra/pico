@@ -299,19 +299,26 @@ RawTree* raw_slice(RawTree* raw, size_t drop, PiAllocator* pia) {
 
 //  Helper function for various struct-related, helpers, when handling 
 //  [. fieldname] clauses
-bool get_fieldname(RawTree* raw, Symbol* fieldname) {
-    if (raw->type == RawBranch && raw->branch.nodes.len == 2) {
-        raw = &raw->branch.nodes.data[1];
-        if (is_symbol(*raw)) {
-            *fieldname = raw->atom.symbol;
-            return true;
-        } else {
-            return false;
-        }
-    }
-    else {
-        return false;
-    }
+typedef enum {
+    FDot      = 0x1,
+    FColon    = 0x2,
+} FieldSpec;
+
+bool get_fieldname(RawTree* raw, FieldSpec spec, Symbol* fieldname) {
+    if (raw->type != RawBranch || raw->branch.nodes.len != 2) return false;
+    if (raw->branch.hint != HExpression) return false;
+
+
+    RawTree head = raw->branch.nodes.data[0];
+    if (!is_symbol(head)) return false;
+    if ((spec & FDot) && !symbol_eq(string_to_symbol(mv_string(".")), head.atom.symbol)) return false;
+    if ((spec & FColon) && !symbol_eq(string_to_symbol(mv_string(":")), head.atom.symbol)) return false;
+
+    RawTree field = raw->branch.nodes.data[1];
+    if (!is_symbol(field)) return false;
+
+    *fieldname = field.atom.symbol;
+    return true;
 }
 
 // Helper function for labels, when we are expecting [label expr] clauses
@@ -843,7 +850,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             }
 
             Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
               struct_bad_fdesc_fieldname(fdesc, ctx);
             }
 
@@ -1038,7 +1045,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                     clause_tagname = mname.atom.symbol;
                     clause_binds = mk_symbol_array(0, a);
                 } else {
-                    if (!get_fieldname(&raw_pattern.branch.nodes.data[0], &clause_tagname)) {
+                    if (!get_fieldname(&raw_pattern.branch.nodes.data[0], FColon, &clause_tagname)) {
                         PtrArray nodes = mk_ptr_array(2, a);
                         push_ptr(mv_str_doc(mv_string("Unable to get tagname in pattern:"), a), &nodes);
                         push_ptr(pretty_rawtree(raw_pattern.branch.nodes.data[0], a), &nodes);
@@ -1132,7 +1139,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
         constraint = abstract_expr_i(current, ctx);
         start_idx++;
 
+        SymSynAMap implicit_fields = mk_sym_syn_amap(1, a);
         SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len - start_idx, a);
+        bool currently_implicit = true;
         for (size_t i = start_idx; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
@@ -1147,8 +1156,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+            Symbol field_sym;
+            FieldSpec spec =  FDot;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], spec, &field_sym)) {
                 err.range = fdesc.branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Instance has malformed field name.", a);
                 throw_pi_error(ctx.point, err);
@@ -1157,7 +1167,12 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             RawTree* val_desc = fdesc.branch.nodes.len == 2 ? &fdesc.branch.nodes.data[1] : raw_slice(&fdesc, 1, ctx.pia); 
             SynRef syn = abstract_expr_i(*val_desc, ctx);
 
-            sym_syn_insert(field, syn, &fields);
+            currently_implicit &= fdesc.branch.hint == HImplicit; 
+            if (currently_implicit) {
+                sym_syn_insert(field_sym, syn, &implicit_fields);
+            } else {
+                sym_syn_insert(field_sym, syn, &fields);
+            }
         }
 
         Syntax syn = (Syntax) {
@@ -1165,6 +1180,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             .instance.params = params,
             .instance.implicits = implicits,
             .instance.constraint = constraint,
+            .instance.implicit_fields = implicit_fields,
             .instance.fields = fields,
         };
         SynRef res = new_syntax(ctx.tape);
@@ -2015,7 +2031,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             };
 
             Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Structure type has malformed field name.", a);
                 throw_pi_error(ctx.point, err);
@@ -2096,7 +2112,7 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 SynArray* types = mem_alloc(sizeof(PtrArray), a);
                 *types = mk_syn_array(edesc.branch.nodes.len - 1, a);
 
-                if (!get_fieldname(&edesc.branch.nodes.data[0], &tagname)) {
+                if (!get_fieldname(&edesc.branch.nodes.data[0], FColon, &tagname)) {
                     err.range = edesc.branch.nodes.data[0].range;
                     err.message = mv_cstr_doc("Enum type has malformed field name.", a);
                     throw_pi_error(ctx.point, err);
@@ -2266,7 +2282,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             throw_pi_error(ctx.point, err);
         }
 
+        SymSynAMap implicit_fields = mk_sym_syn_amap(1, a);
         SymSynAMap fields = mk_sym_syn_amap(raw.branch.nodes.len - 3, a);
+        bool currently_implicit = true;
         for (size_t i = 3; i < raw.branch.nodes.len; i++) {
             RawTree fdesc = raw.branch.nodes.data[i];
             if (fdesc.type != RawBranch) {
@@ -2281,8 +2299,9 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 throw_pi_error(ctx.point, err);
             }
 
-            Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+            Symbol field_sym;
+            FieldSpec spec = FDot;
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], spec, &field_sym)) {
                 err.range = fdesc.branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Trait has malformed field name.", a);
                 throw_pi_error(ctx.point, err);
@@ -2295,13 +2314,19 @@ SynRef mk_term(TermFormer former, RawTree raw, AbstractionICtx ctx) {
                 syn = abstract_expr_i(*raw_term, ctx);
             }
 
-            sym_syn_insert(field, syn, &fields);
+            currently_implicit &= fdesc.branch.hint == HImplicit;
+            if (currently_implicit) {
+                sym_syn_insert(field_sym, syn, &implicit_fields);
+            } else {
+                sym_syn_insert(field_sym, syn, &fields);
+            }
         }
 
         Syntax syn = {
             .type = STraitType,
             .trait.name = name,
             .trait.vars = vars,
+            .trait.implicit_fields = implicit_fields,
             .trait.fields = fields,
         };
         SynRef res = new_syntax(ctx.tape);
@@ -2965,7 +2990,7 @@ TopLevel mk_toplevel(TermFormer former, RawTree raw, AbstractionICtx ctx) {
             }
 
             Symbol field;
-            if (!get_fieldname(&fdesc.branch.nodes.data[0], &field)) {
+            if (!get_fieldname(&fdesc.branch.nodes.data[0], FDot, &field)) {
                 err.range = fdesc.branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Declaration has malformed property name.", a);
                 throw_pi_error(ctx.point, err);
@@ -3343,7 +3368,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
 
         if (raw->branch.nodes.len == 2) {
             Symbol all_sym;
-            if(!get_fieldname(raw, &all_sym)) {
+            if(!get_fieldname(raw, FColon, &all_sym)) {
                 err.range = raw->range;
                 err.message = mv_cstr_doc("Invalid export clause - couldn't get fieldname from expected 'all' ", a);
                 throw_pi_error(point, err);
@@ -3359,7 +3384,7 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
             };
         } else if (raw->branch.nodes.len == 3) {
             Symbol middle;
-            if(!get_fieldname(&raw->branch.nodes.data[1], &middle)) {
+            if(!get_fieldname(&raw->branch.nodes.data[1], FColon, &middle)) {
                 err.range = raw->branch.nodes.data[1].range;
                 err.message = mv_cstr_doc("Invalid export clause - expected to get a keyword such as :as or :only", a);
                 throw_pi_error(point, err);
@@ -3372,12 +3397,12 @@ ExportClause abstract_export_clause(RawTree* raw, PiErrorPoint* point, Allocator
 
             Symbol name;
             Symbol rename;
-            if(!get_fieldname(&raw->branch.nodes.data[0], &name)) {
+            if(!get_fieldname(&raw->branch.nodes.data[0], FColon, &name)) {
                 err.range = raw->branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Invalid export-as name", a);
                 throw_pi_error(point, err);
             }
-            if(!get_fieldname(&raw->branch.nodes.data[0], &rename)) {
+            if(!get_fieldname(&raw->branch.nodes.data[0], FColon, &rename)) {
                 err.range = raw->branch.nodes.data[0].range;
                 err.message = mv_cstr_doc("Invalid export-as new name", a);
                 throw_pi_error(point, err);

@@ -157,6 +157,23 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
+    /**
+     * TODO: the below test demonstrates a bug with instance importing...
+     * 
+    if (test_start(log, mv_string("module-re-export-instances-unambiguous"))) {
+        MODULE("(module sub-eq (import (core :all) (num.i64 :all)) (export :all)) \n"
+               "(def Eq Trait Eq [A] [.eq Proc [A A] Bool])\n"
+               "(def eql all [A] proc {(eq (Eq A))} [(x A) (y A)] eq.eq x y)\n");
+        MODULE("(module sub1 (import (core :all) (num.i64 :all) (sub-eq :types)) (export :all)) \n"
+               "(def eq-i64 instance (Eq I64) [.eq proc [x y] = x y])\n");
+        MODULE("(module sub2 (import (core :all) (num.i64 :all)) (re-export (sub1 :instances)))\n");
+        MODULE("(module test-module (import (core :all) (sub-eq :all) (sub2 :instances) (sub1 :instances)) (export val))\n"
+            "  (def val eql 3 4)");
+        bool expected = false;
+        TEST_EQ("test-module.val");
+    }
+    */
+
     if (test_start(log, mv_string("module-re-export-multiple-clauses"))) {
         MODULE("(module sub-x (import (core :all)) (export :all)) \n"
                "(def x 10)\n");

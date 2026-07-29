@@ -123,6 +123,7 @@ typedef struct {
     uint64_t id;
     Symbol name;
     SymbolPiList vars;
+    SymAddrPiAMap implicit_fields; 
     SymAddrPiAMap fields; 
 } TraitType; 
 
@@ -138,6 +139,7 @@ typedef struct {
 
     // The types the instance is implemented for.
     AddrPiList args; 
+    SymAddrPiAMap implicit_fields; 
     SymAddrPiAMap fields; 
 } TraitInstance; 
 

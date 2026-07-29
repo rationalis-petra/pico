@@ -20,6 +20,7 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 2, "data", "pointer");
     add_import_all(&imports.clauses, a, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, a, 2, "abs", "order");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
@@ -91,6 +92,12 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
         if (suite_start(log, mv_string("numeric"))) {
             RegionAllocator* subregion = make_subregion(region);
             run_pico_stdlib_abs_numeric_tests(log, module, env, target, subregion);
+            suite_end(log);
+            release_subregion(subregion);
+        }
+        if (suite_start(log, mv_string("order"))) {
+            RegionAllocator* subregion = make_subregion(region);
+            run_pico_stdlib_abs_order_tests(log, module, env, target, subregion);
             suite_end(log);
             release_subregion(subregion);
         }

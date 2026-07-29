@@ -1475,26 +1475,37 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         } else {
             // -----------------------------------------------------------------
             //
-            //                               INSTANCE
+            //                              INSTANCE
             //
             // -----------------------------------------------------------------
 
             // Generate the instance object
             generate_i(syn.projector.val, env, ictx);
-            // Both instances are passed by reference, and so occupy an addriss size
+            // Instances are passed by reference, and so occupy an address size
             size_t src_sz = ADDRESS_SIZE;
 
-            // From this point, behaviour depends on whether we are projecting from
-            // a structure or from an instance
             bool field_is_var = is_variable_in(type, env);
             bool offset_is_var = false;
-            for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                offset_is_var |= is_variable_in(source_type->instance.fields.data[i].val, env);
+            bool is_implicit = false;
+            for (size_t i = 0; i < source_type->instance.implicit_fields.len; i++) {
+                offset_is_var |= is_variable_in(source_type->instance.implicit_fields.data[i].val, env);
 
                 // Note: we only break *after* checking the field, as the offset
                 //       of a field is dependent on its' alignment
-                if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                if (symbol_eq(source_type->instance.implicit_fields.data[i].key, syn.projector.field)) {
+                    is_implicit = true;
                     break;
+                }
+            }
+            if (!is_implicit) {
+                for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                    offset_is_var |= is_variable_in(source_type->instance.fields.data[i].val, env);
+
+                    // Note: we only break *after* checking the field, as the offset
+                    //       of a field is dependent on its' alignment
+                    if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                        break;
+                }
             }
 
             if (!field_is_var && !offset_is_var) {
@@ -1504,11 +1515,19 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
                 // Now, calculate offset for field 
                 size_t offset = 0;
-                for (size_t i = 0; i < source_type->instance.fields.len; i++) {
-                    offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
-                    if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                for (size_t i = 0; i < source_type->instance.implicit_fields.len; i++) {
+                    offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.implicit_fields.data[i].val));
+                    if (symbol_eq(source_type->instance.implicit_fields.data[i].key, syn.projector.field))
                         break;
                     offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
+                }
+                if (!is_implicit) {
+                    for (size_t i = 0; i < source_type->instance.fields.len; i++) {
+                        offset = pi_size_align(offset, pi_align_of(*(PiType*)source_type->instance.fields.data[i].val));
+                        if (symbol_eq(source_type->instance.fields.data[i].key, syn.projector.field))
+                            break;
+                        offset += pi_size_of(*(PiType*)source_type->instance.fields.data[i].val);
+                    }
                 }
                 build_binary_op(Add, reg(RSI, sz_64), imm32(offset), ass, a, point);
 
@@ -1520,7 +1539,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 generate_monomorphic_copy(RSP, RSI, val_sz, ass, a, point);
             } else if (!field_is_var && offset_is_var) {
                 // Now, calculate offset for field 
-                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+                generate_trait_offset_of(RDI, syn.projector.field, source_type->instance.implicit_fields, source_type->instance.fields, env, ass, a, point);
 
                 // Pop the pointer to the instance from the stack - store in RSI
                 data_stack_shrink(env, src_sz);
@@ -1538,7 +1557,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 //       dynamic stack val ptr
 
                 // Generate field offset and size. 
-                generate_offset_of(RDI, syn.projector.field, source_type->instance.fields, env, ass, a, point);
+                generate_trait_offset_of(RDI, syn.projector.field, source_type->instance.implicit_fields, source_type->instance.fields, env, ass, a, point);
                 build_unary_op(Push, reg(RDI, sz_64), ass, a, point);
                 generate_size_of(RAX, type, env, ass, a, point);
                 build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
@@ -1618,6 +1637,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             // TODO: account for if instances / implicits.len > 0
 
             size_t immediate_sz = 0;
+            for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+                immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.implicit_fields.data[i].val));
+                immediate_sz += pi_size_of(*(PiType*)type->instance.implicit_fields.data[i].val);
+            }
             for (size_t i = 0; i < type->instance.fields.len; i++) {
                 immediate_sz = pi_size_align(immediate_sz, pi_align_of(*(PiType*)type->instance.fields.data[i].val));
                 immediate_sz += pi_size_of(*(PiType*)type->instance.fields.data[i].val);
@@ -1634,14 +1657,52 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             // we first generate all fields (arbitrary order), THEN move the
             // fields into the allocated memory
             int64_t stack_head = get_stack_head(env);
+            for (size_t i = 0; i < syn.instance.implicit_fields.len; i++) {
+                SynRef val = syn.instance.implicit_fields.data[i].val;
+                generate_i(val, env, ictx);
+            }
+            int64_t implicit_stack_head = get_stack_head(env);
             for (size_t i = 0; i < syn.instance.fields.len; i++) {
                 SynRef val = syn.instance.fields.data[i].val;
                 generate_i(val, env, ictx);
             }
             size_t total_src_size = stack_head - get_stack_head(env);
+            size_t implicit_source = implicit_stack_head - get_stack_head(env);
 
             // Alignment
             size_t index_offset = 0;
+            for (size_t i = 0; i < type->instance.implicit_fields.len; i++) {
+                Symbol field = type->instance.implicit_fields.data[i].key;
+                PiType* ty = type->instance.implicit_fields.data[i].val;
+
+                size_t source_offset = implicit_source;
+                for (size_t j = syn.instance.implicit_fields.len; j > 0; j--) {
+                    size_t idx = j - 1;
+                    if (symbol_eq(field, syn.instance.implicit_fields.data[idx].key)) { break; }
+                    PiType* field_ty = get_type(syn.instance.implicit_fields.data[idx].val, ictx.tape);
+                    source_offset += is_variable_in(field_ty, env) ? ADDRESS_SIZE : pi_stack_size_of(*field_ty);
+                }
+                size_t val_size = pi_size_of(*ty);
+                size_t val_align = pi_align_of(*ty);
+
+
+                // Retrieve index (ptr) and align it
+                // TODO (BUG): Check offset is < int8_t max.
+                build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, total_src_size, sz_64), ass, a, point);
+                size_t aligned_offset = pi_size_align(index_offset, val_align);
+                build_binary_op(Add, reg(RCX, sz_64), imm32(aligned_offset), ass, a, point);
+
+                // Retrieve Dest ptr
+                build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
+                build_binary_op(Add, reg(RDX, sz_64), imm32(source_offset), ass, a, point);
+
+                // TODO (check if should replace with stack copy/move)
+                generate_monomorphic_copy(RCX, RDX, val_size, ass, a, point);
+
+                // We need to increment the current field index to be able to access
+                // the next
+                index_offset += val_size;
+            }
             for (size_t i = 0; i < type->instance.fields.len; i++) {
                 Symbol field = type->instance.fields.data[i].key;
                 PiType* ty = type->instance.fields.data[i].val;
@@ -3184,6 +3245,35 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         }
 
         // First, malloc enough data for the array:
+        generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.implicit_fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
+
+        for (size_t i = 0; i < syn.trait.implicit_fields.len; i++) {
+            SymSynCell field = syn.trait.implicit_fields.data[i];
+            // First, move the field name
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 0, sz_64), imm32(field.key.name), ass, a, point);
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 8, sz_64), imm32(field.key.did), ass, a, point);
+
+            // Second, generate & move the type (note: stash & pop RCX)
+            build_unary_op(Push, reg(RCX, sz_64), ass, a, point);
+            build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+            data_stack_grow(env, 2*ADDRESS_SIZE);
+            generate_i(field.val, env, ictx);
+
+            data_stack_shrink(env, 3*ADDRESS_SIZE);
+            build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+            build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+
+            build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
+
+            // Now, incremenet index by 3 (to account for trait size!)
+            build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
+        }
+        build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
+        data_stack_grow(env, ADDRESS_SIZE);
+
+        // First, malloc enough data for the array:
         generate_tmp_malloc(reg(RAX, sz_64), imm32(syn.trait.fields.len * (sizeof(Symbol) + ADDRESS_SIZE)), ass, a, point);
         build_binary_op(Mov, reg(RCX, sz_64), imm32(0), ass, a, point);
 
@@ -3206,12 +3296,17 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             build_binary_op(Mov, sib8(RAX, RCX, 8, 16, sz_64), reg(R9, sz_64), ass, a, point);
 
-            // Now, incremenet index by 2 (to account for trait size!)
+            // Now, incremenet index by 3 (to account for trait size!)
             build_binary_op(Add, reg(RCX, sz_64), imm32(3), ass, a, point);
         }
+        build_unary_op(Pop, reg(R12, sz_64), ass, a, point);
+        data_stack_shrink(env, ADDRESS_SIZE);
 
         // Finally, generate function call to make type
-        gen_mk_trait_ty(syn.trait.name, syn.trait.vars, reg(RAX, sz_64), imm32(syn.trait.fields.len), reg(RAX, sz_64), ass, a, point);
+        gen_mk_trait_ty(syn.trait.name, syn.trait.vars, reg(RAX, sz_64),
+                        imm32(syn.trait.implicit_fields.len), reg(R12, sz_64),
+                        imm32(syn.trait.fields.len), reg(RAX, sz_64),
+                        ass, a, point);
         build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
         data_stack_grow(env, ADDRESS_SIZE);
 
