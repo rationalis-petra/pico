@@ -17,7 +17,6 @@ void add_user_module(Package* user, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 1, "data");
     add_import(&imports.clauses, &ra, 1, "platform");
     add_import(&imports.clauses, &ra, 1, "meta");
-    add_import(&imports.clauses, &ra, 1, "foreign");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),

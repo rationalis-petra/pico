@@ -1,6 +1,7 @@
 #include "pico/stdlib/lang/lang.h"
 #include "pico/stdlib/lang/core.h"
 #include "pico/stdlib/lang/extra.h"
+#include "pico/stdlib/lang/foreign.h"
 #include "pico/stdlib/lang/debug.h"
 #include "pico/stdlib/lang/dev.h"
 #include "pico/stdlib/lang/relic.h"
@@ -26,6 +27,8 @@ Module* add_lang_module(Assembler* ass, Target target, Package* base, RegionAllo
 
     RegionAllocator* subregion = make_subregion(region);
     add_core_module(ass, lang, subregion);
+    reset_subregion(subregion);
+    add_foreign_module(ass, lang, subregion);
     reset_subregion(subregion);
     add_relic_module(lang, subregion);
     reset_subregion(subregion);

@@ -1,10 +1,9 @@
 #include <inttypes.h>
-#include "platform/signals.h"
 
 #include "pico/stdlib/num/num.h"
 #include "pico/stdlib/num/submodules.h"
 
-void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
+void add_num_module(Assembler* ass, Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -24,18 +23,29 @@ void add_num_module(Assembler* ass, Package* base, RegionAllocator* region) {
     };
     Module* module = mk_module(header, base, NULL);
 
-    add_bool_module(ass, module, &ra);
+    RegionAllocator* subregion = make_subregion(region);
+    add_bool_module(ass, target, module, subregion);
 
-    add_integral_module(mv_string("u8"), sz_8, false, ass, module, &ra);
-    add_integral_module(mv_string("u16"), sz_16, false, ass, module, &ra);
-    add_integral_module(mv_string("u32"), sz_32, false, ass, module, &ra);
-    add_integral_module(mv_string("u64"), sz_64, false, ass, module, &ra);
+    add_integral_module(sz_8, false, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_16, false, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_32, false, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_64, false, ass, target, module, subregion);
+    reset_subregion(subregion);
 
-    add_integral_module(mv_string("i8"), sz_8, true, ass, module, &ra);
-    add_integral_module(mv_string("i16"), sz_16, true, ass, module, &ra);
-    add_integral_module(mv_string("i32"), sz_32, true, ass, module, &ra);
-    add_integral_module(mv_string("i64"), sz_64, true, ass, module, &ra);
+    add_integral_module(sz_8, true, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_16, true, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_32, true, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_integral_module(sz_64, true, ass, target, module, subregion);
+    reset_subregion(subregion);
 
-    add_float_module(mv_string("f32"), Float_32, ass, module, &ra);
-    add_float_module(mv_string("f64"), Float_64, ass, module, &ra);
+    add_float_module(Float_32, ass, target, module, subregion);
+    reset_subregion(subregion);
+    add_float_module(Float_64, ass, target, module, subregion);
+    reset_subregion(subregion);
 }

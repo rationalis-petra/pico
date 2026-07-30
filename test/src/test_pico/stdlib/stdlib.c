@@ -14,12 +14,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(12, a),
     };
-    add_import_all(&imports.clauses, a, 2, "lang", "relic");
+    add_import_all(&imports.clauses, a, 1, "prelude");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 2, "data", "pointer");
-    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
-    add_import_all(&imports.clauses, a, 2, "abs", "order");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");

@@ -30,7 +30,6 @@ void add_dev_module(Target target, Module* lang, RegionAllocator* region) {
     Name name;
 
     PiType type;
-    //PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
         panic(doc_to_str(point.error_message, 120, &ra));
@@ -48,6 +47,7 @@ void add_dev_module(Target target, Module* lang, RegionAllocator* region) {
     // ------------------------------------------------------------------------
     // Term Formers
     // ------------------------------------------------------------------------
+
     former = FDescribe;
     name = string_to_name(mv_string("describe"));
     add_def(module, name, type, &former, null_segments, NULL);

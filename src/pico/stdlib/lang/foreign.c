@@ -6,7 +6,7 @@
 
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/lang/core.h"
-#include "pico/stdlib/foreign.h"
+#include "pico/stdlib/lang/foreign.h"
 
 static PiType* exported_c_type;
 PiType* get_c_type() {
@@ -115,7 +115,7 @@ void build_dynlib_symbol_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allo
 
 }
 
-void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) {
+void add_foreign_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -133,7 +133,8 @@ void add_foreign_module(Assembler* ass, Package *base, RegionAllocator* region) 
         .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
+    Package* base = get_package(lang);
+    Module* module = mk_module(header, base, lang);
 
     PiType type;
     PiType* typep;

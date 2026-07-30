@@ -9,7 +9,8 @@ void add_prelude_module(Package* base, RegionAllocator* region) {
         .clauses = mk_import_clause_array(16, &ra),
     };
     add_import_all(&re_exports.clauses, &ra, 2, "lang", "relic");
-    add_import_all(&re_exports.clauses, &ra, 1, "num");
+    add_import_flags(&re_exports.clauses, &ra, ImportTypes | ImportInstances,
+                     2, seg_name("num"), seg_wild());
     /** TODO: just re-export and, or, not etc. */
     add_import_all(&re_exports.clauses, &ra, 2, "num", "bool");
     add_import_all(&re_exports.clauses, &ra, 2, "abs", "numeric");

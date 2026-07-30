@@ -4,9 +4,10 @@
 
 #include "components/pretty/string_printer.h"
 
+#include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/num/submodules.h"
-#include "pico/codegen/codegen.h"
+#include "pico/stdlib/helpers.h"
 
 static PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
@@ -207,22 +208,41 @@ static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAl
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 }
 
-void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, Assembler* ass, Module* num, Allocator* a) {
-    PiAllocator pico_allocator = convert_to_pallocator(a);
+void add_integral_module(LocationSize sz, bool is_signed,
+                         Assembler *ass, Target target, Module *num,
+                         RegionAllocator* region) {
+    Allocator a = ra_to_gpa(region);
+    PiAllocator pico_allocator = convert_to_pallocator(&a);
     PiAllocator* pia = &pico_allocator;
 
-    Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+    char* lower_names[2][4] = {
+        {"u8", "u16", "u32", "u64"},
+        {"i8", "i16", "i32", "i64"},
     };
+    char* upper_names[2][4] = {
+        {"U8", "U16", "U32", "U64"},
+        {"I8", "I16", "I32", "I64"},
+    };
+    String name_lower = mv_string(lower_names[is_signed][sz]);
+    String name_upper = mv_string(upper_names[is_signed][sz]);
+
+    Imports imports = (Imports) {
+        .clauses = mk_import_clause_array(8, &a),
+    };
+    add_import_all(&imports.clauses, &a, 2, "lang", "relic");
+    add_import_all(&imports.clauses, &a, 2, "abs", "show");
+    add_import_all(&imports.clauses, &a, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &a, 2, "abs", "order");
+    add_import_all(&imports.clauses, &a, 2, "abs", "numeric");
     ReExports re_exports = (ReExports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(0, &a),
     };
     Exports exports = (Exports) {
         .export_all = true,
-        .clauses = mk_export_clause_array(0, a),
+        .clauses = mk_export_clause_array(0, &a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(moudle_name),
+        .name = string_to_name(name_lower),
         .imports = imports,
         .re_exports = re_exports,
         .exports = exports,
@@ -233,7 +253,7 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     PiType* typep;
     ErrorPoint point;
     if (catch_error(point)) {
-        panic(doc_to_str(point.error_message, 120, a));
+        panic(doc_to_str(point.error_message, 120, &a));
     }
 
     PrimType prims[2][4] = {
@@ -242,12 +262,12 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     };
     PrimType prim = prims[is_signed][sz];
 
-    Segments fn_segments = (Segments) {.data = mk_u8_array(0, a)};
+    Segments fn_segments = (Segments) {.data = mk_u8_array(0, &a)};
     Segments prepped;
 
     if (sz > sz_16) {
         typep = mk_unop_type(pia, prim, prim);
-        build_unary_fn(ass, BSwap, sz, a, &point);
+        build_unary_fn(ass, BSwap, sz, &a, &point);
         name = string_to_name(mv_string("byte-swap"));
         fn_segments.code = get_instructions(ass);
         prepped = prep_target(module, fn_segments, ass, NULL);
@@ -255,7 +275,7 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
         clear_assembler(ass);
     }
 
-    build_binary_fn(ass, Add, sz, a, &point);
+    build_binary_fn(ass, Add, sz, &a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
     name = string_to_name(mv_string("+"));
     fn_segments.code = get_instructions(ass);
@@ -263,28 +283,28 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_binary_fn(ass, Sub, sz, a, &point);
+    build_binary_fn(ass, Sub, sz, &a, &point);
     name = string_to_name(mv_string("-"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IMul : Mul, RAX, sz, a, &point);
+    build_special_binary_fn(ass, is_signed ? IMul : Mul, RAX, sz, &a, &point);
     name = string_to_name(mv_string("*"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_special_binary_fn(ass, is_signed ? IDiv : Div, RAX, sz, a, &point);
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, RAX, sz, &a, &point);
     name = string_to_name(mv_string("/"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_binary_fn(ass, And, sz, a, &point);
+    build_binary_fn(ass, And, sz, &a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
     name = string_to_name(mv_string("and"));
     fn_segments.code = get_instructions(ass);
@@ -292,7 +312,7 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_binary_fn(ass, Or, sz, a, &point);
+    build_binary_fn(ass, Or, sz, &a, &point);
     typep = mk_binop_type(pia, prim, prim, prim);
     name = string_to_name(mv_string("or"));
     fn_segments.code = get_instructions(ass);
@@ -302,7 +322,7 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
 
     // TODO: set out to AH if size == 8
     Regname out = sz == sz_8 ? AH : RDX;
-    build_special_binary_fn(ass, is_signed ? IDiv : Div, out, sz, a, &point);
+    build_special_binary_fn(ass, is_signed ? IDiv : Div, out, sz, &a, &point);
     name = string_to_name(mv_string("mod"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -312,14 +332,14 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     // Type Change
     typep = mk_binop_type(pia, UInt_8, prim, prim);
 
-    build_shift_fn(ass, SHLCL, sz, a, &point);
+    build_shift_fn(ass, SHLCL, sz, &a, &point);
     name = string_to_name(mv_string("shl"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_shift_fn(ass, SHRCL, sz, a, &point);
+    build_shift_fn(ass, SHRCL, sz, &a, &point);
     name = string_to_name(mv_string("shr"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -329,42 +349,42 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     // Type Change
     typep = mk_binop_type(pia, prim, prim, Bool);
 
-    build_comp_fn(ass, is_signed ? SetL : SetB, sz, a, &point);
+    build_comp_fn(ass, is_signed ? SetL : SetB, sz, &a, &point);
     name = string_to_name(mv_string("<"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, is_signed ? SetLE : SetBE, sz, a, &point);
+    build_comp_fn(ass, is_signed ? SetLE : SetBE, sz, &a, &point);
     name = string_to_name(mv_string("<="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, is_signed ? SetG : SetA, sz, a, &point);
+    build_comp_fn(ass, is_signed ? SetG : SetA, sz, &a, &point);
     name = string_to_name(mv_string(">"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, is_signed ? SetGE : SetAE, sz, a, &point);
+    build_comp_fn(ass, is_signed ? SetGE : SetAE, sz, &a, &point);
     name = string_to_name(mv_string(">="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, SetE, sz, a, &point);
+    build_comp_fn(ass, SetE, sz, &a, &point);
     name = string_to_name(mv_string("="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    build_comp_fn(ass, SetNE, sz, a, &point);
+    build_comp_fn(ass, SetNE, sz, &a, &point);
     name = string_to_name(mv_string("!="));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
@@ -372,15 +392,54 @@ void add_integral_module(String moudle_name, LocationSize sz, bool is_signed, As
     clear_assembler(ass);
 
     typep = mk_proc_type(pia, 1, mk_prim_type(pia, prim), mk_string_type(pia));
-    build_to_string_fn(typep, prim, ass, pia, a, &point);
+    build_to_string_fn(typep, prim, ass, pia, &a, &point);
     name = string_to_name(mv_string("to-string"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) {
+        panic(mv_string("pico error in pico/stdlib/abs/order.c"));
+    }
+
+    String show_instance = string_ncat(&a, 5,
+                mv_string("(def show-"),
+                name_lower,
+                mv_string(" instance (Show "),
+                name_upper,
+                mv_string(")  \n  [.to-string to-string])"));
+    compile_str_toplevel(show_instance, module, target, &point, &pi_point, region);
+
+    String eq_instance = string_ncat(&a, 5, 
+                mv_string("(def eq-"),
+                name_lower,
+                mv_string(" instance (Eq "),
+                name_upper,
+                mv_string(")  [.= =] [.!= !=])"));
+    compile_str_toplevel(eq_instance, module, target, &point, &pi_point, region);
+
+    String ord_instance = string_ncat(&a, 5, 
+                mv_string("(def ord-"),
+                name_lower,
+                mv_string(" instance (Ord "),
+                name_upper,
+                mv_string(")  [.< <] [.<= <=] [.> >] [.>= >=])"));
+    compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
+
+    String num_instance = string_ncat(&a, 5, 
+                mv_string("(def num-"),
+                name_lower,
+                mv_string(" instance (Num "),
+                name_upper,
+                mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0] [.one 1])"));
+    compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
 }
 
-void add_bool_module(Assembler *ass, Module *num, Allocator *a) {
+void add_bool_module(Assembler *ass, Target target, Module *num, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    Allocator* a = &ra;
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 

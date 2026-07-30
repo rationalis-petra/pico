@@ -8,6 +8,7 @@
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/num/submodules.h"
 #include "pico/codegen/codegen.h"
+#include "pico/stdlib/helpers.h"
 
 static PiType* mk_binop_type(PiAllocator* pia, PrimType a1, PrimType a2, PrimType r) {
     return mk_proc_type(pia, 2, mk_prim_type(pia, a1), mk_prim_type(pia, a2), mk_prim_type(pia, r));
@@ -65,13 +66,23 @@ static void build_to_string_fn(PiType* type, PrimType prim, Assembler* ass, PiAl
     convert_c_fn(cfn, &c_type, type, ass, a, point); 
 }
 
-void add_float_module(String module_name, PrimType prim, Assembler* ass, Module* num, Allocator* a) {
+void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num, RegionAllocator* region) {
+    Allocator ra = ra_to_gpa(region);
+    Allocator* a = &ra;
     PiAllocator pico_allocator = convert_to_pallocator(a);
     PiAllocator* pia = &pico_allocator;
 
+    String name_lower = mv_string(prim == Float_32 ? "f32" : "f64");
+    String name_upper = mv_string(prim == Float_32 ? "F32" : "F64");
+
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(0, a),
+        .clauses = mk_import_clause_array(8, a),
     };
+    add_import_all(&imports.clauses, a, 2, "lang", "relic");
+    add_import_all(&imports.clauses, a, 2, "abs", "show");
+    add_import_all(&imports.clauses, a, 2, "abs", "equality");
+    add_import_all(&imports.clauses, a, 2, "abs", "order");
+    add_import_all(&imports.clauses, a, 2, "abs", "numeric");
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),
     };
@@ -80,7 +91,7 @@ void add_float_module(String module_name, PrimType prim, Assembler* ass, Module*
         .clauses = mk_export_clause_array(0, a),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(module_name),
+        .name = string_to_name(name_lower),
         .imports = imports,
         .re_exports = re_exports,
         .exports = exports,
@@ -155,4 +166,45 @@ void add_float_module(String module_name, PrimType prim, Assembler* ass, Module*
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
+
+
+    PiErrorPoint pi_point;
+    if (catch_error(pi_point)) {
+        panic(mv_string("pico error in pico/stdlib/abs/order.c"));
+    }
+
+
+    String show_instance = string_ncat(a, 5,
+                mv_string("(def show-"),
+                name_lower,
+                mv_string(" instance (Show "),
+                name_upper,
+                mv_string(")  \n  [.to-string to-string])"));
+    compile_str_toplevel(show_instance, module, target, &point, &pi_point, region);
+
+    /*
+    String eq_instance = string_ncat(a, 5, 
+                mv_string("(def eq-"),
+                name_lower,
+                mv_string(" instance (Eq "),
+                name_upper,
+                mv_string(")  [.= =] [.!= !=])"));
+    compile_str_toplevel(eq_instance, module, target, &point, &pi_point, region);
+
+    String ord_instance = string_ncat(a, 5, 
+                mv_string("(def ord-"),
+                name_lower,
+                mv_string(" instance (Ord "),
+                name_upper,
+                mv_string(")  [.< <] [.<= <=] [.> >] [.>= >=])"));
+    compile_str_toplevel(ord_instance, module, target, &point, &pi_point, region);
+    */
+
+    String num_instance = string_ncat(a, 5, 
+                mv_string("(def num-"),
+                name_lower,
+                mv_string(" instance (Num "),
+                name_upper,
+                mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0.0] [.one 1.0])"));
+    compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
 }
