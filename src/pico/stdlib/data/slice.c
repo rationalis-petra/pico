@@ -11,9 +11,8 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "extra");
     add_import_all(&imports.clauses, &ra, 1, "meta");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
 

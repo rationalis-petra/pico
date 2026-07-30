@@ -8,8 +8,8 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/data/client/allocator.h"
-#include "pico/stdlib/core.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/syntax/concrete.h"
@@ -826,7 +826,7 @@ void build_thread_end_macro(PiType* type, Assembler* ass, PiAllocator* pia,  All
     convert_c_fn(thread_end_macro, &fn_ctype, type, ass, a, point); 
 }
 
-void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
+void add_extra_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -844,7 +844,8 @@ void add_extra_module(Assembler* ass, Package* base, RegionAllocator* region) {
         .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
+    Package* base = get_package(lang);
+    Module* module = mk_module(header, base, lang);
 
     PiType* typep;
     Name name;

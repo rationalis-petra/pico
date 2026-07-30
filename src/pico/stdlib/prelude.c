@@ -8,8 +8,7 @@ void add_prelude_module(Package* base, RegionAllocator* region) {
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(16, &ra),
     };
-    add_import_all(&re_exports.clauses, &ra, 1, "core");
-    add_import_all(&re_exports.clauses, &ra, 1, "extra");
+    add_import_all(&re_exports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&re_exports.clauses, &ra, 1, "num");
     /** TODO: just re-export and, or, not etc. */
     add_import_all(&re_exports.clauses, &ra, 2, "num", "bool");

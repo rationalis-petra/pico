@@ -1,18 +1,14 @@
 #include "platform/memory/executable.h"
 
 #include "pico/stdlib/stdlib.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/lang/lang.h"
 #include "pico/stdlib/data/data.h"
 #include "pico/stdlib/abs/abs.h"
 #include "pico/stdlib/platform/platform.h"
 #include "pico/stdlib/num/num.h"
-#include "pico/stdlib/extra.h"
 #include "pico/stdlib/meta/meta.h"
-#include "pico/stdlib/debug.h"
-#include "pico/stdlib/dev.h"
 #include "pico/stdlib/foreign.h"
 #include "pico/stdlib/prelude.h"
-#include "pico/stdlib/user.h"
 
 static Package* base;
 Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator* module_allocator, RegionAllocator* region) {
@@ -28,19 +24,15 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     base = mk_package(string_to_name(mv_string("base")), *module_allocator);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_core_module(ass, base, subregion);
+    Module* lang = add_lang_module(ass, target, base, subregion);
     reset_subregion(subregion);
     add_num_module(ass, base, subregion);
     reset_subregion(subregion);
     add_meta_module(ass, base, subregion);
     reset_subregion(subregion);
-    add_debug_module(target, base, subregion);
-    reset_subregion(subregion);
-    add_dev_module(target, base, subregion);
-    reset_subregion(subregion);
 
-    // Extra happens AFTER meta, as extra has `loop` - a macro!
-    add_extra_module(ass, base, subregion);
+    // Populate extra bits of lang AFTER meta has been created.
+    populate_lang_module_extras(lang, ass, subregion);
     reset_subregion(subregion);
 
     add_platform_module(ass, base, default_allocator, subregion);

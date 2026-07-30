@@ -1441,6 +1441,7 @@ size_t pi_instance_size_of(PiType type) {
   }
 
   return total;
+
  invalid_type:
   panic(mv_string("Cannot get size of polymorphic type!"));
 }

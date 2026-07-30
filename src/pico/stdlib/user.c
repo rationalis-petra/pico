@@ -7,6 +7,9 @@ void add_user_module(Package* user, RegionAllocator* region) {
     Imports imports = (Imports) {.clauses = mk_import_clause_array(246, &ra),};
 
     add_import_all(&imports.clauses, &ra, 1, "prelude");
+    add_import(&imports.clauses, &ra, 2, "lang", "debug");
+    add_import(&imports.clauses, &ra, 2, "lang", "dev");
+
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "platform", "terminal");
 
@@ -15,8 +18,6 @@ void add_user_module(Package* user, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 1, "platform");
     add_import(&imports.clauses, &ra, 1, "meta");
     add_import(&imports.clauses, &ra, 1, "foreign");
-    add_import(&imports.clauses, &ra, 1, "debug");
-    add_import(&imports.clauses, &ra, 1, "dev");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),

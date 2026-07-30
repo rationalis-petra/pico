@@ -6,7 +6,7 @@
 
 #include "components/pretty/stream_printer.h"
 #include "pico/data/error.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
 

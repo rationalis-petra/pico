@@ -8,7 +8,7 @@
 #include "pico/data/client/meta/list_impl.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/lang/core.h"
 #include "pico/stdlib/platform/submodules.h"
 
 #ifdef WINDOW_SYSTEM

@@ -16,9 +16,8 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(8, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 2, "lang", "relic");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");

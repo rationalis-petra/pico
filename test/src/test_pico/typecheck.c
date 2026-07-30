@@ -22,11 +22,10 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(8, a),
+        .clauses = mk_import_clause_array(4, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 2, "lang", "relic");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
 

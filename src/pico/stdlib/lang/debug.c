@@ -4,7 +4,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/debug.h"
+#include "pico/stdlib/lang/debug.h"
 
 void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});
@@ -12,7 +12,7 @@ void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Alloca
     convert_c_fn(debug_break, &fn_ctype, type, ass, a, point); 
 }
 
-void add_debug_module(Target target, Package* base, RegionAllocator* region) {
+void add_debug_module(Target target, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     PiAllocator pico_region = convert_to_pallocator(&ra);
     PiAllocator* pia = &pico_region;
@@ -33,7 +33,8 @@ void add_debug_module(Target target, Package* base, RegionAllocator* region) {
         .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
+    Package* base = get_package(lang);
+    Module* module = mk_module(header, base, lang);
     Name name;
 
     PiType type;

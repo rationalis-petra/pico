@@ -15,7 +15,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/parse/parse.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/stdlib/meta/meta.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/binding/environment.h"

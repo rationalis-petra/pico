@@ -12,11 +12,10 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     Package* base = get_base_package();
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(3, a),
+        .clauses = mk_import_clause_array(12, a),
     };
-    add_import_all(&imports.clauses, a, 1, "core");
+    add_import_all(&imports.clauses, a, 2, "lang", "relic");
     add_import_all(&imports.clauses, a, 1, "num");
-    add_import_all(&imports.clauses, a, 1, "extra");
     add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 2, "data", "pointer");
     add_import_all(&imports.clauses, a, 2, "abs", "numeric");

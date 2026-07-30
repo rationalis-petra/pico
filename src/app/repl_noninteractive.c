@@ -12,7 +12,7 @@
 #include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 
 #include "app/repl.h"
 

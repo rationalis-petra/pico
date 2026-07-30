@@ -9,11 +9,9 @@ void add_result_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(3, &ra),
+        .clauses = mk_import_clause_array(1, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
-    add_import_all(&imports.clauses, &ra, 1, "num");
-    add_import_all(&imports.clauses, &ra, 1, "extra");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),

@@ -1,5 +1,5 @@
-#ifndef __PICO_STDLIB_CORE_H
-#define __PICO_STDLIB_CORE_H
+#ifndef __PICO_STDLIB_LANG_CORE_H
+#define __PICO_STDLIB_LANG_CORE_H
 
 #include "platform/memory/region.h"
 
@@ -15,6 +15,6 @@ PiType* get_result_type();
 PiType* get_allocator_vtable_type();
 PiType* get_allocator_type();
 
-void add_core_module(Assembler* ass, Package* base, RegionAllocator* region);
+void add_core_module(Assembler* ass, Module* lang, RegionAllocator* region);
 
 #endif

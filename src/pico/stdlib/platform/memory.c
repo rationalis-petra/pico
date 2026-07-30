@@ -7,7 +7,7 @@
 #include "pico/data/client/allocator.h"
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/lang/core.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/codegen/backend-direct/internal.h"
 

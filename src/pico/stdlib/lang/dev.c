@@ -4,9 +4,9 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/dev.h"
+#include "pico/stdlib/lang/dev.h"
 
-void add_dev_module(Target target, Package* base, RegionAllocator* region) {
+void add_dev_module(Target target, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
@@ -25,7 +25,8 @@ void add_dev_module(Target target, Package* base, RegionAllocator* region) {
         .re_exports = re_exports,
         .exports = exports,
     };
-    Module* module = mk_module(header, base, NULL);
+    Package* base = get_package(lang);
+    Module* module = mk_module(header, base, lang);
     Name name;
 
     PiType type;

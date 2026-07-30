@@ -10,7 +10,7 @@ void add_equality_module(Target target, Module *abs, RegionAllocator* region) {
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(4, &ra),
     };
-    add_import_all(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "data");
 

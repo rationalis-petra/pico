@@ -1,4 +1,4 @@
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/lang/core.h"
 
 #include "test_pico/stdlib/components.h"
 #include "test_pico/helper.h"

@@ -6,7 +6,7 @@
 #include "pico/syntax/concrete.h"
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/core.h"
+#include "pico/stdlib/lang/core.h"
 #include "pico/stdlib/meta/submodules.h"
 
 static PiType* symbol_type;

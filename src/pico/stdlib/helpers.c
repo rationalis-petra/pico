@@ -6,7 +6,7 @@
 #include "data/stream.h"
 
 #include "pico/parse/parse.h"
-#include "pico/stdlib/extra.h"
+#include "pico/stdlib/lang/extra.h"
 #include "pico/abstraction/abstraction.h"
 #include "pico/typecheck/typecheck.h"
 #include "pico/codegen/codegen.h"
