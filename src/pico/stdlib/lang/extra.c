@@ -8,7 +8,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/data/client/allocator.h"
-#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/core/kernel.h"
 #include "pico/stdlib/lang/extra.h"
 #include "pico/stdlib/platform/submodules.h"
 #include "pico/stdlib/meta/meta.h"

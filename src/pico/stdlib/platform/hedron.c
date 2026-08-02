@@ -10,7 +10,7 @@
 #include "pico/codegen/codegen.h"
 #include "pico/codegen/backend-direct/internal.h"
 
-#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/core/kernel.h"
 #include "pico/stdlib/platform/submodules.h"
 
 static PiType* surface_ty;

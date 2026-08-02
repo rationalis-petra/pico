@@ -56,7 +56,7 @@ void run_pico_stdlib_meta_refl_tests(TestLog *log, Module* module, Environment* 
         FileResult fileres = open_file(filename, Read | Write, &ra);
         if (fileres.type == Ok) {
             File* file = fileres.file;
-            const char contents[] = "(module test (import (lang.core :all)) (export x)) (def x 3)";
+            const char contents[] = "(module test (import (core.kernel :all)) (export x)) (def x 3)";
             U8Array data = (U8Array) {
                 .len = sizeof(contents),
                 .data = (uint8_t*)contents,

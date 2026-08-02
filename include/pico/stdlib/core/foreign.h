@@ -1,5 +1,5 @@
-#ifndef __PICO_STDLIB_LANG_FOREIGN_H
-#define __PICO_STDLIB_LANG_FOREIGN_H
+#ifndef __PICO_STDLIB_CORE_FOREIGN_H
+#define __PICO_STDLIB_CORE_FOREIGN_H
 
 #include "pico/values/modular.h"
 

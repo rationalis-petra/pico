@@ -7,8 +7,6 @@ void add_user_module(Package* user, RegionAllocator* region) {
     Imports imports = (Imports) {.clauses = mk_import_clause_array(246, &ra),};
 
     add_import_all(&imports.clauses, &ra, 1, "prelude");
-    add_import(&imports.clauses, &ra, 2, "lang", "debug");
-    add_import(&imports.clauses, &ra, 2, "lang", "dev");
 
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "platform", "terminal");

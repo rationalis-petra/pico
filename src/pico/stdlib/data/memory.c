@@ -3,7 +3,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/stdlib/helpers.h"
-#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/core/kernel.h"
 
 void add_memory_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);

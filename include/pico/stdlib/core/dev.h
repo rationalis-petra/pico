@@ -1,5 +1,5 @@
-#ifndef __PICO_STDLIB_LANG_DEV_H
-#define __PICO_STDLIB_LANG_DEV_H
+#ifndef __PICO_STDLIB_CORE_DEV_H
+#define __PICO_STDLIB_CORE_DEV_H
 
 #include "platform/memory/region.h"
 

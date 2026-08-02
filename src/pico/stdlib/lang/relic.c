@@ -8,7 +8,7 @@ void add_relic_module(Module* lang, RegionAllocator* region) {
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(16, &ra),
     };
-    add_import_all(&re_exports.clauses, &ra, 1, "core");
+    add_import_all(&re_exports.clauses, &ra, 2, "core", "kernel");
     add_import_all(&re_exports.clauses, &ra, 1, "extra");
 
     Exports exports = (Exports) {

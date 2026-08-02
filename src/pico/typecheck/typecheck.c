@@ -12,8 +12,8 @@
 #include "pico/values/types.h"
 #include "pico/codegen/codegen.h"
 #include "pico/eval/call.h"
-#include "pico/stdlib/lang/core.h"
-#include "pico/stdlib/lang/foreign.h"
+#include "pico/stdlib/core/kernel.h"
+#include "pico/stdlib/core/foreign.h"
 #include "pico/stdlib/meta/meta.h"
 
 // forward declarations

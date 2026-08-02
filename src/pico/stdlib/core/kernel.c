@@ -6,7 +6,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/backend-direct/internal.h"
-#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/core/kernel.h"
 
 static PiType* ptr_type;
 PiType* get_ptr_type() {
@@ -187,7 +187,7 @@ void build_nop_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_nullary_op(Ret, ass, a, point);
 }
 
-void add_core_module(Assembler* ass, Module* lang, RegionAllocator* region) {
+void add_kernel_module(Assembler* ass, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -200,7 +200,7 @@ void add_core_module(Assembler* ass, Module* lang, RegionAllocator* region) {
         .clauses = mk_export_clause_array(0, &ra),
     };
     ModuleHeader header = (ModuleHeader) {
-        .name = string_to_name(mv_string("core")),
+        .name = string_to_name(mv_string("kernel")),
         .imports = imports,
         .re_exports = re_exports,
         .exports = exports,

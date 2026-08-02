@@ -4,7 +4,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/lang/dev.h"
+#include "pico/stdlib/core/dev.h"
 
 void add_dev_module(Target target, Module* lang, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);

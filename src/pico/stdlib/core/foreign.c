@@ -5,8 +5,8 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/lang/core.h"
-#include "pico/stdlib/lang/foreign.h"
+#include "pico/stdlib/core/kernel.h"
+#include "pico/stdlib/core/foreign.h"
 
 static PiType* exported_c_type;
 PiType* get_c_type() {

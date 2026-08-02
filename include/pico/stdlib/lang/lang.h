@@ -8,6 +8,4 @@
 
 Module* add_lang_module(Assembler* ass, Target target, Package* base, RegionAllocator* region);
 
-void populate_lang_module_extras(Module* lang, Assembler* ass, RegionAllocator* region);
-
 #endif

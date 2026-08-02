@@ -43,60 +43,60 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
 
     if (test_start(log, mv_string("module-header-import-all-export-all"))) {
         int64_t expected = 1;
-        MODULE("(module test-module (import (lang.core :all)) (export :all)) \n"
+        MODULE("(module test-module (import (core.kernel :all)) (export :all)) \n"
             "  (def val1 1) (def val2 2) (def val3 3)");
         TEST_EQ("test-module.val1");
     }
 
     if (test_start(log, mv_string("modlue-non-export"))) {
-        MODULE("(module test-module (import (lang.core :all)) (export val1 val2)) \n"
+        MODULE("(module test-module (import (core.kernel :all)) (export val1 val2)) \n"
             "  (def val1 1) (def val2 2) (def val3 3)");
         TEST_ABSTRACT_FAIL("test-module.val3");
     }
 
     if (test_start(log, mv_string("modlue-import-path-all"))) {
-        MODULE("(module test-module (import (lang.core :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) (num.i64 :all)) (export val)) \n"
             "  (def val (+ 1 3))");
         int64_t expected = 4;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("modlue-export-annotated"))) {
-        MODULE("(module test-sub (import (lang.core :all) (lang.extra :all) (num.i64 :all)) (export sub-val)) \n"
+        MODULE("(module test-sub (import (core.kernel :all) (lang.extra :all) (num.i64 :all)) (export sub-val)) \n"
             "(ann sub-val I64) "
             "(def sub-val (+ 1 3))");
-        MODULE("(module test-module (import (lang.core :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
             "(def val (+ 1 sub-val))");
         int64_t expected = 5;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("modlue-import-path-visible-private-siblings"))) {
-        MODULE("(module test-sub (import (lang.core :all) (num.i64 :all)) (export sub-val)) \n"
+        MODULE("(module test-sub (import (core.kernel :all) (num.i64 :all)) (export sub-val)) \n"
             "(def sub-val (+ 1 3))");
-        MODULE("(module test-module (import (lang.core :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) (test-sub :all) (num.i64 :all)) (export val)) \n"
             "(def val (+ 1 sub-val))");
         int64_t expected = 5;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-import-path-split"))) {
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all)) (export val1)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export val1)) \n"
                "(def val1 1)");
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (export val2)) \n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (export val2)) \n"
                "(def val2 2)");
-        MODULE("(module test-module (import (lang.core :all) (eval-test-module.(sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) (eval-test-module.(sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
             "  (def val (+ val1 val2))");
         int64_t expected = 3;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-import-path-split-head"))) {
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all)) (export val1)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export val1)) \n"
                "(def val1 1)");
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (export val2)) \n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (export val2)) \n"
                "(def val2 2)");
-        MODULE("(module test-module (import (lang.core :all) ((sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) ((sub1 sub2) :all) (num.i64 :all)) (export val)) \n"
             "  (def val (+ val1 val2))");
         int64_t expected = 3;
         TEST_EQ("test-module.val");
@@ -104,54 +104,54 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
 
     if (test_start(log, mv_string("module-import-types"))) {
         MODULE(
-          "(module sub1 (import (lang.core :all) (num.i64 :all)) (export TestStruct)) \n"
+          "(module sub1 (import (core.kernel :all) (num.i64 :all)) (export TestStruct)) \n"
           "(def TestStruct Struct [.x I64] [.y I64])\n");
-        MODULE("(module test-module (import (lang.core :all) (sub1 :types)) (export val)) \n"
+        MODULE("(module test-module (import (core.kernel :all) (sub1 :types)) (export val)) \n"
             "  (def val struct TestStruct [.x 3] [.y 4])");
         int64_t expected[2] = {3, 4};
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-re-export-values-import-all"))) {
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all)) (export val1)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export val1)) \n"
                "(def val1 7)");
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (re-export (sub1 :values (val1)))) \n");
-        MODULE("(module test-module (import (lang.core :all) (sub2 :all) (num.i64 :all)) (export val)) \n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (re-export (sub1 :values (val1)))) \n");
+        MODULE("(module test-module (import (core.kernel :all) (sub2 :all) (num.i64 :all)) (export val)) \n"
             "  (def val val1)");
         int64_t expected = 7;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-re-export-import-values"))) {
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all)) (export val1)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export val1)) \n"
                "(def val1 8)");
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (re-export (sub1 :values (val1)))) \n");
-        MODULE("(module test-module (import (lang.core :all) (sub2 :values (val1)) (num.i64 :all)) (export val)) \n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (re-export (sub1 :values (val1)))) \n");
+        MODULE("(module test-module (import (core.kernel :all) (sub2 :values (val1)) (num.i64 :all)) (export val)) \n"
             "  (def val val1)");
         int64_t expected = 8;
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-re-export-types"))) {
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all)) (export TestStruct)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export TestStruct)) \n"
                "(def TestStruct Struct [.x I64] [.y I64])\n");
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (re-export (sub1 :types))) \n");
-        MODULE("(module test-module (import (lang.core :all) (sub2 :types)) (export val)) \n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (re-export (sub1 :types))) \n");
+        MODULE("(module test-module (import (core.kernel :all) (sub2 :types)) (export val)) \n"
             "  (def val struct TestStruct [.x 3] [.y 4])");
         int64_t expected[2] = {3, 4};
         TEST_EQ("test-module.val");
     }
 
     if (test_start(log, mv_string("module-re-export-instances"))) {
-        MODULE("(module sub-eq (import (lang.core :all) (num.i64 :all)) (export :all)) \n"
+        MODULE("(module sub-eq (import (core.kernel :all) (num.i64 :all)) (export :all)) \n"
                "(def Eq Trait Eq [A] [.eq Proc [A A] Bool])\n"
                "(def eql all [A] proc {(eq (Eq A))} [(x A) (y A)] eq.eq x y)\n");
-        MODULE("(module sub1 (import (lang.core :all) (num.i64 :all) (sub-eq :types)) (export :all)) \n"
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all) (sub-eq :types)) (export :all)) \n"
                "(def eq-i64 instance (Eq I64) [.eq proc [x y] = x y])\n");
         // TODO (BUG): investigate use-after-free when we remove the trailing
         // ')' from the below expression/module header
-        MODULE("(module sub2 (import (lang.core :all) (num.i64 :all)) (re-export (sub1 :instances)))\n");
-        MODULE("(module test-module (import (lang.core :all) (sub-eq :all) (sub2 :types)) (export val))\n"
+        MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (re-export (sub1 :instances)))\n");
+        MODULE("(module test-module (import (core.kernel :all) (sub-eq :all) (sub2 :types)) (export val))\n"
             "  (def val eql 3 4)");
         bool expected = false;
         TEST_EQ("test-module.val");
@@ -175,12 +175,12 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
     */
 
     if (test_start(log, mv_string("module-re-export-multiple-clauses"))) {
-        MODULE("(module sub-x (import (lang.core :all)) (export :all)) \n"
+        MODULE("(module sub-x (import (core.kernel :all)) (export :all)) \n"
                "(def x 10)\n");
-        MODULE("(module sub-y (import (lang.core :all)) (export :all)) \n"
+        MODULE("(module sub-y (import (core.kernel :all)) (export :all)) \n"
                "(def y 15)\n");
-        MODULE("(module sub-comb (import (lang.core :all)) (re-export (sub-x :all) (sub-y :all))) \n");
-        MODULE("(module test-module (import (lang.core :all) (num.i64 :all) (sub-comb :all)) (export val))\n"
+        MODULE("(module sub-comb (import (core.kernel :all)) (re-export (sub-x :all) (sub-y :all))) \n");
+        MODULE("(module test-module (import (core.kernel :all) (num.i64 :all) (sub-comb :all)) (export val))\n"
             "  (def val + x y)");
         int64_t expected = 25;
         TEST_EQ("test-module.val");

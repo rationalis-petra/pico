@@ -1,6 +1,7 @@
 #include "platform/memory/executable.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/core/core.h"
 #include "pico/stdlib/lang/lang.h"
 #include "pico/stdlib/data/data.h"
 #include "pico/stdlib/abs/abs.h"
@@ -26,11 +27,12 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     /** 
      * Phase 1: Core (lang + meta) modules
      */
-    Module* lang = add_lang_module(ass, target, base, subregion);
+    add_core_module(ass, target, base, subregion);
     reset_subregion(subregion);
     add_meta_module(ass, base, subregion);
     reset_subregion(subregion);
-    populate_lang_module_extras(lang, ass, subregion);
+
+    add_lang_module(ass, target, base, subregion);
     reset_subregion(subregion);
 
     /** 

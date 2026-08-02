@@ -4,7 +4,7 @@
 #include "components/pretty/string_printer.h"
 
 #include "pico/codegen/codegen.h"
-#include "pico/stdlib/lang/debug.h"
+#include "pico/stdlib/core/debug.h"
 
 void build_debug_break_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
     CType fn_ctype = mk_fn_ctype(pia, 0, (CType){.sort = CSVoid});

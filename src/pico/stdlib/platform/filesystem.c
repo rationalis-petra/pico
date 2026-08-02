@@ -6,7 +6,7 @@
 #include "pico/values/ctypes.h"
 #include "pico/codegen/codegen.h"
 #include "pico/stdlib/platform/submodules.h"
-#include "pico/stdlib/lang/core.h"
+#include "pico/stdlib/core/kernel.h"
 
 static PiType* file_ty;
 static PiType* file_err_ty;
