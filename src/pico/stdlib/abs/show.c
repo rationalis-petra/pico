@@ -48,6 +48,11 @@ void add_show_module(Target target, Module *abs, RegionAllocator* region) {
 
     const char* show_trait = 
         "(def Show Trait Show [A]"
-        "  [.to-string Proc [A] String])\n";
+        "  [.show Proc [A] String])\n";
     compile_toplevel(show_trait, module, target, &point, &pi_point, region);
+
+    const char* show_fn = 
+        "(def show all [A] proc {(s Show A)} [(x A)]"
+        "  s.show x)\n";
+    compile_toplevel(show_fn, module, target, &point, &pi_point, region);
 }

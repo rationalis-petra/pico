@@ -69,6 +69,15 @@ RawTree atom_symbol(const char *str) {
     };
 }
 
+RawTree atom_symbolr(const char *str, Range range) {
+    return (RawTree) {
+        .type = RawAtom,
+        .atom.type = ASymbol,
+        .atom.symbol = string_to_symbol(mv_string(str)),
+        .range = range
+    };
+}
+
 typedef enum {UpTo, Below, Above, DownTo, Then} RangeType; 
 
 typedef struct {
@@ -76,6 +85,7 @@ typedef struct {
     RawTree name;
     RawTree from;
     RawTree to;
+    Range for_range;
 } ForRange;
 
 /**
@@ -95,15 +105,17 @@ bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
         default: panic(mv_string("unrecognised comparator"));
         }
     
+        Range fr = range.for_range;
         RawTreePiList proj_nodes = mk_rawtree_list(3, pia);
-        push_rawtree(atom_symbol("."), &proj_nodes);
-        push_rawtree(atom_symbol(comparator), &proj_nodes);
-        push_rawtree(atom_symbol("u64"), &proj_nodes);
+        push_rawtree(atom_symbolr(".", fr), &proj_nodes);
+        push_rawtree(atom_symbolr(comparator, fr), &proj_nodes);
+        push_rawtree(atom_symbolr("u64", fr), &proj_nodes);
 
         RawTree proj = (RawTree) {
             .type = RawBranch,
             .branch.hint = HExpression,
             .branch.nodes = proj_nodes,
+            .range = fr
         };
 
         RawTreePiList comp_nodes = mk_rawtree_list(3, pia);
@@ -309,6 +321,7 @@ MacroResult loop_macro(RawTreePiList nodes) {
                     }
 
                     range.to = branch.branch.nodes.data[5];
+                    range.for_range = branch.range;
 
                     ForRange* rp = call_alloc(sizeof(ForRange), pia);
                     *rp = range;

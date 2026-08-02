@@ -48,7 +48,7 @@ Package* base_package(Assembler* ass, Allocator* default_allocator, PiAllocator*
     reset_subregion(subregion);
     add_num_module(ass, target, base, subregion);
     reset_subregion(subregion);
-    add_data_module(target, base, subregion);
+    add_data_module(ass, target, base, subregion);
     reset_subregion(subregion);
 
 

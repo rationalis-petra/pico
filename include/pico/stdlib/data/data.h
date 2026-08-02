@@ -6,6 +6,5 @@
 #include "pico/values/modular.h"
 #include "pico/codegen/codegen.h"
 
-void add_data_module(Target target, Package* base, RegionAllocator* region);
-
+void add_data_module(Assembler* ass, Target target, Package* base, RegionAllocator* region);
 #endif

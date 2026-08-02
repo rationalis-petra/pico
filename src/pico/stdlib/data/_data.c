@@ -1,7 +1,7 @@
 #include "pico/stdlib/data/submodules.h"
 #include "pico/stdlib/data/data.h"
 
-void add_data_module(Target target, Package* base, RegionAllocator* region) {
+void add_data_module(Assembler* ass, Target target, Package* base, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
     Imports imports = (Imports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -23,7 +23,7 @@ void add_data_module(Target target, Package* base, RegionAllocator* region) {
     delete_module_header(header);
 
     RegionAllocator* subregion = make_subregion(region);
-    add_allocators_module(target.target, module, subregion);
+    add_allocators_module(ass, module, subregion);
     reset_subregion(subregion);
     add_pointer_module(target, module, subregion);
     reset_subregion(subregion);

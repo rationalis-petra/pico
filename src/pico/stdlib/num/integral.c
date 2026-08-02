@@ -409,7 +409,7 @@ void add_integral_module(LocationSize sz, bool is_signed,
                 name_lower,
                 mv_string(" instance (Show "),
                 name_upper,
-                mv_string(")  \n  [.to-string to-string])"));
+                mv_string(")  \n  [.show to-string])"));
     compile_str_toplevel(show_instance, module, target, &point, &pi_point, region);
 
     String eq_instance = string_ncat(&a, 5, 
