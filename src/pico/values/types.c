@@ -2073,7 +2073,7 @@ bool pi_type_eql_i(PiType* lhs, PiType* rhs, RenameArray* array) {
             return false;
         if (lhs->distinct.id != rhs->distinct.id)
             return false;
-        if (lhs->distinct.type != rhs->distinct.type)
+        if (!pi_type_eql_i(lhs->distinct.type, rhs->distinct.type, array))
             return false;
         if (!lhs->distinct.args != !rhs->distinct.args)
             return false;

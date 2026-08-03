@@ -31,12 +31,18 @@ uint8_t relic_read_byte(File *file) {
     return out;
 }
 
-U8Array relic_read_chunk(File *file, MaybeSize msize) {
+U8PiList relic_read_chunk(File *file, MaybeSize msize) {
     // TODO: The allocator pointer goes on to live in the output array,
     //       and so it will be dangling when this function exits
     PiAllocator pia = get_std_current_allocator();
     Allocator a = convert_to_callocator(&pia);
-    return read_chunk(file, !msize.tag, msize.size, &a);
+    U8Array arr = read_chunk(file, !msize.tag, msize.size, &a);
+    return (U8PiList) {
+      .data = arr.data,
+      .len = arr.len,
+      .size = arr.size,
+      .gpa = pia,
+    };
 }
 
 CType build_file_result_ctype(PiAllocator* pia) {

@@ -345,11 +345,11 @@ InstanceClosures bd_generate_instance_closures(Assembler *target, ClosureGenData
           size_t arg_size = pi_stack_size_of(*argty);
           if (is_variable_for(paramty, types)) {
               // As is not vaiable for us, we need to move to variable stack.
-              build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), target, a, point);
+              build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), target, a, point);
               generate_monomorphic_copy(VSTACK_HEAD, RCX, arg_size, target, a, point);
               build_unary_op(Push, reg(VSTACK_HEAD, sz_64), target, a, point);
           } else {
-              build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_size), target, a, point);
+              build_binary_op(Sub, reg(RSP, sz_64), imma(arg_size), target, a, point);
               generate_monomorphic_copy(RSP, RCX, arg_size, target, a, point);
           }
           src_offset -= pi_stack_size_of(*argty);
@@ -815,7 +815,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                         // Copy down From Above
                         size_t argsz = pi_stack_size_of(*aty);
                         args_size += argsz;
-                        build_binary_op(Sub, reg(RSP, sz_64), imm8(argsz), ass, a, point);
+                        build_binary_op(Sub, reg(RSP, sz_64), imma(argsz), ass, a, point);
                         generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
                     }
                 }
@@ -834,7 +834,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                         // Copy down From Above
                         size_t argsz = pi_stack_size_of(*aty);
                         args_size += argsz;
-                        build_binary_op(Sub, reg(RSP, sz_64), imm8(argsz), ass, a, point);
+                        build_binary_op(Sub, reg(RSP, sz_64), imma(argsz), ass, a, point);
                         generate_stack_copy_from_base(0, arg_base - args_size, argsz, ass, a, point);
                     }
                 }
@@ -856,7 +856,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                     generate_poly_move(reg(VSTACK_HEAD, sz_64), reg(R9, sz_64), reg(RAX, sz_64), ass, a, point);
 
                     build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(args_size), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(args_size), ass, a, point);
                     build_binary_op(Add, reg(RSP, sz_64), reg(RAX, sz_64), ass, a, point);
                     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
                     data_stack_grow(env, ADDRESS_SIZE);
@@ -864,7 +864,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                     // Regular move up the data-stack
                     size_t out_sz = pi_stack_size_of(*type);
                     generate_stack_move(args_size, 0, out_sz, ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(args_size), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(args_size), ass, a, point);
                     data_stack_grow(env, pi_stack_size_of(*type));
                 }
             }
@@ -922,9 +922,9 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 static_arg_size += ADDRESS_SIZE;
                 if (!is_variable_in(argty, env)) {
                     size_t arg_size = pi_stack_size_of(*argty);
-                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
                     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
 
                     data_stack_shrink(env, arg_size);
@@ -950,9 +950,9 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 static_arg_size += ADDRESS_SIZE;
                 if (!is_variable_in(argty, env)) {
                     size_t arg_size = pi_stack_size_of(*argty);
-                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Sub, reg(VSTACK_HEAD, sz_64), imma(arg_size), ass, a, point);
                     generate_monomorphic_copy(VSTACK_HEAD, RSP, arg_size, ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(arg_size), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(arg_size), ass, a, point);
                     build_unary_op(Push, reg(VSTACK_HEAD, sz_64), ass, a, point);
 
                     data_stack_shrink(env, arg_size);
@@ -1359,7 +1359,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             }
             // Now, copy up the stack, restore stack head
             int64_t tmps_size = head - get_stack_head(env);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(tmps_size + ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(tmps_size + ADDRESS_SIZE), ass, a, point);
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
             data_stack_shrink(env, tmps_size);
 
@@ -1981,7 +1981,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                         };
                         push_binding(bind, &vars);
 
-                        build_binary_op(Sub, reg(RSP, sz_64), imm8(arg_sz), ass, a, point);
+                        build_binary_op(Sub, reg(RSP, sz_64), imma(arg_sz), ass, a, point);
                         data_stack_grow(env, arg_sz);
 
                         // Push the value onto the stack - perform a monomorphic stack
@@ -2033,7 +2033,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 generate_poly_move(reg(R10, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
 
                 // Restore the data stack.
-                build_binary_op(Add, reg(RSP, sz_64), imm8(mov_offset), ass, a, point);
+                build_binary_op(Add, reg(RSP, sz_64), imma(mov_offset), ass, a, point);
                 build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
                 data_stack_shrink(env, mov_offset);
             } else {
@@ -2221,7 +2221,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         } else{
             // Now, allocate space on stack
             size_t val_size = pi_size_of(*type);
-            build_binary_op(Sub, reg(RSP, sz_64), imm32(pi_stack_align(val_size)), ass, a, point);
+            build_binary_op(Sub, reg(RSP, sz_64), imma(pi_stack_align(val_size)), ass, a, point);
             build_binary_op(Mov, reg(RCX, sz_64), reg(RAX, sz_64), ass, a, point);
 
             generate_monomorphic_copy(RSP, RCX, val_size, ass, a, point);
@@ -2237,12 +2237,12 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
 #if ABI == SYSTEM_V_64 
         // arg1 = rdi, arg2 = rsi
-        build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDI, sz_64), rrefa(RSP, val_size, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RSI, sz_64), reg(RSP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz_64), imm32(val_size), ass, a, point);
 #elif ABI == WIN_64 
         // arg1 = rcx, arg2 = rdx
-        build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, val_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RCX, sz_64), rrefa(RSP, val_size, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RDX, sz_64), reg(RSP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(R8, sz_64), imm32(val_size), ass, a, point);
 #else
@@ -2356,14 +2356,14 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Store current index in stack return position
             build_binary_op(Mov, rref8(RSP, bind_sz, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
         } else {
             size_t stack_sz = pi_stack_size_of(*type);
             // HERE IS !!BUG!!
             build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RSP, bind_sz + stack_sz - ADDRESS_SIZE, sz_64), ass, a, point);
             generate_stack_move(bind_sz, 0, stack_sz, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(bind_sz), ass, a, point);
             data_stack_shrink(env, bind_sz);
         }
         break;
@@ -2527,7 +2527,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Copy the result down the stack
             generate_stack_move(arg_total, 0, out_size, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(arg_total), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(arg_total), ass, a, point);
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
             sym_size_bind(cell.key, out.backlink, &label_jumps);
@@ -2799,11 +2799,11 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
                 if (is_variable_in(get_type(elt->expr, ictx.tape), env)) {
                     generate_stack_size_of(RAX, get_type(elt->expr, ictx.tape), env, ass, a, point);
                     build_binary_op(Add, reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(ADDRESS_SIZE), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(ADDRESS_SIZE), ass, a, point);
                     data_stack_shrink(env, ADDRESS_SIZE);
                 } else {
                     size_t stack_sz = pi_stack_size_of(*get_type(elt->expr, ictx.tape));
-                    build_binary_op(Add, reg(RSP, sz_64), imm8(stack_sz), ass, a, point);
+                    build_binary_op(Add, reg(RSP, sz_64), imma(stack_sz), ass, a, point);
                     data_stack_shrink(env, stack_sz);
                 }
             }
@@ -2822,7 +2822,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
 
             // Store current index in stack return position
             generate_stack_move(bind_sz, 0, ADDRESS_SIZE, ass, a, point);
-            build_binary_op(Add, reg(RSP, sz_64), imm8(bind_sz + ADDRESS_SIZE), ass, a, point);
+            build_binary_op(Add, reg(RSP, sz_64), imma(bind_sz + ADDRESS_SIZE), ass, a, point);
             data_stack_shrink(env, bind_sz + ADDRESS_SIZE);
         } else {
             size_t stack_sz = pi_stack_size_of(*type);

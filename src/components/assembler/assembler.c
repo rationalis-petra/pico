@@ -320,6 +320,7 @@ Location imm8(int64_t immediate) {
       .immediate_8 = (int8_t)immediate,
     };
 }
+
 Location imm16(int16_t immediate) {
     return (Location) {
       .type = Dest_Immediate,
@@ -342,6 +343,17 @@ Location imm64(int64_t immediate) {
       .sz = sz_64,
       .immediate_64 = immediate,
     };
+}
+
+Location imma(int64_t immediate) {
+  /** TODO: add support for 16-bit immediates, with promotion if the
+      instruction requires it! */
+  if ((immediate <= INT8_MAX) & (immediate >= INT8_MIN)) {
+      return imm8(immediate);
+      panic(mv_string("immediate out of bounds"));
+  } else {
+      return imm32(immediate);
+  }
 }
 
 typedef enum EncOrder {
