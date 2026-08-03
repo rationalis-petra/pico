@@ -596,7 +596,7 @@ void generate_stack_size_of(Regname dest, PiType* type, AddressEnv* env, Assembl
             AddressEntry e = address_env_lookup(type->var, env);
             switch (e.type) {
             case ALocalDirect:
-                build_binary_op(Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(dest, sz_64), rrefa(RBP, e.stack_offset, sz_64), ass, a, point);
                 build_binary_op(And, reg(dest, sz_64), imm32(0xFFFFFFF), ass, a, point);
                 break;
             case ALocalIndexed:
@@ -648,7 +648,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
             AddressEntry e = address_env_lookup(type->var, env);
             switch (e.type) {
             case ALocalDirect:
-                build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R8, sz_64), rrefa(RBP, e.stack_offset, sz_64), ass, a, point);
                 build_unary_op(Push, reg(R8, sz_64), ass, a, point);
                 break;
             case ATooManyLocals: {

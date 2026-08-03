@@ -12,6 +12,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
         .clauses = mk_import_clause_array(3, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "platform");
 
@@ -69,7 +70,7 @@ void add_pointer_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(local_fn, module,target,  &point, &pi_point, region);
 
     const char *delete_fn = 
-        "(def delete all [A] proc [(ptr (Ptr A))] \n"
-        "  (memory.free (unname ptr)))";
+        "(def delete-ptr instance [A] {(del (Delete A))} (Delete (Ptr A))\n"
+        "  [.delete proc [ptr] seq (del.delete (get ptr)) (memory.free (unname ptr))])";
     compile_toplevel(delete_fn, module,target,  &point, &pi_point, region);
 }

@@ -1,6 +1,7 @@
 #include "platform/signals.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/helpers.h"
 #include "pico/stdlib/meta/meta.h"
 
 #include "test_pico/helper.h"
@@ -17,10 +18,11 @@ void run_pico_stdlib_tests(TestLog* log, Target target, Allocator* a) {
     add_import_all(&imports.clauses, a, 1, "prelude");
     add_import_all(&imports.clauses, a, 1, "num");
     add_import_all(&imports.clauses, a, 1, "data");
-    add_import_all(&imports.clauses, a, 2, "data", "pointer");
     add_import_all(&imports.clauses, a, 1, "meta");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
+
+    add_import_flags(&imports.clauses, a, ImportInstances, 2, seg_name("data"), seg_wild());
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),

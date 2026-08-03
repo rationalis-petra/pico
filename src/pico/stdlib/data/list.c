@@ -9,13 +9,16 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, &ra),
+        .clauses = mk_import_clause_array(8, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "meta", "gen");
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
+
+    add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
@@ -43,8 +46,6 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     }
 
     // TODO (FEAT): add/implement the following:
-    //  - list-free or delete-list
-
     const char *mk_list_type =
         "(def List Named List Family [A] Struct\n"
         "  [.data Address]\n"
@@ -73,10 +74,11 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(mk_null_list_fn, module, target, &point, &pi_point, region);
     
     // TODO (BUG): use list allocator
-    const char *mk_free_fn = 
-        "(def free-list all [A] proc [(list (List A))]\n"
-        "  (free list.data))";
-    compile_toplevel(mk_free_fn, module, target, &point, &pi_point, region);
+    const char *mk_deinit_fn = 
+        "(def de-init all [A] proc [(list (List A))]\n"
+        "  (bind [current-allocator list.gpa]"
+        "    (free list.data)))";
+    compile_toplevel(mk_deinit_fn, module, target, &point, &pi_point, region);
 
     const char *elt_fn =
         "(def elt all [A] proc [idx (arr (List A))]\n"
@@ -171,4 +173,36 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "(def clear all [A] proc [(l (Ptr (List A)))] \n"
         "  (set l (struct (get l) [.len 0])))";
     compile_toplevel(list_clear_fn, module, target, &point, &pi_point, region);
+
+    /**
+     *  Implementations for Abstractions
+     */
+
+    /*
+    const char *list_eq =
+        "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"
+        "  [.= proc [(l1 (List A)) (l2 (List A))] \n"
+        "    (labels (seq \n"
+        "              (when (u64.!= l1.len l2.len) (go-to not-eq))\n"
+        "              (loop [for i from 0 below l1.len] \n"
+        "                (when (eq.!= (elt i l1) (elt i l2)) (go-to not-eq)))\n"
+        "              :true) \n"
+        "      [not-eq :false])]\n"
+        "  [.!= proc [(l1 (List A)) (l2 (List A))] \n"
+        "    (labels (seq \n"
+        "              (when (u64.!= l1.len l2.len) (go-to not-eq))\n"
+        "              (loop [for i from 0 below l1.len] \n"
+        "                (when (eq.!= (elt i l1) (elt i l2)) (go-to not-eq)))\n"
+        "              :false) \n"
+        "      [not-eq :true])])\n";
+    compile_toplevel(list_eq, module, target, &point, &pi_point, region);
+     */
+
+    const char *list_delete =
+        "(def list-delete instance [A] {(del (Delete A))} (Delete (List A))\n"
+        "  [.delete proc [list] seq\n"
+        "    (loop [for i from 0 below list.len]\n"
+        "      (del.delete (elt i list)))\n"
+        "    (de-init list)])\n";
+    compile_toplevel(list_delete, module, target, &point, &pi_point, region);
 }

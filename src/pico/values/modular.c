@@ -800,7 +800,7 @@ ModuleEntry* get_def_internal(Name name, Module* module) {
 }
 
 ModuleEntry* get_def_external(Name name, Module* module) {
-    ModuleEntry* entry = (ModuleEntry*)entry_lookup(name, module->entries);
+    ModuleEntry* entry = (ModuleEntry*)get_def_internal(name, module);
     if (entry != NULL) {
       /** TODO (performance): should cache if definition is exported in the module def? */
       if (module->header.exports.export_all) return entry;

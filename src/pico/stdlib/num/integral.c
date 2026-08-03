@@ -230,10 +230,11 @@ void add_integral_module(LocationSize sz, bool is_signed,
         .clauses = mk_import_clause_array(8, &a),
     };
     add_import_all(&imports.clauses, &a, 2, "lang", "relic");
-    add_import_all(&imports.clauses, &a, 2, "abs", "show");
     add_import_all(&imports.clauses, &a, 2, "abs", "equality");
     add_import_all(&imports.clauses, &a, 2, "abs", "order");
     add_import_all(&imports.clauses, &a, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, &a, 2, "abs", "show");
+    add_import_all(&imports.clauses, &a, 2, "abs", "lifetime");
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &a),
     };
@@ -435,6 +436,24 @@ void add_integral_module(LocationSize sz, bool is_signed,
                 name_upper,
                 mv_string(")  [.+ +] [.- -] [.* *] [./ /] [.zero 0] [.one 1])"));
     compile_str_toplevel(num_instance, module, target, &point, &pi_point, region);
+
+    /** TODO: add a tag/compiler attribute to designate this as a no-op copy */
+    String copy_instance = string_ncat(&a, 5, 
+                mv_string("(def copy-"),
+                name_lower,
+                mv_string(" instance (Copy "),
+                name_upper,
+                mv_string(")  [.copy proc [x] x])"));
+    compile_str_toplevel(copy_instance, module, target, &point, &pi_point, region);
+
+    /** TODO: add a tag/compiler attribute to designate this as a no-op delete */
+    String delete_instance = string_ncat(&a, 5, 
+                mv_string("(def delete-"),
+                name_lower,
+                mv_string(" instance (Delete "),
+                name_upper,
+                mv_string(")  [.delete proc [x] :unit])"));
+    compile_str_toplevel(delete_instance, module, target, &point, &pi_point, region);
 }
 
 void add_bool_module(Assembler *ass, Target target, Module *num, RegionAllocator* region) {

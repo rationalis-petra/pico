@@ -4,7 +4,7 @@
 void add_user_module(Package* user, RegionAllocator* region) {
 
     Allocator ra = ra_to_gpa(region);
-    Imports imports = (Imports) {.clauses = mk_import_clause_array(246, &ra),};
+    Imports imports = (Imports) {.clauses = mk_import_clause_array(16, &ra),};
 
     add_import_all(&imports.clauses, &ra, 1, "prelude");
 

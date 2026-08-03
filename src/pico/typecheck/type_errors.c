@@ -515,7 +515,7 @@ _Noreturn void type_error_proj_invalid_type(PiType* type, SynRef ref, TypeCheckC
     } else {
         push_ptr(mv_cstr_doc("Attempting to access the field", a), &nodes);
         push_ptr(mk_paren_doc("'", "'", mv_str_doc(view_symbol_string(proj.projector.field), a), a), &nodes);
-        push_ptr(mv_cstr_doc(" however, this field cannot be accessed, as the source has type", a), &nodes);
+        push_ptr(mv_cstr_doc("however, this field cannot be accessed, as the source has type", a), &nodes);
         push_ptr(mv_nest_doc(2, pretty_type(get_type(proj.projector.val, ctx.tape), default_ptp, a), a),  &nodes);
         push_ptr(mv_cstr_doc("which does not allow field access.", a), &nodes);
     }

@@ -2575,8 +2575,10 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.instance.constraint, env, ctx);
 
         for (size_t i = 0; i < typed.instance.implicits.len; i++) {
-            SynRef syn = typed.instance.fields.data[i].val;
-            squash_types(syn, env, ctx);
+            SynRef* ref = typed.instance.implicits.data[i].val;
+            if (ref) {
+                squash_types(*ref, env, ctx);
+            }
         }
 
         for (size_t i = 0; i < typed.instance.fields.len; i++) {
@@ -2757,14 +2759,14 @@ void squash_types(SynRef ref, TypeEnv* env, TypeCheckContext ctx) {
         squash_types(typed.opaque_type.body, env, ctx);
         break;
     case STraitType:
+        for (size_t i = 0; i < typed.trait.implicit_fields.len; i++) {
+            squash_types(typed.trait.implicit_fields.data[i].val, env, ctx);
+        }
         for (size_t i = 0; i < typed.trait.fields.len; i++) {
             squash_types(typed.trait.fields.data[i].val, env, ctx);
         }
         break;
     case SCheckedType: {
-        // TODO: it seems like *sometimes* we want for this to be allowed as a
-        //   uvar (notably when calling eval_type), but otherwise don't want
-        //   to throw an error here.
         squash_type(typed.type_val, uctx);
         break;
     }
