@@ -22,6 +22,8 @@ static PiType* input_rate_ty;
 static PiType* input_format_ty;
 static PiType* binder_desc_ty;
 static PiType* attribute_desc_ty;
+static PiType* push_const_range_ty;
+static PiType* pipeline_info_ty;
 
 static PiType* descriptor_binding_ty;
 
@@ -101,13 +103,14 @@ void build_destroy_shader_module_fn(PiType* type, Assembler* ass, PiAllocator* p
 }
 
 void build_create_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* pia, Allocator* a, ErrorPoint* point) {
-    CType fn_ctype = mk_fn_ctype(pia, 5,
+    CType arg_ctype = mk_struct_ctype(pia, 6,
                                  "resource_describe", mk_list_ctype(pia),
                                  "binder_describe", mk_list_ctype(pia),
                                  "attrib_describe", mk_list_ctype(pia),
+                                 "push_constants", mk_list_ctype(pia),
                                  "shaders", mk_list_ctype(pia),
-                                 "surface", mk_voidptr_ctype(pia),
-                                 mk_voidptr_ctype(pia));
+                                 "surface", mk_voidptr_ctype(pia));
+    CType fn_ctype = mk_fn_ctype(pia, 1, "info", arg_ctype, mk_voidptr_ctype(pia));
     convert_c_fn(create_pipeline, &fn_ctype, type, ass, a, point); 
 }
 
@@ -408,6 +411,17 @@ void build_command_bind_pipeline_fn(PiType* type, Assembler* ass, PiAllocator* p
                                  "pipeline", mk_voidptr_ctype(pia),
                                  (CType){.sort = CSVoid});
     convert_c_fn(command_bind_pipeline, &fn_ctype, type, ass, a, point); 
+}
+
+void build_command_push_constants_fn(PiType *type, Assembler *ass, PiAllocator *pia, Allocator *a, ErrorPoint *point) {
+    CType fn_ctype = mk_fn_ctype(pia, 6, "command_buffer", mk_voidptr_ctype(pia),
+                                 "pipeline", mk_voidptr_ctype(pia),
+                                 "shader_stage", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CLongLong}), 
+                                 "offset", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
+                                 "size", mk_primint_ctype((CPrimInt){.is_signed = Unsigned, .prim = CInt}), 
+                                 "value", mk_voidptr_ctype(pia),
+                                 (CType){.sort = CSVoid});
+    convert_c_fn(command_push_constants, &fn_ctype, type, ass, a, point); 
 }
 
 void build_command_bind_descriptor_set_fn(PiType *type, Assembler *ass, PiAllocator *pia, Allocator *a, ErrorPoint *point) {
@@ -737,7 +751,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
 
     typep = mk_enum_type(pia, 3, "combined-image-sampler", 0, "uniform-buffer", 0, "storage-buffer", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
-    name = string_to_name(mv_string("DecriptorType"));
+    name = string_to_name(mv_string("DescriptorType"));
     add_def(module, name, type, &typep, null_segments, NULL);
     clear_assembler(ass);
     e = get_def_internal(name, module);
@@ -871,6 +885,32 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     clear_assembler(ass);
     e = get_def_internal(name, module);
     attribute_desc_ty = e->value;
+
+    typep = mk_struct_type(pia, 3,
+                           "stage", shader_stage_ty,
+                           "offset", mk_prim_type(pia, UInt_32),
+                           "size", mk_prim_type(pia, UInt_32));
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    name = string_to_name(mv_string("PushConstantRange"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    push_const_range_ty = e->value;
+
+
+    typep = mk_struct_type(pia, 6,
+                           "descriptor-set-layouts", mk_app_type(pia, get_list_type(), descriptor_set_layout_ty),
+                           "binding-descriptions", mk_app_type(pia, get_list_type(), binder_desc_ty),
+                           "attribute-descriptions", mk_app_type(pia, get_list_type(), attribute_desc_ty),
+                           "push-constant-ranges", mk_app_type(pia, get_list_type(), push_const_range_ty),
+                           "shaders", mk_app_type(pia, get_list_type(), shader_module_ty),
+                           "surface", surface_ty);
+    type = (PiType) {.sort = TKind, .kind.nargs = 0};
+    name = string_to_name(mv_string("PipelineInfo"));
+    add_def(module, name, type, &typep, null_segments, NULL);
+    clear_assembler(ass);
+    e = get_def_internal(name, module);
+    pipeline_info_ty = e->value;
 
     typep = mk_enum_type(pia, 5, "vertex", 0, "index", 0, "uniform", 0, "storage", 0, "transfer-source", 0, "transfer-destination", 0);
     type = (PiType) {.sort = TKind, .kind.nargs = 0};
@@ -1093,13 +1133,7 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-    typep = mk_proc_type(pia, 5,
-                         mk_app_type(pia, get_list_type(), descriptor_set_layout_ty),
-                         mk_app_type(pia, get_list_type(), binder_desc_ty),
-                         mk_app_type(pia, get_list_type(), attribute_desc_ty),
-                         mk_app_type(pia, get_list_type(), shader_module_ty),
-                         surface_ty,
-                         pipeline_ty);
+    typep = mk_proc_type(pia, 1, pipeline_info_ty, pipeline_ty);
     build_create_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("create-pipeline"));
     fn_segments.code = get_instructions(ass);
@@ -1256,6 +1290,16 @@ void add_hedron_module(Assembler *ass, Module *platform, RegionAllocator* region
     typep = mk_proc_type(pia, 2, command_buffer_ty, pipeline_ty, mk_prim_type(pia, Unit));
     build_command_bind_pipeline_fn(typep, ass, pia, &ra, &point);
     name = string_to_name(mv_string("command-bind-pipeline"));
+    fn_segments.code = get_instructions(ass);
+    prepped = prep_target(module, fn_segments, ass, NULL);
+    add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
+    clear_assembler(ass);
+
+    typep = mk_proc_type(pia, 6, command_buffer_ty, pipeline_ty, shader_stage_ty,
+                         mk_prim_type(pia, UInt_32), mk_prim_type(pia, UInt_32),
+                         mk_prim_type(pia, Address), mk_prim_type(pia, Unit)); 
+    build_command_push_constants_fn(typep, ass, pia, &ra, &point);
+    name = string_to_name(mv_string("command-push-constants"));
     fn_segments.code = get_instructions(ass);
     prepped = prep_target(module, fn_segments, ass, NULL);
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);

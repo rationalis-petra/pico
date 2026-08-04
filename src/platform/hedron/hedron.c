@@ -1030,17 +1030,12 @@ void update_descriptor_sets(HedronWriteDescriptorSetPiList writes, HedronCopyDes
     mem_free(vk_copies, hd_alloc);
 }
 
-HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
-                                BindingDescriptionPiList bdesc,
-                                AttributeDescriptionPiList adesc,
-                                AddrPiList shaders,
-                                HedronSurface* surface) {
-
-    if (shaders.len != 2) {
+HedronPipeline* create_pipeline(PipelineInfo pinfo) {
+    if (pinfo.shaders.len != 2) {
         panic(mv_string("pipeline expects exactly 2 shaders: vertex and fragment"));
     }
-    HedronShaderModule* vert_shader = shaders.data[0];
-    HedronShaderModule* frag_shader = shaders.data[1];
+    HedronShaderModule* vert_shader = pinfo.shaders.data[0];
+    HedronShaderModule* frag_shader = pinfo.shaders.data[1];
 
     VkPipelineShaderStageCreateInfo vertex_shader_info = (VkPipelineShaderStageCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1058,23 +1053,23 @@ HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
 
     VkPipelineShaderStageCreateInfo shader_stages[2] = {vertex_shader_info, fragment_shader_info};
 
-    VkVertexInputBindingDescription binding_descriptions[bdesc.len];
-    for (size_t i = 0; i < bdesc.len; i++) {
-        uint32_t input_rate = bdesc.data[i].input_rate == Vertex
+    VkVertexInputBindingDescription binding_descriptions[pinfo.bdesc.len];
+    for (size_t i = 0; i < pinfo.bdesc.len; i++) {
+        uint32_t input_rate = pinfo.bdesc.data[i].input_rate == Vertex
             ? VK_VERTEX_INPUT_RATE_VERTEX
             : VK_VERTEX_INPUT_RATE_INSTANCE;
 
         binding_descriptions[i] = (VkVertexInputBindingDescription) {
-            .binding = bdesc.data[i].binding,
-            .stride = bdesc.data[i].stride,
+            .binding = pinfo.bdesc.data[i].binding,
+            .stride = pinfo.bdesc.data[i].stride,
             .inputRate = input_rate,
         };
     }
 
-    VkVertexInputAttributeDescription attribute_descriptions[adesc.len];
-    for (size_t i = 0; i < adesc.len; i++) {
+    VkVertexInputAttributeDescription attribute_descriptions[pinfo.adesc.len];
+    for (size_t i = 0; i < pinfo.adesc.len; i++) {
         uint32_t format = {};
-        switch (adesc.data[i].format) {
+        switch (pinfo.adesc.data[i].format) {
         case Float_1:
             format = VK_FORMAT_R32_SFLOAT;
             break;
@@ -1087,18 +1082,30 @@ HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
         }; 
 
         attribute_descriptions[i] = (VkVertexInputAttributeDescription) {
-            .binding = adesc.data[i].binding,
-            .location = adesc.data[i].location,
+            .binding = pinfo.adesc.data[i].binding,
+            .location = pinfo.adesc.data[i].location,
             .format = format,
-            .offset = adesc.data[i].offset,
+            .offset = pinfo.adesc.data[i].offset,
+        };
+    }
+
+    /** TODO: if len is 0 then may cause bugs/be undefined? but having len == 0
+        is legit... */
+    VkPushConstantRange constant_ranges[pinfo.push_const_ranges.len == 0 ? 1 : pinfo.push_const_ranges.len];
+    for (size_t i = 0; i < pinfo.push_const_ranges.len; i++) {
+        VkShaderStageFlagBits shader_stage = convert_shader_type(pinfo.push_const_ranges.data[i].stage);
+        constant_ranges[i] = (VkPushConstantRange) {
+            .stageFlags = shader_stage,
+            .offset = pinfo.push_const_ranges.data[i].offset,
+            .size = pinfo.push_const_ranges.data[i].size,
         };
     }
 
     VkPipelineVertexInputStateCreateInfo vertex_input_info = (VkPipelineVertexInputStateCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = bdesc.len,
+        .vertexBindingDescriptionCount = pinfo.bdesc.len,
         .pVertexBindingDescriptions = binding_descriptions,
-        .vertexAttributeDescriptionCount = adesc.len,
+        .vertexAttributeDescriptionCount = pinfo.adesc.len,
         .pVertexAttributeDescriptions = attribute_descriptions,
     };
 
@@ -1111,15 +1118,15 @@ HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
     VkViewport viewport = (VkViewport) {
         viewport.x = 0.0f,
         viewport.y = 0.0f,
-        viewport.width = (float) surface->extent.width,
-        viewport.height = (float) surface->extent.height,
+        viewport.width = (float) pinfo.surface->extent.width,
+        viewport.height = (float) pinfo.surface->extent.height,
         viewport.minDepth = 0.0f,
         viewport.maxDepth = 1.0f,
     };
 
     VkRect2D scissor = (VkRect2D) {
         .offset = {.x = 0, .y = 0},
-        .extent = surface->extent,
+        .extent = pinfo.surface->extent,
     };
 
     VkDynamicState dynamic_state_arr[2] = {
@@ -1191,18 +1198,18 @@ HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
     colour_blending.blendConstants[2] = 0.0f; // Optional
     colour_blending.blendConstants[3] = 0.0f; // Optional
 
-    VkDescriptorSetLayout* vk_ds_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * descriptor_set_layouts.len, hd_alloc);
-    for (size_t i = 0; i < descriptor_set_layouts.len; i++) {
-        HedronDescriptorSetLayout* layout = descriptor_set_layouts.data[i];
+    VkDescriptorSetLayout* vk_ds_layouts = mem_alloc(sizeof(VkDescriptorSetLayout) * pinfo.descriptor_set_layouts.len, hd_alloc);
+    for (size_t i = 0; i < pinfo.descriptor_set_layouts.len; i++) {
+        HedronDescriptorSetLayout* layout = pinfo.descriptor_set_layouts.data[i];
         vk_ds_layouts[i] = layout->layout;
     }
 
     VkPipelineLayoutCreateInfo pipeline_layout_info = (VkPipelineLayoutCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = descriptor_set_layouts.len,
+        .setLayoutCount = pinfo.descriptor_set_layouts.len,
         .pSetLayouts = vk_ds_layouts,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = NULL,
+        .pushConstantRangeCount = pinfo.push_const_ranges.len,
+        .pPushConstantRanges = constant_ranges,
     };
 
     VkPipelineLayout pipeline_layout;
@@ -1224,7 +1231,7 @@ HedronPipeline* create_pipeline(AddrPiList descriptor_set_layouts,
         .pColorBlendState = &colour_blending,
         .pDynamicState = &dynamic_states,
         .layout = pipeline_layout,
-        .renderPass = surface->renderpass,
+        .renderPass = pinfo.surface->renderpass,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1,
@@ -1297,13 +1304,13 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size) {
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
-    VkBuffer vertex_buffer;
-    if (vkCreateBuffer(logical_device, &buffer_info, NULL, &vertex_buffer) != VK_SUCCESS) {
+    VkBuffer buffer;
+    if (vkCreateBuffer(logical_device, &buffer_info, NULL, &buffer) != VK_SUCCESS) {
         panic(mv_string("failed to create vulkan buffer!"));
     }
 
     VkMemoryRequirements mem_requirements;
-    vkGetBufferMemoryRequirements(logical_device, vertex_buffer, &mem_requirements);
+    vkGetBufferMemoryRequirements(logical_device, buffer, &mem_requirements);
 
     VkMemoryAllocateInfo alloc_info = (VkMemoryAllocateInfo) {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -1316,11 +1323,11 @@ HedronBuffer* create_buffer(BufferType type, uint64_t size) {
         panic(mv_string("failed to allocate vertex buffer memory!"));
     }
 
-    vkBindBufferMemory(logical_device, vertex_buffer, vertex_buffer_memory, 0);
+    vkBindBufferMemory(logical_device, buffer, vertex_buffer_memory, 0);
 
     HedronBuffer* out = mem_alloc(sizeof(HedronBuffer), hd_alloc);
     *out = (HedronBuffer) {
-        .vk_buffer = vertex_buffer,
+        .vk_buffer = buffer,
         .device_memory = vertex_buffer_memory,
         .size = size,
     };
@@ -1791,6 +1798,11 @@ void command_copy_buffer_to_image(HedronCommandBuffer *commands,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1,
                            &region);
+}
+
+void command_push_constants(HedronCommandBuffer* commands, HedronPipeline *pipeline, ShaderStage stage, uint32_t offset, uint32_t size, const void* constants) {
+    VkShaderStageFlagBits shader_stage = convert_shader_type(stage);
+    vkCmdPushConstants(commands->buffer, pipeline->layout, shader_stage, offset, size, constants);
 }
 
 void command_bind_descriptor_set(HedronCommandBuffer *commands,

@@ -167,7 +167,6 @@ void add_float_module(PrimType prim, Assembler* ass, Target target, Module* num,
     add_def(module, name, *typep, &prepped.code.data, prepped, NULL);
     clear_assembler(ass);
 
-
     PiErrorPoint pi_point;
     if (catch_error(pi_point)) {
         panic(mv_string("pico error in pico/stdlib/abs/order.c"));
