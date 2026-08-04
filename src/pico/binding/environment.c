@@ -367,6 +367,18 @@ void incorporate_import_clause_internal(ImportClause clause, InternalImportData 
     }
     case ImportComplex: {
         Targets targets = get_targets(clause.path, root_module, module, point, a);
+        if (clause.import_as) {
+            ParentMap parents = get_origins(clause.path, root_module, module, point, a);
+#ifdef DEBUG_ASSERT
+            if (parents.values.len != 1) {
+                panic(mv_string("When importing with :as, the abstraction phase should ensure that import clauses are singular."));
+            }
+#endif
+            Module* target = parents.values.data[0];
+            Name name = parents.names.data[0];
+            u64_name_insert(data.origins->len, name, data.rename);
+            name_ptr_insert(clause.to, target, data.origins);
+        }
 
         for (size_t i = 0; i < targets.values.len; i++ ) {
             Module* target = targets.values.data[i];

@@ -102,6 +102,15 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
         TEST_EQ("test-module.val");
     }
 
+    if (test_start(log, mv_string("modlue-import-as"))) {
+        MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all)) (export val)) \n"
+               "(def val 898712)");
+        MODULE("(module test-module (import (core.kernel :all) (sub1 :as s) (num.i64 :all)) (export val)) \n"
+            "  (def val s.val)");
+        int64_t expected = 898712;
+        TEST_EQ("test-module.val");
+    }
+
     if (test_start(log, mv_string("module-import-types"))) {
         MODULE(
           "(module sub1 (import (core.kernel :all) (num.i64 :all)) (export TestStruct)) \n"

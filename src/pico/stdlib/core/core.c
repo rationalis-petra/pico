@@ -30,6 +30,10 @@ void add_core_module(Assembler* ass, Target target, Package* base, RegionAllocat
     reset_subregion(subregion);
     add_debug_module(target, core, subregion);
     reset_subregion(subregion);
+
+    /** By default, the development module is only available in debug builds. */
+#ifdef DEBUG
     add_dev_module(target, core, subregion);
     reset_subregion(subregion);
+#endif
 }

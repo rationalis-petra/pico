@@ -18,6 +18,13 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 2, "data", "list");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
 
+    add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
+                     2, seg_name("num"), seg_wild());
+    add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "order");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
+
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),
     };
@@ -102,6 +109,19 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "  (decode-utf8-point (slice.subview (get offset) string.len (unname string))))";
     compile_toplevel(str_elt, module, target, &point, &pi_point, region);
 
+    const char *str_len =
+        "(def len proc [(string String)] seq\n"
+        "  [let! offset (local 0)]\n"
+        "  [let! index (local 0)]\n"
+        "  (loop [while (u64.< (get offset) string.len)] \n"
+        "    [let! byte (slice.elt (get offset) (unname string))]\n"
+        "    [let! len (widen U64 (num-utf8-bytes byte))]"
+        "    (set index  (u64.+ 1 (get index)))\n"
+        "    (set offset (u64.+ len (get offset))))\n"
+        "  \n"
+        "  (get index)) \n";
+    compile_toplevel(str_len, module, target, &point, &pi_point, region);
+
     const char *str_subview =
         "(def subview proc [(start U64) (end U64) (string String)] \n"
         "  (struct String [.addr (num-to-address (u64.+ start (address-to-num string.addr)))] [.len (u64.- end start)]))";
@@ -124,12 +144,12 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     compile_toplevel(from_ascii, module, target, &point, &pi_point, region);
 
     const char *str_delete =
-        "(def delete proc [(lhs String)] \n"
-        "  memory.free lhs.addr)";
+        "(def string-delete instance (Delete String) \n"
+        "  [.delete proc [str] memory.free str.addr])";
     compile_toplevel(str_delete, module, target, &point, &pi_point, region);
 
     const char *str_eql =
-        "(def = proc [(lhs String) (rhs String)] \n"
+        "(def string= proc [(lhs String) (rhs String)] \n"
         "  (if (u64.!= lhs.len rhs.len)  \n"
         "    :false                              \n"
         "    (seq                                \n"
@@ -142,8 +162,7 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "          (u64.= (get idx) (u64.- lhs.len 1))))))";
     compile_toplevel(str_eql, module, target, &point, &pi_point, region);
 
-    const char *str_not_eql =
-        "(def != proc [(lhs String) (rhs String)] \n"
-        "  bool.not (= lhs rhs))";
-    compile_toplevel(str_not_eql, module, target, &point, &pi_point, region);
+    const char *str_eq =
+        "(def string-= instance (Eq String) [.= string=] [.!= proc [l r] bool.not (string= l r)] )\n";
+    compile_toplevel(str_eq, module, target, &point, &pi_point, region);
 }

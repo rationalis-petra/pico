@@ -119,7 +119,7 @@ _Noreturn void type_error_invalid_import(ImportClause clause, Name bad, bool exi
 
     PicoError err = {
         .range = range,
-        .message = mv_sep_doc(nodes, ctx.a),
+        .message = mv_hsep_doc(nodes, ctx.a),
     };
     throw_pi_error(ctx.point, err);
 }

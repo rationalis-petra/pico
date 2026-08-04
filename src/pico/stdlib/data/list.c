@@ -17,7 +17,11 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 2, "platform", "memory");
     add_import_all(&imports.clauses, &ra, 2, "data", "pointer");
 
+    add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
+                     2, seg_name("num"), seg_wild());
     add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "order");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
     add_import_all(&imports.clauses, &ra, 2, "abs", "lifetime");
 
     ReExports re_exports = (ReExports) {
@@ -196,7 +200,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "              :false) \n"
         "      [not-eq :true])])\n";
     compile_toplevel(list_eq, module, target, &point, &pi_point, region);
-     */
+    */
 
     const char *list_delete =
         "(def list-delete instance [A] {(del (Delete A))} (Delete (List A))\n"

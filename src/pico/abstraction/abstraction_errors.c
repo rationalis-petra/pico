@@ -264,6 +264,17 @@ _Noreturn void import_missing_targets(RawTree raw, size_t index, PiErrorPoint* p
     throw_pi_error(point, err);
 }
 
+_Noreturn void import_as_needs_singleton(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a) {
+    PtrArray nodes = mk_ptr_array(2, a);
+    push_ptr(mv_cstr_doc("Invalid import clause - used import :as here, but :as can only be used when non", a), &nodes);
+    push_ptr(mv_cstr_doc("of the import target path is a wildcard, e.g. foo.(:all) or multiple, e.g. foo.(bar baz).", a), &nodes);
+    PicoError err = {
+        .range = raw.branch.nodes.data[index].range,
+        .message = mv_hsep_doc(nodes, a),
+    };
+    throw_pi_error(point, err);
+}
+
 _Noreturn void import_missing_as(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a) {
     PicoError err = {
         .range = raw.range,

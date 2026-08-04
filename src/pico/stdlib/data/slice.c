@@ -9,12 +9,18 @@ void add_slice_module(Target target, Module *data, RegionAllocator* region) {
     Allocator ra = ra_to_gpa(region);
 
     Imports imports = (Imports) {
-        .clauses = mk_import_clause_array(4, &ra),
+        .clauses = mk_import_clause_array(8, &ra),
     };
     add_import_all(&imports.clauses, &ra, 2, "lang", "relic");
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 1, "meta");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
+
+    add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
+                     2, seg_name("num"), seg_wild());
+    add_import_all(&imports.clauses, &ra, 2, "abs", "equality");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "order");
+    add_import_all(&imports.clauses, &ra, 2, "abs", "numeric");
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, &ra),

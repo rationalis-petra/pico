@@ -54,6 +54,8 @@ _Noreturn void trait_tyformer_incorrect_param_list(RawTree raw, AbstractionICtx 
 // ------------------------------------------------------------
 _Noreturn void import_key_malformed(RawTree raw, PiErrorPoint* point, Allocator* a);
 _Noreturn void import_missing_targets(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_as_needs_singleton(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
+_Noreturn void import_as_duplicate(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
 _Noreturn void import_missing_as(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
 _Noreturn void import_as_bad_symbol(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);
 _Noreturn void import_as_bad_path(RawTree raw, size_t index, PiErrorPoint* point, Allocator* a);

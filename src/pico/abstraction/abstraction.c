@@ -3192,6 +3192,11 @@ ImportClause abstract_import_clause(RawTree* raw, Allocator* a, PiErrorPoint* po
                 out_clause.import_values = true;
                 out_clause.values = abstract_import_values(&raw->branch.nodes.data[index], point, a);
             } else if (is_key_symbol(header, string_to_symbol(mv_string("as")))) {
+                for (size_t i = 0; i < out_clause.path.len; i++) {
+                    if (out_clause.path.data[i].type != SegName) {
+                        import_as_needs_singleton(*raw, index, point, a);
+                    }
+                }
                 // TODO: add check to ensure is unique (i.e. :values occurs only once)
                 // TODO: add check to ensure that the path segment is simple,
                 //       i.g. no SegWildcard/SegSymbols

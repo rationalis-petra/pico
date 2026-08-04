@@ -106,20 +106,10 @@ bool mk_condition(ForRange range, RawTree* out, PiAllocator *pia) {
         }
     
         Range fr = range.for_range;
-        RawTreePiList proj_nodes = mk_rawtree_list(3, pia);
-        push_rawtree(atom_symbolr(".", fr), &proj_nodes);
-        push_rawtree(atom_symbolr(comparator, fr), &proj_nodes);
-        push_rawtree(atom_symbolr("u64", fr), &proj_nodes);
-
-        RawTree proj = (RawTree) {
-            .type = RawBranch,
-            .branch.hint = HExpression,
-            .branch.nodes = proj_nodes,
-            .range = fr
-        };
+        RawTree comp = atom_symbolr(comparator, fr);
 
         RawTreePiList comp_nodes = mk_rawtree_list(3, pia);
-        push_rawtree(proj, &comp_nodes);
+        push_rawtree(comp, &comp_nodes);
         push_rawtree(range.name, &comp_nodes);
         push_rawtree(range.to, &comp_nodes);
 
@@ -390,15 +380,8 @@ MacroResult loop_macro(RawTreePiList nodes) {
 
             // Increment or decrement appropriately
             // TODO: replace with +/- (using the num trait) rather than u64.+/u64.-
-            RawTreePiList func_nodes = mk_rawtree_list(3, pia);
-            push_rawtree(atom_symbol("."), &func_nodes);
-            push_rawtree(atom_symbol(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-"), &func_nodes);
-            push_rawtree(atom_symbol("u64"), &func_nodes);
-            RawTree func_term = (RawTree) {
-                .type = RawBranch,
-                .branch.hint = HExpression,
-                .branch.nodes = func_nodes,
-            };
+            Range srange = fr->for_range;
+            RawTree func_term = atom_symbolr(((fr->type == UpTo) | (fr->type == Below)) ? "+" : "-", srange);
 
             RawTreePiList call_nodes = mk_rawtree_list(4, pia);
             push_rawtree(func_term, &call_nodes);
