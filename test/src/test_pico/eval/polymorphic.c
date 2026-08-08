@@ -63,6 +63,13 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         TEST_EQ("((all [A] proc [(x I64)] (int-id x)) {Unit} 89)");
     }
 
+    if (test_start(log, mv_string("poly-return"))) {
+        RUN("(def id all [A] proc [(x A)] x)");
+
+        int64_t expected = 987;
+        TEST_EQ("(id 987)");
+    }
+
     if (test_start(log, mv_string("call-multiple-polymorphic-functions-in-sequence"))) {
         RUN("(def id all [A] proc [(x A)] x)");
         RUN("(def sequence all [A] proc [(x A)] (seq (id x) (id x)))");
@@ -112,11 +119,11 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
         RUN("(def eq-arr4 instance [A] {(eq (Eql A))} (Eql (Array [1] A))"
             "  [.= proc [l r] (eq.= (aelt 0 l) (aelt 0 r))]"
             "  [.!= proc [l r] (eq.!= (aelt 0 l) (aelt 0 r))])");
-        RUN("(def = all [A] proc {(e Eql A)} [l r] (e.= l r))");
-        RUN("(def != all [A] proc {(e Eql A)} [l r] (e.!= l r))");
+        RUN("(def eql all [A] proc {(e Eql A)} [l r] (e.= l r))");
+        RUN("(def not-eql all [A] proc {(e Eql A)} [l r] (e.!= l r))");
 
         bool expected = false;
-        TEST_EQ("(!= (array [#q]) (array [#q]))");
+        TEST_EQ("(not-eql (array [#q]) (array [#q]))");
     }
 
     // -------------------------------------------------------------------------
@@ -461,6 +468,19 @@ void run_pico_eval_polymorphic_tests(TestLog *log, Module* module, Environment* 
     if (test_start(log, mv_string("poly-proc-in-proc"))) {
         int64_t expected = 72;
         TEST_EQ("((proc [x] (let [id (all [A] proc [(y A)] y)] (id {I64} x))) 72)");
+    }
+
+    if (test_start(log, mv_string("double-poly-call"))) {
+        RUN(
+        "(def svtest proc [(start U64) (end U64) (string String)] seq \n"
+        "  [let! start-byte (local start)]\n"
+        "  [let! index (local 5)]\n"
+        "  (= start (get index))"
+        "  \n"
+        "  string)");
+
+        uint64_t expected = 4;
+        TEST_EQ("((all [A] proc [(x A)] x) (svtest 3 4 \"test\").len)");
     }
 
     set_std_current_allocator(old);

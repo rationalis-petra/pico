@@ -58,29 +58,30 @@ PiType build_store_fn_ty(PiAllocator* pia) {
 }
 
 void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // The usual calling convention for polymorphic functions is assumed, hence
-    // stack has the form:
-    // RSP-24  | type size
-    // RSP-16  | store address
-    // RSP-8   | variable stack index (value/ptr)
-    // RSP     | return address 
+    /**
+     * The usual calling convention for polymorphic functions is assumed, hence
+     * stack has the form:
+     * [RSP-0x28] | return dest
+     * [RSP-0x20] | R14 output value
+     * [RSP-0x18] | type size
+     * [RSP-0x10  | store address
+     * [RSP-0x8]  | variable stack index (value/ptr)
+     * [RSP]      | return address 
+     */
 
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-
-    // TODO: delegate this work to the backend
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
-    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RDI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
 
-    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
     build_binary_op(SHR, reg(RDX, sz_64), imm8(28), ass, a, point);
     build_binary_op(And, reg(RDX, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
-    build_unary_op(Pop, reg(RCX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
     build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
@@ -90,21 +91,17 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #else
 #error "Unknown calling convention"
 #endif
-    // Push return address
-    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
 
     // copy memcpy into RCX & call
     generate_c_call(memcpy, ass, a, point);
 
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
+    // Restore R14
+    build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
 
-    // Stack size of & return
-    build_unary_op(Pop, reg(R9, sz_64), ass, a, point);
-    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
-    build_binary_op(Add, reg(R14, sz_64), reg(R9, sz_64), ass, a, point);
-
-    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-
+    // Pop all values from stack (except return address, then return) 
+    build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0x0, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x28), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x0, sz_64), reg(RAX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
 
@@ -124,48 +121,38 @@ void relic_memcpy(char *dest, char *src, size_t size) {
 }
 
 void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
-    // The usual calling convention for polymorphic functions is assumed, hence
-    // stack has the form:
-    // RSP-16  | type size
-    // RSP-8   | load address
-    // RSP     | return address 
+    /** 
+     * The usual calling convention for polymorphic functions is assumed, hence
+     * stack has the form:
+     * [RSP-0x20] | return dest
+     * [RSP-0x18] | R14 output value
+     * [RSP-x010] | type size
+     * [RSP-0x8]  | load address
+     * [RSP]      | return address 
+     */
 
-    // Stash return address in RAX
-    build_unary_op(Pop, reg(RAX, sz_64), ass, a, point);
-
-    // Stash load src address
 #if ABI == SYSTEM_V_64
     // memcpy (dest = rdi, src = rsi, size = rdx)
-    build_unary_op(Pop, reg(RSI, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RSI, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
 
-    // Store size in RDX, stack size in R9
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R9, sz_64), reg(RDX, sz_64), ass, a, point);
-    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
+    // Store size in RDX
+    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
     build_binary_op(SHR, reg(RDX, sz_64), imm8(28), ass, a, point);
     build_binary_op(And, reg(RDX, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
-    build_binary_op(Sub, reg(R14, sz_64), reg(R9, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RDI, sz_64), reg(R14, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDI, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
 
-    build_unary_op(Push, reg(R14, sz_64), ass, a, point);
 #elif ABI == WIN_64
     // memcpy (dest = rcx, src = rdx, size = r8)
-    build_unary_op(Pop, reg(RDX, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
 
-    // Store size in R8, stack size in R9
-    build_unary_op(Pop, reg(R8, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(R9, sz_64), reg(R8, sz_64), ass, a, point);
-    build_binary_op(And, reg(R9, sz_64), imm32(0xFFFFFFF), ass, a, point);
-
+    // Store size in R8
+    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
     build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
     build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
-    build_binary_op(Sub, reg(R14, sz_64), reg(R9, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RCX, sz_64), reg(R14, sz_64), ass, a, point);
-
-    build_unary_op(Push, reg(R14, sz_64), ass, a, point);
+    // Store the output address value in RCX
+    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x28, sz_64), ass, a, point);
 
 #elif ABI == SYSTEM_V_AARCH64
     panic(mv_string("Not implemented: build_load_fn for aarch64"));
@@ -173,13 +160,16 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
 #error "Unknown calling convention"
 #endif
 
-    // Stash 
-    build_unary_op(Push, reg(RAX, sz_64), ass, a, point);
-
-    // copy memcpy into RCX & call
+    // Do the load
     generate_c_call(relic_memcpy, ass, a, point);
 
-    // Return
+    // Restore R14
+    build_binary_op(Mov, reg(R14, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
+
+    // Pop all values from stack (except return address, then return) 
+    build_binary_op(Mov, reg(RAX, sz_64), rref8(RSP, 0x0, sz_64), ass, a, point);
+    build_binary_op(Add, reg(RSP, sz_64), imm8(0x20), ass, a, point);
+    build_binary_op(Mov, rref8(RSP, 0x0, sz_64), reg(RAX, sz_64), ass, a, point);
     build_nullary_op(Ret, ass, a, point);
 }
 

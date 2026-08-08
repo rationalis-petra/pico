@@ -2,6 +2,7 @@
 #include "platform/memory/region.h"
 
 #include "pico/stdlib/stdlib.h"
+#include "pico/stdlib/helpers.h"
 
 #include "test_pico/helper.h"
 #include "test_pico/eval/eval.h"
@@ -17,10 +18,14 @@ void run_pico_eval_tests(TestLog* log, Target target, RegionAllocator* region) {
         .clauses = mk_import_clause_array(8, a),
     };
     add_import_all(&imports.clauses, a, 1, "prelude");
-    add_import_all(&imports.clauses, a, 1, "data");
     add_import_all(&imports.clauses, a, 1, "num");
+    add_import_all(&imports.clauses, a, 1, "data");
+    add_import_all(&imports.clauses, a, 2, "data", "pointer");
     add_import_all(&imports.clauses, a, 1, "platform");
     add_import_all(&imports.clauses, a, 2, "platform", "memory");
+
+    add_import_flags(&imports.clauses, a, ImportTypes | ImportInstances,
+                     2, seg_name("data"), seg_wild());
 
     ReExports re_exports = (ReExports) {
         .clauses = mk_import_clause_array(0, a),

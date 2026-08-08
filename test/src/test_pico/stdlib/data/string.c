@@ -69,6 +69,21 @@ void run_pico_stdlib_data_string_tests(TestLog *log, Module* module, Environment
         TEST_EQ("(!= \"test\" \"lack\")");
     }
 
+    if (test_start(log, mv_string("len-simple"))) {
+        uint64_t expected = 4;
+        TEST_EQ("(string.len \"test\")");
+    }
+
+    if (test_start(log, mv_string("len-empty"))) {
+        uint64_t expected = 0;
+        TEST_EQ("(string.len \"\")");
+    }
+
+    if (test_start(log, mv_string("len-unicode"))) {
+        uint64_t expected = 5;
+        TEST_EQ("(string.len \"←lack\")");
+    }
+
     if (test_start(log, mv_string("subview-whole-string"))) {
         bool expected = true;
         TEST_EQ("(= (string.subview 0 4 \"test\") \"test\")");

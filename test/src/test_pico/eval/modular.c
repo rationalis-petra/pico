@@ -153,10 +153,10 @@ void run_pico_eval_modular_tests(TestLog *log, Module* module, Environment* env,
 
     if (test_start(log, mv_string("module-re-export-instances"))) {
         MODULE("(module sub-eq (import (core.kernel :all) (num.i64 :all)) (export :all)) \n"
-               "(def Eq Trait Eq [A] [.eq Proc [A A] Bool])\n"
-               "(def eql all [A] proc {(eq (Eq A))} [(x A) (y A)] eq.eq x y)\n");
+               "(def Eql Trait Eql [A] [.eq Proc [A A] Bool])\n"
+               "(def eql all [A] proc {(eq (Eql A))} [(x A) (y A)] eq.eq x y)\n");
         MODULE("(module sub1 (import (core.kernel :all) (num.i64 :all) (sub-eq :types)) (export :all)) \n"
-               "(def eq-i64 instance (Eq I64) [.eq proc [x y] = x y])\n");
+               "(def eq-i64 instance (Eql I64) [.eq proc [x y] = x y])\n");
         // TODO (BUG): investigate use-after-free when we remove the trailing
         // ')' from the below expression/module header
         MODULE("(module sub2 (import (core.kernel :all) (num.i64 :all)) (re-export (sub1 :instances)))\n");

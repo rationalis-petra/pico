@@ -15,6 +15,6 @@ typedef struct {
 // Repl Iter will run a single iteration of a read-eval-print loop, based 
 // 
 bool repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts);
-bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts);
+bool noninteractive_repl_iter(IStream* cin, Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts);
 
 #endif

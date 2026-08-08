@@ -114,9 +114,14 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ(":");
   }
 
-  if (test_start(log, mv_string("parse-^-prefix"))) {
+  if (test_start(log, mv_string("parse-^-prefix-eos"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), symbol_atom("ref"));
     TEST_EQ("^ref");
+  }
+
+  if (test_start(log, mv_string("parse-^-prefix-no-eos"))) {
+    RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), symbol_atom("ref"));
+    TEST_EQ(" ^ref ");
   }
 
   if (test_start(log, mv_string("parse-^-in-place"))) {

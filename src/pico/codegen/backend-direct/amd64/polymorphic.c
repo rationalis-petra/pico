@@ -77,67 +77,74 @@ void generate_polymorphic(SymbolArray types, SynRef ref, AddressEnv* env, Intern
     address_start_poly(types, vars, env, a);
 
     build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-    build_unary_op(Push, reg(R15, sz_64), ass, a, point);
+    build_unary_op(Push, reg(VSTACK_BASE, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
 
     generate_i(body, env, ictx);
 
-    // Codegen function postlude:
-    // Stack now looks like:
-    // 
-    // OLD RBP | return address
-    // OLD R15 | OLD RBP
-    // Arguments...
-    // Return Value
-
-    // Considerations:
-    // - which stack to return value on? 
-    // - always data stack?
-    // - always relevant stack?
+    /**
+     * Codegen function postlude:
+     * --------------------------
+     *
+     * Stack now looks like:
+     * ============================================
+     * [RBP + args_size + 0x20]   | Hidden 1st arg (return destination)
+     * [RBP + args_size + 0x18]   | Hidden 2nd arg (desired VSTACK_HEAD on return)
+     * ..args_size..              | Arguments...
+     * [RBP + 0x10]               | Return Address      
+     * [RBP + 0x8]                | Old RBP
+     * [RBP]   ->                 | Old R15 (VStack Base)
+     * [RSP]   ->                 | Return Value
+     * ============================================
+     * 
+     * Note that regardless of whether the variable is dynamic for US, we write
+     * the value to the return destination pointer.
+    */
 
     if (is_variable_for(body_type, types)) {
         // Return on Variable Stack
-        // R15 is the 'destination' on the variable stack of a return
+        // VSTACK_BASE is the 'destination' on the variable stack of a return
         // argument.
 
         // Store value at the stack head
         generate_stack_size_of(RAX, body_type, env, ass, a, point);
-        build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-        build_binary_op(Sub, reg(R15, sz_64), reg(RAX, sz_64), ass, a, point);
-        generate_poly_move(reg(R15, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), reg(R15, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, 0x20 + args_size, sz_64), ass, a, point);
+        generate_poly_move(reg(R8, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0x18 + args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RSP, sz_64), reg(RBP, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
 
         // Now, copy the return return address 
-        build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
 
         // destination
-        // return val store at (RET + FROM + RBP + R15 + ARGS = 8 + 8 + 8 + 8 ARGS = 0x20 + args)
-        // return address = above - 0x8
-        build_binary_op(Mov, rref8(RSP, 0x18 + args_size, sz_64), reg(VSTACK_HEAD, sz_64), ass, a, point);
-        build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
+        // return address = overwrite the output pointer
+        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(0x20 + args_size), ass, a, point);
     } else {
         // Return on Data Stack
         // this is much like the steps above, where we copy 
         size_t ret_sz = pi_stack_size_of(*body_type);
     
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0x18 + args_size, sz_64), ass, a, point);
 
-        // Now, copy the return address into a (safe) register
-        build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
-        generate_stack_move(0x18 + args_size, 0, ret_sz, ass, a, point);
+        // Now, copy return value to the 
+        build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 0x20 + args_size, sz_64), ass, a, point);
+        generate_monomorphic_copy(RBX, RSP, ret_sz, ass, a, point);
 
         // Then the return address
-        build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, 0x10, sz_64), ass, a, point);
+        /** IMPORTANT: don't restore RBP until we are finished using it!*/
+        build_binary_op(Mov, reg(RSP, sz_64), reg(RBP, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(R8, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imm8(0x20 + args_size), ass, a, point);
     }
 
     build_nullary_op(Ret, ass, a, point);
@@ -182,7 +189,7 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     address_start_poly_instance(&types, vars,&syn.instance.implicits, env, a);
 
     build_unary_op(Push, reg(RBP, sz_64), ass, a, point);
-    build_unary_op(Push, reg(R15, sz_64), ass, a, point);
+    build_unary_op(Push, reg(VSTACK_BASE, sz_64), ass, a, point);
 
     build_binary_op(Mov, reg(RBP, sz_64), reg(RSP, sz_64), ass, a, point);
     PiType as_struct = {
@@ -233,7 +240,7 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     size_t ret_sz = pi_stack_size_of(*type);
     
     // Next, restore the old stack bases (variable + static)
-    build_binary_op(Mov, reg(R15, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
     build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
     build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
 

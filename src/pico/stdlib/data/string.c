@@ -17,6 +17,7 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
     add_import(&imports.clauses, &ra, 2, "data", "slice");
     add_import(&imports.clauses, &ra, 2, "data", "list");
     add_import(&imports.clauses, &ra, 2, "platform", "memory");
+    add_import(&imports.clauses, &ra, 2, "core", "debug");
 
     add_import_flags(&imports.clauses, &ra, ImportTypes | ImportInstances,
                      2, seg_name("num"), seg_wild());
@@ -98,33 +99,51 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "(def elt proc [(idx U64) (string String)] seq\n"
         "  [let! offset (local 0)]\n"
         "  [let! index (local 0)]\n"
-        "  (loop [while (u64.< (get offset) string.len)] \n"
-        "        [while (u64.< (get index) idx)]\n"
-        "    [let! byte (slice.elt (get offset) (unname string))]\n"
+        "  (loop [while (u64.< ^offset string.len)] \n"
+        "        [while (u64.< ^index idx)]\n"
+        "    [let! byte (slice.elt ^offset (unname string))]\n"
         "    [let! len (widen U64 (num-utf8-bytes byte))]"
-        "    (set index  (u64.+ 1 (get index)))\n"
-        "    (set offset (u64.+ len (get offset))))\n"
+        "    (set index  (u64.+ 1 ^index))\n"
+        "    (set offset (u64.+ len ^offset)))\n"
         "  \n"
-        "  (when (u64.!= idx (get index)) (panic \"string.elt: index out of range\")) \n"
-        "  (decode-utf8-point (slice.subview (get offset) string.len (unname string))))";
+        "  (when (u64.!= idx ^index) (panic \"string.elt: index out of range\")) \n"
+        "  (decode-utf8-point (slice.subview ^offset string.len (unname string))))";
     compile_toplevel(str_elt, module, target, &point, &pi_point, region);
 
     const char *str_len =
         "(def len proc [(string String)] seq\n"
         "  [let! offset (local 0)]\n"
         "  [let! index (local 0)]\n"
-        "  (loop [while (u64.< (get offset) string.len)] \n"
-        "    [let! byte (slice.elt (get offset) (unname string))]\n"
+        "  (loop [while (u64.< ^offset string.len)] \n"
+        "    [let! byte (slice.elt ^offset (unname string))]\n"
         "    [let! len (widen U64 (num-utf8-bytes byte))]"
-        "    (set index  (u64.+ 1 (get index)))\n"
-        "    (set offset (u64.+ len (get offset))))\n"
+        "    (set index  (u64.+ 1 ^index))\n"
+        "    (set offset (u64.+ len ^offset)))\n"
         "  \n"
-        "  (get index)) \n";
+        "  ^index) \n";
     compile_toplevel(str_len, module, target, &point, &pi_point, region);
 
     const char *str_subview =
-        "(def subview proc [(start U64) (end U64) (string String)] \n"
-        "  (struct String [.addr (num-to-address (u64.+ start (address-to-num string.addr)))] [.len (u64.- end start)]))";
+        "(def subview proc [(start U64) (end U64) (string String)] seq \n"
+        "  [let! start-byte (local start)]\n"
+        "  [let! end-byte (local end)]\n"
+        "  [let! offset (local 0)]\n"
+        "  [let! index (local 0)]\n"
+        //"  (debug.debug-break)"
+        //"  (when (= start ^index) (set start-byte ^offset))"
+        //"  (when (= end ^index) (set end-byte ^offset))"
+        //"  (debug.debug-break)"
+        "  (loop [while (u64.< ^offset string.len)] \n"
+        "    (when (u64.= start ^index) (set start-byte ^offset))"
+        "    (when (u64.= end ^index) (set end-byte ^offset))"
+        "    [let! byte (slice.elt ^offset (unname string))]\n"
+        "    [let! len (widen U64 (num-utf8-bytes byte))]"
+        "    (set index  (u64.+ 1 ^index))\n"
+        "    (set offset (u64.+ len ^offset)))\n"
+        "  \n"
+        "  (struct String [.addr (num-to-address (u64.+ ^start-byte "
+        "                           (address-to-num string.addr)))]"
+        "                 [.len (u64.- ^end-byte ^start-byte)]))";
     compile_toplevel(str_subview, module, target, &point, &pi_point, region);
 
     const char *str_join =
@@ -159,7 +178,7 @@ void add_string_module(Target target, Module *data, RegionAllocator* region) {
         "        (set idx i))                    \n"
         "      (if (u64.= 0 lhs.len)         \n "
         "          :true                         \n "
-        "          (u64.= (get idx) (u64.- lhs.len 1))))))";
+        "          (u64.= ^idx (u64.- lhs.len 1))))))";
     compile_toplevel(str_eql, module, target, &point, &pi_point, region);
 
     const char *str_eq =

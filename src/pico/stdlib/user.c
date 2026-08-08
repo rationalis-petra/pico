@@ -11,7 +11,7 @@ void add_user_module(Package* user, RegionAllocator* region) {
     add_import_all(&imports.clauses, &ra, 1, "num");
     add_import_all(&imports.clauses, &ra, 2, "platform", "terminal");
 
-    add_import(&imports.clauses, &ra, 1, "core");
+    add_import_all(&imports.clauses, &ra, 1, "core");
     add_import(&imports.clauses, &ra, 1, "abs");
     add_import(&imports.clauses, &ra, 1, "data");
     add_import(&imports.clauses, &ra, 1, "platform");

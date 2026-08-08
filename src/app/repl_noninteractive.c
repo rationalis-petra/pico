@@ -16,8 +16,7 @@
 
 #include "app/repl.h"
 
-bool noninteractive_repl_iter(Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
-    IStream *cin = get_stdin_stream();
+bool noninteractive_repl_iter(IStream* cin, Allocator* stdalloc, RegionAllocator* region, Allocator* exec, Module* module, IterOpts opts) {
     FormattedOStream* cout = get_formatted_stdout();
     // Note: we need to be aware of the arena and error point, as both are used
     // by code in the 'true' branches of the nonlocal exits, and may be stored

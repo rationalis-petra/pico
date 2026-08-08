@@ -119,7 +119,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 running = false;
                 break;
             }
-            else if (is_symchar(point) || point == '^'){
+            else if (is_symchar(point) || point == '^') {
                 out = parse_atom(is, pia, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
@@ -350,6 +350,10 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                     .atom.type = ASymbol,
                     .atom.symbol = string_to_symbol(str),
                 };
+                if (caret_next) {
+                    val = wrap_caret(val, caret_range, pia);
+                    caret_next = false;
+                }
                 push_rawtree(val, &terms);
             } else if (caret_next) {
                 RawTree val = {
@@ -380,6 +384,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 caret_next = false;
                 push_rawtree(val, &terms);
             }
+            // TODO: panic on nothing here; same as above case (in loop)
         } else {
             String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
