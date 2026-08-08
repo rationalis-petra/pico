@@ -109,42 +109,42 @@ void generate_polymorphic(SymbolArray types, SynRef ref, AddressEnv* env, Intern
 
         // Store value at the stack head
         generate_stack_size_of(RAX, body_type, env, ass, a, point);
-        build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, 0x20 + args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), rrefa(RBP, 0x20 + args_size, sz_64), ass, a, point);
         generate_poly_move(reg(R8, sz_64), reg(VSTACK_HEAD, sz_64), reg(RAX, sz_64), ass, a, point);
 
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0x18 + args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rrefa(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rrefa(RBP, 0x18 + args_size, sz_64), ass, a, point);
         build_binary_op(Mov, reg(RSP, sz_64), reg(RBP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rrefa(RBP, 0x8, sz_64), ass, a, point);
 
         // Now, copy the return return address 
-        build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RDX, sz_64), rrefa(RSP, 0x10, sz_64), ass, a, point);
 
         // destination
         // return address = overwrite the output pointer
-        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x20 + args_size), ass, a, point);
+        build_binary_op(Mov, rrefa(RSP, 0x20 + args_size, sz_64), reg(RDX, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imma(0x20 + args_size), ass, a, point);
     } else {
         // Return on Data Stack
         // this is much like the steps above, where we copy 
         size_t ret_sz = pi_stack_size_of(*body_type);
     
         // Next, restore the old stack bases (variable + static)
-        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0x18 + args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rrefa(RBP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rrefa(RBP, 0x18 + args_size, sz_64), ass, a, point);
 
         // Now, copy return value to the 
-        build_binary_op(Mov, reg(RBX, sz_64), rref8(RBP, 0x20 + args_size, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(RBX, sz_64), rrefa(RBP, 0x20 + args_size, sz_64), ass, a, point);
         generate_monomorphic_copy(RBX, RSP, ret_sz, ass, a, point);
 
         // Then the return address
-        build_binary_op(Mov, reg(R8, sz_64), rref8(RBP, 0x10, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R8, sz_64), rrefa(RBP, 0x10, sz_64), ass, a, point);
         /** IMPORTANT: don't restore RBP until we are finished using it!*/
         build_binary_op(Mov, reg(RSP, sz_64), reg(RBP, sz_64), ass, a, point);
-        build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
-        build_binary_op(Mov, rref8(RSP, 0x20 + args_size, sz_64), reg(R8, sz_64), ass, a, point);
-        build_binary_op(Add, reg(RSP, sz_64), imm8(0x20 + args_size), ass, a, point);
+        build_binary_op(Mov, reg(RBP, sz_64), rrefa(RBP, 0x8, sz_64), ass, a, point);
+        build_binary_op(Mov, rrefa(RSP, 0x20 + args_size, sz_64), reg(R8, sz_64), ass, a, point);
+        build_binary_op(Add, reg(RSP, sz_64), imma(0x20 + args_size), ass, a, point);
     }
 
     build_nullary_op(Ret, ass, a, point);
@@ -223,11 +223,11 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
         } else {
             size_t copy_sz = pi_size_of(*type);
             size_t stack_val_sz = pi_stack_align(copy_sz);
-            build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, copy_sz, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R8, sz_64), rrefa(RSP, copy_sz, sz_64), ass, a, point);
             generate_monomorphic_copy(R8, RSP, copy_sz, ass, a, point);
 
             build_binary_op(Add, reg(RSP, sz_64), imm32(stack_val_sz), ass, a, point);
-            build_binary_op(Add, rref8(RSP, 0, sz_64), imm32(copy_sz), ass, a, point);
+            build_binary_op(Add, rrefa(RSP, 0, sz_64), imm32(copy_sz), ass, a, point);
             data_stack_grow(env, ADDRESS_SIZE);
         }
     }
@@ -240,16 +240,16 @@ void generate_polymorphic_instance(SymbolArray types, SynRef ref, AddressEnv* en
     size_t ret_sz = pi_stack_size_of(*type);
     
     // Next, restore the old stack bases (variable + static)
-    build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rref8(RBP, 0, sz_64), ass, a, point);
-    build_binary_op(Mov, reg(RBP, sz_64), rref8(RBP, 0x8, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_BASE, sz_64), rrefa(RBP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(VSTACK_HEAD, sz_64), rrefa(RBP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RBP, sz_64), rrefa(RBP, 0x8, sz_64), ass, a, point);
 
     // Now, copy the return address into a (safe) register
-    build_binary_op(Mov, reg(RBX, sz_64), rref8(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RBX, sz_64), rrefa(RSP, 0x10 + ret_sz, sz_64), ass, a, point);
     generate_stack_move(0x18 + args_size, 0, ret_sz, ass, a, point);
 
     // Then the return address
-    build_binary_op(Mov, rref8(RSP, 0x10 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
+    build_binary_op(Mov, rrefa(RSP, 0x10 + args_size, sz_64), reg(RBX, sz_64), ass, a, point);
     build_binary_op(Add, reg(RSP, sz_64), imm8(0x10 + args_size), ass, a, point);
 
     build_nullary_op(Ret, ass, a, point);
@@ -280,7 +280,7 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             AddressEntry e = address_env_lookup(type->var, env);
             switch (e.type) {
             case ALocalDirect:
-                build_binary_op(Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(dest, sz_64), rrefa(RBP, e.stack_offset, sz_64), ass, a, point);
                 build_binary_op(SHR, reg(dest, sz_64), imm8(28), ass, a, point);
                 build_binary_op(And, reg(dest, sz_64), imm32(0xFFFFFFF), ass, a, point);
                 break;
@@ -327,13 +327,13 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
             for (size_t i = 0; i < type->structure.fields.len; i++) {
                 PiType* field_type = type->structure.fields.data[i].val;
                 generate_align_of(R8, field_type, env, ass, a, point);
-                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
 
                 generate_align_to(R9, R8, ass, a, point);
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+                build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
         
                 generate_size_of(R8, field_type, env, ass, a, point);
-                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+                build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
             }
             // pop into the destination register
             build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -346,14 +346,14 @@ void generate_size_of(Regname dest, PiType* type, AddressEnv* env, Assembler* as
 
                 // Pick the larger of (old size) vs (current size)
                 generate_variant_size_of(R9, types, env, ass, a, point);
-                build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R10, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
                 build_binary_op(Cmp, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
                 // Move R10 into R9 if R9 was below R10
                 build_binary_op(CMovB, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
                 // Store R9 on the top of the stack
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+                build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
             }
             // pop into the destination register
             build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -395,7 +395,7 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
             AddressEntry e = address_env_lookup(type->var, env);
             switch (e.type) {
             case ALocalDirect:
-                build_binary_op(Mov, reg(dest, sz_64), rref8(RBP, e.stack_offset, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(dest, sz_64), rrefa(RBP, e.stack_offset, sz_64), ass, a, point);
                 build_binary_op(SHR, reg(dest, sz_64), imm8(56), ass, a, point);
                 break;
             case ALocalIndexed:
@@ -430,13 +430,13 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
             for (size_t i = 0; i < type->structure.fields.len; i++) {
                 PiType* field_type = type->structure.fields.data[i].val;
                 generate_align_of(R8, field_type, env, ass, a, point);
-                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
 
                 generate_align_to(R9, R8, ass, a, point);
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+                build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
         
                 generate_size_of(R8, field_type, env, ass, a, point);
-                build_binary_op(Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+                build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
             }
             // pop into the destination register
             build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -449,14 +449,14 @@ void generate_align_of(Regname dest, PiType* type, AddressEnv* env, Assembler* a
 
                 // Pick the larger of (old align) vs (current align)
                 generate_variant_align_of(R9, types, env, ass, a, point);
-                build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R10, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
                 build_binary_op(Cmp, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
                 // Move R10 into R9 if R9 was below R10
                 build_binary_op(CMovB, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
                 // Store R9 on the top of the stack
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+                build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
             }
             // pop into the destination register
             build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -484,9 +484,9 @@ void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, Addres
         if (i != 0) {
             // Align to the new field; can skip if size = 0;
             generate_align_of(R8, (PiType*)fields.data[i].val, env, ass, a, point);
-            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
             generate_align_to(R9, R8, ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+            build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
         }
 
         if (symbol_eq(fields.data[i].key, field))
@@ -495,7 +495,7 @@ void generate_offset_of(Regname dest, Symbol field, SymAddrPiAMap fields, Addres
         // Push the size into RAX; this is then added to the value at
         // the top of the stack  
         generate_size_of(RAX, (PiType*)fields.data[i].val, env, ass, a, point);
-        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
     }
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
 }
@@ -507,9 +507,9 @@ void generate_trait_offset_of(Regname dest, Symbol field, SymAddrPiAMap ifields,
         if (i != 0) {
             // Align to the new field; can skip if size = 0;
             generate_align_of(R8, (PiType*)ifields.data[i].val, env, ass, a, point);
-            build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+            build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
             generate_align_to(R9, R8, ass, a, point);
-            build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+            build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
         }
 
         if (symbol_eq(ifields.data[i].key, field)) {
@@ -520,16 +520,16 @@ void generate_trait_offset_of(Regname dest, Symbol field, SymAddrPiAMap ifields,
         // Push the size into RAX; this is then added to the value at
         // the top of the stack  
         generate_size_of(RAX, (PiType*)ifields.data[i].val, env, ass, a, point);
-        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
     }
     if (!is_implicit) {
         for (size_t i = 0; i < fields.len; i++) {
             if (i != 0) {
                 // Align to the new field; can skip if size = 0;
                 generate_align_of(R8, (PiType*)fields.data[i].val, env, ass, a, point);
-                build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+                build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
                 generate_align_to(R9, R8, ass, a, point);
-                build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+                build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
             }
 
             if (symbol_eq(fields.data[i].key, field))
@@ -538,7 +538,7 @@ void generate_trait_offset_of(Regname dest, Symbol field, SymAddrPiAMap ifields,
             // Push the size into RAX; this is then added to the value at
             // the top of the stack  
             generate_size_of(RAX, (PiType*)fields.data[i].val, env, ass, a, point);
-            build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+            build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
         }
     }
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -550,13 +550,13 @@ void generate_variant_size_of(Regname dest, PtrArray* types, AddressEnv* env, As
     build_unary_op(Push, imm32(total), ass, a, point);
     for (size_t i = 0; i < types->len; i++) {
         generate_align_of(R8, types->data[i], env, ass, a, point);
-        build_binary_op(Mov, reg(R9, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R9, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
 
         generate_align_to(R9, R8, ass, a, point);
-        build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+        build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
         
         generate_size_of(R8, types->data[i], env, ass, a, point);
-        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+        build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
     }
 
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -568,14 +568,14 @@ void generate_variant_align_of(Regname dest, PtrArray* types, AddressEnv* env, A
     build_unary_op(Push, imm32(total), ass, a, point);
     for (size_t i = 0; i < types->len; i++) {
         generate_align_of(R9, types->data[i], env, ass, a, point);
-        build_binary_op(Mov, reg(R10, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+        build_binary_op(Mov, reg(R10, sz_64), rrefa(RSP, 0, sz_64), ass, a, point);
         build_binary_op(Cmp, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
         // Move R10 into R9 if R9 was below R10
         build_binary_op(CMovB, reg(R9, sz_64), reg(R10, sz_64), ass, a, point);
 
         // Store R9 on the top of the stack
-        build_binary_op(Mov, rref8(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
+        build_binary_op(Mov, rrefa(RSP, 0, sz_64), reg(R9, sz_64), ass, a, point);
     }
 
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
@@ -587,7 +587,7 @@ void generate_variant_stack_size_of(Regname dest, PtrArray* types, AddressEnv* e
     build_unary_op(Push, imm32(total), ass, a, point);
     for (size_t i = 0; i < types->len; i++) {
         generate_stack_size_of(RAX, types->data[i], env, ass, a, point);
-        build_binary_op(Add, rref8(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
+        build_binary_op(Add, rrefa(RSP, 0, sz_64), reg(RAX, sz_64), ass, a, point);
     }
     build_unary_op(Pop, reg(dest, sz_64), ass, a, point);
 }
@@ -679,7 +679,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
             generate_size_of(R8, type, env, ass, a, point);
             build_binary_op(Mov, reg(RAX, sz_64), reg(R8, sz_64), ass, a, point);
             build_binary_op(SHL, reg(R8, sz_64), imm8(28), ass, a, point);
-            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(Or, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
 
             /* uint64_t result = (align << 56) | (size << 28) | stack_sz; */
             // Now, we use the 'div' instruction with RDX = 0; RAX = size.
@@ -697,7 +697,7 @@ void generate_pi_type(PiType *type, AddressEnv *env, Assembler *ass, Allocator *
 
             // Add this to the original size and binary-or it into the type.
             build_binary_op(Add, reg(R8, sz_64), reg(RCX, sz_64), ass, a, point);
-            build_binary_op(Or, rref8(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
+            build_binary_op(Or, rrefa(RSP, 0, sz_64), reg(R8, sz_64), ass, a, point);
         }
     } else {
         size_t align = pi_align_of(*type);

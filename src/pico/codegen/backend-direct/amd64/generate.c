@@ -2522,10 +2522,10 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
         SymSizeAssoc label_points = mk_sym_size_assoc(syn.labels.terms.len, a);
         SymSizeAssoc label_jumps = mk_sym_size_assoc(syn.labels.terms.len, a);
 
-        size_t out_size = pi_size_of(*type);
+        size_t out_size = pi_stack_size_of(*type);
         for (size_t i = 0; i < syn.labels.terms.len; i++) {
             // Clear the stack offset, either from expression or previous label
-            data_stack_shrink(env,out_size);
+            data_stack_shrink(env, out_size);
             SymPtrACell cell = syn.labels.terms.data[i];
 
             // Mark Label

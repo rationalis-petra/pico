@@ -182,7 +182,6 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
      *  Implementations for Abstractions
      */
 
-    /*
     const char *list_eq =
         "(def list-eq instance [A] {(eq (Eq A))} (Eq (List A))\n"
         "  [.= proc [(l1 (List A)) (l2 (List A))] \n"
@@ -200,7 +199,6 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "              :false) \n"
         "      [not-eq :true])])\n";
     compile_toplevel(list_eq, module, target, &point, &pi_point, region);
-    */
 
     const char *list_delete =
         "(def list-delete instance [A] {(del (Delete A))} (Delete (List A))\n"
