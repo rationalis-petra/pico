@@ -83,7 +83,7 @@ void build_store_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(Mov, reg(RDX, sz_64), rref8(RSP, 0x8, sz_64), ass, a, point);
     build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x10, sz_64), ass, a, point);
 
-    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(R8, sz_64), rref8(RSP, 0x18, sz_64), ass, a, point);
     build_binary_op(SHR, reg(R8, sz_64), imm8(28), ass, a, point);
     build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
 #elif ABI == SYSTEM_V_AARCH64
@@ -152,7 +152,7 @@ void build_load_fn(Assembler* ass, Allocator* a, ErrorPoint* point) {
     build_binary_op(And, reg(R8, sz_64), imm32(0xFFFFFFF), ass, a, point);
 
     // Store the output address value in RCX
-    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x28, sz_64), ass, a, point);
+    build_binary_op(Mov, reg(RCX, sz_64), rref8(RSP, 0x20, sz_64), ass, a, point);
 
 #elif ABI == SYSTEM_V_AARCH64
     panic(mv_string("Not implemented: build_load_fn for aarch64"));
