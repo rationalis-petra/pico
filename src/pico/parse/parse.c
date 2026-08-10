@@ -2,22 +2,18 @@
 #include "platform/signals.h"
 #include "pico/parse/parse.h"
 
-#include "components/pretty/standard_types.h"
-
 // The main parsing functions, which parse different types of expressions. 
 // The entry point, parse_expr, which an arbitrary expression, inspects the head
 // of the input sream and delegates to a number of secondary parsing functions:  
 // + list - for whitespace separated lists 
 // + atom - for symbols OR prefixed operators such as .field or :variant
 //   + parse_sybol - for symbols, is called by parse_atom
-//   + parse_prefix - for prefixed operators, is called by parse_atom
 // + numbers - for decimal or floating-point numbers
 
 static ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocator* a);
 static ParseResult parse_list(IStream* is, uint32_t terminator, SyntaxHint hint, PiAllocator* pia, Allocator* a);
 static ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator* a);
-static ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_rawstring(IStream* is, PiAllocator* pia, Allocator* a);
 static ParseResult parse_hash(IStream* is, PiAllocator* pia, Allocator* a);
@@ -61,43 +57,23 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
             else if (point == 0x27E8) {
                 out = parse_list(is, 0x27E9, HData, pia, a);
             }
-            else if (point == ':') {
-                if (terms.len == 0) {
-                    out = parse_prefix(':', is, pia, a);
-                } else {
-                    size_t start = bytecount(is);
-                    next(is, &point);
+            else if ((point == ':') | (point == '.') | (point == '^')) {
+                size_t start = bytecount(is);
+                next(is, &point);
+                U32Array chars = {.len = 0, .size = 1, .data = &point };
+                push_u32(point, &chars);
+                Symbol sym = string_to_symbol(string_from_UTF_32(chars, a));
 
-                    out = (ParseResult) {
-                        .type = ParseSuccess,
-                        .result = (RawTree) {
-                            .type = RawAtom,
-                            .range.start = start,
-                            .range.end = bytecount(is),
-                            .atom.type = ASymbol,
-                            .atom.symbol = string_to_symbol(mv_string(":")),
-                        }
-                    };
-                }
-            }
-            else if (point == '.') {
-                if (terms.len == 0) {
-                    out = parse_prefix('.', is, pia, a);
-                } else {
-                    size_t start = bytecount(is);
-                    next(is, &point);
-
-                    out = (ParseResult) {
-                        .type = ParseSuccess,
-                        .result = (RawTree) {
-                            .type = RawAtom,
-                            .range.start = start,
-                            .range.end = bytecount(is),
-                            .atom.type = ASymbol,
-                            .atom.symbol = string_to_symbol(mv_string(".")),
-                        }
-                    };
-                }
+                out = (ParseResult) {
+                    .type = ParseSuccess,
+                    .result = (RawTree) {
+                        .type = RawAtom,
+                        .range.start = start,
+                        .range.end = bytecount(is),
+                        .atom.type = ASymbol,
+                        .atom.symbol = sym,
+                    }
+                };
             }
             else if (point == '"') {
                 out = parse_string(is, pia, a);
@@ -119,7 +95,7 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 running = false;
                 break;
             }
-            else if (is_symchar(point) || point == '^') {
+            else if (is_symchar(point)) {
                 out = parse_atom(is, pia, a);
             } else if (point == expected) {
                 // We couldn't do a parse!
@@ -175,50 +151,99 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
         }
     }
 
-    // Post-run cleanup: reduce the term list to a single term (or ParseNone)
     if (out.type != ParseFail && terms.len == 0) {
         out.type = ParseNone;
     } else if (out.type == ParseNone && terms.len == 1) {
         out.type = ParseSuccess;
         out.result = terms.data[0];
     } else if ((out.type == ParseSuccess || out.type == ParseNone) && terms.len > 1) {
-        // Check that there is an appropriate (odd) number of terms for infix operator
-        //   unrolling to function
-        if (terms.len % 2 == 0) {
-            PtrArray nodes = mk_ptr_array(3, a);
-            push_ptr(mv_cstr_doc("Inappropriate number of terms for infix-operator, expecting odd number but got", a), &nodes);
-            push_ptr(pretty_u64(terms.len, a), &nodes);
+        /**
+         * Unrolling
+         * Now that the list has been accumulated, 'unroll' the list appropriately, 
+         * e.g. num:i64.+ => [num, :, i64, ., +] => (. + (: num i64))
+         * For a more in-depth, worked example, take
+         * bar.^foo.baz => (. baz (^ (. foo bar)))
+         * 
+         * We first get the list ['bar', '.', '^', 'foo', '.', 'baz']
+         * We start with `final` undefined, and `current = &final`
+         * 
+         * We start on the RHS, with 'baz', and look to the left the symbol is
+         * '.' (an infix operator), and there are more symbols, so we determine
+         * it is infix, and set *current = (. baz ?) and current = &?
+         * 
+         * Then, we proceed and decrement 'i' by 2 (baz + .), and look again.
+         * This time, the symbol under the index is 'foo' and one to the left is
+         * '^' (a prefix operator). There are still more symbols left, so we set
+         * *out = (^ ?) and SWAP foo & ^. final is now (. baz (^ ?)). We
+         * decrement 'i' by only 1 (prefix) and set current = &?. 
+         *
+         * Now, the value at the index is stil 'foo' (remember we swapped it
+         * with '^', but the value to the left is '.', so we proceed as we did
+         * for baz: *out = (. foo ?), giving final = (. baz (^ (. foo ?))). 
+         * 
+         * Finally, we get to 'bar' (i = 0). There are no more symbols to the
+         * left of bar, so it just gets inserted in, giving the final expression
+         *
+         *  (. baz (^ (. foo ?)))
+         *
+         */
+        RawTree final;
+        RawTree* current = &final;
+        for (size_t i = terms.len - 1; i > 0;) {
+            RawTree raw_token = terms.data[i - 1];
+            if (raw_token.type != RawAtom || raw_token.atom.type != ASymbol) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Unexpected infix symbol: expected '.', ':' or '^'.", a),
+                    .error.range = raw_token.range,
+                };
+            }
+            Symbol tok = raw_token.atom.symbol;
+            bool is_infix_sym = symbol_eq(tok, string_to_symbol(mv_string(".")))
+                || symbol_eq(tok, string_to_symbol(mv_string(":")));
+            bool is_prefix_sym = symbol_eq(tok, string_to_symbol(mv_string("^")));
+            if (!is_infix_sym & !is_prefix_sym) {
+                return (ParseResult) {
+                    .type = ParseFail,
+                    .error.message = mv_cstr_doc("Unexpected infix symbol: expected '.', ':' or '^'.", a),
+                    .error.range = raw_token.range,
+                };
+            }
+            if (is_prefix_sym || i == 1) {
+                RawTreePiList nodes = mk_rawtree_list(2, pia);
+                RawTree rhs = terms.data[i];
+                terms.data[i - 1] = rhs;
+                terms.data[i] = raw_token;
+                push_rawtree(raw_token, &nodes);
+                push_rawtree(rhs,  &nodes);
+                *current = (RawTree) {
+                    .type = RawBranch,
+                    .branch.hint = HExpression,
+                    .branch.nodes = nodes,
+                };
+                current = &nodes.data[1];
+                i -= 1;
+            } else {
+                RawTreePiList nodes = mk_rawtree_list(3, pia);
+                RawTree rhs = terms.data[i];
+                push_rawtree(raw_token, &nodes);
+                push_rawtree(rhs,  &nodes);
+                push_rawtree(rhs,  &nodes);
+                *current = (RawTree) {
+                    .type = RawBranch,
+                    .branch.hint = HExpression,
+                    .branch.nodes = nodes,
+                };
+                current = &nodes.data[2];
+                i -= 2;
+            }
 
-            out = (ParseResult) {
-                .type = ParseFail,
-                .error.message = mv_sep_doc(nodes, a),
-                .error.range.start = terms.data[0].range.start,
-                .error.range.end = terms.data[terms.len - 1].range.end,
-            };
-            return out;
-        }
-
-        // Now that the list has been accumulated, 'unroll' the list appropriately, 
-        // meaning that (num : i64 . +) becomes (. + (: num i64))
-        RawTree current = terms.data[0];
-        for (size_t i = 1; terms.len - i != 0; i += 2) {
-            RawTreePiList children = mk_rawtree_list(3, pia);
-            push_rawtree(terms.data[i], &children);
-            push_rawtree(terms.data[i+1], &children);
-            push_rawtree(current, &children);
-
-            current = (RawTree) {
-                .type = RawBranch,
-                .range.start = terms.data[0].range.start,
-                .range.end = current.range.end,
-                .branch.hint = HExpression,
-                .branch.nodes = children,
-            };
         };
+        *current = terms.data[0];
 
         out = (ParseResult) {
             .type = ParseSuccess,
-            .result = current,
+            .result = final,
         };
     }
     return out;
@@ -289,27 +314,6 @@ ParseResult parse_atom(IStream* is, PiAllocator* pia, Allocator* a) {
     return parse_atom_prepped(symchars, start, is, pia, a);
 }
 
-RawTree wrap_caret(RawTree val, Range bang_range, PiAllocator* pia) {
-    RawTreePiList nodes = mk_rawtree_list(2, pia);
-
-    push_rawtree((RawTree) {
-        .type = RawAtom,
-        .range = bang_range,
-        .atom.type = ASymbol,
-        .atom.symbol= string_to_symbol(mv_string("^")),
-      }, &nodes);
-    
-    push_rawtree(val, &nodes);
-
-    return (RawTree) {
-        .type = RawBranch,
-        .range.start = bang_range.start,
-        .range.end = val.range.end,
-        .branch.hint = HExpression,
-        .branch.nodes = nodes,
-    };
-}
-
 ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiAllocator* pia, Allocator* a) {
     /* The parse_atom function is responsible for parsing symbols and 'symbol conglomerates'
      * These may be 'true' atoms such as bar, + or foo. Strings separated by '.'
@@ -328,17 +332,10 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
     // Accumulate a list of symbols, so, for example, 
     // num:i64.+ becomes {'num', ':', 'i64', '.', '+'}
 
-    bool caret_next = false;
-    Range caret_range = {};
     while (((result = peek(is, &codepoint)) == StreamSuccess)) {
         if (is_symchar(codepoint)) {
             next(is, &codepoint);
             push_u32(codepoint, &symchars);
-        } else if (codepoint == '^') {
-            // TODO: detect if caret_next is already true!
-            caret_next = true;
-            next(is, &codepoint);
-            caret_range = (Range) { start, bytecount(is) };
         } else { 
             // Empty symchars *should* only occur when parsing the '^' symbol
             if (symchars.len != 0) {
@@ -350,22 +347,9 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                     .atom.type = ASymbol,
                     .atom.symbol = string_to_symbol(str),
                 };
-                if (caret_next) {
-                    val = wrap_caret(val, caret_range, pia);
-                    caret_next = false;
-                }
-                push_rawtree(val, &terms);
-            } else if (caret_next) {
-                RawTree val = {
-                    .type = RawAtom,
-                    .range = caret_range,
-                    .atom.type = ASymbol,
-                    .atom.symbol = string_to_symbol(mv_string("^")),
-                };
-                caret_next = false;
                 push_rawtree(val, &terms);
             } else {
-                panic(mv_string("Unexpected Case encountered while parsing"));
+                panic(mv_string("Unexpected Case encountered while parsing: empty symbol"));
             }
 
             // We are done; break out of loop
@@ -374,17 +358,7 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
     }
     if (result == StreamEnd) {
         if (symchars.len == 0) {
-            if (caret_next) {
-                RawTree val = {
-                    .type = RawAtom,
-                    .range = caret_range,
-                    .atom.type = ASymbol,
-                    .atom.symbol = string_to_symbol(mv_string("^")),
-                };
-                caret_next = false;
-                push_rawtree(val, &terms);
-            }
-            // TODO: panic on nothing here; same as above case (in loop)
+            panic(mv_string("Unexpected Case encountered while parsing: empty symbol"));
         } else {
             String str = string_from_UTF_32(symchars, a);
             RawTree val = (RawTree) {
@@ -394,10 +368,6 @@ ParseResult parse_atom_prepped(U32Array symchars, size_t start, IStream* is, PiA
                 .atom.type = ASymbol,
                 .atom.symbol = string_to_symbol(str),
             };
-            if (caret_next) {
-                val = wrap_caret(val, caret_range, pia);
-                caret_next = false;
-            }
             push_rawtree(val, &terms);
         }
     }
@@ -580,74 +550,6 @@ ParseResult parse_number(uint8_t base, IStream* is, PiAllocator* pia, Allocator*
             .result.atom.int_64 = int_result,
         };
     }
-}
-
-ParseResult parse_prefix(char prefix, IStream* is, PiAllocator* pia, Allocator* a) {
-    uint32_t codepoint;
-    StreamResult result;
-    ParseResult out;
-    U32Array arr = mk_u32_array(10, a);
-
-    size_t start = bytecount(is);
-    next(is, &codepoint); // consume token
-
-    while (((result = peek(is, &codepoint)) == StreamSuccess) && is_symchar(codepoint)) {
-        next(is, &codepoint);
-        push_u32(codepoint, &arr);
-    }
-
-    if (result != StreamSuccess && result != StreamEnd) {
-        out.type = ParseFail;
-        out.error.message = mv_cstr_doc("Stream failed while parsing prefix", a);
-        out.error.range.start = bytecount(is);
-        out.error.range.end = bytecount(is);
-    } else if (arr.len == 0) {
-        char cstr[2] = {prefix, '\0'};
-        String str = mv_string(cstr);
-        Symbol sym_result = string_to_symbol(str);
-
-        out.type = ParseSuccess;
-        out.result.type = RawAtom;
-        out.result.atom.type = ASymbol;
-        out.result.atom.symbol = sym_result;
-
-    } else {
-        char cstr[2] = {prefix, '\0'};
-        String str = mv_string(cstr);
-        Symbol sym_result = string_to_symbol(str);
-        RawTree proj = (RawTree) {
-            .type = RawAtom,
-            .range.start = start,
-            .range.end = bytecount(is),
-            .atom.type = ASymbol,
-            .atom.symbol = sym_result,
-        };
-
-        str = string_from_UTF_32(arr, a);
-        sym_result = string_to_symbol(str);
-        RawTree field = (RawTree) {
-            .type = RawAtom,
-            .range.start = start,
-            .range.end = bytecount(is),
-            .atom.type = ASymbol,
-            .atom.symbol = sym_result,
-        };
-
-        RawTreePiList nodes = mk_rawtree_list(2, pia);
-        push_rawtree(proj, &nodes);
-        push_rawtree(field, &nodes);
-
-        out.type = ParseSuccess;
-        out.result = (RawTree) {
-            .type = RawBranch,
-            .range.start = start,
-            .range.end = bytecount(is),
-            .branch.hint = HExpression,
-            .branch.nodes = nodes,
-        };
-    }
-    
-    return out;
 }
 
 ParseResult parse_string(IStream* is, PiAllocator* pia, Allocator* a) {

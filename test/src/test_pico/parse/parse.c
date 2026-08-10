@@ -129,6 +129,13 @@ void run_pico_parse_tests(TestLog* log, RegionAllocator* region) {
     TEST_EQ("(set ^ ref)");
   }
 
+  if (test_start(log, mv_string("parse-^-complex"))) {
+    RawTree rhs =
+      expr_branch(&pia, 2, symbol_atom("foo"), symbol_atom("bar"));
+    RawTree expected = expr_branch(&pia, 2, symbol_atom("^"), rhs);
+    TEST_EQ("^(foo bar) ");
+  }
+
   if (test_start(log, mv_string("parse-.-prefix"))) {
     RawTree expected = expr_branch(&pia, 2, symbol_atom("."), symbol_atom("ref"));
     TEST_EQ(".ref");
