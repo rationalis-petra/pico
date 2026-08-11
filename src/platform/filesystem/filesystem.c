@@ -272,7 +272,9 @@ String get_current_directory(Allocator* a) {
 #if OS_FAMILY == WINDOWS
     size_t mem_required = GetCurrentDirectory(0, NULL);
     String out = {
-      .memsize = mem_required,
+      // TODO: in pico, we ignore the '\0' character, but just subtracting 1 here will probably lead to a bug in the future
+      //       perhaps: re-alloc at the smaller size?
+      .memsize = mem_required - 1, 
       .bytes = mem_alloc(mem_required, a),
     };
     // TODO: convert to valid path (consider encoding)
