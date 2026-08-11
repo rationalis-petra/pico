@@ -94,7 +94,7 @@ void call_unit_fn(void *function, Allocator *a) {
     void* dvars = get_dynamic_memory();
     void* dynamic_memory = mem_alloc(4096, a);
     void* vstack_memory = mem_alloc(4096, a);
-    void* vstack_memory_ptr = vstack_memory + 4095; 
+    void* vstack_memory_ptr = vstack_memory + 4096; 
 
     // TODO: swap so this is backend independent (use foreign_adapters to call) 
 #if ARCH == AMD64
@@ -156,7 +156,7 @@ void* call_instance_fn(void *function, U64Array types, PtrArray implicits, size_
     void* dvars = get_dynamic_memory();
     void* dynamic_memory = mem_alloc(4096, a);
     void* vstack_memory = mem_alloc(4096, a);
-    void* vstack_memory_ptr = vstack_memory + 4095; 
+    void* vstack_memory_ptr = vstack_memory + 4096; 
 
     ArenaAllocator* arena = make_arena_allocator(4096, a);
     Allocator aa = aa_to_gpa(arena);

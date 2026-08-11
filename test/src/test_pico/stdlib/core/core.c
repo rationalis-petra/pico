@@ -122,6 +122,21 @@ void run_pico_stdlib_core_tests(TestLog *log, Module* module, Environment* env, 
         TEST_EQ("(labels (go-to loop 0) [loop [x] (if (i64.< x 10) (go-to loop (i64.+ x 1)) x)])");
     }
 
+    if (test_start(log, mv_string("labels-bool-binding"))) {
+        bool expected = false;
+        TEST_EQ("(labels (go-to loop :true 0) [loop [x y] (if x (go-to loop (i64.< y 10) (i64.+ y 1)) x)])");
+    }
+
+    if (test_start(log, mv_string("labels-bool-binding"))) {
+        bool expected = false;
+        TEST_EQ("(labels (go-to loop 0) \n"
+                "  [loop [x] (seq  (if (not (< 10 x)) :unit (go-to exit)) \n"
+                "    [let! my-list (list.init {I64} 0 0)]\n"
+                "    (list.de-init my-list)\n"
+                "    (go-to loop (+ x 1)))]\n"
+                "  [exit :unit])\n");
+    }
+
     if (test_start(log, mv_string("nested-labels"))) {
         int64_t expected = 4;
         TEST_EQ("(labels (go-to start) [start (labels (go-to end) [end 4])] [end 3])");

@@ -60,7 +60,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     // TODO (BUG): the array should set the allocator
     const char *mk_list_fn = 
-        "(def mk-list all [A] proc [len capacity]\n"
+        "(def init all [A] proc [len capacity]\n"
         "  (struct (List A)\n"
         "    [.gpa (use current-allocator)]\n"
         "    [.capacity capacity]\n"
@@ -106,7 +106,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     const char *map_fn =
         "(def map all [A B] proc [(fn (Proc [A] B)) (lst (List A))]\n"
-        "  (let [new-list (mk-list {B} lst.len lst.len)] (seq\n"
+        "  (let [new-list (init {B} lst.len lst.len)] (seq\n"
         "    (loop [for i from 0 below lst.len]\n"
         "      (eset i (fn (elt i lst)) new-list))\n"
         "      new-list)))";
@@ -114,19 +114,19 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
 
     const char *list_macro = 
         "(def list macro proc [terms] seq\n"
-        "  [let! new-terms mk-list {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len)]\n"
-        "  [let! let-terms mk-list {Syntax} 3 3]\n"
-        "  [let! arr-terms mk-list {Syntax} 3 3]\n"
+        "  [let! new-terms init {Syntax} (u64.+ 2 terms.len) (u64.+ 2 terms.len)]\n"
+        "  [let! let-terms init {Syntax} 3 3]\n"
+        "  [let! arr-terms init {Syntax} 3 3]\n"
         "\n"
         "  [let! ar get-range (elt 0 terms)]\n"
         "\n"
         "  [let! local-sym Syntax:atom ar (Atom:symbol (mk-unique-symbol \"local-list\"))]\n"
         "  [let! eset-sym capture eset]\n"
         "\n"
-        "  [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
+        "  [let! eset-elt-terms init {Syntax} 4 4]\n"
         "\n"
         "\n"
-        "  (eset 0 (capture mk-list) arr-terms)\n"
+        "  (eset 0 (capture init) arr-terms)\n"
         "  (eset 1 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
         "  (eset 2 (Syntax:atom ar (:integral (narrow I64 (u64.- terms.len 1)))) arr-terms)\n"
         "\n"
@@ -139,7 +139,7 @@ void add_list_module(Target target, Module *data, RegionAllocator* region) {
         "\n"
         "  (labels (go-to loop 1)\n"
         "    [loop [i] seq\n"
-        "      [let! eset-elt-terms mk-list {Syntax} 4 4]\n"
+        "      [let! eset-elt-terms init {Syntax} 4 4]\n"
         "      [let! elt-range get-range (elt i terms)]\n"
         "      [let! idx-node Syntax:atom elt-range (:integral (narrow I64 (u64.- i 1)))]\n"
         "      (eset 0 eset-sym eset-elt-terms)\n"

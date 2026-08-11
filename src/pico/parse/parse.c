@@ -218,6 +218,8 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 push_rawtree(rhs,  &nodes);
                 *current = (RawTree) {
                     .type = RawBranch,
+                    .range.end = rhs.range.end,
+                    .range.start = terms.data[0].range.start,
                     .branch.hint = HExpression,
                     .branch.nodes = nodes,
                 };
@@ -231,6 +233,8 @@ ParseResult parse_expr(IStream* is, uint32_t expected, PiAllocator* pia, Allocat
                 push_rawtree(rhs,  &nodes);
                 *current = (RawTree) {
                     .type = RawBranch,
+                    .range.end = rhs.range.end,
+                    .range.start = terms.data[0].range.start,
                     .branch.hint = HExpression,
                     .branch.nodes = nodes,
                 };

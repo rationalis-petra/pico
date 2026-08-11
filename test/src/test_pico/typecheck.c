@@ -80,7 +80,7 @@ void run_pico_typecheck_tests(TestLog* log, Target target, RegionAllocator* regi
         PiAllocator current_old = get_std_current_allocator();
         set_std_current_allocator(pregion);
         PiType* expected = mk_prim_type(&pregion, Int_64);
-        TEST_TYPE("(seq [let! lst (list.mk-list 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
+        TEST_TYPE("(seq [let! lst (list.init 1 1)] (list.eset 0 10 lst) (list.elt 0 lst))");
         set_std_current_allocator(current_old);
     }
 

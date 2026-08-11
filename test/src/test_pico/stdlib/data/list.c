@@ -12,7 +12,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     Allocator ra = ra_to_gpa(region);
     PiAllocator pregion = convert_to_pallocator(&ra);
 
-    RUN("(def list-1 (list.mk-list {I64} 5 10))");
+    RUN("(def list-1 (list.init {I64} 5 10))");
     if (test_start(log, mv_string("list-len"))) {
         int64_t expected = 5;
         TEST_EQ("list-1.len");
@@ -57,7 +57,7 @@ void run_pico_stdlib_data_list_tests(TestLog *log, Module* module, Environment* 
     }
 
     if (test_start(log, mv_string("push"))) {
-        RUN("(def list-3 pointer.new (list.mk-list {I64} 0 3))");
+        RUN("(def list-3 pointer.new (list.init {I64} 0 3))");
         RUN("(list.push 12 list-3)");
         RUN("(list.push 13 list-3)");
         RUN("(list.push 14 list-3)");

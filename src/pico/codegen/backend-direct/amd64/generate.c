@@ -2538,7 +2538,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             size_t arg_total = 0;
             SymSizeAssoc arg_sizes = mk_sym_size_assoc(branch->args.len, a);
             for (size_t i = 0; i < branch->args.len; i++) {
-                size_t arg_size = pi_size_of(*(PiType*)branch->args.data[i].val);
+                size_t arg_size = pi_stack_size_of(*(PiType*)branch->args.data[i].val);
                 sym_size_bind(branch->args.data[i].key, arg_size, &arg_sizes);
                 arg_total += arg_size;
             }
@@ -2638,7 +2638,7 @@ void generate_i(SynRef ref, AddressEnv* env, InternalContext ictx) {
             // a seq or if, the other branches of the if or the rest of the seq
             // generates assuming the correct stack offset.
             data_stack_shrink(env, arg_total);
-            data_stack_grow(env, pi_size_of(*type));
+            data_stack_grow(env, pi_stack_size_of(*type));
 
             AsmResult out = build_unary_op(JMP, imm32(0), ass, a, point);
 
